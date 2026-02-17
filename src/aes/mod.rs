@@ -1,6 +1,6 @@
 pub mod mapping;
 
-pub use mapping::resolve_mappings;
+pub use mapping::{apply_after_stat, resolve_mappings};
 
 /// All supported aesthetic channels.
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
@@ -53,11 +53,21 @@ impl Aesthetic {
     }
 }
 
+/// When an aesthetic mapping should be resolved.
+#[derive(Clone, Debug, PartialEq)]
+pub enum MappingStage {
+    /// Resolve before stat computation (default — maps from raw data columns).
+    BeforeStat,
+    /// Resolve after stat computation (maps from stat-computed columns like `density`, `count`).
+    AfterStat,
+}
+
 /// Maps a source column to an aesthetic channel.
 #[derive(Clone, Debug)]
 pub struct AesMapping {
     pub column: String,
     pub aesthetic: Aesthetic,
+    pub stage: MappingStage,
 }
 
 /// Builder for aesthetic mappings.
@@ -71,156 +81,114 @@ impl Aes {
         Self::default()
     }
 
-    pub fn x(mut self, col: &str) -> Self {
+    fn push(mut self, col: &str, aesthetic: Aesthetic) -> Self {
         self.mappings.push(AesMapping {
             column: col.to_string(),
-            aesthetic: Aesthetic::X,
+            aesthetic,
+            stage: MappingStage::BeforeStat,
         });
         self
     }
 
-    pub fn y(mut self, col: &str) -> Self {
+    fn push_after_stat(mut self, col: &str, aesthetic: Aesthetic) -> Self {
         self.mappings.push(AesMapping {
             column: col.to_string(),
-            aesthetic: Aesthetic::Y,
+            aesthetic,
+            stage: MappingStage::AfterStat,
         });
         self
     }
 
-    pub fn color(mut self, col: &str) -> Self {
-        self.mappings.push(AesMapping {
-            column: col.to_string(),
-            aesthetic: Aesthetic::Color,
-        });
-        self
+    pub fn x(self, col: &str) -> Self {
+        self.push(col, Aesthetic::X)
+    }
+    pub fn y(self, col: &str) -> Self {
+        self.push(col, Aesthetic::Y)
+    }
+    pub fn color(self, col: &str) -> Self {
+        self.push(col, Aesthetic::Color)
+    }
+    pub fn fill(self, col: &str) -> Self {
+        self.push(col, Aesthetic::Fill)
+    }
+    pub fn size(self, col: &str) -> Self {
+        self.push(col, Aesthetic::Size)
+    }
+    pub fn shape(self, col: &str) -> Self {
+        self.push(col, Aesthetic::Shape)
+    }
+    pub fn alpha(self, col: &str) -> Self {
+        self.push(col, Aesthetic::Alpha)
+    }
+    pub fn group(self, col: &str) -> Self {
+        self.push(col, Aesthetic::Group)
+    }
+    pub fn ymin(self, col: &str) -> Self {
+        self.push(col, Aesthetic::Ymin)
+    }
+    pub fn ymax(self, col: &str) -> Self {
+        self.push(col, Aesthetic::Ymax)
+    }
+    pub fn label(self, col: &str) -> Self {
+        self.push(col, Aesthetic::Label)
+    }
+    pub fn weight(self, col: &str) -> Self {
+        self.push(col, Aesthetic::Weight)
+    }
+    pub fn xend(self, col: &str) -> Self {
+        self.push(col, Aesthetic::Xend)
+    }
+    pub fn yend(self, col: &str) -> Self {
+        self.push(col, Aesthetic::Yend)
+    }
+    pub fn xmin(self, col: &str) -> Self {
+        self.push(col, Aesthetic::Xmin)
+    }
+    pub fn xmax(self, col: &str) -> Self {
+        self.push(col, Aesthetic::Xmax)
+    }
+    pub fn angle(self, col: &str) -> Self {
+        self.push(col, Aesthetic::Angle)
+    }
+    pub fn radius(self, col: &str) -> Self {
+        self.push(col, Aesthetic::Radius)
+    }
+    pub fn linetype(self, col: &str) -> Self {
+        self.push(col, Aesthetic::Linetype)
     }
 
-    pub fn fill(mut self, col: &str) -> Self {
-        self.mappings.push(AesMapping {
-            column: col.to_string(),
-            aesthetic: Aesthetic::Fill,
-        });
-        self
+    // ─── after_stat() mappings ──────────────────────────────────
+    // Map stat-computed columns (e.g., `density`, `count`, `ncount`, `ndensity`)
+    // to an aesthetic. These are resolved after the stat step in the build pipeline.
+
+    /// Map a stat-computed column to the y aesthetic (e.g., `after_stat_y("density")`).
+    pub fn after_stat_y(self, col: &str) -> Self {
+        self.push_after_stat(col, Aesthetic::Y)
     }
 
-    pub fn size(mut self, col: &str) -> Self {
-        self.mappings.push(AesMapping {
-            column: col.to_string(),
-            aesthetic: Aesthetic::Size,
-        });
-        self
+    /// Map a stat-computed column to the x aesthetic.
+    pub fn after_stat_x(self, col: &str) -> Self {
+        self.push_after_stat(col, Aesthetic::X)
     }
 
-    pub fn shape(mut self, col: &str) -> Self {
-        self.mappings.push(AesMapping {
-            column: col.to_string(),
-            aesthetic: Aesthetic::Shape,
-        });
-        self
+    /// Map a stat-computed column to the fill aesthetic.
+    pub fn after_stat_fill(self, col: &str) -> Self {
+        self.push_after_stat(col, Aesthetic::Fill)
     }
 
-    pub fn alpha(mut self, col: &str) -> Self {
-        self.mappings.push(AesMapping {
-            column: col.to_string(),
-            aesthetic: Aesthetic::Alpha,
-        });
-        self
+    /// Map a stat-computed column to the color aesthetic.
+    pub fn after_stat_color(self, col: &str) -> Self {
+        self.push_after_stat(col, Aesthetic::Color)
     }
 
-    pub fn group(mut self, col: &str) -> Self {
-        self.mappings.push(AesMapping {
-            column: col.to_string(),
-            aesthetic: Aesthetic::Group,
-        });
-        self
+    /// Map a stat-computed column to the size aesthetic.
+    pub fn after_stat_size(self, col: &str) -> Self {
+        self.push_after_stat(col, Aesthetic::Size)
     }
 
-    pub fn ymin(mut self, col: &str) -> Self {
-        self.mappings.push(AesMapping {
-            column: col.to_string(),
-            aesthetic: Aesthetic::Ymin,
-        });
-        self
-    }
-
-    pub fn ymax(mut self, col: &str) -> Self {
-        self.mappings.push(AesMapping {
-            column: col.to_string(),
-            aesthetic: Aesthetic::Ymax,
-        });
-        self
-    }
-
-    pub fn label(mut self, col: &str) -> Self {
-        self.mappings.push(AesMapping {
-            column: col.to_string(),
-            aesthetic: Aesthetic::Label,
-        });
-        self
-    }
-
-    pub fn weight(mut self, col: &str) -> Self {
-        self.mappings.push(AesMapping {
-            column: col.to_string(),
-            aesthetic: Aesthetic::Weight,
-        });
-        self
-    }
-
-    pub fn xend(mut self, col: &str) -> Self {
-        self.mappings.push(AesMapping {
-            column: col.to_string(),
-            aesthetic: Aesthetic::Xend,
-        });
-        self
-    }
-
-    pub fn yend(mut self, col: &str) -> Self {
-        self.mappings.push(AesMapping {
-            column: col.to_string(),
-            aesthetic: Aesthetic::Yend,
-        });
-        self
-    }
-
-    pub fn xmin(mut self, col: &str) -> Self {
-        self.mappings.push(AesMapping {
-            column: col.to_string(),
-            aesthetic: Aesthetic::Xmin,
-        });
-        self
-    }
-
-    pub fn xmax(mut self, col: &str) -> Self {
-        self.mappings.push(AesMapping {
-            column: col.to_string(),
-            aesthetic: Aesthetic::Xmax,
-        });
-        self
-    }
-
-    pub fn angle(mut self, col: &str) -> Self {
-        self.mappings.push(AesMapping {
-            column: col.to_string(),
-            aesthetic: Aesthetic::Angle,
-        });
-        self
-    }
-
-    pub fn radius(mut self, col: &str) -> Self {
-        self.mappings.push(AesMapping {
-            column: col.to_string(),
-            aesthetic: Aesthetic::Radius,
-        });
-        self
-    }
-
-    pub fn linetype(mut self, col: &str) -> Self {
-        self.mappings.push(AesMapping {
-            column: col.to_string(),
-            aesthetic: Aesthetic::Linetype,
-        });
-        self
+    /// Map a stat-computed column to the alpha aesthetic.
+    pub fn after_stat_alpha(self, col: &str) -> Self {
+        self.push_after_stat(col, Aesthetic::Alpha)
     }
 
     /// Get the column mapped to a specific aesthetic.

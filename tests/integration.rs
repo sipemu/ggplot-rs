@@ -1021,3 +1021,375 @@ fn test_continuous_fill_legend() {
     assert!(Path::new(&path).exists());
     std::fs::remove_file(&path).ok();
 }
+
+// ─── Feature: Size/alpha continuous mapping ──────────────────
+
+#[test]
+fn test_size_mapping() {
+    let data = vec![
+        (
+            "x".to_string(),
+            vec![Value::Float(1.0), Value::Float(2.0), Value::Float(3.0)],
+        ),
+        (
+            "y".to_string(),
+            vec![Value::Float(1.0), Value::Float(2.0), Value::Float(3.0)],
+        ),
+        (
+            "pop".to_string(),
+            vec![
+                Value::Float(100.0),
+                Value::Float(500.0),
+                Value::Float(1000.0),
+            ],
+        ),
+    ];
+    let path = temp_path("size_mapping.svg");
+    GGPlot::new(data)
+        .aes(Aes::new().x("x").y("y").size("pop"))
+        .geom_point()
+        .save(&path)
+        .expect("should render with size mapping");
+    assert!(Path::new(&path).exists());
+    std::fs::remove_file(&path).ok();
+}
+
+#[test]
+fn test_size_scale_values() {
+    // Verify that ScaleSizeContinuous actually maps values to different sizes
+    let data = vec![
+        ("x".to_string(), vec![Value::Float(1.0), Value::Float(2.0)]),
+        ("y".to_string(), vec![Value::Float(1.0), Value::Float(2.0)]),
+        (
+            "size".to_string(),
+            vec![Value::Float(10.0), Value::Float(100.0)],
+        ),
+    ];
+    let built = GGPlot::new(data)
+        .aes(Aes::new().x("x").y("y").size("size"))
+        .geom_point()
+        .build();
+
+    let size_scale = built.scales.get(&Aesthetic::Size);
+    assert!(size_scale.is_some(), "should have a size scale");
+    let s = size_scale.unwrap();
+    let small = s.map_to_size(&Value::Float(10.0)).unwrap();
+    let large = s.map_to_size(&Value::Float(100.0)).unwrap();
+    assert!(large > small, "larger value should map to larger size");
+}
+
+#[test]
+fn test_alpha_mapping() {
+    let data = vec![
+        (
+            "x".to_string(),
+            vec![Value::Float(1.0), Value::Float(2.0), Value::Float(3.0)],
+        ),
+        (
+            "y".to_string(),
+            vec![Value::Float(1.0), Value::Float(2.0), Value::Float(3.0)],
+        ),
+        (
+            "density".to_string(),
+            vec![Value::Float(0.1), Value::Float(0.5), Value::Float(1.0)],
+        ),
+    ];
+    let path = temp_path("alpha_mapping.svg");
+    GGPlot::new(data)
+        .aes(Aes::new().x("x").y("y").alpha("density"))
+        .geom_point()
+        .save(&path)
+        .expect("should render with alpha mapping");
+    assert!(Path::new(&path).exists());
+    std::fs::remove_file(&path).ok();
+}
+
+#[test]
+fn test_alpha_scale_values() {
+    let data = vec![
+        ("x".to_string(), vec![Value::Float(1.0), Value::Float(2.0)]),
+        ("y".to_string(), vec![Value::Float(1.0), Value::Float(2.0)]),
+        (
+            "alpha".to_string(),
+            vec![Value::Float(0.0), Value::Float(1.0)],
+        ),
+    ];
+    let built = GGPlot::new(data)
+        .aes(Aes::new().x("x").y("y").alpha("alpha"))
+        .geom_point()
+        .build();
+
+    let alpha_scale = built.scales.get(&Aesthetic::Alpha);
+    assert!(alpha_scale.is_some(), "should have an alpha scale");
+    let s = alpha_scale.unwrap();
+    let lo = s.map_to_alpha(&Value::Float(0.0)).unwrap();
+    let hi = s.map_to_alpha(&Value::Float(1.0)).unwrap();
+    assert!(hi > lo, "higher value should have higher alpha");
+    assert!((0.0..=1.0).contains(&lo), "alpha should be in [0,1]");
+    assert!((0.0..=1.0).contains(&hi), "alpha should be in [0,1]");
+}
+
+#[test]
+fn test_custom_size_range() {
+    let data = vec![
+        ("x".to_string(), vec![Value::Float(1.0), Value::Float(2.0)]),
+        ("y".to_string(), vec![Value::Float(1.0), Value::Float(2.0)]),
+        (
+            "size".to_string(),
+            vec![Value::Float(1.0), Value::Float(10.0)],
+        ),
+    ];
+    let path = temp_path("custom_size_range.svg");
+    GGPlot::new(data)
+        .aes(Aes::new().x("x").y("y").size("size"))
+        .geom_point()
+        .scale_size(ScaleSizeContinuous::new().with_range(2.0, 10.0))
+        .save(&path)
+        .expect("should render with custom size range");
+    assert!(Path::new(&path).exists());
+    std::fs::remove_file(&path).ok();
+}
+
+// ─── Feature: Custom breaks/labels ──────────────────────────
+
+#[test]
+fn test_custom_breaks() {
+    let data = xy_data();
+    let path = temp_path("custom_breaks.svg");
+    GGPlot::new(data)
+        .aes(Aes::new().x("x").y("y"))
+        .geom_point()
+        .scale_x_continuous(ScaleContinuous::new().with_breaks(vec![1.0, 5.0, 10.0]))
+        .save(&path)
+        .expect("should render with custom breaks");
+    assert!(Path::new(&path).exists());
+    std::fs::remove_file(&path).ok();
+}
+
+#[test]
+fn test_custom_breaks_with_labels() {
+    let data = xy_data();
+    let built = GGPlot::new(data)
+        .aes(Aes::new().x("x").y("y"))
+        .geom_point()
+        .scale_x_continuous(
+            ScaleContinuous::new()
+                .with_breaks(vec![1.0, 5.0, 10.0])
+                .with_labels(vec!["Low".into(), "Mid".into(), "High".into()]),
+        )
+        .build();
+
+    let x_scale = built.scales.get(&Aesthetic::X).unwrap();
+    let breaks = x_scale.breaks();
+    let labels: Vec<&str> = breaks.iter().map(|(_, l)| l.as_str()).collect();
+    assert_eq!(labels, vec!["Low", "Mid", "High"]);
+}
+
+// ─── Feature: Secondary axes ────────────────────────────────
+
+#[test]
+fn test_sec_axis_render() {
+    let data = vec![
+        (
+            "celsius".to_string(),
+            vec![
+                Value::Float(0.0),
+                Value::Float(10.0),
+                Value::Float(20.0),
+                Value::Float(30.0),
+            ],
+        ),
+        (
+            "time".to_string(),
+            vec![
+                Value::Float(1.0),
+                Value::Float(2.0),
+                Value::Float(3.0),
+                Value::Float(4.0),
+            ],
+        ),
+    ];
+    let path = temp_path("sec_axis.svg");
+    GGPlot::new(data)
+        .aes(Aes::new().x("time").y("celsius"))
+        .geom_line()
+        .scale_y_continuous(
+            ScaleContinuous::new()
+                .with_sec_axis(SecAxis::new(|c| c * 9.0 / 5.0 + 32.0).with_name("Fahrenheit")),
+        )
+        .save(&path)
+        .expect("should render with secondary axis");
+    assert!(Path::new(&path).exists());
+    let content = std::fs::read_to_string(&path).unwrap();
+    assert!(
+        content.contains("Fahrenheit"),
+        "should contain sec axis title"
+    );
+    std::fs::remove_file(&path).ok();
+}
+
+#[test]
+fn test_sec_axis_transform() {
+    let sec = SecAxis::new(|x| x * 2.0);
+    assert!((sec.transform_value(5.0) - 10.0).abs() < f64::EPSILON);
+    assert!((sec.transform_value(0.0) - 0.0).abs() < f64::EPSILON);
+}
+
+// ─── Feature: after_stat() computed aesthetics ──────────────
+
+#[test]
+fn test_after_stat_density() {
+    // Use after_stat to map density (from StatBin) to y
+    let data = vec![(
+        "x".to_string(),
+        (0..100)
+            .map(|i| Value::Float(i as f64 / 10.0))
+            .collect::<Vec<_>>(),
+    )];
+    let path = temp_path("after_stat.svg");
+    GGPlot::new(data)
+        .aes(Aes::new().x("x").after_stat_y("density"))
+        .geom_histogram()
+        .save(&path)
+        .expect("should render histogram with after_stat(density)");
+    assert!(Path::new(&path).exists());
+    std::fs::remove_file(&path).ok();
+}
+
+#[test]
+fn test_after_stat_build() {
+    // Verify after_stat(density) produces density values on y
+    let data = vec![(
+        "x".to_string(),
+        (0..100)
+            .map(|i| Value::Float(i as f64 / 10.0))
+            .collect::<Vec<_>>(),
+    )];
+    let built = GGPlot::new(data.clone())
+        .aes(Aes::new().x("x").after_stat_y("density"))
+        .geom_histogram()
+        .build();
+
+    let y_vals: Vec<f64> = built.layers[0]
+        .data
+        .column("y")
+        .unwrap()
+        .iter()
+        .filter_map(|v| v.as_f64())
+        .collect();
+
+    // density values should be < 1 for uniform data over [0, 10]
+    let max_y = y_vals.iter().cloned().fold(f64::NEG_INFINITY, f64::max);
+    assert!(
+        max_y < 1.0,
+        "density values should be < 1 for uniform data: max_y={max_y}"
+    );
+
+    // Compare with default (count)
+    let built_count = GGPlot::new(data)
+        .aes(Aes::new().x("x"))
+        .geom_histogram()
+        .build();
+    let count_max: f64 = built_count.layers[0]
+        .data
+        .column("y")
+        .unwrap()
+        .iter()
+        .filter_map(|v| v.as_f64())
+        .fold(f64::NEG_INFINITY, f64::max);
+
+    assert!(
+        count_max > max_y,
+        "count values should be larger than density values"
+    );
+}
+
+// ─── Feature: position_dodge2 and position_nudge ─────────────
+
+#[test]
+fn test_position_dodge2() {
+    let mut rows = Vec::new();
+    for x in ["a", "b", "c"] {
+        for fill in ["g1", "g2"] {
+            rows.push(HashMap::from([
+                ("x".to_string(), Value::Str(x.into())),
+                ("fill".to_string(), Value::Str(fill.into())),
+            ]));
+        }
+    }
+    let path = temp_path("dodge2.svg");
+    GGPlot::new(rows)
+        .aes(Aes::new().x("x").fill("fill"))
+        .geom_bar()
+        .position(PositionDodge2::default())
+        .save(&path)
+        .expect("should render with position_dodge2");
+    assert!(Path::new(&path).exists());
+    std::fs::remove_file(&path).ok();
+}
+
+#[test]
+fn test_position_nudge() {
+    let data = vec![
+        (
+            "x".to_string(),
+            vec![Value::Float(1.0), Value::Float(2.0), Value::Float(3.0)],
+        ),
+        (
+            "y".to_string(),
+            vec![Value::Float(1.0), Value::Float(2.0), Value::Float(3.0)],
+        ),
+        (
+            "label".to_string(),
+            vec![
+                Value::Str("A".into()),
+                Value::Str("B".into()),
+                Value::Str("C".into()),
+            ],
+        ),
+    ];
+    let path = temp_path("nudge.svg");
+    GGPlot::new(data)
+        .aes(Aes::new().x("x").y("y").label("label"))
+        .geom_point()
+        .geom_text()
+        .position(PositionNudge::new(0.0, 0.2))
+        .save(&path)
+        .expect("should render with position_nudge");
+    assert!(Path::new(&path).exists());
+    std::fs::remove_file(&path).ok();
+}
+
+#[test]
+fn test_position_nudge_build() {
+    // Verify nudge actually shifts positions
+    let data = vec![
+        ("x".to_string(), vec![Value::Float(1.0), Value::Float(2.0)]),
+        ("y".to_string(), vec![Value::Float(1.0), Value::Float(2.0)]),
+    ];
+    let nudge_x = 0.5;
+    let built = GGPlot::new(data)
+        .aes(Aes::new().x("x").y("y"))
+        .geom_point()
+        .position(PositionNudge::new(nudge_x, 0.0))
+        .build();
+
+    let x_vals: Vec<f64> = built.layers[0]
+        .data
+        .column("x")
+        .unwrap()
+        .iter()
+        .filter_map(|v| v.as_f64())
+        .collect();
+
+    assert!(
+        (x_vals[0] - 1.5).abs() < f64::EPSILON,
+        "x[0] should be nudged to 1.5, got {}",
+        x_vals[0]
+    );
+    assert!(
+        (x_vals[1] - 2.5).abs() < f64::EPSILON,
+        "x[1] should be nudged to 2.5, got {}",
+        x_vals[1]
+    );
+}

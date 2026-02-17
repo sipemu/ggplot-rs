@@ -506,6 +506,16 @@ impl GGPlot {
         self
     }
 
+    pub fn scale_size(mut self, s: crate::scale::size::ScaleSizeContinuous) -> Self {
+        self.scales.push(Box::new(s));
+        self
+    }
+
+    pub fn scale_alpha(mut self, s: crate::scale::alpha::ScaleAlphaContinuous) -> Self {
+        self.scales.push(Box::new(s));
+        self
+    }
+
     pub fn xlim(self, min: f64, max: f64) -> Self {
         self.scale_x_continuous(ScaleContinuous::new().with_limits(min, max))
     }

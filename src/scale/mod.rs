@@ -1,3 +1,4 @@
+pub mod alpha;
 pub mod color;
 pub mod continuous;
 pub mod datetime;
@@ -7,7 +8,9 @@ pub mod linetype;
 pub mod manual;
 pub mod palettes;
 pub mod scale_set;
+pub mod sec_axis;
 pub mod shape;
+pub mod size;
 pub mod transform;
 pub mod util;
 
@@ -60,6 +63,21 @@ pub trait Scale: Send + Sync {
 
     /// Map a data value to a linetype. Default returns None.
     fn map_to_linetype(&self, _value: &Value) -> Option<Linetype> {
+        None
+    }
+
+    /// Map a data value to a point size (radius in pixels). Default returns None.
+    fn map_to_size(&self, _value: &Value) -> Option<f64> {
+        None
+    }
+
+    /// Map a data value to an alpha (opacity) value. Default returns None.
+    fn map_to_alpha(&self, _value: &Value) -> Option<f64> {
+        None
+    }
+
+    /// Get the secondary axis specification, if any.
+    fn sec_axis(&self) -> Option<&sec_axis::SecAxis> {
         None
     }
 }

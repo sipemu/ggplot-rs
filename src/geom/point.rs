@@ -66,9 +66,15 @@ impl Geom for GeomPoint {
                 self.color
             };
 
-            let alpha = alpha_col.and_then(|c| c[i].as_f64()).unwrap_or(self.alpha);
+            let alpha = alpha_col
+                .and_then(|c| scales.map_alpha(&c[i]))
+                .or_else(|| alpha_col.and_then(|c| c[i].as_f64()))
+                .unwrap_or(self.alpha);
 
-            let size = size_col.and_then(|c| c[i].as_f64()).unwrap_or(self.size);
+            let size = size_col
+                .and_then(|c| scales.map_size(&c[i]))
+                .or_else(|| size_col.and_then(|c| c[i].as_f64()))
+                .unwrap_or(self.size);
 
             let shape = shape_col
                 .and_then(|c| scales.map_shape(&c[i]))

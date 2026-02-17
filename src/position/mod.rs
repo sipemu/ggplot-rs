@@ -1,7 +1,9 @@
 pub mod dodge;
+pub mod dodge2;
 pub mod fill;
 pub mod identity;
 pub mod jitter;
+pub mod nudge;
 pub mod stack;
 
 use crate::data::DataFrame;

@@ -1,12 +1,14 @@
 use crate::aes::Aesthetic;
 use crate::data::{DataFrame, Value};
 use crate::render::backend::{Linetype, PointShape};
+use crate::scale::alpha::ScaleAlphaContinuous;
 use crate::scale::color::{ScaleColorContinuous, ScaleColorDiscrete};
 use crate::scale::continuous::ScaleContinuous;
 use crate::scale::datetime::ScaleDateTime;
 use crate::scale::discrete::ScaleDiscrete;
 use crate::scale::linetype::ScaleLinetypeDiscrete;
 use crate::scale::shape::ScaleShapeDiscrete;
+use crate::scale::size::ScaleSizeContinuous;
 
 use super::Scale;
 
@@ -80,6 +82,14 @@ impl ScaleSet {
                 let scale = ScaleLinetypeDiscrete::new();
                 self.scales.push(Box::new(scale));
             }
+            Aesthetic::Size => {
+                let scale = ScaleSizeContinuous::new();
+                self.scales.push(Box::new(scale));
+            }
+            Aesthetic::Alpha => {
+                let scale = ScaleAlphaContinuous::new();
+                self.scales.push(Box::new(scale));
+            }
             _ => {
                 if is_discrete {
                     let scale = ScaleDiscrete::new().for_aesthetic(aes.clone());
@@ -125,6 +135,23 @@ impl ScaleSet {
     pub fn map_linetype(&self, value: &Value) -> Option<Linetype> {
         self.get(&Aesthetic::Linetype)
             .and_then(|s| s.map_to_linetype(value))
+    }
+
+    /// Map a value to a point size through the size scale.
+    pub fn map_size(&self, value: &Value) -> Option<f64> {
+        self.get(&Aesthetic::Size)
+            .and_then(|s| s.map_to_size(value))
+    }
+
+    /// Map a value to an alpha (opacity) through the alpha scale.
+    pub fn map_alpha(&self, value: &Value) -> Option<f64> {
+        self.get(&Aesthetic::Alpha)
+            .and_then(|s| s.map_to_alpha(value))
+    }
+
+    /// Get the secondary axis for an aesthetic, if one exists.
+    pub fn sec_axis(&self, aes: &Aesthetic) -> Option<&crate::scale::sec_axis::SecAxis> {
+        self.get(aes).and_then(|s| s.sec_axis())
     }
 
     /// Get all scales.

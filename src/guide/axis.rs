@@ -172,6 +172,95 @@ pub fn draw_y_axis(
     Ok(())
 }
 
+/// Draw a secondary Y axis on the right side.
+pub fn draw_sec_y_axis(
+    primary_scale: &dyn Scale,
+    sec_axis: &crate::scale::sec_axis::SecAxis,
+    coord: &dyn Coord,
+    theme: &Theme,
+    plot_area: &Rect,
+    backend: &mut dyn DrawBackend,
+) -> Result<(), RenderError> {
+    let breaks = primary_scale.breaks();
+    let tick_len = theme.axis_ticks_length;
+    let axis_line = theme.get_axis_line_y();
+    let axis_ticks = theme.get_axis_ticks_y();
+
+    let right_x = plot_area.x + plot_area.width;
+
+    // Axis line on right side
+    if axis_line.visible {
+        backend.draw_line(
+            &[
+                (right_x, plot_area.y),
+                (right_x, plot_area.y + plot_area.height),
+            ],
+            &LineStyle {
+                color: axis_line.color,
+                width: axis_line.width,
+                alpha: 1.0,
+                linetype: Linetype::Solid,
+            },
+        )?;
+    }
+
+    // Ticks and labels at primary break positions, but with transformed labels
+    for (pos, label) in &breaks {
+        let (_, py) = coord.transform((0.0, *pos), plot_area);
+
+        if axis_ticks.visible {
+            backend.draw_line(
+                &[(right_x, py), (right_x + tick_len, py)],
+                &LineStyle {
+                    color: axis_ticks.color,
+                    width: axis_ticks.width,
+                    alpha: 1.0,
+                    linetype: Linetype::Solid,
+                },
+            )?;
+        }
+
+        if theme.axis_text_y.visible {
+            // Parse the primary label back to a number, transform it
+            let sec_label = if let Ok(v) = label.parse::<f64>() {
+                let transformed = sec_axis.transform_value(v);
+                crate::scale::util::format_number(transformed)
+            } else {
+                label.clone()
+            };
+
+            backend.draw_text(
+                &sec_label,
+                (right_x + tick_len + theme.legend_spacing, py),
+                &TextStyle {
+                    color: theme.axis_text_y.color,
+                    size: theme.axis_text_y.size,
+                    anchor: TextAnchor::Start,
+                    angle: 0.0,
+                },
+            )?;
+        }
+    }
+
+    // Secondary axis title
+    if !sec_axis.name.is_empty() && theme.axis_title_y.visible {
+        let title_x = right_x + tick_len + theme.axis_text_y.size * 3.5 + theme.legend_spacing;
+        let center_y = plot_area.y + plot_area.height / 2.0;
+        backend.draw_text(
+            &sec_axis.name,
+            (title_x, center_y),
+            &TextStyle {
+                color: theme.axis_title_y.color,
+                size: theme.axis_title_y.size,
+                anchor: TextAnchor::Middle,
+                angle: 90.0,
+            },
+        )?;
+    }
+
+    Ok(())
+}
+
 /// Compute minor break positions as midpoints between major breaks.
 fn minor_breaks(major: &[(f64, String)]) -> Vec<f64> {
     if major.len() < 2 {

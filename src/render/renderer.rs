@@ -97,6 +97,11 @@ impl PlotRenderer {
             // 4. Draw axes
             axis::draw_x_axis(hs, built.coord.as_ref(), theme, &plot_area, backend)?;
             axis::draw_y_axis(vs, built.coord.as_ref(), theme, &plot_area, backend)?;
+
+            // 4b. Draw secondary y axis if present
+            if let Some(sec) = built.scales.sec_axis(&Aesthetic::Y) {
+                axis::draw_sec_y_axis(vs, sec, built.coord.as_ref(), theme, &plot_area, backend)?;
+            }
         }
 
         // 5. Draw each layer's geometry

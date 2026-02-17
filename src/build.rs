@@ -1,4 +1,4 @@
-use crate::aes::{mapping::resolve_mappings, Aes, Aesthetic};
+use crate::aes::{mapping::apply_after_stat, mapping::resolve_mappings, Aes, Aesthetic};
 use crate::annotate::Annotation;
 use crate::coord::Coord;
 use crate::data::DataFrame;
@@ -312,6 +312,9 @@ impl PlotBuilder {
         } else {
             stat.compute_group(&working_data, scale_set)
         };
+
+        // Step 6a: Apply after_stat() mappings (rename stat-computed columns)
+        apply_after_stat(&mut working_data, &merged_mapping);
 
         // Step 6b: Ensure scales for stat-computed aesthetics (e.g. y from StatCount/StatBin)
         let stat_aes = [

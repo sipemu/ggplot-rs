@@ -9,6 +9,7 @@ pub struct ScaleDiscrete {
     aesthetic: Aesthetic,
     name: String,
     levels: Vec<String>,
+    custom_labels: Option<Vec<String>>,
 }
 
 impl ScaleDiscrete {
@@ -17,6 +18,7 @@ impl ScaleDiscrete {
             aesthetic: Aesthetic::X,
             name: String::new(),
             levels: Vec::new(),
+            custom_labels: None,
         }
     }
 
@@ -27,6 +29,12 @@ impl ScaleDiscrete {
 
     pub fn with_name(mut self, name: &str) -> Self {
         self.name = name.to_string();
+        self
+    }
+
+    /// Set custom display labels for each level. Must match the number of levels.
+    pub fn with_labels(mut self, labels: Vec<String>) -> Self {
+        self.custom_labels = Some(labels);
         self
     }
 }
@@ -72,9 +80,14 @@ impl Scale for ScaleDiscrete {
         self.levels
             .iter()
             .enumerate()
-            .map(|(i, label)| {
+            .map(|(i, level)| {
                 let pos = (i as f64 + 0.5) / n as f64;
-                (pos, label.clone())
+                let label = if let Some(ref labels) = self.custom_labels {
+                    labels.get(i).cloned().unwrap_or_else(|| level.clone())
+                } else {
+                    level.clone()
+                };
+                (pos, label)
             })
             .collect()
     }
