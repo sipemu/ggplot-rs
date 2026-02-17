@@ -364,8 +364,9 @@ impl PlotBuilder {
     }
 
     /// Detect which columns to group by for statistics.
+    /// Checks group/color/fill plus discrete x (like R's auto-grouping by discrete x).
     fn detect_group_columns(data: &DataFrame) -> Vec<String> {
-        let candidates = ["group", "color", "fill"];
+        let candidates = ["group", "color", "fill", "x"];
         let mut group_cols = Vec::new();
         for &col in &candidates {
             if data.has_column(col) {

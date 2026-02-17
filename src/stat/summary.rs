@@ -15,7 +15,7 @@ pub enum SummaryFun {
 }
 
 impl SummaryFun {
-    fn apply(&self, values: &[f64]) -> f64 {
+    pub fn apply(&self, values: &[f64]) -> f64 {
         if values.is_empty() {
             return 0.0;
         }

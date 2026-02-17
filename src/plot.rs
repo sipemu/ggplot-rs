@@ -15,6 +15,8 @@ use crate::geom::bar::GeomBar;
 use crate::geom::bin2d::GeomBin2d;
 use crate::geom::boxplot::GeomBoxplot;
 use crate::geom::col::GeomCol;
+use crate::geom::contour::GeomContour;
+use crate::geom::count::GeomCount;
 use crate::geom::crossbar::GeomCrossbar;
 use crate::geom::curve::GeomCurve;
 use crate::geom::density::GeomDensity;
@@ -389,6 +391,22 @@ impl GGPlot {
         self.add_geom(geom)
     }
 
+    pub fn geom_count(self) -> Self {
+        self.add_geom(GeomCount::default())
+    }
+
+    pub fn geom_count_with(self, geom: GeomCount) -> Self {
+        self.add_geom(geom)
+    }
+
+    pub fn geom_contour(self) -> Self {
+        self.add_geom(GeomContour::default())
+    }
+
+    pub fn geom_contour_with(self, geom: GeomContour) -> Self {
+        self.add_geom(geom)
+    }
+
     fn add_geom(mut self, geom: impl Geom + 'static) -> Self {
         let stat = geom.default_stat();
         let position = geom.default_position();
@@ -606,6 +624,22 @@ impl GGPlot {
 
     pub fn scale_y_sqrt(self) -> Self {
         self.scale_y_continuous(ScaleContinuous::new().with_transform(ScaleTransform::Sqrt))
+    }
+
+    pub fn scale_x_log2(self) -> Self {
+        self.scale_x_continuous(ScaleContinuous::new().with_transform(ScaleTransform::Log2))
+    }
+
+    pub fn scale_y_log2(self) -> Self {
+        self.scale_y_continuous(ScaleContinuous::new().with_transform(ScaleTransform::Log2))
+    }
+
+    pub fn scale_x_ln(self) -> Self {
+        self.scale_x_continuous(ScaleContinuous::new().with_transform(ScaleTransform::Ln))
+    }
+
+    pub fn scale_y_ln(self) -> Self {
+        self.scale_y_continuous(ScaleContinuous::new().with_transform(ScaleTransform::Ln))
     }
 
     // ─── Faceting ─────────────────────────────────────────────────

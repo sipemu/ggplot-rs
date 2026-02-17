@@ -3,6 +3,8 @@ pub mod bar;
 pub mod bin2d;
 pub mod boxplot;
 pub mod col;
+pub mod contour;
+pub mod count;
 pub mod crossbar;
 pub mod curve;
 pub mod density;

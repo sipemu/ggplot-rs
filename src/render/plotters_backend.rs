@@ -32,6 +32,99 @@ fn to_rgba(color: (u8, u8, u8), alpha: f64) -> RGBAColor {
     RGBAColor(color.0, color.1, color.2, alpha)
 }
 
+/// Clip a point to the given rectangle bounds. Returns None if fully outside.
+fn clip_point(x: f64, y: f64, rect: &Rect) -> (f64, f64) {
+    (
+        x.clamp(rect.x, rect.x + rect.width),
+        y.clamp(rect.y, rect.y + rect.height),
+    )
+}
+
+/// Check if a point is inside the rectangle (with small margin).
+fn point_in_rect(x: f64, y: f64, rect: &Rect) -> bool {
+    let margin = 2.0;
+    x >= rect.x - margin
+        && x <= rect.x + rect.width + margin
+        && y >= rect.y - margin
+        && y <= rect.y + rect.height + margin
+}
+
+/// Cohen-Sutherland line clipping. Returns clipped line segment or None if fully outside.
+fn clip_line_segment(
+    mut x0: f64,
+    mut y0: f64,
+    mut x1: f64,
+    mut y1: f64,
+    rect: &Rect,
+) -> Option<((f64, f64), (f64, f64))> {
+    let xmin = rect.x;
+    let xmax = rect.x + rect.width;
+    let ymin = rect.y;
+    let ymax = rect.y + rect.height;
+
+    const INSIDE: u8 = 0;
+    const LEFT: u8 = 1;
+    const RIGHT: u8 = 2;
+    const BOTTOM: u8 = 4;
+    const TOP: u8 = 8;
+
+    let outcode = |x: f64, y: f64| -> u8 {
+        let mut code = INSIDE;
+        if x < xmin {
+            code |= LEFT;
+        } else if x > xmax {
+            code |= RIGHT;
+        }
+        if y < ymin {
+            code |= TOP;
+        } else if y > ymax {
+            code |= BOTTOM;
+        }
+        code
+    };
+
+    let mut code0 = outcode(x0, y0);
+    let mut code1 = outcode(x1, y1);
+
+    for _ in 0..20 {
+        if (code0 | code1) == 0 {
+            return Some(((x0, y0), (x1, y1)));
+        }
+        if (code0 & code1) != 0 {
+            return None;
+        }
+
+        let code_out = if code0 != 0 { code0 } else { code1 };
+        let (x, y);
+
+        if code_out & TOP != 0 {
+            x = x0 + (x1 - x0) * (ymin - y0) / (y1 - y0);
+            y = ymin;
+        } else if code_out & BOTTOM != 0 {
+            x = x0 + (x1 - x0) * (ymax - y0) / (y1 - y0);
+            y = ymax;
+        } else if code_out & RIGHT != 0 {
+            y = y0 + (y1 - y0) * (xmax - x0) / (x1 - x0);
+            x = xmax;
+        } else {
+            y = y0 + (y1 - y0) * (xmin - x0) / (x1 - x0);
+            x = xmin;
+        }
+
+        if code_out == code0 {
+            x0 = x;
+            y0 = y;
+            code0 = outcode(x0, y0);
+        } else {
+            x1 = x;
+            y1 = y;
+            code1 = outcode(x1, y1);
+        }
+    }
+
+    None
+}
+
 fn map_err<E: std::fmt::Debug>(e: E) -> RenderError {
     RenderError::BackendError(format!("{:?}", e))
 }
@@ -109,6 +202,10 @@ impl<'a, DB: DrawingBackend> DrawBackend for PlottersAdapter<'a, DB> {
         radius: f64,
         style: &PointStyle,
     ) -> Result<(), RenderError> {
+        // Clip: skip points entirely outside the plot area
+        if !point_in_rect(center.0, center.1, &self.plot_area) {
+            return Ok(());
+        }
         let color = to_rgba(style.color, style.alpha);
         if style.filled {
             self.area
@@ -150,11 +247,21 @@ impl<'a, DB: DrawingBackend> DrawBackend for PlottersAdapter<'a, DB> {
 
         for path in &sub_paths {
             for window in path.windows(2) {
-                let p1 = (window[0].0 as i32, window[0].1 as i32);
-                let p2 = (window[1].0 as i32, window[1].1 as i32);
-                self.area
-                    .draw(&PathElement::new(vec![p1, p2], stroke))
-                    .map_err(map_err)?;
+                // Clip each line segment to plot area
+                if let Some((p1, p2)) = clip_line_segment(
+                    window[0].0,
+                    window[0].1,
+                    window[1].0,
+                    window[1].1,
+                    &self.plot_area,
+                ) {
+                    self.area
+                        .draw(&PathElement::new(
+                            vec![(p1.0 as i32, p1.1 as i32), (p2.0 as i32, p2.1 as i32)],
+                            stroke,
+                        ))
+                        .map_err(map_err)?;
+                }
             }
         }
         Ok(())
@@ -166,8 +273,22 @@ impl<'a, DB: DrawingBackend> DrawBackend for PlottersAdapter<'a, DB> {
         bottom_right: (f64, f64),
         style: &RectStyle,
     ) -> Result<(), RenderError> {
-        let tl = (top_left.0 as i32, top_left.1 as i32);
-        let br = (bottom_right.0 as i32, bottom_right.1 as i32);
+        // Clamp rect to plot area
+        let clamped_tl = clip_point(top_left.0, top_left.1, &self.plot_area);
+        let clamped_br = clip_point(bottom_right.0, bottom_right.1, &self.plot_area);
+
+        // Skip if fully collapsed after clamping
+        if (clamped_tl.0 - clamped_br.0).abs() < 0.5 && (clamped_tl.1 - clamped_br.1).abs() < 0.5 {
+            // But don't skip if original rect was already small (it's a real data rect)
+            if (top_left.0 - bottom_right.0).abs() > 1.0
+                || (top_left.1 - bottom_right.1).abs() > 1.0
+            {
+                return Ok(());
+            }
+        }
+
+        let tl = (clamped_tl.0 as i32, clamped_tl.1 as i32);
+        let br = (clamped_br.0 as i32, clamped_br.1 as i32);
 
         if let Some(fill) = style.fill {
             let fill_color = to_rgba(fill, style.alpha);
@@ -278,6 +399,10 @@ impl<'a, DB: DrawingBackend> DrawBackend for PlottersAdapter<'a, DB> {
         radius: f64,
         style: &PointStyle,
     ) -> Result<(), RenderError> {
+        // Clip: skip shapes entirely outside the plot area
+        if !point_in_rect(center.0, center.1, &self.plot_area) {
+            return Ok(());
+        }
         let color = to_rgba(style.color, style.alpha);
         let (cx, cy) = (center.0 as i32, center.1 as i32);
         let r = radius as i32;

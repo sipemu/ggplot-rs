@@ -8,6 +8,8 @@ pub use crate::geom::bar::GeomBar;
 pub use crate::geom::bin2d::GeomBin2d;
 pub use crate::geom::boxplot::GeomBoxplot;
 pub use crate::geom::col::GeomCol;
+pub use crate::geom::contour::GeomContour;
+pub use crate::geom::count::GeomCount;
 pub use crate::geom::crossbar::GeomCrossbar;
 pub use crate::geom::curve::GeomCurve;
 pub use crate::geom::density::GeomDensity;
@@ -65,7 +67,9 @@ pub use crate::stat::function::StatFunction;
 pub use crate::stat::identity::StatIdentity;
 pub use crate::stat::loess::StatLoess;
 pub use crate::stat::smooth::SmoothMethod;
+pub use crate::stat::sum::StatSum;
 pub use crate::stat::summary::{StatSummary, SummaryFun};
+pub use crate::stat::summary_bin::StatSummaryBin;
 pub use crate::theme::elements::{ElementLine, ElementRect, ElementText};
 pub use crate::theme::presets::{
     theme_bw, theme_bw_base, theme_classic, theme_classic_base, theme_dark, theme_dark_base,

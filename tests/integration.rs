@@ -2332,3 +2332,396 @@ fn test_geom_label_hjust_fontfamily() {
     assert!(Path::new(&path).exists());
     std::fs::remove_file(&path).ok();
 }
+
+// ─── Tier 4: Auto-group by discrete X ──────────────────────
+
+#[test]
+fn test_auto_group_discrete_x() {
+    // Boxplot with discrete x should auto-group without explicit group column
+    let data = vec![
+        (
+            "x".to_string(),
+            vec![
+                Value::Str("A".into()),
+                Value::Str("A".into()),
+                Value::Str("A".into()),
+                Value::Str("A".into()),
+                Value::Str("A".into()),
+                Value::Str("B".into()),
+                Value::Str("B".into()),
+                Value::Str("B".into()),
+                Value::Str("B".into()),
+                Value::Str("B".into()),
+            ],
+        ),
+        (
+            "y".to_string(),
+            vec![
+                Value::Float(1.0),
+                Value::Float(2.0),
+                Value::Float(3.0),
+                Value::Float(4.0),
+                Value::Float(5.0),
+                Value::Float(10.0),
+                Value::Float(20.0),
+                Value::Float(30.0),
+                Value::Float(40.0),
+                Value::Float(50.0),
+            ],
+        ),
+    ];
+    let built = GGPlot::new(data)
+        .aes(Aes::new().x("x").y("y"))
+        .geom_boxplot()
+        .build();
+
+    // Should have at least 2 rows (one per group) from boxplot stat
+    assert!(
+        built.layers[0].data.nrows() >= 2,
+        "auto-grouping by discrete x should produce multiple groups, got {} rows",
+        built.layers[0].data.nrows()
+    );
+}
+
+// ─── Tier 4: Log2 and Ln transforms ────────────────────────
+
+#[test]
+fn test_scale_x_log2() {
+    let data = vec![
+        (
+            "x".to_string(),
+            vec![
+                Value::Float(1.0),
+                Value::Float(2.0),
+                Value::Float(4.0),
+                Value::Float(8.0),
+            ],
+        ),
+        (
+            "y".to_string(),
+            vec![
+                Value::Float(1.0),
+                Value::Float(2.0),
+                Value::Float(3.0),
+                Value::Float(4.0),
+            ],
+        ),
+    ];
+    let built = GGPlot::new(data)
+        .aes(Aes::new().x("x").y("y"))
+        .geom_point()
+        .scale_x_log2()
+        .build();
+
+    let x_scale = built.scales.get(&Aesthetic::X).unwrap();
+    // log2(8) = 3.0, log2(1) = 0.0
+    let v8 = x_scale.map(&Value::Float(8.0_f64.log2()));
+    let v1 = x_scale.map(&Value::Float(1.0_f64.log2()));
+    assert!(v8 > v1, "log2(8) should map higher than log2(1)");
+}
+
+#[test]
+fn test_scale_y_ln() {
+    let data = vec![
+        ("x".to_string(), vec![Value::Float(1.0), Value::Float(2.0)]),
+        (
+            "y".to_string(),
+            vec![Value::Float(1.0), Value::Float(std::f64::consts::E)],
+        ),
+    ];
+    let path = temp_path("scale_y_ln.svg");
+    GGPlot::new(data)
+        .aes(Aes::new().x("x").y("y"))
+        .geom_point()
+        .scale_y_ln()
+        .save(&path)
+        .expect("should render with ln-transformed y axis");
+    assert!(Path::new(&path).exists());
+    std::fs::remove_file(&path).ok();
+}
+
+// ─── Tier 4: geom_count / stat_sum ─────────────────────────
+
+#[test]
+fn test_geom_count_render() {
+    let data = vec![
+        (
+            "x".to_string(),
+            vec![
+                Value::Float(1.0),
+                Value::Float(1.0),
+                Value::Float(1.0),
+                Value::Float(2.0),
+                Value::Float(2.0),
+                Value::Float(3.0),
+            ],
+        ),
+        (
+            "y".to_string(),
+            vec![
+                Value::Float(1.0),
+                Value::Float(1.0),
+                Value::Float(1.0),
+                Value::Float(2.0),
+                Value::Float(2.0),
+                Value::Float(3.0),
+            ],
+        ),
+    ];
+    let path = temp_path("geom_count.svg");
+    GGPlot::new(data)
+        .aes(Aes::new().x("x").y("y"))
+        .geom_count()
+        .save(&path)
+        .expect("should render geom_count");
+    assert!(Path::new(&path).exists());
+    std::fs::remove_file(&path).ok();
+}
+
+#[test]
+fn test_stat_sum_build() {
+    let data = vec![
+        (
+            "x".to_string(),
+            vec![
+                Value::Float(1.0),
+                Value::Float(1.0),
+                Value::Float(1.0),
+                Value::Float(2.0),
+                Value::Float(2.0),
+                Value::Float(3.0),
+            ],
+        ),
+        (
+            "y".to_string(),
+            vec![
+                Value::Float(1.0),
+                Value::Float(1.0),
+                Value::Float(1.0),
+                Value::Float(2.0),
+                Value::Float(2.0),
+                Value::Float(3.0),
+            ],
+        ),
+    ];
+    let built = GGPlot::new(data)
+        .aes(Aes::new().x("x").y("y"))
+        .geom_count()
+        .build();
+
+    let layer = &built.layers[0].data;
+    // 3 unique (x,y) pairs: (1,1)x3, (2,2)x2, (3,3)x1
+    assert_eq!(layer.nrows(), 3, "stat_sum should produce 3 unique groups");
+    let n_col = layer.column("n").expect("should have n column");
+    let counts: Vec<f64> = n_col.iter().filter_map(|v| v.as_f64()).collect();
+    assert!(
+        counts.contains(&3.0),
+        "should have count 3 for (1,1), got {:?}",
+        counts
+    );
+    assert!(
+        counts.contains(&2.0),
+        "should have count 2 for (2,2), got {:?}",
+        counts
+    );
+    assert!(
+        counts.contains(&1.0),
+        "should have count 1 for (3,3), got {:?}",
+        counts
+    );
+}
+
+// ─── Tier 4: geom_contour / stat_contour ───────────────────
+
+#[test]
+fn test_geom_contour_render() {
+    // Generate gridded z = x^2 + y^2 data
+    let mut xs = Vec::new();
+    let mut ys = Vec::new();
+    let mut zs = Vec::new();
+    for ix in 0..10 {
+        for iy in 0..10 {
+            let x = ix as f64;
+            let y = iy as f64;
+            xs.push(Value::Float(x));
+            ys.push(Value::Float(y));
+            zs.push(Value::Float(x * x + y * y));
+        }
+    }
+    let data = vec![
+        ("x".to_string(), xs),
+        ("y".to_string(), ys),
+        ("z".to_string(), zs),
+    ];
+    let path = temp_path("geom_contour.svg");
+    GGPlot::new(data)
+        .aes(Aes::new().x("x").y("y"))
+        .geom_contour()
+        .save(&path)
+        .expect("should render contour lines");
+    assert!(Path::new(&path).exists());
+    std::fs::remove_file(&path).ok();
+}
+
+#[test]
+fn test_stat_contour_build() {
+    let mut xs = Vec::new();
+    let mut ys = Vec::new();
+    let mut zs = Vec::new();
+    for ix in 0..20 {
+        for iy in 0..20 {
+            let x = ix as f64;
+            let y = iy as f64;
+            xs.push(Value::Float(x));
+            ys.push(Value::Float(y));
+            zs.push(Value::Float(x * x + y * y));
+        }
+    }
+    let data = vec![
+        ("x".to_string(), xs),
+        ("y".to_string(), ys),
+        ("z".to_string(), zs),
+    ];
+    let built = GGPlot::new(data)
+        .aes(Aes::new().x("x").y("y"))
+        .geom_contour()
+        .build();
+
+    let layer = &built.layers[0].data;
+    // Should produce contour line segments
+    assert!(
+        layer.nrows() > 0,
+        "stat_contour should produce contour line data"
+    );
+    assert!(
+        layer.column("level").is_some(),
+        "contour data should have level column"
+    );
+    assert!(
+        layer.column("group").is_some(),
+        "contour data should have group column"
+    );
+}
+
+// ─── Tier 4: Plot panel clipping ────────────────────────────
+
+#[test]
+fn test_clipping_out_of_bounds() {
+    // Data extending well beyond coord limits should still render without panic
+    let data = vec![
+        (
+            "x".to_string(),
+            vec![
+                Value::Float(-100.0),
+                Value::Float(0.0),
+                Value::Float(5.0),
+                Value::Float(200.0),
+            ],
+        ),
+        (
+            "y".to_string(),
+            vec![
+                Value::Float(-50.0),
+                Value::Float(0.0),
+                Value::Float(5.0),
+                Value::Float(100.0),
+            ],
+        ),
+    ];
+    let path = temp_path("clipping.svg");
+    GGPlot::new(data)
+        .aes(Aes::new().x("x").y("y"))
+        .geom_point()
+        .geom_line()
+        .coord_cartesian_zoom(Some((0.0, 10.0)), Some((0.0, 10.0)))
+        .save(&path)
+        .expect("should render with clipping for out-of-bounds data");
+    assert!(Path::new(&path).exists());
+    std::fs::remove_file(&path).ok();
+}
+
+// ─── Tier 4: stat_summary_bin ───────────────────────────────
+
+#[test]
+fn test_stat_summary_bin_build() {
+    let data = vec![
+        (
+            "x".to_string(),
+            (0..100)
+                .map(|i| Value::Float(i as f64 / 10.0))
+                .collect::<Vec<_>>(),
+        ),
+        (
+            "y".to_string(),
+            (0..100)
+                .map(|i| Value::Float((i as f64 / 10.0).sin()))
+                .collect::<Vec<_>>(),
+        ),
+    ];
+    let built = GGPlot::new(data)
+        .aes(Aes::new().x("x").y("y"))
+        .geom_point()
+        .stat(StatSummaryBin::default().with_bins(5))
+        .build();
+
+    let layer = &built.layers[0].data;
+    // 5 bins, some may be empty but we should have at least a few rows
+    assert!(
+        layer.nrows() >= 3,
+        "stat_summary_bin should produce binned summary rows, got {}",
+        layer.nrows()
+    );
+    assert!(layer.column("ymin").is_some(), "should have ymin column");
+    assert!(layer.column("ymax").is_some(), "should have ymax column");
+}
+
+#[test]
+fn test_stat_summary_bin_mean() {
+    // 2 bins, each with known y values
+    let data = vec![
+        (
+            "x".to_string(),
+            vec![
+                Value::Float(0.0),
+                Value::Float(0.1),
+                Value::Float(0.2),
+                Value::Float(0.5),
+                Value::Float(0.6),
+                Value::Float(0.7),
+            ],
+        ),
+        (
+            "y".to_string(),
+            vec![
+                Value::Float(10.0),
+                Value::Float(20.0),
+                Value::Float(30.0),
+                Value::Float(40.0),
+                Value::Float(50.0),
+                Value::Float(60.0),
+            ],
+        ),
+    ];
+    let built = GGPlot::new(data)
+        .aes(Aes::new().x("x").y("y"))
+        .geom_point()
+        .stat(StatSummaryBin::default().with_bins(2))
+        .build();
+
+    let layer = &built.layers[0].data;
+    let y_col = layer.column("y").expect("should have y column");
+    let y_vals: Vec<f64> = y_col.iter().filter_map(|v| v.as_f64()).collect();
+    // Bin 1: x in [0, 0.35) -> y = [10, 20, 30] -> mean = 20
+    // Bin 2: x in [0.35, 0.7] -> y = [40, 50, 60] -> mean = 50
+    assert_eq!(y_vals.len(), 2, "should have 2 bins");
+    assert!(
+        (y_vals[0] - 20.0).abs() < 1e-6,
+        "first bin mean should be 20, got {}",
+        y_vals[0]
+    );
+    assert!(
+        (y_vals[1] - 50.0).abs() < 1e-6,
+        "second bin mean should be 50, got {}",
+        y_vals[1]
+    );
+}

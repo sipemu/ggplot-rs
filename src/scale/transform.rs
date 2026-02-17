@@ -5,6 +5,8 @@ use crate::data::Value;
 pub enum ScaleTransform {
     Identity,
     Log10,
+    Log2,
+    Ln,
     Sqrt,
     Reverse,
 }
@@ -17,6 +19,20 @@ impl ScaleTransform {
             ScaleTransform::Log10 => {
                 if value > 0.0 {
                     value.log10()
+                } else {
+                    f64::NEG_INFINITY
+                }
+            }
+            ScaleTransform::Log2 => {
+                if value > 0.0 {
+                    value.log2()
+                } else {
+                    f64::NEG_INFINITY
+                }
+            }
+            ScaleTransform::Ln => {
+                if value > 0.0 {
+                    value.ln()
                 } else {
                     f64::NEG_INFINITY
                 }
@@ -37,6 +53,8 @@ impl ScaleTransform {
         match self {
             ScaleTransform::Identity => value,
             ScaleTransform::Log10 => 10f64.powf(value),
+            ScaleTransform::Log2 => 2f64.powf(value),
+            ScaleTransform::Ln => value.exp(),
             ScaleTransform::Sqrt => value * value,
             ScaleTransform::Reverse => -value,
         }

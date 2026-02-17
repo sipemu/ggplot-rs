@@ -3,6 +3,7 @@ pub mod bin2d;
 pub mod bindot;
 pub mod binhex;
 pub mod boxplot;
+pub mod contour;
 pub mod count;
 pub mod density;
 pub mod ecdf;
@@ -11,7 +12,9 @@ pub mod identity;
 pub mod loess;
 pub mod qq;
 pub mod smooth;
+pub mod sum;
 pub mod summary;
+pub mod summary_bin;
 pub mod ydensity;
 
 use crate::aes::{Aes, Aesthetic};
