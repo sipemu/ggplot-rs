@@ -41,6 +41,7 @@ pub use crate::position::dodge2::PositionDodge2;
 pub use crate::position::fill::PositionFill;
 pub use crate::position::identity::PositionIdentity;
 pub use crate::position::jitter::PositionJitter;
+pub use crate::position::jitterdodge::PositionJitterDodge;
 pub use crate::position::nudge::PositionNudge;
 pub use crate::position::stack::PositionStack;
 pub use crate::render::backend::{Linetype, PointShape};
@@ -48,6 +49,7 @@ pub use crate::scale::alpha::ScaleAlphaContinuous;
 pub use crate::scale::color::{RGBAColor, ScaleColorContinuous, ScaleColorDiscrete};
 pub use crate::scale::continuous::ScaleContinuous;
 pub use crate::scale::datetime::ScaleDateTime;
+pub use crate::scale::discrete::ScaleDiscrete;
 pub use crate::scale::gradient::ScaleColorGradient2;
 pub use crate::scale::manual::ScaleManual;
 pub use crate::scale::palettes::PaletteName;
@@ -68,5 +70,5 @@ pub use crate::theme::presets::{
     theme_gray, theme_gray_base, theme_light, theme_light_base, theme_linedraw,
     theme_linedraw_base, theme_minimal, theme_minimal_base, theme_void, theme_void_base,
 };
-pub use crate::theme::{LegendPosition, Margin, Theme};
+pub use crate::theme::{LegendPosition, Margin, Theme, ThemeUpdate};
 pub use polars;

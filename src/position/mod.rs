@@ -3,6 +3,7 @@ pub mod dodge2;
 pub mod fill;
 pub mod identity;
 pub mod jitter;
+pub mod jitterdodge;
 pub mod nudge;
 pub mod stack;
 

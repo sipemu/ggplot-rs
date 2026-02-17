@@ -95,7 +95,7 @@ impl GGPlot {
             mapping: Aes::default(),
             layers: Vec::new(),
             scales: Vec::new(),
-            coord: Box::new(CoordCartesian),
+            coord: Box::new(CoordCartesian::new()),
             theme: Theme::default(),
             labels: Labels::default(),
             facet: Facet::default(),
@@ -450,6 +450,18 @@ impl GGPlot {
         self
     }
 
+    pub fn scale_x_discrete(mut self, s: crate::scale::discrete::ScaleDiscrete) -> Self {
+        let s = s.for_aesthetic(crate::aes::Aesthetic::X);
+        self.scales.push(Box::new(s));
+        self
+    }
+
+    pub fn scale_y_discrete(mut self, s: crate::scale::discrete::ScaleDiscrete) -> Self {
+        let s = s.for_aesthetic(crate::aes::Aesthetic::Y);
+        self.scales.push(Box::new(s));
+        self
+    }
+
     pub fn scale_color(mut self, s: impl Scale + 'static) -> Self {
         self.scales.push(Box::new(s));
         self
@@ -595,6 +607,23 @@ impl GGPlot {
         self
     }
 
+    /// Zoom into a region without filtering data (unlike xlim/ylim which filter).
+    pub fn coord_cartesian_zoom(
+        mut self,
+        xlim: Option<(f64, f64)>,
+        ylim: Option<(f64, f64)>,
+    ) -> Self {
+        let mut c = CoordCartesian::new();
+        if let Some((min, max)) = xlim {
+            c = c.xlim(min, max);
+        }
+        if let Some((min, max)) = ylim {
+            c = c.ylim(min, max);
+        }
+        self.coord = Box::new(c);
+        self
+    }
+
     pub fn coord_polar(mut self) -> Self {
         self.coord = Box::new(CoordPolar::new());
         self
@@ -649,6 +678,13 @@ impl GGPlot {
 
     pub fn theme_void(mut self) -> Self {
         self.theme = crate::theme::presets::theme_void();
+        self
+    }
+
+    /// Apply incremental theme modifications on top of the current theme.
+    /// Like R's `+ theme(axis.text.x = element_text(...))`.
+    pub fn theme_update(mut self, update: crate::theme::ThemeUpdate) -> Self {
+        self.theme = self.theme.update(update);
         self
     }
 
@@ -741,7 +777,7 @@ impl GGPlot {
 
         // Build the plot
         let has_title = plot.labels.title.is_some();
-        let has_legend = plot.has_color_or_fill_mapping();
+        let has_legend = plot.has_legend_mapping();
         let x_label = plot.labels.x.clone();
         let y_label = plot.labels.y.clone();
 
@@ -806,11 +842,16 @@ impl GGPlot {
         self.save_with_size(path, w, h)
     }
 
-    fn has_color_or_fill_mapping(&self) -> bool {
+    fn has_legend_mapping(&self) -> bool {
         self.mapping.mappings.iter().any(|m| {
             matches!(
                 m.aesthetic,
-                crate::aes::Aesthetic::Color | crate::aes::Aesthetic::Fill
+                crate::aes::Aesthetic::Color
+                    | crate::aes::Aesthetic::Fill
+                    | crate::aes::Aesthetic::Shape
+                    | crate::aes::Aesthetic::Linetype
+                    | crate::aes::Aesthetic::Size
+                    | crate::aes::Aesthetic::Alpha
             )
         })
     }

@@ -1393,3 +1393,437 @@ fn test_position_nudge_build() {
         x_vals[1]
     );
 }
+
+// ─── Tier 2: Multi-aesthetic legends ────────────────────────
+
+#[test]
+fn test_shape_legend() {
+    let data = vec![
+        (
+            "x".to_string(),
+            vec![Value::Float(1.0), Value::Float(2.0), Value::Float(3.0)],
+        ),
+        (
+            "y".to_string(),
+            vec![Value::Float(1.0), Value::Float(2.0), Value::Float(3.0)],
+        ),
+        (
+            "species".to_string(),
+            vec![
+                Value::Str("cat".into()),
+                Value::Str("dog".into()),
+                Value::Str("bird".into()),
+            ],
+        ),
+    ];
+    let path = temp_path("shape_legend.svg");
+    GGPlot::new(data)
+        .aes(Aes::new().x("x").y("y").shape("species"))
+        .geom_point()
+        .save(&path)
+        .expect("should render with shape legend");
+    assert!(Path::new(&path).exists());
+    let content = std::fs::read_to_string(&path).unwrap();
+    // Legend should contain the species labels
+    assert!(content.contains("cat"), "legend should show 'cat'");
+    assert!(content.contains("dog"), "legend should show 'dog'");
+    std::fs::remove_file(&path).ok();
+}
+
+#[test]
+fn test_linetype_legend() {
+    let data = vec![
+        (
+            "x".to_string(),
+            vec![
+                Value::Float(1.0),
+                Value::Float(2.0),
+                Value::Float(1.0),
+                Value::Float(2.0),
+            ],
+        ),
+        (
+            "y".to_string(),
+            vec![
+                Value::Float(1.0),
+                Value::Float(2.0),
+                Value::Float(2.0),
+                Value::Float(3.0),
+            ],
+        ),
+        (
+            "group".to_string(),
+            vec![
+                Value::Str("a".into()),
+                Value::Str("a".into()),
+                Value::Str("b".into()),
+                Value::Str("b".into()),
+            ],
+        ),
+    ];
+    let path = temp_path("linetype_legend.svg");
+    GGPlot::new(data)
+        .aes(Aes::new().x("x").y("y").linetype("group"))
+        .geom_line()
+        .save(&path)
+        .expect("should render with linetype legend");
+    assert!(Path::new(&path).exists());
+    std::fs::remove_file(&path).ok();
+}
+
+#[test]
+fn test_size_legend() {
+    let data = vec![
+        (
+            "x".to_string(),
+            vec![Value::Float(1.0), Value::Float(2.0), Value::Float(3.0)],
+        ),
+        (
+            "y".to_string(),
+            vec![Value::Float(1.0), Value::Float(2.0), Value::Float(3.0)],
+        ),
+        (
+            "weight".to_string(),
+            vec![Value::Float(10.0), Value::Float(50.0), Value::Float(100.0)],
+        ),
+    ];
+    let path = temp_path("size_legend.svg");
+    GGPlot::new(data)
+        .aes(Aes::new().x("x").y("y").size("weight"))
+        .geom_point()
+        .save(&path)
+        .expect("should render with size legend");
+    assert!(Path::new(&path).exists());
+    std::fs::remove_file(&path).ok();
+}
+
+// ─── Tier 2: coord_cartesian zoom ───────────────────────────
+
+#[test]
+fn test_coord_cartesian_zoom_render() {
+    let data = xy_data();
+    let path = temp_path("coord_zoom.svg");
+    GGPlot::new(data)
+        .aes(Aes::new().x("x").y("y"))
+        .geom_point()
+        .coord_cartesian_zoom(Some((2.0, 8.0)), Some((1.0, 5.0)))
+        .save(&path)
+        .expect("should render with coord_cartesian zoom");
+    assert!(Path::new(&path).exists());
+    std::fs::remove_file(&path).ok();
+}
+
+#[test]
+fn test_coord_cartesian_zoom_preserves_data() {
+    // coord_cartesian zoom should NOT filter data (unlike xlim/ylim)
+    let data = vec![
+        (
+            "x".to_string(),
+            vec![Value::Float(1.0), Value::Float(5.0), Value::Float(10.0)],
+        ),
+        (
+            "y".to_string(),
+            vec![Value::Float(1.0), Value::Float(5.0), Value::Float(10.0)],
+        ),
+    ];
+    let built = GGPlot::new(data)
+        .aes(Aes::new().x("x").y("y"))
+        .geom_point()
+        .coord_cartesian_zoom(Some((2.0, 8.0)), None)
+        .build();
+
+    // All 3 data points should still be present
+    let nrows = built.layers[0].data.nrows();
+    assert_eq!(nrows, 3, "zoom should not filter rows, got {nrows}");
+}
+
+// ─── Tier 2: Theme composition ──────────────────────────────
+
+#[test]
+fn test_theme_update_render() {
+    let data = xy_data();
+    let path = temp_path("theme_update.svg");
+    GGPlot::new(data)
+        .aes(Aes::new().x("x").y("y"))
+        .geom_point()
+        .theme_minimal()
+        .theme_update(ThemeUpdate {
+            title: Some(ElementText {
+                color: (255, 0, 0),
+                size: 20.0,
+                ..Default::default()
+            }),
+            ..Default::default()
+        })
+        .title("Red Title")
+        .save(&path)
+        .expect("should render with theme update");
+    assert!(Path::new(&path).exists());
+    std::fs::remove_file(&path).ok();
+}
+
+#[test]
+fn test_theme_update_preserves_base() {
+    // theme_update should only override specified fields
+    let base = ggplot_rs::prelude::theme_minimal();
+    let original_axis_text_size = base.axis_text_x.size;
+
+    let updated = base.update(ThemeUpdate {
+        title: Some(ElementText {
+            color: (255, 0, 0),
+            size: 24.0,
+            ..Default::default()
+        }),
+        ..Default::default()
+    });
+
+    assert_eq!(
+        updated.axis_text_x.size, original_axis_text_size,
+        "non-updated fields should be preserved"
+    );
+    assert_eq!(updated.title.size, 24.0, "updated field should change");
+    assert_eq!(
+        updated.title.color,
+        (255, 0, 0),
+        "updated color should change"
+    );
+}
+
+// ─── Tier 2: Discrete scale ordering/limits ─────────────────
+
+#[test]
+fn test_discrete_scale_limits() {
+    let data = vec![(
+        "x".to_string(),
+        vec![
+            Value::Str("c".into()),
+            Value::Str("a".into()),
+            Value::Str("b".into()),
+            Value::Str("a".into()),
+        ],
+    )];
+    let built = GGPlot::new(data)
+        .aes(Aes::new().x("x"))
+        .geom_bar()
+        .scale_x_discrete(ScaleDiscrete::new().with_limits(vec!["b", "a"]))
+        .build();
+
+    let x_scale = built.scales.get(&Aesthetic::X).unwrap();
+    let breaks = x_scale.breaks();
+    let labels: Vec<&str> = breaks.iter().map(|(_, l)| l.as_str()).collect();
+    // Only "b" and "a" should appear, in that order
+    assert_eq!(
+        labels,
+        vec!["b", "a"],
+        "limits should control order: {labels:?}"
+    );
+}
+
+#[test]
+fn test_discrete_scale_custom_labels() {
+    let data = vec![(
+        "x".to_string(),
+        vec![
+            Value::Str("a".into()),
+            Value::Str("b".into()),
+            Value::Str("c".into()),
+        ],
+    )];
+    let built = GGPlot::new(data)
+        .aes(Aes::new().x("x"))
+        .geom_bar()
+        .scale_x_discrete(ScaleDiscrete::new().with_labels(vec![
+            "Alpha".into(),
+            "Beta".into(),
+            "Gamma".into(),
+        ]))
+        .build();
+
+    let x_scale = built.scales.get(&Aesthetic::X).unwrap();
+    let breaks = x_scale.breaks();
+    let labels: Vec<&str> = breaks.iter().map(|(_, l)| l.as_str()).collect();
+    assert_eq!(labels, vec!["Alpha", "Beta", "Gamma"]);
+}
+
+// ─── Tier 2: position_jitterdodge ───────────────────────────
+
+#[test]
+fn test_position_jitterdodge_render() {
+    let mut rows = Vec::new();
+    for x_val in [1.0, 2.0, 3.0] {
+        for fill in ["g1", "g2"] {
+            for _ in 0..5 {
+                rows.push(HashMap::from([
+                    ("x".to_string(), Value::Float(x_val)),
+                    ("y".to_string(), Value::Float(x_val + 1.0)),
+                    ("fill".to_string(), Value::Str(fill.into())),
+                ]));
+            }
+        }
+    }
+    let path = temp_path("jitterdodge.svg");
+    GGPlot::new(rows)
+        .aes(Aes::new().x("x").y("y").fill("fill"))
+        .geom_point()
+        .position(PositionJitterDodge::new(0.2, 0.0))
+        .save(&path)
+        .expect("should render with position_jitterdodge");
+    assert!(Path::new(&path).exists());
+    std::fs::remove_file(&path).ok();
+}
+
+#[test]
+fn test_position_jitterdodge_build() {
+    // Verify that jitterdodge both dodges groups apart and jitters within
+    let data = vec![
+        (
+            "x".to_string(),
+            vec![
+                Value::Float(1.0),
+                Value::Float(1.0),
+                Value::Float(1.0),
+                Value::Float(1.0),
+            ],
+        ),
+        (
+            "y".to_string(),
+            vec![
+                Value::Float(1.0),
+                Value::Float(2.0),
+                Value::Float(3.0),
+                Value::Float(4.0),
+            ],
+        ),
+        (
+            "fill".to_string(),
+            vec![
+                Value::Str("a".into()),
+                Value::Str("a".into()),
+                Value::Str("b".into()),
+                Value::Str("b".into()),
+            ],
+        ),
+    ];
+    let built = GGPlot::new(data)
+        .aes(Aes::new().x("x").y("y").fill("fill"))
+        .geom_point()
+        .position(PositionJitterDodge::new(0.3, 0.0).with_seed(42))
+        .build();
+
+    let x_vals: Vec<f64> = built.layers[0]
+        .data
+        .column("x")
+        .unwrap()
+        .iter()
+        .filter_map(|v| v.as_f64())
+        .collect();
+
+    // All x values started at 1.0 — after dodge+jitter they should be different
+    let all_same = x_vals.windows(2).all(|w| (w[0] - w[1]).abs() < 1e-10);
+    assert!(!all_same, "jitterdodge should produce different x values");
+
+    // Group "a" (indices 0,1) should have different mean x from group "b" (indices 2,3)
+    let mean_a = (x_vals[0] + x_vals[1]) / 2.0;
+    let mean_b = (x_vals[2] + x_vals[3]) / 2.0;
+    assert!(
+        (mean_a - mean_b).abs() > 0.1,
+        "dodge should separate groups: mean_a={mean_a}, mean_b={mean_b}"
+    );
+}
+
+// ─── Tier 2: Legend position variants ───────────────────────
+
+#[test]
+fn test_legend_position_bottom() {
+    let data = vec![
+        (
+            "x".to_string(),
+            vec![Value::Float(1.0), Value::Float(2.0), Value::Float(3.0)],
+        ),
+        (
+            "y".to_string(),
+            vec![Value::Float(1.0), Value::Float(2.0), Value::Float(3.0)],
+        ),
+        (
+            "color".to_string(),
+            vec![
+                Value::Str("a".into()),
+                Value::Str("b".into()),
+                Value::Str("c".into()),
+            ],
+        ),
+    ];
+    let path = temp_path("legend_bottom.svg");
+    GGPlot::new(data)
+        .aes(Aes::new().x("x").y("y").color("color"))
+        .geom_point()
+        .theme(Theme::default().set_legend_position(LegendPosition::Bottom))
+        .save(&path)
+        .expect("should render with bottom legend");
+    assert!(Path::new(&path).exists());
+    std::fs::remove_file(&path).ok();
+}
+
+#[test]
+fn test_legend_position_top() {
+    let data = vec![
+        ("x".to_string(), vec![Value::Float(1.0), Value::Float(2.0)]),
+        ("y".to_string(), vec![Value::Float(1.0), Value::Float(2.0)]),
+        (
+            "color".to_string(),
+            vec![Value::Str("x".into()), Value::Str("y".into())],
+        ),
+    ];
+    let path = temp_path("legend_top.svg");
+    GGPlot::new(data)
+        .aes(Aes::new().x("x").y("y").color("color"))
+        .geom_point()
+        .theme(Theme::default().set_legend_position(LegendPosition::Top))
+        .save(&path)
+        .expect("should render with top legend");
+    assert!(Path::new(&path).exists());
+    std::fs::remove_file(&path).ok();
+}
+
+#[test]
+fn test_legend_position_left() {
+    let data = vec![
+        ("x".to_string(), vec![Value::Float(1.0), Value::Float(2.0)]),
+        ("y".to_string(), vec![Value::Float(1.0), Value::Float(2.0)]),
+        (
+            "color".to_string(),
+            vec![Value::Str("x".into()), Value::Str("y".into())],
+        ),
+    ];
+    let path = temp_path("legend_left.svg");
+    GGPlot::new(data)
+        .aes(Aes::new().x("x").y("y").color("color"))
+        .geom_point()
+        .theme(Theme::default().set_legend_position(LegendPosition::Left))
+        .save(&path)
+        .expect("should render with left legend");
+    assert!(Path::new(&path).exists());
+    std::fs::remove_file(&path).ok();
+}
+
+#[test]
+fn test_legend_position_none() {
+    let data = vec![
+        ("x".to_string(), vec![Value::Float(1.0), Value::Float(2.0)]),
+        ("y".to_string(), vec![Value::Float(1.0), Value::Float(2.0)]),
+        (
+            "color".to_string(),
+            vec![Value::Str("x".into()), Value::Str("y".into())],
+        ),
+    ];
+    let path = temp_path("legend_none.svg");
+    GGPlot::new(data)
+        .aes(Aes::new().x("x").y("y").color("color"))
+        .geom_point()
+        .theme(Theme::default().set_legend_position(LegendPosition::None))
+        .save(&path)
+        .expect("should render with no legend");
+    assert!(Path::new(&path).exists());
+    // Just verify it renders without error
+    std::fs::remove_file(&path).ok();
+}

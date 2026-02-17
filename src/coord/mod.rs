@@ -19,4 +19,14 @@ pub trait Coord: Send + Sync {
     fn is_flipped(&self) -> bool {
         false
     }
+
+    /// Zoom limits for x-axis (data coordinates). Clips viewport without filtering data.
+    fn zoom_x(&self) -> Option<(f64, f64)> {
+        None
+    }
+
+    /// Zoom limits for y-axis (data coordinates). Clips viewport without filtering data.
+    fn zoom_y(&self) -> Option<(f64, f64)> {
+        None
+    }
 }

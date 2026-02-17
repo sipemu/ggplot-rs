@@ -80,4 +80,9 @@ pub trait Scale: Send + Sync {
     fn sec_axis(&self) -> Option<&sec_axis::SecAxis> {
         None
     }
+
+    /// Override the trained domain limits (used by coord_cartesian zoom).
+    fn set_limits(&mut self, _min: f64, _max: f64) {
+        // Default no-op. Continuous scales override this.
+    }
 }

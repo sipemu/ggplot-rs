@@ -65,6 +65,14 @@ impl PlotBuilder {
             scale_set.train_layer(&bl.data);
         }
 
+        // Apply coord zoom limits (coord_cartesian xlim/ylim)
+        if let Some((min, max)) = coord.zoom_x() {
+            scale_set.set_limits(&Aesthetic::X, min, max);
+        }
+        if let Some((min, max)) = coord.zoom_y() {
+            scale_set.set_limits(&Aesthetic::Y, min, max);
+        }
+
         // Compute facet panels
         let (panels, panels_data) = Self::compute_facets(&facet, &built_layers, &plot_data);
 

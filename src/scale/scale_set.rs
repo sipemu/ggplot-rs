@@ -149,6 +149,13 @@ impl ScaleSet {
             .and_then(|s| s.map_to_alpha(value))
     }
 
+    /// Override the domain limits for a scale (used by coord_cartesian zoom).
+    pub fn set_limits(&mut self, aes: &Aesthetic, min: f64, max: f64) {
+        if let Some(scale) = self.get_mut(aes) {
+            scale.set_limits(min, max);
+        }
+    }
+
     /// Get the secondary axis for an aesthetic, if one exists.
     pub fn sec_axis(&self, aes: &Aesthetic) -> Option<&crate::scale::sec_axis::SecAxis> {
         self.get(aes).and_then(|s| s.sec_axis())

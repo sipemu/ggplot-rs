@@ -174,4 +174,10 @@ impl Scale for ScaleDateTime {
     fn set_name(&mut self, name: &str) {
         self.name = name.to_string();
     }
+
+    fn set_limits(&mut self, min: f64, max: f64) {
+        self.min = min;
+        self.max = max;
+        self.trained = true;
+    }
 }

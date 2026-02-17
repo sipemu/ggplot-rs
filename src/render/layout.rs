@@ -1,4 +1,4 @@
-use crate::theme::Theme;
+use crate::theme::{LegendPosition, Theme};
 
 use super::Rect;
 
@@ -53,7 +53,7 @@ impl PlotLayout {
                 0.0
             };
 
-        let legend_width = if has_legend {
+        let legend_size = if has_legend {
             theme.legend_margin.left
                 + theme.legend_key_width
                 + theme.legend_spacing
@@ -63,10 +63,30 @@ impl PlotLayout {
             0.0
         };
 
-        let plot_x = margin.left + y_axis_width;
-        let plot_y = margin.top + title_height;
-        let plot_width = width - margin.left - margin.right - y_axis_width - legend_width;
-        let plot_height = height - margin.top - margin.bottom - title_height - x_axis_height;
+        // Determine legend space allocation per position
+        let (legend_right, legend_left, legend_top, legend_bottom) = if has_legend {
+            match theme.legend_position {
+                LegendPosition::Right => (legend_size, 0.0, 0.0, 0.0),
+                LegendPosition::Left => (0.0, legend_size, 0.0, 0.0),
+                LegendPosition::Top => (0.0, 0.0, legend_size, 0.0),
+                LegendPosition::Bottom => (0.0, 0.0, 0.0, legend_size),
+                LegendPosition::None => (0.0, 0.0, 0.0, 0.0),
+            }
+        } else {
+            (0.0, 0.0, 0.0, 0.0)
+        };
+
+        let plot_x = margin.left + y_axis_width + legend_left;
+        let plot_y = margin.top + title_height + legend_top;
+        let plot_width =
+            width - margin.left - margin.right - y_axis_width - legend_right - legend_left;
+        let plot_height = height
+            - margin.top
+            - margin.bottom
+            - title_height
+            - x_axis_height
+            - legend_top
+            - legend_bottom;
 
         let plot_width = plot_width.max(50.0);
         let plot_height = plot_height.max(50.0);
@@ -97,7 +117,7 @@ impl PlotLayout {
                 height: x_axis_height,
             },
             y_axis_area: Rect {
-                x: margin.left,
+                x: margin.left + legend_left,
                 y: plot_y,
                 width: y_axis_width,
                 height: plot_height,
@@ -105,7 +125,7 @@ impl PlotLayout {
             legend_area: Rect {
                 x: plot_x + plot_width,
                 y: plot_y,
-                width: legend_width,
+                width: legend_size,
                 height: plot_height,
             },
         }

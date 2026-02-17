@@ -335,6 +335,106 @@ impl Theme {
         self.panel_spacing_y = val;
         self
     }
+
+    /// Apply incremental theme modifications.
+    /// Only fields that are `Some` in the update are applied.
+    pub fn update(mut self, upd: ThemeUpdate) -> Self {
+        if let Some(v) = upd.text {
+            self.text = v;
+        }
+        if let Some(v) = upd.title {
+            self.title = v;
+        }
+        if let Some(v) = upd.subtitle {
+            self.subtitle = v;
+        }
+        if let Some(v) = upd.caption {
+            self.caption = v;
+        }
+        if let Some(v) = upd.axis_text_x {
+            self.axis_text_x = v;
+        }
+        if let Some(v) = upd.axis_text_y {
+            self.axis_text_y = v;
+        }
+        if let Some(v) = upd.axis_title_x {
+            self.axis_title_x = v;
+        }
+        if let Some(v) = upd.axis_title_y {
+            self.axis_title_y = v;
+        }
+        if let Some(v) = upd.axis_line {
+            self.axis_line = v;
+        }
+        if let Some(v) = upd.axis_ticks {
+            self.axis_ticks = v;
+        }
+        if let Some(v) = upd.panel_background {
+            self.panel_background = v;
+        }
+        if let Some(v) = upd.panel_grid_major {
+            self.panel_grid_major = v;
+        }
+        if let Some(v) = upd.panel_grid_minor {
+            self.panel_grid_minor = v;
+        }
+        if let Some(v) = upd.panel_border {
+            self.panel_border = v;
+        }
+        if let Some(v) = upd.plot_background {
+            self.plot_background = v;
+        }
+        if let Some(v) = upd.legend_position {
+            self.legend_position = v;
+        }
+        if let Some(v) = upd.legend_title {
+            self.legend_title = v;
+        }
+        if let Some(v) = upd.legend_text {
+            self.legend_text = v;
+        }
+        if let Some(v) = upd.legend_background {
+            self.legend_background = v;
+        }
+        if let Some(v) = upd.strip_text {
+            self.strip_text = v;
+        }
+        if let Some(v) = upd.strip_background {
+            self.strip_background = v;
+        }
+        if let Some(v) = upd.plot_margin {
+            self.plot_margin = v;
+        }
+        self
+    }
+}
+
+/// Incremental theme modifications. All fields are optional — only `Some` values are applied.
+/// Like R's `theme(axis.text.x = element_text(...))`.
+#[derive(Clone, Debug, Default)]
+pub struct ThemeUpdate {
+    pub text: Option<ElementText>,
+    pub title: Option<ElementText>,
+    pub subtitle: Option<ElementText>,
+    pub caption: Option<ElementText>,
+    pub axis_text_x: Option<ElementText>,
+    pub axis_text_y: Option<ElementText>,
+    pub axis_title_x: Option<ElementText>,
+    pub axis_title_y: Option<ElementText>,
+    pub axis_line: Option<ElementLine>,
+    pub axis_ticks: Option<ElementLine>,
+    pub panel_background: Option<ElementRect>,
+    pub panel_grid_major: Option<ElementLine>,
+    pub panel_grid_minor: Option<ElementLine>,
+    pub panel_border: Option<ElementLine>,
+    pub plot_background: Option<ElementRect>,
+    pub legend_position: Option<LegendPosition>,
+    pub legend_title: Option<ElementText>,
+    pub legend_text: Option<ElementText>,
+    pub legend_background: Option<ElementRect>,
+    pub strip_text: Option<ElementText>,
+    pub strip_background: Option<ElementRect>,
+    pub plot_margin: Option<Margin>,
 }
 
 impl Default for Theme {

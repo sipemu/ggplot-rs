@@ -193,4 +193,10 @@ impl Scale for ScaleContinuous {
     fn sec_axis(&self) -> Option<&SecAxis> {
         self.sec_axis.as_ref()
     }
+
+    fn set_limits(&mut self, min: f64, max: f64) {
+        self.min = min;
+        self.max = max;
+        self.trained = true;
+    }
 }

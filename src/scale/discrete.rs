@@ -10,6 +10,8 @@ pub struct ScaleDiscrete {
     name: String,
     levels: Vec<String>,
     custom_labels: Option<Vec<String>>,
+    /// Pre-set level order/filter. When set, only these levels are shown (in this order).
+    limits: Option<Vec<String>>,
 }
 
 impl ScaleDiscrete {
@@ -19,6 +21,7 @@ impl ScaleDiscrete {
             name: String::new(),
             levels: Vec::new(),
             custom_labels: None,
+            limits: None,
         }
     }
 
@@ -37,6 +40,24 @@ impl ScaleDiscrete {
         self.custom_labels = Some(labels);
         self
     }
+
+    /// Set level order and filter. Only these levels are shown, in this order.
+    /// Data values not in limits are mapped to the middle (0.5).
+    pub fn with_limits(mut self, limits: Vec<&str>) -> Self {
+        self.limits = Some(limits.into_iter().map(|s| s.to_string()).collect());
+        self
+    }
+}
+
+impl ScaleDiscrete {
+    /// Get the effective levels (filtered by limits if set).
+    fn effective_levels(&self) -> &[String] {
+        if let Some(ref limits) = self.limits {
+            limits
+        } else {
+            &self.levels
+        }
+    }
 }
 
 impl Default for ScaleDiscrete {
@@ -51,33 +72,39 @@ impl Scale for ScaleDiscrete {
     }
 
     fn train(&mut self, values: &[Value]) {
-        for v in values {
-            let key = v.to_group_key();
-            if !self.levels.contains(&key) {
-                self.levels.push(key);
+        if let Some(ref limits) = self.limits {
+            // When limits are set, use them as the level order (ignore data order)
+            self.levels = limits.clone();
+        } else {
+            for v in values {
+                let key = v.to_group_key();
+                if !self.levels.contains(&key) {
+                    self.levels.push(key);
+                }
             }
         }
     }
 
     fn map(&self, value: &Value) -> f64 {
         let key = value.to_group_key();
-        let n = self.levels.len();
+        let effective = self.effective_levels();
+        let n = effective.len();
         if n == 0 {
             return 0.5;
         }
-        match self.levels.iter().position(|l| l == &key) {
-            // Band-based positioning: each category centered in its band
+        match effective.iter().position(|l| l == &key) {
             Some(idx) => (idx as f64 + 0.5) / n as f64,
-            None => 0.5,
+            None => 0.5, // Not in limits → maps to middle
         }
     }
 
     fn breaks(&self) -> Vec<(f64, String)> {
-        let n = self.levels.len();
+        let effective = self.effective_levels();
+        let n = effective.len();
         if n == 0 {
             return vec![];
         }
-        self.levels
+        effective
             .iter()
             .enumerate()
             .map(|(i, level)| {
