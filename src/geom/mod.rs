@@ -1,18 +1,35 @@
 pub mod area;
 pub mod bar;
+pub mod bin2d;
 pub mod boxplot;
 pub mod col;
+pub mod crossbar;
+pub mod curve;
 pub mod density;
+pub mod dotplot;
 pub mod errorbar;
+pub mod freqpoly;
+pub mod hex;
 pub mod histogram;
+pub mod jitter;
 pub mod line;
+pub mod linerange;
+pub mod path;
 pub mod point;
+pub mod pointrange;
+pub mod polygon;
+pub mod qq;
+pub mod rect;
 pub mod refline;
 pub mod ribbon;
 pub mod rug;
 pub mod segment;
 pub mod smooth;
+pub mod spoke;
+pub mod step;
 pub mod text;
+pub mod tile;
+pub mod violin;
 
 use std::collections::HashMap;
 

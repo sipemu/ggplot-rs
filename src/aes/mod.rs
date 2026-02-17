@@ -22,6 +22,8 @@ pub enum Aesthetic {
     Weight,
     Xend,
     Yend,
+    Angle,
+    Radius,
 }
 
 impl Aesthetic {
@@ -45,6 +47,8 @@ impl Aesthetic {
             Aesthetic::Weight => "weight",
             Aesthetic::Xend => "xend",
             Aesthetic::Yend => "yend",
+            Aesthetic::Angle => "angle",
+            Aesthetic::Radius => "radius",
         }
     }
 }
@@ -175,6 +179,38 @@ impl Aes {
         self.mappings.push(AesMapping {
             column: col.to_string(),
             aesthetic: Aesthetic::Yend,
+        });
+        self
+    }
+
+    pub fn xmin(mut self, col: &str) -> Self {
+        self.mappings.push(AesMapping {
+            column: col.to_string(),
+            aesthetic: Aesthetic::Xmin,
+        });
+        self
+    }
+
+    pub fn xmax(mut self, col: &str) -> Self {
+        self.mappings.push(AesMapping {
+            column: col.to_string(),
+            aesthetic: Aesthetic::Xmax,
+        });
+        self
+    }
+
+    pub fn angle(mut self, col: &str) -> Self {
+        self.mappings.push(AesMapping {
+            column: col.to_string(),
+            aesthetic: Aesthetic::Angle,
+        });
+        self
+    }
+
+    pub fn radius(mut self, col: &str) -> Self {
+        self.mappings.push(AesMapping {
+            column: col.to_string(),
+            aesthetic: Aesthetic::Radius,
         });
         self
     }

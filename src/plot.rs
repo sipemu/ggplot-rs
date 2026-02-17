@@ -11,19 +11,36 @@ use crate::data::{DataFrame, GGData};
 use crate::facet::{Facet, FacetScales};
 use crate::geom::area::GeomArea;
 use crate::geom::bar::GeomBar;
+use crate::geom::bin2d::GeomBin2d;
 use crate::geom::boxplot::GeomBoxplot;
 use crate::geom::col::GeomCol;
+use crate::geom::crossbar::GeomCrossbar;
+use crate::geom::curve::GeomCurve;
 use crate::geom::density::GeomDensity;
+use crate::geom::dotplot::GeomDotplot;
 use crate::geom::errorbar::GeomErrorbar;
+use crate::geom::freqpoly::GeomFreqpoly;
+use crate::geom::hex::GeomHex;
 use crate::geom::histogram::GeomHistogram;
+use crate::geom::jitter::GeomJitter;
 use crate::geom::line::GeomLine;
+use crate::geom::linerange::GeomLinerange;
+use crate::geom::path::GeomPath;
 use crate::geom::point::GeomPoint;
+use crate::geom::pointrange::GeomPointrange;
+use crate::geom::polygon::GeomPolygon;
+use crate::geom::qq::{GeomQQ, GeomQQLine};
+use crate::geom::rect::GeomRect;
 use crate::geom::refline::{GeomAbline, GeomHline, GeomVline};
 use crate::geom::ribbon::GeomRibbon;
 use crate::geom::rug::GeomRug;
 use crate::geom::segment::GeomSegment;
 use crate::geom::smooth::GeomSmooth;
+use crate::geom::spoke::GeomSpoke;
+use crate::geom::step::GeomStep;
 use crate::geom::text::{GeomLabel, GeomText};
+use crate::geom::tile::GeomTile;
+use crate::geom::violin::GeomViolin;
 use crate::geom::{Geom, GeomParams};
 use crate::position::Position;
 use crate::render::layout::PlotLayout;
@@ -222,6 +239,150 @@ impl GGPlot {
     }
 
     pub fn geom_rug_with(self, geom: GeomRug) -> Self {
+        self.add_geom(geom)
+    }
+
+    pub fn geom_jitter(self) -> Self {
+        self.add_geom(GeomJitter::default())
+    }
+
+    pub fn geom_jitter_with(self, geom: GeomJitter) -> Self {
+        self.add_geom(geom)
+    }
+
+    pub fn geom_path(self) -> Self {
+        self.add_geom(GeomPath::default())
+    }
+
+    pub fn geom_path_with(self, geom: GeomPath) -> Self {
+        self.add_geom(geom)
+    }
+
+    pub fn geom_step(self) -> Self {
+        self.add_geom(GeomStep::default())
+    }
+
+    pub fn geom_step_with(self, geom: GeomStep) -> Self {
+        self.add_geom(geom)
+    }
+
+    pub fn geom_freqpoly(self) -> Self {
+        self.add_geom(GeomFreqpoly::default())
+    }
+
+    pub fn geom_freqpoly_with(self, geom: GeomFreqpoly) -> Self {
+        self.add_geom(geom)
+    }
+
+    pub fn geom_linerange(self) -> Self {
+        self.add_geom(GeomLinerange::default())
+    }
+
+    pub fn geom_linerange_with(self, geom: GeomLinerange) -> Self {
+        self.add_geom(geom)
+    }
+
+    pub fn geom_pointrange(self) -> Self {
+        self.add_geom(GeomPointrange::default())
+    }
+
+    pub fn geom_pointrange_with(self, geom: GeomPointrange) -> Self {
+        self.add_geom(geom)
+    }
+
+    pub fn geom_crossbar(self) -> Self {
+        self.add_geom(GeomCrossbar::default())
+    }
+
+    pub fn geom_crossbar_with(self, geom: GeomCrossbar) -> Self {
+        self.add_geom(geom)
+    }
+
+    pub fn geom_spoke(self) -> Self {
+        self.add_geom(GeomSpoke::default())
+    }
+
+    pub fn geom_spoke_with(self, geom: GeomSpoke) -> Self {
+        self.add_geom(geom)
+    }
+
+    pub fn geom_rect(self) -> Self {
+        self.add_geom(GeomRect::default())
+    }
+
+    pub fn geom_rect_with(self, geom: GeomRect) -> Self {
+        self.add_geom(geom)
+    }
+
+    pub fn geom_tile(self) -> Self {
+        self.add_geom(GeomTile::default())
+    }
+
+    pub fn geom_tile_with(self, geom: GeomTile) -> Self {
+        self.add_geom(geom)
+    }
+
+    pub fn geom_polygon(self) -> Self {
+        self.add_geom(GeomPolygon::default())
+    }
+
+    pub fn geom_polygon_with(self, geom: GeomPolygon) -> Self {
+        self.add_geom(geom)
+    }
+
+    pub fn geom_curve(self) -> Self {
+        self.add_geom(GeomCurve::default())
+    }
+
+    pub fn geom_curve_with(self, geom: GeomCurve) -> Self {
+        self.add_geom(geom)
+    }
+
+    pub fn geom_violin(self) -> Self {
+        self.add_geom(GeomViolin::default())
+    }
+
+    pub fn geom_violin_with(self, geom: GeomViolin) -> Self {
+        self.add_geom(geom)
+    }
+
+    pub fn geom_dotplot(self) -> Self {
+        self.add_geom(GeomDotplot::default())
+    }
+
+    pub fn geom_dotplot_with(self, geom: GeomDotplot) -> Self {
+        self.add_geom(geom)
+    }
+
+    pub fn geom_qq(self) -> Self {
+        self.add_geom(GeomQQ::default())
+    }
+
+    pub fn geom_qq_with(self, geom: GeomQQ) -> Self {
+        self.add_geom(geom)
+    }
+
+    pub fn geom_qq_line(self) -> Self {
+        self.add_geom(GeomQQLine::default())
+    }
+
+    pub fn geom_qq_line_with(self, geom: GeomQQLine) -> Self {
+        self.add_geom(geom)
+    }
+
+    pub fn geom_bin2d(self) -> Self {
+        self.add_geom(GeomBin2d::default())
+    }
+
+    pub fn geom_bin2d_with(self, geom: GeomBin2d) -> Self {
+        self.add_geom(geom)
+    }
+
+    pub fn geom_hex(self) -> Self {
+        self.add_geom(GeomHex::default())
+    }
+
+    pub fn geom_hex_with(self, geom: GeomHex) -> Self {
         self.add_geom(geom)
     }
 

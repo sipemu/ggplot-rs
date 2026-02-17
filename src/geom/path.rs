@@ -12,16 +12,16 @@ use crate::theme::Theme;
 
 use super::{Geom, GeomParams};
 
-/// Line geometry — connects points sorted by x.
-pub struct GeomLine {
+/// Path geometry — connects points in row order (no x-sort).
+pub struct GeomPath {
     pub color: (u8, u8, u8),
     pub width: f64,
     pub alpha: f64,
 }
 
-impl Default for GeomLine {
+impl Default for GeomPath {
     fn default() -> Self {
-        GeomLine {
+        GeomPath {
             color: (0, 0, 0),
             width: 1.5,
             alpha: 1.0,
@@ -29,7 +29,7 @@ impl Default for GeomLine {
     }
 }
 
-impl Geom for GeomLine {
+impl Geom for GeomPath {
     fn draw(
         &self,
         data: &DataFrame,
@@ -51,7 +51,6 @@ impl Geom for GeomLine {
         let x_scale = scales.get(&Aesthetic::X);
         let y_scale = scales.get(&Aesthetic::Y);
 
-        // If there's a color/group aesthetic, draw separate lines per group
         if let Some(cc) = color_col {
             let mut groups: Vec<(String, Vec<usize>)> = Vec::new();
             for (i, v) in cc.iter().enumerate() {
@@ -73,15 +72,7 @@ impl Geom for GeomLine {
                     .and_then(|lc| scales.map_linetype(&lc[first_idx]))
                     .unwrap_or(Linetype::Solid);
 
-                // Sort indices by x value
-                let mut sorted = indices.clone();
-                sorted.sort_by(|&a, &b| {
-                    let xa = x_col[a].as_f64().unwrap_or(0.0);
-                    let xb = x_col[b].as_f64().unwrap_or(0.0);
-                    xa.partial_cmp(&xb).unwrap_or(std::cmp::Ordering::Equal)
-                });
-
-                let points: Vec<(f64, f64)> = sorted
+                let points: Vec<(f64, f64)> = indices
                     .iter()
                     .map(|&i| {
                         let nx = x_scale.map(|s| s.map(&x_col[i])).unwrap_or(0.0);
@@ -113,17 +104,8 @@ impl Geom for GeomLine {
                 })
                 .unwrap_or(Linetype::Solid);
 
-            // Sort by x value
-            let mut sorted_indices: Vec<usize> = (0..data.nrows()).collect();
-            sorted_indices.sort_by(|&a, &b| {
-                let xa = x_col[a].as_f64().unwrap_or(0.0);
-                let xb = x_col[b].as_f64().unwrap_or(0.0);
-                xa.partial_cmp(&xb).unwrap_or(std::cmp::Ordering::Equal)
-            });
-
-            let points: Vec<(f64, f64)> = sorted_indices
-                .iter()
-                .map(|&i| {
+            let points: Vec<(f64, f64)> = (0..data.nrows())
+                .map(|i| {
                     let nx = x_scale.map(|s| s.map(&x_col[i])).unwrap_or(0.0);
                     let ny = y_scale.map(|s| s.map(&y_col[i])).unwrap_or(0.0);
                     coord.transform((nx, ny), &plot_area)
@@ -163,6 +145,6 @@ impl Geom for GeomLine {
     }
 
     fn name(&self) -> &str {
-        "line"
+        "path"
     }
 }
