@@ -1,0 +1,336 @@
+pub mod elements;
+pub mod presets;
+
+pub use elements::{ElementLine, ElementRect, ElementText};
+
+/// Position of the legend.
+#[derive(Clone, Debug)]
+pub enum LegendPosition {
+    Right,
+    Left,
+    Top,
+    Bottom,
+    None,
+}
+
+/// Plot margins (in pixels).
+#[derive(Clone, Debug)]
+pub struct Margin {
+    pub top: f64,
+    pub right: f64,
+    pub bottom: f64,
+    pub left: f64,
+}
+
+impl Default for Margin {
+    fn default() -> Self {
+        Margin {
+            top: 10.0,
+            right: 10.0,
+            bottom: 10.0,
+            left: 10.0,
+        }
+    }
+}
+
+/// Complete theme specification for a plot.
+#[derive(Clone, Debug)]
+pub struct Theme {
+    // ── Existing fields ──
+    pub text: ElementText,
+    pub title: ElementText,
+    pub axis_text_x: ElementText,
+    pub axis_text_y: ElementText,
+    pub axis_title_x: ElementText,
+    pub axis_title_y: ElementText,
+    pub axis_line: ElementLine,
+    pub axis_ticks: ElementLine,
+    pub panel_background: ElementRect,
+    pub panel_grid_major: ElementLine,
+    pub panel_grid_minor: ElementLine,
+    pub plot_background: ElementRect,
+    pub legend_position: LegendPosition,
+    pub plot_margin: Margin,
+
+    // ── New text elements ──
+    pub subtitle: ElementText,
+    pub caption: ElementText,
+    pub legend_title: ElementText,
+    pub legend_text: ElementText,
+    pub strip_text: ElementText,
+
+    // ── Per-axis optional overrides (None = inherit from parent) ──
+    pub axis_line_x: Option<ElementLine>,
+    pub axis_line_y: Option<ElementLine>,
+    pub axis_ticks_x: Option<ElementLine>,
+    pub axis_ticks_y: Option<ElementLine>,
+    pub panel_grid_major_x: Option<ElementLine>,
+    pub panel_grid_major_y: Option<ElementLine>,
+    pub panel_grid_minor_x: Option<ElementLine>,
+    pub panel_grid_minor_y: Option<ElementLine>,
+
+    // ── New rect/line elements ──
+    pub panel_border: ElementLine,
+    pub legend_background: ElementRect,
+    pub legend_key: ElementRect,
+    pub strip_background: ElementRect,
+
+    // ── Scalar spacing/sizing ──
+    pub axis_ticks_length: f64,
+    pub legend_key_width: f64,
+    pub legend_key_height: f64,
+    pub legend_spacing: f64,
+    pub legend_margin: Margin,
+    pub panel_spacing: f64,
+    pub panel_spacing_x: Option<f64>,
+    pub panel_spacing_y: Option<f64>,
+}
+
+impl Theme {
+    // ── Fallback accessors for Option fields ──
+
+    pub fn get_axis_line_x(&self) -> &ElementLine {
+        self.axis_line_x.as_ref().unwrap_or(&self.axis_line)
+    }
+
+    pub fn get_axis_line_y(&self) -> &ElementLine {
+        self.axis_line_y.as_ref().unwrap_or(&self.axis_line)
+    }
+
+    pub fn get_axis_ticks_x(&self) -> &ElementLine {
+        self.axis_ticks_x.as_ref().unwrap_or(&self.axis_ticks)
+    }
+
+    pub fn get_axis_ticks_y(&self) -> &ElementLine {
+        self.axis_ticks_y.as_ref().unwrap_or(&self.axis_ticks)
+    }
+
+    pub fn get_panel_grid_major_x(&self) -> &ElementLine {
+        self.panel_grid_major_x.as_ref().unwrap_or(&self.panel_grid_major)
+    }
+
+    pub fn get_panel_grid_major_y(&self) -> &ElementLine {
+        self.panel_grid_major_y.as_ref().unwrap_or(&self.panel_grid_major)
+    }
+
+    pub fn get_panel_grid_minor_x(&self) -> &ElementLine {
+        self.panel_grid_minor_x.as_ref().unwrap_or(&self.panel_grid_minor)
+    }
+
+    pub fn get_panel_grid_minor_y(&self) -> &ElementLine {
+        self.panel_grid_minor_y.as_ref().unwrap_or(&self.panel_grid_minor)
+    }
+
+    pub fn get_panel_spacing_x(&self) -> f64 {
+        self.panel_spacing_x.unwrap_or(self.panel_spacing)
+    }
+
+    pub fn get_panel_spacing_y(&self) -> f64 {
+        self.panel_spacing_y.unwrap_or(self.panel_spacing)
+    }
+
+    // ── Existing setters ──
+
+    pub fn set_axis_text_x(mut self, el: ElementText) -> Self {
+        self.axis_text_x = el;
+        self
+    }
+
+    pub fn set_axis_text_y(mut self, el: ElementText) -> Self {
+        self.axis_text_y = el;
+        self
+    }
+
+    pub fn set_axis_title_x(mut self, el: ElementText) -> Self {
+        self.axis_title_x = el;
+        self
+    }
+
+    pub fn set_axis_title_y(mut self, el: ElementText) -> Self {
+        self.axis_title_y = el;
+        self
+    }
+
+    pub fn set_axis_line(mut self, el: ElementLine) -> Self {
+        self.axis_line = el;
+        self
+    }
+
+    pub fn set_axis_ticks(mut self, el: ElementLine) -> Self {
+        self.axis_ticks = el;
+        self
+    }
+
+    pub fn set_panel_background(mut self, el: ElementRect) -> Self {
+        self.panel_background = el;
+        self
+    }
+
+    pub fn set_panel_grid_major(mut self, el: ElementLine) -> Self {
+        self.panel_grid_major = el;
+        self
+    }
+
+    pub fn set_panel_grid_minor(mut self, el: ElementLine) -> Self {
+        self.panel_grid_minor = el;
+        self
+    }
+
+    pub fn set_plot_background(mut self, el: ElementRect) -> Self {
+        self.plot_background = el;
+        self
+    }
+
+    pub fn set_legend_position(mut self, pos: LegendPosition) -> Self {
+        self.legend_position = pos;
+        self
+    }
+
+    pub fn set_plot_margin(mut self, margin: Margin) -> Self {
+        self.plot_margin = margin;
+        self
+    }
+
+    pub fn set_title(mut self, el: ElementText) -> Self {
+        self.title = el;
+        self
+    }
+
+    pub fn set_text(mut self, el: ElementText) -> Self {
+        self.text = el;
+        self
+    }
+
+    // ── New setters ──
+
+    pub fn set_subtitle(mut self, el: ElementText) -> Self {
+        self.subtitle = el;
+        self
+    }
+
+    pub fn set_caption(mut self, el: ElementText) -> Self {
+        self.caption = el;
+        self
+    }
+
+    pub fn set_legend_title(mut self, el: ElementText) -> Self {
+        self.legend_title = el;
+        self
+    }
+
+    pub fn set_legend_text(mut self, el: ElementText) -> Self {
+        self.legend_text = el;
+        self
+    }
+
+    pub fn set_strip_text(mut self, el: ElementText) -> Self {
+        self.strip_text = el;
+        self
+    }
+
+    pub fn set_axis_line_x(mut self, el: Option<ElementLine>) -> Self {
+        self.axis_line_x = el;
+        self
+    }
+
+    pub fn set_axis_line_y(mut self, el: Option<ElementLine>) -> Self {
+        self.axis_line_y = el;
+        self
+    }
+
+    pub fn set_axis_ticks_x(mut self, el: Option<ElementLine>) -> Self {
+        self.axis_ticks_x = el;
+        self
+    }
+
+    pub fn set_axis_ticks_y(mut self, el: Option<ElementLine>) -> Self {
+        self.axis_ticks_y = el;
+        self
+    }
+
+    pub fn set_panel_grid_major_x(mut self, el: Option<ElementLine>) -> Self {
+        self.panel_grid_major_x = el;
+        self
+    }
+
+    pub fn set_panel_grid_major_y(mut self, el: Option<ElementLine>) -> Self {
+        self.panel_grid_major_y = el;
+        self
+    }
+
+    pub fn set_panel_grid_minor_x(mut self, el: Option<ElementLine>) -> Self {
+        self.panel_grid_minor_x = el;
+        self
+    }
+
+    pub fn set_panel_grid_minor_y(mut self, el: Option<ElementLine>) -> Self {
+        self.panel_grid_minor_y = el;
+        self
+    }
+
+    pub fn set_panel_border(mut self, el: ElementLine) -> Self {
+        self.panel_border = el;
+        self
+    }
+
+    pub fn set_legend_background(mut self, el: ElementRect) -> Self {
+        self.legend_background = el;
+        self
+    }
+
+    pub fn set_legend_key(mut self, el: ElementRect) -> Self {
+        self.legend_key = el;
+        self
+    }
+
+    pub fn set_strip_background(mut self, el: ElementRect) -> Self {
+        self.strip_background = el;
+        self
+    }
+
+    pub fn set_axis_ticks_length(mut self, val: f64) -> Self {
+        self.axis_ticks_length = val;
+        self
+    }
+
+    pub fn set_legend_key_width(mut self, val: f64) -> Self {
+        self.legend_key_width = val;
+        self
+    }
+
+    pub fn set_legend_key_height(mut self, val: f64) -> Self {
+        self.legend_key_height = val;
+        self
+    }
+
+    pub fn set_legend_spacing(mut self, val: f64) -> Self {
+        self.legend_spacing = val;
+        self
+    }
+
+    pub fn set_legend_margin(mut self, margin: Margin) -> Self {
+        self.legend_margin = margin;
+        self
+    }
+
+    pub fn set_panel_spacing(mut self, val: f64) -> Self {
+        self.panel_spacing = val;
+        self
+    }
+
+    pub fn set_panel_spacing_x(mut self, val: Option<f64>) -> Self {
+        self.panel_spacing_x = val;
+        self
+    }
+
+    pub fn set_panel_spacing_y(mut self, val: Option<f64>) -> Self {
+        self.panel_spacing_y = val;
+        self
+    }
+}
+
+impl Default for Theme {
+    fn default() -> Self {
+        presets::theme_gray()
+    }
+}

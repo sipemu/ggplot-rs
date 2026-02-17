@@ -1,0 +1,11 @@
+[package]
+name = "ggplot-rs"
+version = "0.1.0"
+edition = "2021"
+description = "A Rust implementation of ggplot2's Grammar of Graphics"
+
+[dependencies]
+plotters = "0.3"
+indexmap = "2"
+rand = "0.8"
+polars = { version = "0.46", features = ["lazy"] }
