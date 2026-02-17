@@ -230,6 +230,60 @@ impl DataFrame {
     }
 }
 
+impl DataFrame {
+    /// Load a DataFrame from a CSV file.
+    /// First row is treated as column headers.
+    /// Values are parsed as Float if possible, otherwise kept as strings.
+    /// The literal string "NA" is parsed as Value::Na.
+    pub fn from_csv(path: &str) -> Result<Self, std::io::Error> {
+        let content = std::fs::read_to_string(path)?;
+        let mut lines = content.lines();
+
+        let header = match lines.next() {
+            Some(h) => h,
+            None => return Ok(DataFrame::new()),
+        };
+
+        let col_names: Vec<&str> = header.split(',').map(|s| s.trim()).collect();
+        let mut columns: Vec<Vec<Value>> = vec![Vec::new(); col_names.len()];
+
+        for line in lines {
+            let line = line.trim();
+            if line.is_empty() {
+                continue;
+            }
+            let fields: Vec<&str> = line.split(',').collect();
+            for (i, field) in fields.iter().enumerate() {
+                if i >= col_names.len() {
+                    continue;
+                }
+                let field = field.trim();
+                let val = if field == "NA" || field == "na" {
+                    Value::Na
+                } else if let Ok(f) = field.parse::<f64>() {
+                    Value::Float(f)
+                } else {
+                    Value::Str(field.to_string())
+                };
+                columns[i].push(val);
+            }
+            // Pad missing columns with NA
+            for col in columns.iter_mut().skip(fields.len()) {
+                col.push(Value::Na);
+            }
+        }
+
+        let mut df = DataFrame::new();
+        for (i, name) in col_names.iter().enumerate() {
+            if !columns[i].is_empty() {
+                df.add_column(name.to_string(), std::mem::take(&mut columns[i]));
+            }
+        }
+
+        Ok(df)
+    }
+}
+
 impl Default for DataFrame {
     fn default() -> Self {
         Self::new()

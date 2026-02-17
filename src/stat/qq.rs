@@ -36,6 +36,22 @@ fn rational_approx(t: f64) -> f64 {
     t - (c0 + c1 * t + c2 * t * t) / (1.0 + d1 * t + d2 * t * t + d3 * t * t * t)
 }
 
+/// R-compatible type-7 quantile interpolation (R's default `quantile()` method).
+fn quantile_type7(sorted: &[f64], p: f64) -> f64 {
+    let n = sorted.len();
+    if n == 0 {
+        return 0.0;
+    }
+    if n == 1 {
+        return sorted[0];
+    }
+    let h = (n - 1) as f64 * p;
+    let lo = h.floor() as usize;
+    let hi = (lo + 1).min(n - 1);
+    let frac = h - lo as f64;
+    sorted[lo] + frac * (sorted[hi] - sorted[lo])
+}
+
 /// StatQQ: sort sample, compute theoretical normal quantiles.
 /// Output: x (theoretical quantiles), y (sample sorted).
 pub struct StatQQ;
@@ -59,8 +75,9 @@ impl Stat for StatQQ {
         let mut y_vals = Vec::with_capacity(n);
 
         for (i, &val) in values.iter().enumerate() {
-            // Plotting position: (i - 0.5) / n
-            let p = (i as f64 + 0.5) / n as f64;
+            // R's ppoints(): (i + 1 - a) / (n + 1 - 2*a) where a = 3/8 for n > 10
+            let a = if n > 10 { 3.0 / 8.0 } else { 0.5 };
+            let p = (i as f64 + 1.0 - a) / (n as f64 + 1.0 - 2.0 * a);
             let theoretical = qnorm(p);
             x_vals.push(Value::Float(theoretical));
             y_vals.push(Value::Float(val));
@@ -110,9 +127,9 @@ impl Stat for StatQQLine {
         values.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
         let n = values.len();
 
-        // Sample Q1 and Q3
-        let sample_q1 = values[n / 4];
-        let sample_q3 = values[3 * n / 4];
+        // Sample Q1 and Q3 using R-compatible type-7 quantile interpolation
+        let sample_q1 = quantile_type7(&values, 0.25);
+        let sample_q3 = quantile_type7(&values, 0.75);
 
         // Theoretical Q1 and Q3
         let theo_q1 = qnorm(0.25);
@@ -122,9 +139,10 @@ impl Stat for StatQQLine {
         let slope = (sample_q3 - sample_q1) / (theo_q3 - theo_q1);
         let intercept = sample_q1 - slope * theo_q1;
 
-        // Extend line to cover full theoretical range
-        let x_min = qnorm(0.5 / n as f64);
-        let x_max = qnorm((n as f64 - 0.5) / n as f64);
+        // Extend line to cover full theoretical range using R's ppoints formula
+        let a = if n > 10 { 3.0 / 8.0 } else { 0.5 };
+        let x_min = qnorm((1.0 - a) / (n as f64 + 1.0 - 2.0 * a));
+        let x_max = qnorm((n as f64 - a) / (n as f64 + 1.0 - 2.0 * a));
 
         let mut result = DataFrame::new();
         result.add_column(

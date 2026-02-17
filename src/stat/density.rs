@@ -87,8 +87,21 @@ fn gaussian_kernel(x: f64) -> f64 {
 fn iqr(values: &[f64]) -> f64 {
     let mut sorted = values.to_vec();
     sorted.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
+    quantile_type7(&sorted, 0.75) - quantile_type7(&sorted, 0.25)
+}
+
+/// R-compatible type-7 quantile interpolation (R's default `quantile()` method).
+fn quantile_type7(sorted: &[f64], p: f64) -> f64 {
     let n = sorted.len();
-    let q1 = sorted[n / 4];
-    let q3 = sorted[3 * n / 4];
-    q3 - q1
+    if n == 0 {
+        return 0.0;
+    }
+    if n == 1 {
+        return sorted[0];
+    }
+    let h = (n - 1) as f64 * p;
+    let lo = h.floor() as usize;
+    let hi = (lo + 1).min(n - 1);
+    let frac = h - lo as f64;
+    sorted[lo] + frac * (sorted[hi] - sorted[lo])
 }

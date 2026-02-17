@@ -656,6 +656,12 @@ impl GGPlot {
 
     // ─── Build and Render ────────────────────────────────────────
 
+    /// Build the plot without rendering (analogous to R's ggplot_build()).
+    /// Returns the fully computed BuiltPlot with layer data ready for inspection.
+    pub fn build(self) -> crate::build::BuiltPlot {
+        PlotBuilder::build(self)
+    }
+
     /// Build and save the plot to a file. Format determined by extension.
     pub fn save(self, path: &str) -> Result<(), GGError> {
         self.save_with_size(path, 800, 600)
