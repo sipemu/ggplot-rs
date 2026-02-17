@@ -6,6 +6,7 @@ use crate::build::PlotBuilder;
 use crate::coord::cartesian::CoordCartesian;
 use crate::coord::fixed::CoordFixed;
 use crate::coord::flip::CoordFlip;
+use crate::coord::polar::CoordPolar;
 use crate::coord::Coord;
 use crate::data::{DataFrame, GGData};
 use crate::facet::{Facet, FacetScales};
@@ -401,6 +402,40 @@ impl GGPlot {
         self
     }
 
+    // ─── Layer-level overrides ──────────────────────────────────
+
+    /// Override the stat for the most recently added layer.
+    pub fn stat(mut self, stat: impl Stat + 'static) -> Self {
+        if let Some(layer) = self.layers.last_mut() {
+            layer.stat = Box::new(stat);
+        }
+        self
+    }
+
+    /// Override the position for the most recently added layer.
+    pub fn position(mut self, pos: impl Position + 'static) -> Self {
+        if let Some(layer) = self.layers.last_mut() {
+            layer.position = Box::new(pos);
+        }
+        self
+    }
+
+    /// Override the data for the most recently added layer.
+    pub fn layer_data(mut self, data: impl GGData) -> Self {
+        if let Some(layer) = self.layers.last_mut() {
+            layer.data = Some(data.into_dataframe());
+        }
+        self
+    }
+
+    /// Override the aesthetic mapping for the most recently added layer.
+    pub fn layer_aes(mut self, mapping: Aes) -> Self {
+        if let Some(layer) = self.layers.last_mut() {
+            layer.mapping = mapping;
+        }
+        self
+    }
+
     // ─── Scales ──────────────────────────────────────────────────
 
     pub fn scale_x_continuous(mut self, s: ScaleContinuous) -> Self {
@@ -457,6 +492,18 @@ impl GGPlot {
         use crate::scale::color::ScaleColorContinuous;
         let s = ScaleColorContinuous::new(crate::aes::Aesthetic::Color).with_colors(low, high);
         self.scale_color(s)
+    }
+
+    pub fn scale_x_datetime(mut self, s: crate::scale::datetime::ScaleDateTime) -> Self {
+        let s = s.for_aesthetic(crate::aes::Aesthetic::X);
+        self.scales.push(Box::new(s));
+        self
+    }
+
+    pub fn scale_y_datetime(mut self, s: crate::scale::datetime::ScaleDateTime) -> Self {
+        let s = s.for_aesthetic(crate::aes::Aesthetic::Y);
+        self.scales.push(Box::new(s));
+        self
     }
 
     pub fn xlim(self, min: f64, max: f64) -> Self {
@@ -535,6 +582,16 @@ impl GGPlot {
 
     pub fn coord_fixed(mut self, ratio: f64) -> Self {
         self.coord = Box::new(CoordFixed::new(ratio));
+        self
+    }
+
+    pub fn coord_polar(mut self) -> Self {
+        self.coord = Box::new(CoordPolar::new());
+        self
+    }
+
+    pub fn coord_polar_with(mut self, coord: CoordPolar) -> Self {
+        self.coord = Box::new(coord);
         self
     }
 

@@ -1,6 +1,7 @@
 use std::collections::HashMap;
 use std::path::Path;
 
+use ggplot_rs::data::DataFrame;
 use ggplot_rs::prelude::*;
 
 fn temp_path(name: &str) -> String {
@@ -675,6 +676,348 @@ fn test_geom_hex() {
         .geom_hex()
         .save(&path)
         .expect("should render hex");
+    assert!(Path::new(&path).exists());
+    std::fs::remove_file(&path).ok();
+}
+
+// ─── Feature: Layer-level stat/position override ─────────────
+
+#[test]
+fn test_layer_stat_override() {
+    // Use geom_bar (default stat=StatCount) but override to StatIdentity
+    // to provide pre-computed y values
+    let data = vec![
+        (
+            "category".to_string(),
+            vec![
+                Value::Str("A".into()),
+                Value::Str("B".into()),
+                Value::Str("C".into()),
+            ],
+        ),
+        (
+            "count".to_string(),
+            vec![Value::Float(10.0), Value::Float(20.0), Value::Float(15.0)],
+        ),
+    ];
+    let path = temp_path("stat_override.svg");
+    GGPlot::new(data)
+        .aes(Aes::new().x("category").y("count"))
+        .geom_col()
+        .stat(StatIdentity)
+        .save(&path)
+        .expect("should render with stat override");
+    assert!(Path::new(&path).exists());
+    std::fs::remove_file(&path).ok();
+}
+
+#[test]
+fn test_layer_position_override() {
+    // Use geom_bar (default position=PositionStack) but override to PositionDodge
+    let mut rows = Vec::new();
+    for x in ["a", "b", "c"] {
+        for fill in ["g1", "g2"] {
+            rows.push(HashMap::from([
+                ("x".to_string(), Value::Str(x.into())),
+                ("fill".to_string(), Value::Str(fill.into())),
+            ]));
+        }
+    }
+    let path = temp_path("position_override.svg");
+    GGPlot::new(rows)
+        .aes(Aes::new().x("x").fill("fill"))
+        .geom_bar()
+        .position(PositionDodge)
+        .save(&path)
+        .expect("should render with position override");
+    assert!(Path::new(&path).exists());
+    std::fs::remove_file(&path).ok();
+}
+
+#[test]
+fn test_layer_position_override_build() {
+    // Verify that position override actually changes computed data
+    let data = vec![
+        ("x".to_string(), vec![Value::Float(1.0), Value::Float(1.0)]),
+        ("y".to_string(), vec![Value::Float(3.0), Value::Float(2.0)]),
+        (
+            "fill".to_string(),
+            vec![Value::Str("g1".into()), Value::Str("g2".into())],
+        ),
+    ];
+    // Default: geom_col uses PositionIdentity → y values unchanged
+    let built_default = GGPlot::new(data.clone())
+        .aes(Aes::new().x("x").y("y").fill("fill"))
+        .geom_col()
+        .build();
+
+    // Override: PositionStack → y should be cumulative
+    let built_stacked = GGPlot::new(data)
+        .aes(Aes::new().x("x").y("y").fill("fill"))
+        .geom_col()
+        .position(PositionStack)
+        .build();
+
+    let default_y: Vec<f64> = built_default.layers[0]
+        .data
+        .column("y")
+        .unwrap()
+        .iter()
+        .filter_map(|v| v.as_f64())
+        .collect();
+    let stacked_y: Vec<f64> = built_stacked.layers[0]
+        .data
+        .column("y")
+        .unwrap()
+        .iter()
+        .filter_map(|v| v.as_f64())
+        .collect();
+
+    // Stacked y should have at least one value > any default y
+    let default_max = default_y.iter().cloned().fold(f64::NEG_INFINITY, f64::max);
+    let stacked_max = stacked_y.iter().cloned().fold(f64::NEG_INFINITY, f64::max);
+    assert!(
+        stacked_max > default_max,
+        "stacking should produce larger y: default_max={default_max}, stacked_max={stacked_max}"
+    );
+}
+
+#[test]
+fn test_layer_data_override() {
+    // Use different data per layer
+    let base_data = vec![
+        ("x".to_string(), vec![Value::Float(1.0), Value::Float(2.0)]),
+        ("y".to_string(), vec![Value::Float(1.0), Value::Float(4.0)]),
+    ];
+    let overlay_data: DataFrame = vec![
+        ("x".to_string(), vec![Value::Float(1.5), Value::Float(2.5)]),
+        ("y".to_string(), vec![Value::Float(3.0), Value::Float(2.0)]),
+    ]
+    .into_dataframe();
+
+    let path = temp_path("layer_data.svg");
+    GGPlot::new(base_data)
+        .aes(Aes::new().x("x").y("y"))
+        .geom_line()
+        .geom_point()
+        .layer_data(overlay_data)
+        .save(&path)
+        .expect("should render with layer data override");
+    assert!(Path::new(&path).exists());
+    std::fs::remove_file(&path).ok();
+}
+
+// ─── Feature: Date/time support ──────────────────────────────
+
+#[test]
+fn test_datetime_values() {
+    // 2024-01-01 through 2024-01-05 (epoch seconds)
+    let base = 1704067200_i64; // 2024-01-01 00:00:00 UTC
+    let day = 86400_i64;
+    let data = vec![
+        (
+            "date".to_string(),
+            vec![
+                Value::DateTime(base),
+                Value::DateTime(base + day),
+                Value::DateTime(base + 2 * day),
+                Value::DateTime(base + 3 * day),
+                Value::DateTime(base + 4 * day),
+            ],
+        ),
+        (
+            "price".to_string(),
+            vec![
+                Value::Float(100.0),
+                Value::Float(102.5),
+                Value::Float(101.0),
+                Value::Float(105.0),
+                Value::Float(103.5),
+            ],
+        ),
+    ];
+    let path = temp_path("datetime.svg");
+    GGPlot::new(data)
+        .aes(Aes::new().x("date").y("price"))
+        .geom_line()
+        .geom_point()
+        .title("Stock Price")
+        .save(&path)
+        .expect("should render date/time plot");
+    assert!(Path::new(&path).exists());
+    let content = std::fs::read_to_string(&path).unwrap();
+    // Should have date-formatted axis labels
+    assert!(
+        content.contains("2024"),
+        "axis labels should contain date strings"
+    );
+    std::fs::remove_file(&path).ok();
+}
+
+#[test]
+fn test_datetime_auto_scale() {
+    // Verify that DateTime values auto-detect ScaleDateTime
+    let base = 1704067200_i64;
+    let day = 86400_i64;
+    let data = vec![
+        (
+            "x".to_string(),
+            vec![Value::DateTime(base), Value::DateTime(base + 30 * day)],
+        ),
+        ("y".to_string(), vec![Value::Float(1.0), Value::Float(2.0)]),
+    ];
+    let built = GGPlot::new(data)
+        .aes(Aes::new().x("x").y("y"))
+        .geom_point()
+        .build();
+
+    // X scale breaks should be date-formatted
+    let x_scale = built
+        .scales
+        .get(&Aesthetic::X)
+        .expect("should have X scale");
+    let breaks = x_scale.breaks();
+    assert!(!breaks.is_empty(), "datetime scale should have breaks");
+    // Check that at least one label looks like a date
+    assert!(
+        breaks.iter().any(|(_, label)| label.contains("2024")),
+        "datetime breaks should contain year: {:?}",
+        breaks
+    );
+}
+
+// ─── Feature: coord_polar ────────────────────────────────────
+
+#[test]
+fn test_coord_polar_pie() {
+    // Pie chart: bars in polar coordinates
+    let data = vec![(
+        "category".to_string(),
+        vec![
+            Value::Str("A".into()),
+            Value::Str("A".into()),
+            Value::Str("A".into()),
+            Value::Str("B".into()),
+            Value::Str("B".into()),
+            Value::Str("C".into()),
+        ],
+    )];
+    let path = temp_path("polar_pie.svg");
+    GGPlot::new(data)
+        .aes(Aes::new().x("category"))
+        .geom_bar()
+        .coord_polar()
+        .save(&path)
+        .expect("should render polar pie chart");
+    assert!(Path::new(&path).exists());
+    std::fs::remove_file(&path).ok();
+}
+
+#[test]
+fn test_coord_polar_with_config() {
+    let data = xy_data();
+    let path = temp_path("polar_config.svg");
+    GGPlot::new(data)
+        .aes(Aes::new().x("x").y("y"))
+        .geom_point()
+        .coord_polar_with(
+            CoordPolar::new()
+                .theta("y")
+                .start(std::f64::consts::FRAC_PI_2),
+        )
+        .save(&path)
+        .expect("should render polar with config");
+    assert!(Path::new(&path).exists());
+    std::fs::remove_file(&path).ok();
+}
+
+#[test]
+fn test_coord_polar_transform() {
+    use ggplot_rs::coord::Coord;
+    use ggplot_rs::render::Rect;
+
+    let coord = CoordPolar::new();
+    let area = Rect {
+        x: 0.0,
+        y: 0.0,
+        width: 200.0,
+        height: 200.0,
+    };
+
+    // Center point: radius=0 → should be at center
+    let (cx, cy) = coord.transform((0.0, 0.0), &area);
+    assert!((cx - 100.0).abs() < 1.0, "center x: {cx}");
+    assert!((cy - 100.0).abs() < 1.0, "center y: {cy}");
+
+    // Full radius at angle 0 (12 o'clock) → should be at top center
+    let (px, py) = coord.transform((0.0, 1.0), &area);
+    assert!((px - 100.0).abs() < 1.0, "top x: {px}");
+    assert!(py < 10.0, "top y should be near 0: {py}");
+}
+
+// ─── Feature: Continuous legend (guide_colorbar) ─────────────
+
+#[test]
+fn test_continuous_color_legend() {
+    // Scatter plot with continuous color → should draw a colorbar legend
+    let n = 20;
+    let data = vec![
+        (
+            "x".to_string(),
+            (0..n).map(|i| Value::Float(i as f64)).collect(),
+        ),
+        (
+            "y".to_string(),
+            (0..n)
+                .map(|i| Value::Float((i as f64 * 0.3).sin()))
+                .collect(),
+        ),
+        (
+            "value".to_string(),
+            (0..n).map(|i| Value::Float(i as f64)).collect(),
+        ),
+    ];
+    let path = temp_path("continuous_legend.svg");
+    GGPlot::new(data)
+        .aes(Aes::new().x("x").y("y").color("value"))
+        .geom_point()
+        .save(&path)
+        .expect("should render with continuous legend");
+    assert!(Path::new(&path).exists());
+    let content = std::fs::read_to_string(&path).unwrap();
+    // Should have many rect elements (the gradient bar slices)
+    let rect_count = content.matches("<rect").count();
+    assert!(
+        rect_count > 10,
+        "continuous legend should have gradient slices, found {rect_count} rects"
+    );
+    std::fs::remove_file(&path).ok();
+}
+
+#[test]
+fn test_continuous_fill_legend() {
+    // Bin2d with continuous fill → should draw a colorbar
+    let n = 100;
+    let data = vec![
+        (
+            "x".to_string(),
+            (0..n)
+                .map(|i| Value::Float((i as f64 * 0.1).sin()))
+                .collect(),
+        ),
+        (
+            "y".to_string(),
+            (0..n)
+                .map(|i| Value::Float((i as f64 * 0.1).cos()))
+                .collect(),
+        ),
+    ];
+    let path = temp_path("continuous_fill.svg");
+    GGPlot::new(data)
+        .aes(Aes::new().x("x").y("y"))
+        .geom_bin2d()
+        .save(&path)
+        .expect("should render bin2d with continuous fill legend");
     assert!(Path::new(&path).exists());
     std::fs::remove_file(&path).ok();
 }

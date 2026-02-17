@@ -1,6 +1,7 @@
 pub mod cartesian;
 pub mod fixed;
 pub mod flip;
+pub mod polar;
 
 use crate::render::Rect;
 

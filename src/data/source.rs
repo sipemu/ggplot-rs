@@ -25,6 +25,10 @@ fn polars_anyvalue_to_value(v: polars::datatypes::AnyValue) -> Value {
         AnyValue::String(s) => Value::Str(s.to_string()),
         AnyValue::StringOwned(s) => Value::Str(s.to_string()),
         AnyValue::Null => Value::Na,
+        AnyValue::Date(d) => Value::DateTime(d as i64 * 86400),
+        AnyValue::Datetime(us, _, _) => Value::DateTime(us / 1_000_000),
+        AnyValue::Duration(us, _) => Value::Integer(us),
+        AnyValue::Time(ns) => Value::Integer(ns / 1_000_000_000),
         other => Value::Str(format!("{:?}", other)),
     }
 }

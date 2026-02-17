@@ -3,6 +3,7 @@ use crate::data::{DataFrame, Value};
 use crate::render::backend::{Linetype, PointShape};
 use crate::scale::color::{ScaleColorContinuous, ScaleColorDiscrete};
 use crate::scale::continuous::ScaleContinuous;
+use crate::scale::datetime::ScaleDateTime;
 use crate::scale::discrete::ScaleDiscrete;
 use crate::scale::linetype::ScaleLinetypeDiscrete;
 use crate::scale::shape::ScaleShapeDiscrete;
@@ -56,6 +57,11 @@ impl ScaleSet {
             None => false,
         };
 
+        let is_datetime = match values {
+            Some(vals) => vals.iter().any(|v| v.is_datetime()),
+            None => false,
+        };
+
         match aes {
             Aesthetic::Color | Aesthetic::Fill => {
                 if is_discrete {
@@ -77,6 +83,9 @@ impl ScaleSet {
             _ => {
                 if is_discrete {
                     let scale = ScaleDiscrete::new().for_aesthetic(aes.clone());
+                    self.scales.push(Box::new(scale));
+                } else if is_datetime {
+                    let scale = ScaleDateTime::new().for_aesthetic(aes.clone());
                     self.scales.push(Box::new(scale));
                 } else {
                     let scale = ScaleContinuous::new().for_aesthetic(aes.clone());
