@@ -200,7 +200,9 @@ impl Aes {
         let mut result = self.clone();
         for m in &other.mappings {
             // Remove existing mapping for same aesthetic
-            result.mappings.retain(|existing| existing.aesthetic != m.aesthetic);
+            result
+                .mappings
+                .retain(|existing| existing.aesthetic != m.aesthetic);
             result.mappings.push(m.clone());
         }
         result

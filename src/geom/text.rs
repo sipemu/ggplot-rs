@@ -38,9 +38,15 @@ impl Geom for GeomText {
         _theme: &Theme,
         backend: &mut dyn DrawBackend,
     ) -> Result<(), RenderError> {
-        let x_col = data.column("x").ok_or(RenderError::MissingAesthetic("x".into()))?;
-        let y_col = data.column("y").ok_or(RenderError::MissingAesthetic("y".into()))?;
-        let label_col = data.column("label").ok_or(RenderError::MissingAesthetic("label".into()))?;
+        let x_col = data
+            .column("x")
+            .ok_or(RenderError::MissingAesthetic("x".into()))?;
+        let y_col = data
+            .column("y")
+            .ok_or(RenderError::MissingAesthetic("y".into()))?;
+        let label_col = data
+            .column("label")
+            .ok_or(RenderError::MissingAesthetic("label".into()))?;
 
         let plot_area = backend.plot_area();
         let x_scale = scales.get(&Aesthetic::X);
@@ -72,10 +78,18 @@ impl Geom for GeomText {
         vec![Aesthetic::X, Aesthetic::Y, Aesthetic::Label]
     }
 
-    fn default_stat(&self) -> Box<dyn Stat> { Box::new(StatIdentity) }
-    fn default_position(&self) -> Box<dyn Position> { Box::new(PositionIdentity) }
-    fn default_params(&self) -> GeomParams { GeomParams::default() }
-    fn name(&self) -> &str { "text" }
+    fn default_stat(&self) -> Box<dyn Stat> {
+        Box::new(StatIdentity)
+    }
+    fn default_position(&self) -> Box<dyn Position> {
+        Box::new(PositionIdentity)
+    }
+    fn default_params(&self) -> GeomParams {
+        GeomParams::default()
+    }
+    fn name(&self) -> &str {
+        "text"
+    }
 }
 
 /// Label geometry — like text but with a background rectangle.
@@ -108,9 +122,15 @@ impl Geom for GeomLabel {
         _theme: &Theme,
         backend: &mut dyn DrawBackend,
     ) -> Result<(), RenderError> {
-        let x_col = data.column("x").ok_or(RenderError::MissingAesthetic("x".into()))?;
-        let y_col = data.column("y").ok_or(RenderError::MissingAesthetic("y".into()))?;
-        let label_col = data.column("label").ok_or(RenderError::MissingAesthetic("label".into()))?;
+        let x_col = data
+            .column("x")
+            .ok_or(RenderError::MissingAesthetic("x".into()))?;
+        let y_col = data
+            .column("y")
+            .ok_or(RenderError::MissingAesthetic("y".into()))?;
+        let label_col = data
+            .column("label")
+            .ok_or(RenderError::MissingAesthetic("label".into()))?;
 
         let plot_area = backend.plot_area();
         let x_scale = scales.get(&Aesthetic::X);
@@ -158,8 +178,16 @@ impl Geom for GeomLabel {
         vec![Aesthetic::X, Aesthetic::Y, Aesthetic::Label]
     }
 
-    fn default_stat(&self) -> Box<dyn Stat> { Box::new(StatIdentity) }
-    fn default_position(&self) -> Box<dyn Position> { Box::new(PositionIdentity) }
-    fn default_params(&self) -> GeomParams { GeomParams::default() }
-    fn name(&self) -> &str { "label" }
+    fn default_stat(&self) -> Box<dyn Stat> {
+        Box::new(StatIdentity)
+    }
+    fn default_position(&self) -> Box<dyn Position> {
+        Box::new(PositionIdentity)
+    }
+    fn default_params(&self) -> GeomParams {
+        GeomParams::default()
+    }
+    fn name(&self) -> &str {
+        "label"
+    }
 }

@@ -54,8 +54,12 @@ impl Scale for ScaleColorGradient2 {
         for v in values {
             if let Some(f) = v.as_f64() {
                 if f.is_finite() {
-                    if f < self.min { self.min = f; }
-                    if f > self.max { self.max = f; }
+                    if f < self.min {
+                        self.min = f;
+                    }
+                    if f > self.max {
+                        self.max = f;
+                    }
                 }
             }
         }

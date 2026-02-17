@@ -7,8 +7,8 @@ use crate::coord::cartesian::CoordCartesian;
 use crate::coord::fixed::CoordFixed;
 use crate::coord::flip::CoordFlip;
 use crate::coord::Coord;
-use crate::facet::{Facet, FacetScales};
 use crate::data::{DataFrame, GGData};
+use crate::facet::{Facet, FacetScales};
 use crate::geom::area::GeomArea;
 use crate::geom::bar::GeomBar;
 use crate::geom::boxplot::GeomBoxplot;
@@ -284,15 +284,17 @@ impl GGPlot {
 
     pub fn scale_color_brewer(self, name: crate::scale::palettes::PaletteName) -> Self {
         use crate::scale::color::ScaleColorDiscrete;
-        let s = ScaleColorDiscrete::new(crate::aes::Aesthetic::Color)
-            .with_named_palette(&name);
+        let s = ScaleColorDiscrete::new(crate::aes::Aesthetic::Color).with_named_palette(&name);
         self.scale_color(s)
     }
 
-    pub fn scale_color_gradient(self, low: crate::scale::color::RGBAColor, high: crate::scale::color::RGBAColor) -> Self {
+    pub fn scale_color_gradient(
+        self,
+        low: crate::scale::color::RGBAColor,
+        high: crate::scale::color::RGBAColor,
+    ) -> Self {
         use crate::scale::color::ScaleColorContinuous;
-        let s = ScaleColorContinuous::new(crate::aes::Aesthetic::Color)
-            .with_colors(low, high);
+        let s = ScaleColorContinuous::new(crate::aes::Aesthetic::Color).with_colors(low, high);
         self.scale_color(s)
     }
 
@@ -349,7 +351,12 @@ impl GGPlot {
         self
     }
 
-    pub fn facet_grid_free(mut self, row: Option<&str>, col: Option<&str>, scales: FacetScales) -> Self {
+    pub fn facet_grid_free(
+        mut self,
+        row: Option<&str>,
+        col: Option<&str>,
+        scales: FacetScales,
+    ) -> Self {
         self.facet = Facet::Grid {
             row_var: row.map(String::from),
             col_var: col.map(String::from),
@@ -530,8 +537,7 @@ impl GGPlot {
                 area.fill(&plotters::prelude::WHITE)
                     .map_err(|e| GGError::Render(RenderError::BackendError(format!("{:?}", e))))?;
                 let mut adapter = PlottersAdapter::new(&area, layout.plot_area.clone());
-                PlotRenderer::render(&built, &mut adapter)
-                    .map_err(GGError::Render)?;
+                PlotRenderer::render(&built, &mut adapter).map_err(GGError::Render)?;
                 area.present()
                     .map_err(|e| GGError::Render(RenderError::BackendError(format!("{:?}", e))))?;
             }
@@ -541,8 +547,7 @@ impl GGPlot {
                 area.fill(&plotters::prelude::WHITE)
                     .map_err(|e| GGError::Render(RenderError::BackendError(format!("{:?}", e))))?;
                 let mut adapter = PlottersAdapter::new(&area, layout.plot_area.clone());
-                PlotRenderer::render(&built, &mut adapter)
-                    .map_err(GGError::Render)?;
+                PlotRenderer::render(&built, &mut adapter).map_err(GGError::Render)?;
                 area.present()
                     .map_err(|e| GGError::Render(RenderError::BackendError(format!("{:?}", e))))?;
             }
@@ -555,22 +560,25 @@ impl GGPlot {
     }
 
     /// Save with physical dimensions (inches) and DPI.
-    pub fn ggsave(self, path: &str, width_inches: f64, height_inches: f64, dpi: f64) -> Result<(), GGError> {
+    pub fn ggsave(
+        self,
+        path: &str,
+        width_inches: f64,
+        height_inches: f64,
+        dpi: f64,
+    ) -> Result<(), GGError> {
         let w = (width_inches * dpi) as u32;
         let h = (height_inches * dpi) as u32;
         self.save_with_size(path, w, h)
     }
 
     fn has_color_or_fill_mapping(&self) -> bool {
-        self.mapping
-            .mappings
-            .iter()
-            .any(|m| {
-                matches!(
-                    m.aesthetic,
-                    crate::aes::Aesthetic::Color | crate::aes::Aesthetic::Fill
-                )
-            })
+        self.mapping.mappings.iter().any(|m| {
+            matches!(
+                m.aesthetic,
+                crate::aes::Aesthetic::Color | crate::aes::Aesthetic::Fill
+            )
+        })
     }
 }
 

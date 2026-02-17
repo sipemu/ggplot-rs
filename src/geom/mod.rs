@@ -19,12 +19,12 @@ use std::collections::HashMap;
 use crate::aes::Aesthetic;
 use crate::coord::Coord;
 use crate::data::DataFrame;
+use crate::position::Position;
 use crate::render::backend::DrawBackend;
 use crate::render::RenderError;
 use crate::scale::ScaleSet;
-use crate::theme::Theme;
-use crate::position::Position;
 use crate::stat::Stat;
+use crate::theme::Theme;
 
 /// Fixed (non-mapped) visual parameters for a geom.
 #[derive(Clone, Debug, Default)]

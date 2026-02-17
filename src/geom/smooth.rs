@@ -54,8 +54,12 @@ impl Geom for GeomSmooth {
         _theme: &Theme,
         backend: &mut dyn DrawBackend,
     ) -> Result<(), RenderError> {
-        let x_col = data.column("x").ok_or(RenderError::MissingAesthetic("x".into()))?;
-        let y_col = data.column("y").ok_or(RenderError::MissingAesthetic("y".into()))?;
+        let x_col = data
+            .column("x")
+            .ok_or(RenderError::MissingAesthetic("x".into()))?;
+        let y_col = data
+            .column("y")
+            .ok_or(RenderError::MissingAesthetic("y".into()))?;
         let ymin_col = data.column("ymin");
         let ymax_col = data.column("ymax");
 

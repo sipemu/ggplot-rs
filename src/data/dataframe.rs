@@ -152,7 +152,11 @@ impl DataFrame {
 
     /// Get a single row as a map.
     pub fn row(&self, idx: usize) -> IndexMap<String, Value> {
-        assert!(idx < self.nrows, "Row index {idx} out of bounds ({} rows)", self.nrows);
+        assert!(
+            idx < self.nrows,
+            "Row index {idx} out of bounds ({} rows)",
+            self.nrows
+        );
         let mut map = IndexMap::new();
         for (name, col) in &self.columns {
             map.insert(name.clone(), col[idx].clone());
@@ -253,7 +257,11 @@ mod tests {
         let mut df = DataFrame::new();
         df.add_column(
             "cat".into(),
-            vec![Value::Str("a".into()), Value::Str("b".into()), Value::Str("a".into())],
+            vec![
+                Value::Str("a".into()),
+                Value::Str("b".into()),
+                Value::Str("a".into()),
+            ],
         );
         df.add_column(
             "val".into(),

@@ -107,9 +107,8 @@ impl PlotBuilder {
                     .iter()
                     .enumerate()
                     .map(|(i, label)| {
-                        let ncols = ncol.unwrap_or_else(|| {
-                            (levels.len() as f64).sqrt().ceil() as usize
-                        });
+                        let ncols =
+                            ncol.unwrap_or_else(|| (levels.len() as f64).sqrt().ceil() as usize);
                         Panel {
                             row: i / ncols.max(1),
                             col: i % ncols.max(1),
@@ -117,7 +116,10 @@ impl PlotBuilder {
                             row_label: None,
                             col_label: Some(label.clone()),
                             rect: crate::render::Rect {
-                                x: 0.0, y: 0.0, width: 0.0, height: 0.0,
+                                x: 0.0,
+                                y: 0.0,
+                                width: 0.0,
+                                height: 0.0,
                             },
                         }
                     })
@@ -129,16 +131,16 @@ impl PlotBuilder {
                     .map(|level| {
                         built_layers
                             .iter()
-                            .map(|bl| {
-                                Self::filter_data_by_var(&bl.data, var, level)
-                            })
+                            .map(|bl| Self::filter_data_by_var(&bl.data, var, level))
                             .collect()
                     })
                     .collect();
 
                 (panels, panels_data)
             }
-            Facet::Grid { row_var, col_var, .. } => {
+            Facet::Grid {
+                row_var, col_var, ..
+            } => {
                 let mut row_levels: Vec<String> = Vec::new();
                 let mut col_levels: Vec<String> = Vec::new();
 
@@ -181,10 +183,21 @@ impl PlotBuilder {
                             row: ri,
                             col: ci,
                             label: format!("{rl} | {cl}"),
-                            row_label: if rl.is_empty() { None } else { Some(rl.clone()) },
-                            col_label: if cl.is_empty() { None } else { Some(cl.clone()) },
+                            row_label: if rl.is_empty() {
+                                None
+                            } else {
+                                Some(rl.clone())
+                            },
+                            col_label: if cl.is_empty() {
+                                None
+                            } else {
+                                Some(cl.clone())
+                            },
                             rect: crate::render::Rect {
-                                x: 0.0, y: 0.0, width: 0.0, height: 0.0,
+                                x: 0.0,
+                                y: 0.0,
+                                width: 0.0,
+                                height: 0.0,
                             },
                         });
 
@@ -288,7 +301,8 @@ impl PlotBuilder {
         let group_cols = Self::detect_group_columns(&working_data);
 
         working_data = if !group_cols.is_empty() {
-            let groups = working_data.group_by(&group_cols.iter().map(|s| s.as_str()).collect::<Vec<_>>());
+            let groups =
+                working_data.group_by(&group_cols.iter().map(|s| s.as_str()).collect::<Vec<_>>());
             let mut result = DataFrame::new();
             for group in groups {
                 let computed = stat.compute_group(&group, scale_set);

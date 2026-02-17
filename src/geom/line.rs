@@ -38,8 +38,12 @@ impl Geom for GeomLine {
         _theme: &Theme,
         backend: &mut dyn DrawBackend,
     ) -> Result<(), RenderError> {
-        let x_col = data.column("x").ok_or(RenderError::MissingAesthetic("x".into()))?;
-        let y_col = data.column("y").ok_or(RenderError::MissingAesthetic("y".into()))?;
+        let x_col = data
+            .column("x")
+            .ok_or(RenderError::MissingAesthetic("x".into()))?;
+        let y_col = data
+            .column("y")
+            .ok_or(RenderError::MissingAesthetic("y".into()))?;
         let color_col = data.column("color");
         let linetype_col = data.column("linetype");
 

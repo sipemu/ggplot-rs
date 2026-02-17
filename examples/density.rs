@@ -7,7 +7,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         .map(|i| {
             let r = ((i.wrapping_mul(1103515245).wrapping_add(12345)) % (1 << 16)) as f64
                 / (1u64 << 16) as f64;
-            if i < 100 { 3.0 + r * 4.0 } else { 5.0 + r * 4.0 }
+            if i < 100 {
+                3.0 + r * 4.0
+            } else {
+                5.0 + r * 4.0
+            }
         })
         .collect();
     let group: Vec<&str> = (0..200)

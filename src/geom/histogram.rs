@@ -42,7 +42,9 @@ impl Geom for GeomHistogram {
     ) -> Result<(), RenderError> {
         let xmin_col = data.column("xmin");
         let xmax_col = data.column("xmax");
-        let y_col = data.column("y").ok_or(RenderError::MissingAesthetic("y".into()))?;
+        let y_col = data
+            .column("y")
+            .ok_or(RenderError::MissingAesthetic("y".into()))?;
 
         let plot_area = backend.plot_area();
         let x_scale = scales.get(&Aesthetic::X);
@@ -57,7 +59,9 @@ impl Geom for GeomHistogram {
                 }
                 _ => {
                     // Fall back to x column with small width
-                    let x_col = data.column("x").ok_or(RenderError::MissingAesthetic("x".into()))?;
+                    let x_col = data
+                        .column("x")
+                        .ok_or(RenderError::MissingAesthetic("x".into()))?;
                     let nx = x_scale.map(|s| s.map(&x_col[i])).unwrap_or(0.0);
                     (nx - 0.02, nx + 0.02)
                 }

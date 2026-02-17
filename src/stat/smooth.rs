@@ -131,7 +131,9 @@ impl StatSmooth {
             y_vals.push(Value::Float(y));
 
             if let Some((mse, sum_xx, mean_x, n)) = se_values {
-                let se_pred = (mse * (1.0 / n + (x - mean_x).powi(2) / (sum_xx - n * mean_x * mean_x))).sqrt();
+                let se_pred = (mse
+                    * (1.0 / n + (x - mean_x).powi(2) / (sum_xx - n * mean_x * mean_x)))
+                    .sqrt();
                 // ~95% CI: t ≈ 1.96 for large n
                 let t_val = 1.96;
                 ymin_vals.push(Value::Float(y - t_val * se_pred));

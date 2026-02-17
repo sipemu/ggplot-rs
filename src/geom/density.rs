@@ -40,8 +40,12 @@ impl Geom for GeomDensity {
         _theme: &Theme,
         backend: &mut dyn DrawBackend,
     ) -> Result<(), RenderError> {
-        let x_col = data.column("x").ok_or(RenderError::MissingAesthetic("x".into()))?;
-        let y_col = data.column("y").ok_or(RenderError::MissingAesthetic("y".into()))?;
+        let x_col = data
+            .column("x")
+            .ok_or(RenderError::MissingAesthetic("x".into()))?;
+        let y_col = data
+            .column("y")
+            .ok_or(RenderError::MissingAesthetic("y".into()))?;
         let fill_col = data.column("fill");
         let color_col = data.column("color");
 
@@ -49,9 +53,7 @@ impl Geom for GeomDensity {
         let x_scale = scales.get(&Aesthetic::X);
         let y_scale = scales.get(&Aesthetic::Y);
 
-        let base_ny = y_scale
-            .map(|s| s.map(&Value::Float(0.0)))
-            .unwrap_or(0.0);
+        let base_ny = y_scale.map(|s| s.map(&Value::Float(0.0))).unwrap_or(0.0);
 
         // Determine groups from color or fill column
         let group_col = color_col.or(fill_col);

@@ -47,7 +47,10 @@ impl Stat for StatLoess {
 
         let n = pairs.len();
         let x_min = pairs.iter().map(|(x, _)| *x).fold(f64::INFINITY, f64::min);
-        let x_max = pairs.iter().map(|(x, _)| *x).fold(f64::NEG_INFINITY, f64::max);
+        let x_max = pairs
+            .iter()
+            .map(|(x, _)| *x)
+            .fold(f64::NEG_INFINITY, f64::max);
         let step = (x_max - x_min) / (self.n_points - 1).max(1) as f64;
 
         // Number of neighbors to use
@@ -115,7 +118,11 @@ fn local_regression(pairs: &[(f64, f64)], x0: f64, k: usize) -> f64 {
     dists.sort_by(|a, b| a.1.partial_cmp(&b.1).unwrap_or(std::cmp::Ordering::Equal));
 
     let max_dist = dists[k - 1].1;
-    let max_dist = if max_dist < f64::EPSILON { 1.0 } else { max_dist };
+    let max_dist = if max_dist < f64::EPSILON {
+        1.0
+    } else {
+        max_dist
+    };
 
     // Tricube weight function
     let weights: Vec<(f64, f64, f64)> = dists[..k]

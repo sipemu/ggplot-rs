@@ -40,16 +40,18 @@ impl Geom for GeomArea {
         _theme: &Theme,
         backend: &mut dyn DrawBackend,
     ) -> Result<(), RenderError> {
-        let x_col = data.column("x").ok_or(RenderError::MissingAesthetic("x".into()))?;
-        let y_col = data.column("y").ok_or(RenderError::MissingAesthetic("y".into()))?;
+        let x_col = data
+            .column("x")
+            .ok_or(RenderError::MissingAesthetic("x".into()))?;
+        let y_col = data
+            .column("y")
+            .ok_or(RenderError::MissingAesthetic("y".into()))?;
 
         let plot_area = backend.plot_area();
         let x_scale = scales.get(&Aesthetic::X);
         let y_scale = scales.get(&Aesthetic::Y);
 
-        let base_ny = y_scale
-            .map(|s| s.map(&Value::Float(0.0)))
-            .unwrap_or(0.0);
+        let base_ny = y_scale.map(|s| s.map(&Value::Float(0.0))).unwrap_or(0.0);
 
         let mut upper: Vec<(f64, f64)> = Vec::new();
         let mut lower: Vec<(f64, f64)> = Vec::new();
@@ -98,8 +100,16 @@ impl Geom for GeomArea {
         vec![Aesthetic::X, Aesthetic::Y]
     }
 
-    fn default_stat(&self) -> Box<dyn Stat> { Box::new(StatIdentity) }
-    fn default_position(&self) -> Box<dyn Position> { Box::new(PositionIdentity) }
-    fn default_params(&self) -> GeomParams { GeomParams::default() }
-    fn name(&self) -> &str { "area" }
+    fn default_stat(&self) -> Box<dyn Stat> {
+        Box::new(StatIdentity)
+    }
+    fn default_position(&self) -> Box<dyn Position> {
+        Box::new(PositionIdentity)
+    }
+    fn default_params(&self) -> GeomParams {
+        GeomParams::default()
+    }
+    fn name(&self) -> &str {
+        "area"
+    }
 }

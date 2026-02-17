@@ -63,10 +63,7 @@ impl Stat for StatDensity {
         for col_name in &["color", "fill", "group"] {
             if let Some(col) = data.column(col_name) {
                 if let Some(first) = col.first() {
-                    result.add_column(
-                        col_name.to_string(),
-                        vec![first.clone(); self.n_points],
-                    );
+                    result.add_column(col_name.to_string(), vec![first.clone(); self.n_points]);
                 }
             }
         }

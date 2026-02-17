@@ -147,16 +147,37 @@ pub enum TextAnchor {
 
 /// Our rendering abstraction, independent of plotters details.
 pub trait DrawBackend {
-    fn draw_circle(&mut self, center: (f64, f64), radius: f64, style: &PointStyle) -> Result<(), RenderError>;
+    fn draw_circle(
+        &mut self,
+        center: (f64, f64),
+        radius: f64,
+        style: &PointStyle,
+    ) -> Result<(), RenderError>;
     fn draw_line(&mut self, points: &[(f64, f64)], style: &LineStyle) -> Result<(), RenderError>;
-    fn draw_rect(&mut self, top_left: (f64, f64), bottom_right: (f64, f64), style: &RectStyle) -> Result<(), RenderError>;
-    fn draw_text(&mut self, text: &str, pos: (f64, f64), style: &TextStyle) -> Result<(), RenderError>;
-    fn draw_polygon(&mut self, points: &[(f64, f64)], style: &RectStyle) -> Result<(), RenderError>;
+    fn draw_rect(
+        &mut self,
+        top_left: (f64, f64),
+        bottom_right: (f64, f64),
+        style: &RectStyle,
+    ) -> Result<(), RenderError>;
+    fn draw_text(
+        &mut self,
+        text: &str,
+        pos: (f64, f64),
+        style: &TextStyle,
+    ) -> Result<(), RenderError>;
+    fn draw_polygon(&mut self, points: &[(f64, f64)], style: &RectStyle)
+        -> Result<(), RenderError>;
     fn plot_area(&self) -> Rect;
     fn total_area(&self) -> Rect;
 
     /// Draw a point with a specific shape. Default delegates to draw_circle for Circle.
-    fn draw_shape(&mut self, center: (f64, f64), radius: f64, style: &PointStyle) -> Result<(), RenderError> {
+    fn draw_shape(
+        &mut self,
+        center: (f64, f64),
+        radius: f64,
+        style: &PointStyle,
+    ) -> Result<(), RenderError> {
         match style.shape {
             PointShape::Circle => self.draw_circle(center, radius, style),
             _ => {

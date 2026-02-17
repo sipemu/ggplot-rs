@@ -14,22 +14,51 @@ pub struct PlotLayout {
 
 impl PlotLayout {
     /// Compute layout from total dimensions and theme settings.
-    pub fn compute(width: f64, height: f64, theme: &Theme, has_title: bool, has_legend: bool) -> Self {
+    pub fn compute(
+        width: f64,
+        height: f64,
+        theme: &Theme,
+        has_title: bool,
+        has_legend: bool,
+    ) -> Self {
         let margin = &theme.plot_margin;
 
-        let title_height = if has_title { theme.title.size * 2.0 } else { 0.0 };
+        let title_height = if has_title {
+            theme.title.size * 2.0
+        } else {
+            0.0
+        };
 
         let x_axis_height = theme.axis_ticks_length
-            + if theme.axis_text_x.visible { theme.axis_text_x.size + 4.0 } else { 0.0 }
-            + if theme.axis_title_x.visible { theme.axis_title_x.size + 8.0 } else { 0.0 };
+            + if theme.axis_text_x.visible {
+                theme.axis_text_x.size + 4.0
+            } else {
+                0.0
+            }
+            + if theme.axis_title_x.visible {
+                theme.axis_title_x.size + 8.0
+            } else {
+                0.0
+            };
 
         let y_axis_width = theme.axis_ticks_length
-            + if theme.axis_text_y.visible { theme.axis_text_y.size * 3.5 + 4.0 } else { 0.0 }
-            + if theme.axis_title_y.visible { theme.axis_title_y.size + 8.0 } else { 0.0 };
+            + if theme.axis_text_y.visible {
+                theme.axis_text_y.size * 3.5 + 4.0
+            } else {
+                0.0
+            }
+            + if theme.axis_title_y.visible {
+                theme.axis_title_y.size + 8.0
+            } else {
+                0.0
+            };
 
         let legend_width = if has_legend {
-            theme.legend_margin.left + theme.legend_key_width + theme.legend_spacing
-                + theme.legend_text.size * 6.0 + theme.legend_margin.right
+            theme.legend_margin.left
+                + theme.legend_key_width
+                + theme.legend_spacing
+                + theme.legend_text.size * 6.0
+                + theme.legend_margin.right
         } else {
             0.0
         };

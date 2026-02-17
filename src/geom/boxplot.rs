@@ -40,7 +40,9 @@ impl Geom for GeomBoxplot {
         _theme: &Theme,
         backend: &mut dyn DrawBackend,
     ) -> Result<(), RenderError> {
-        let x_col = data.column("x").ok_or(RenderError::MissingAesthetic("x".into()))?;
+        let x_col = data
+            .column("x")
+            .ok_or(RenderError::MissingAesthetic("x".into()))?;
         let lower_col = data.column("lower");
         let middle_col = data.column("middle");
         let upper_col = data.column("upper");
@@ -75,7 +77,8 @@ impl Geom for GeomBoxplot {
 
             // Box (IQR)
             let (box_left, box_top) = coord.transform((nx - half_width, map_y(upper)), &plot_area);
-            let (box_right, box_bottom) = coord.transform((nx + half_width, map_y(lower)), &plot_area);
+            let (box_right, box_bottom) =
+                coord.transform((nx + half_width, map_y(lower)), &plot_area);
             backend.draw_rect(
                 (box_left, box_top),
                 (box_right, box_bottom),
@@ -92,7 +95,12 @@ impl Geom for GeomBoxplot {
             let (med_right, _) = coord.transform((nx + half_width, map_y(middle)), &plot_area);
             backend.draw_line(
                 &[(med_left, med_y), (med_right, med_y)],
-                &LineStyle { color: self.color, width: 2.0, alpha: 1.0, linetype: Linetype::Solid },
+                &LineStyle {
+                    color: self.color,
+                    width: 2.0,
+                    alpha: 1.0,
+                    linetype: Linetype::Solid,
+                },
             )?;
 
             // Lower whisker
@@ -100,28 +108,48 @@ impl Geom for GeomBoxplot {
             let (center_x, _) = coord.transform((nx, map_y(lower)), &plot_area);
             backend.draw_line(
                 &[(center_x, box_bottom), (center_x, whisker_bottom)],
-                &LineStyle { color: self.color, width: 1.0, alpha: 1.0, linetype: Linetype::Solid },
+                &LineStyle {
+                    color: self.color,
+                    width: 1.0,
+                    alpha: 1.0,
+                    linetype: Linetype::Solid,
+                },
             )?;
             // Lower whisker cap
             let (wl, _) = coord.transform((nx - half_width * 0.5, map_y(ymin)), &plot_area);
             let (wr, _) = coord.transform((nx + half_width * 0.5, map_y(ymin)), &plot_area);
             backend.draw_line(
                 &[(wl, whisker_bottom), (wr, whisker_bottom)],
-                &LineStyle { color: self.color, width: 1.0, alpha: 1.0, linetype: Linetype::Solid },
+                &LineStyle {
+                    color: self.color,
+                    width: 1.0,
+                    alpha: 1.0,
+                    linetype: Linetype::Solid,
+                },
             )?;
 
             // Upper whisker
             let (_, whisker_top) = coord.transform((nx, map_y(ymax)), &plot_area);
             backend.draw_line(
                 &[(center_x, box_top), (center_x, whisker_top)],
-                &LineStyle { color: self.color, width: 1.0, alpha: 1.0, linetype: Linetype::Solid },
+                &LineStyle {
+                    color: self.color,
+                    width: 1.0,
+                    alpha: 1.0,
+                    linetype: Linetype::Solid,
+                },
             )?;
             // Upper whisker cap
             let (wl, _) = coord.transform((nx - half_width * 0.5, map_y(ymax)), &plot_area);
             let (wr, _) = coord.transform((nx + half_width * 0.5, map_y(ymax)), &plot_area);
             backend.draw_line(
                 &[(wl, whisker_top), (wr, whisker_top)],
-                &LineStyle { color: self.color, width: 1.0, alpha: 1.0, linetype: Linetype::Solid },
+                &LineStyle {
+                    color: self.color,
+                    width: 1.0,
+                    alpha: 1.0,
+                    linetype: Linetype::Solid,
+                },
             )?;
 
             // Outliers
@@ -134,7 +162,12 @@ impl Geom for GeomBoxplot {
                             backend.draw_circle(
                                 (ox, oy),
                                 2.0,
-                                &PointStyle { color: self.color, alpha: 1.0, filled: false, shape: PointShape::Circle },
+                                &PointStyle {
+                                    color: self.color,
+                                    alpha: 1.0,
+                                    filled: false,
+                                    shape: PointShape::Circle,
+                                },
                             )?;
                         }
                     }

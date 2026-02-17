@@ -40,8 +40,12 @@ impl Geom for GeomBar {
         _theme: &Theme,
         backend: &mut dyn DrawBackend,
     ) -> Result<(), RenderError> {
-        let x_col = data.column("x").ok_or(RenderError::MissingAesthetic("x".into()))?;
-        let y_col = data.column("y").ok_or(RenderError::MissingAesthetic("y".into()))?;
+        let x_col = data
+            .column("x")
+            .ok_or(RenderError::MissingAesthetic("x".into()))?;
+        let y_col = data
+            .column("y")
+            .ok_or(RenderError::MissingAesthetic("y".into()))?;
         let fill_col = data.column("fill");
         let ymin_col = data.column("ymin");
 
@@ -58,7 +62,11 @@ impl Geom for GeomBar {
             let ny_base = ymin_col
                 .and_then(|c| c[i].as_f64())
                 .and_then(|v| y_scale.map(|s| s.map(&crate::data::Value::Float(v))))
-                .unwrap_or_else(|| y_scale.map(|s| s.map(&crate::data::Value::Float(0.0))).unwrap_or(0.0));
+                .unwrap_or_else(|| {
+                    y_scale
+                        .map(|s| s.map(&crate::data::Value::Float(0.0)))
+                        .unwrap_or(0.0)
+                });
 
             // Bar width in normalized coords
             let half_width = if x_is_discrete {

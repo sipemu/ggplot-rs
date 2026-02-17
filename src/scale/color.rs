@@ -37,14 +37,54 @@ impl RGBAColor {
 
 /// Default discrete color palette (8 colors, similar to ggplot2 default).
 pub const DEFAULT_PALETTE: &[RGBAColor] = &[
-    RGBAColor { r: 248, g: 118, b: 109, a: 1.0 }, // red
-    RGBAColor { r: 0, g: 186, b: 56, a: 1.0 },    // green
-    RGBAColor { r: 97, g: 156, b: 255, a: 1.0 },   // blue
-    RGBAColor { r: 163, g: 103, b: 203, a: 1.0 },  // purple
-    RGBAColor { r: 231, g: 138, b: 0, a: 1.0 },    // orange
-    RGBAColor { r: 0, g: 191, b: 196, a: 1.0 },    // cyan
-    RGBAColor { r: 199, g: 124, b: 255, a: 1.0 },  // violet
-    RGBAColor { r: 127, g: 127, b: 127, a: 1.0 },  // gray
+    RGBAColor {
+        r: 248,
+        g: 118,
+        b: 109,
+        a: 1.0,
+    }, // red
+    RGBAColor {
+        r: 0,
+        g: 186,
+        b: 56,
+        a: 1.0,
+    }, // green
+    RGBAColor {
+        r: 97,
+        g: 156,
+        b: 255,
+        a: 1.0,
+    }, // blue
+    RGBAColor {
+        r: 163,
+        g: 103,
+        b: 203,
+        a: 1.0,
+    }, // purple
+    RGBAColor {
+        r: 231,
+        g: 138,
+        b: 0,
+        a: 1.0,
+    }, // orange
+    RGBAColor {
+        r: 0,
+        g: 191,
+        b: 196,
+        a: 1.0,
+    }, // cyan
+    RGBAColor {
+        r: 199,
+        g: 124,
+        b: 255,
+        a: 1.0,
+    }, // violet
+    RGBAColor {
+        r: 127,
+        g: 127,
+        b: 127,
+        a: 1.0,
+    }, // gray
 ];
 
 /// Discrete color scale — maps categories to distinct colors.
@@ -84,11 +124,7 @@ impl ScaleColorDiscrete {
     /// Get color for a value.
     pub fn color_for_value(&self, value: &Value) -> RGBAColor {
         let key = value.to_group_key();
-        let idx = self
-            .levels
-            .iter()
-            .position(|l| l == &key)
-            .unwrap_or(0);
+        let idx = self.levels.iter().position(|l| l == &key).unwrap_or(0);
         self.color_for_index(idx)
     }
 
@@ -189,8 +225,12 @@ impl Scale for ScaleColorContinuous {
         for v in values {
             if let Some(f) = v.as_f64() {
                 if f.is_finite() {
-                    if f < self.min { self.min = f; }
-                    if f > self.max { self.max = f; }
+                    if f < self.min {
+                        self.min = f;
+                    }
+                    if f > self.max {
+                        self.max = f;
+                    }
                 }
             }
         }

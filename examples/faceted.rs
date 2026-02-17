@@ -29,7 +29,12 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // facet_wrap: one variable, automatic grid layout
     GGPlot::new(df.clone())
-        .aes(Aes::new().x("sepal_length").y("sepal_width").color("species"))
+        .aes(
+            Aes::new()
+                .x("sepal_length")
+                .y("sepal_width")
+                .color("species"),
+        )
         .geom_point()
         .facet_wrap("species", Some(2))
         .title("Facet Wrap by Species")
@@ -41,7 +46,12 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // facet_grid: two variables, row ~ col layout
     GGPlot::new(df)
-        .aes(Aes::new().x("sepal_length").y("sepal_width").color("species"))
+        .aes(
+            Aes::new()
+                .x("sepal_length")
+                .y("sepal_width")
+                .color("species"),
+        )
         .geom_point()
         .facet_grid(Some("region"), Some("species"))
         .title("Facet Grid: Region ~ Species")

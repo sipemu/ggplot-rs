@@ -21,7 +21,12 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     }?;
 
     GGPlot::new(df)
-        .aes(Aes::new().x("sepal_length").y("sepal_width").color("species"))
+        .aes(
+            Aes::new()
+                .x("sepal_length")
+                .y("sepal_width")
+                .color("species"),
+        )
         .geom_point()
         .title("Iris Scatter Plot")
         .xlab("Sepal Length")

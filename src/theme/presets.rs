@@ -6,9 +6,9 @@ const DEFAULT_BASE_SIZE: f64 = 11.0;
 
 /// Compute text sizes relative to a base size, matching ggplot2 proportions.
 fn text_sizes(base_size: f64) -> (f64, f64, f64) {
-    let title = base_size * 1.2;      // rel(1.2)
-    let axis_title = base_size;        // inherits from text (rel(1.0))
-    let axis_text = base_size * 0.8;   // rel(0.8)
+    let title = base_size * 1.2; // rel(1.2)
+    let axis_title = base_size; // inherits from text (rel(1.0))
+    let axis_text = base_size * 0.8; // rel(0.8)
     (title, axis_title, axis_text)
 }
 
@@ -121,7 +121,7 @@ pub fn theme_gray_base(base_size: f64) -> Theme {
         },
         strip_text: ElementText {
             size: axis_text_size, // rel(0.8)
-            color: (26, 26, 26), // grey10
+            color: (26, 26, 26),  // grey10
             ..Default::default()
         },
 
@@ -151,7 +151,7 @@ pub fn theme_gray_base(base_size: f64) -> Theme {
         },
         strip_background: ElementRect {
             fill: Some((217, 217, 217)), // grey85
-            color: None,                  // colour = NA
+            color: None,                 // colour = NA
             width: 0.0,
             visible: true,
         },

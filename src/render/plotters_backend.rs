@@ -1,6 +1,8 @@
 use plotters::prelude::*;
 
-use super::backend::{DrawBackend, LineStyle, PointShape, PointStyle, RectStyle, TextAnchor, TextStyle};
+use super::backend::{
+    DrawBackend, LineStyle, PointShape, PointStyle, RectStyle, TextAnchor, TextStyle,
+};
 use super::{Rect, RenderError};
 
 /// Adapter from plotters' DrawingArea to our DrawBackend trait.
@@ -128,11 +130,7 @@ impl<'a, DB: DrawingBackend> DrawBackend for PlottersAdapter<'a, DB> {
         Ok(())
     }
 
-    fn draw_line(
-        &mut self,
-        points: &[(f64, f64)],
-        style: &LineStyle,
-    ) -> Result<(), RenderError> {
+    fn draw_line(&mut self, points: &[(f64, f64)], style: &LineStyle) -> Result<(), RenderError> {
         if points.len() < 2 {
             return Ok(());
         }
@@ -186,7 +184,11 @@ impl<'a, DB: DrawingBackend> DrawBackend for PlottersAdapter<'a, DB> {
             self.area
                 .draw(&plotters::prelude::Rectangle::new(
                     [tl, br],
-                    stroke_color.stroke_width(if style.stroke_width > 0.0 { (style.stroke_width as u32).max(1) } else { 0 }),
+                    stroke_color.stroke_width(if style.stroke_width > 0.0 {
+                        (style.stroke_width as u32).max(1)
+                    } else {
+                        0
+                    }),
                 ))
                 .map_err(map_err)?;
         }
@@ -231,10 +233,11 @@ impl<'a, DB: DrawingBackend> DrawBackend for PlottersAdapter<'a, DB> {
                 _ => pos_adj,
             };
 
-            let text_style = plotters::prelude::TextStyle::from(("sans-serif", style.size).into_font())
-                .color(&color)
-                .transform(FontTransform::Rotate270)
-                .pos(transform);
+            let text_style =
+                plotters::prelude::TextStyle::from(("sans-serif", style.size).into_font())
+                    .color(&color)
+                    .transform(FontTransform::Rotate270)
+                    .pos(transform);
 
             self.area
                 .draw_text(text, &text_style, (pos.0 as i32, pos.1 as i32))
@@ -256,7 +259,8 @@ impl<'a, DB: DrawingBackend> DrawBackend for PlottersAdapter<'a, DB> {
         if points.len() < 3 {
             return Ok(());
         }
-        let int_points: Vec<(i32, i32)> = points.iter().map(|(x, y)| (*x as i32, *y as i32)).collect();
+        let int_points: Vec<(i32, i32)> =
+            points.iter().map(|(x, y)| (*x as i32, *y as i32)).collect();
 
         if let Some(fill) = style.fill {
             let fill_color = to_rgba(fill, style.alpha);
@@ -289,17 +293,16 @@ impl<'a, DB: DrawingBackend> DrawBackend for PlottersAdapter<'a, DB> {
                         .map_err(map_err)?;
                 } else {
                     self.area
-                        .draw(&plotters::prelude::Rectangle::new([tl, br], color.stroke_width(1)))
+                        .draw(&plotters::prelude::Rectangle::new(
+                            [tl, br],
+                            color.stroke_width(1),
+                        ))
                         .map_err(map_err)?;
                 }
                 Ok(())
             }
             PointShape::Triangle => {
-                let pts = vec![
-                    (cx, cy - r),
-                    (cx - r, cy + r),
-                    (cx + r, cy + r),
-                ];
+                let pts = vec![(cx, cy - r), (cx - r, cy + r), (cx + r, cy + r)];
                 if style.filled {
                     self.area
                         .draw(&Polygon::new(pts, color.filled()))
@@ -318,12 +321,7 @@ impl<'a, DB: DrawingBackend> DrawBackend for PlottersAdapter<'a, DB> {
                 Ok(())
             }
             PointShape::Diamond => {
-                let pts = vec![
-                    (cx, cy - r),
-                    (cx + r, cy),
-                    (cx, cy + r),
-                    (cx - r, cy),
-                ];
+                let pts = vec![(cx, cy - r), (cx + r, cy), (cx, cy + r), (cx - r, cy)];
                 if style.filled {
                     self.area
                         .draw(&Polygon::new(pts, color.filled()))

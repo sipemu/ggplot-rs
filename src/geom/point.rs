@@ -38,8 +38,12 @@ impl Geom for GeomPoint {
         _theme: &Theme,
         backend: &mut dyn DrawBackend,
     ) -> Result<(), RenderError> {
-        let x_col = data.column("x").ok_or(RenderError::MissingAesthetic("x".into()))?;
-        let y_col = data.column("y").ok_or(RenderError::MissingAesthetic("y".into()))?;
+        let x_col = data
+            .column("x")
+            .ok_or(RenderError::MissingAesthetic("x".into()))?;
+        let y_col = data
+            .column("y")
+            .ok_or(RenderError::MissingAesthetic("y".into()))?;
         let color_col = data.column("color");
         let size_col = data.column("size");
         let alpha_col = data.column("alpha");
@@ -62,13 +66,9 @@ impl Geom for GeomPoint {
                 self.color
             };
 
-            let alpha = alpha_col
-                .and_then(|c| c[i].as_f64())
-                .unwrap_or(self.alpha);
+            let alpha = alpha_col.and_then(|c| c[i].as_f64()).unwrap_or(self.alpha);
 
-            let size = size_col
-                .and_then(|c| c[i].as_f64())
-                .unwrap_or(self.size);
+            let size = size_col.and_then(|c| c[i].as_f64()).unwrap_or(self.size);
 
             let shape = shape_col
                 .and_then(|c| scales.map_shape(&c[i]))

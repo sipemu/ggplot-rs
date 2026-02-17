@@ -28,7 +28,10 @@ impl PlotRenderer {
             if let Some(fill) = theme.plot_background.fill {
                 backend.draw_rect(
                     (total_area.x, total_area.y),
-                    (total_area.x + total_area.width, total_area.y + total_area.height),
+                    (
+                        total_area.x + total_area.width,
+                        total_area.y + total_area.height,
+                    ),
                     &RectStyle {
                         fill: Some(fill),
                         stroke: None,
@@ -44,7 +47,10 @@ impl PlotRenderer {
             if let Some(fill) = theme.panel_background.fill {
                 backend.draw_rect(
                     (plot_area.x, plot_area.y),
-                    (plot_area.x + plot_area.width, plot_area.y + plot_area.height),
+                    (
+                        plot_area.x + plot_area.width,
+                        plot_area.y + plot_area.height,
+                    ),
                     &RectStyle {
                         fill: Some(fill),
                         stroke: theme.panel_background.color,
@@ -105,7 +111,13 @@ impl PlotRenderer {
         }
 
         // 6. Draw annotations
-        Self::draw_annotations(&built.annotations, &built.scales, built.coord.as_ref(), &plot_area, backend)?;
+        Self::draw_annotations(
+            &built.annotations,
+            &built.scales,
+            built.coord.as_ref(),
+            &plot_area,
+            backend,
+        )?;
 
         // 7. Draw title
         if let Some(ref title) = built.labels.title {
@@ -129,7 +141,10 @@ impl PlotRenderer {
             let subtitle_y = plot_area.y - 2.0;
             backend.draw_text(
                 subtitle,
-                (center_x, subtitle_y.max(theme.title.size + theme.subtitle.size)),
+                (
+                    center_x,
+                    subtitle_y.max(theme.title.size + theme.subtitle.size),
+                ),
                 &TextStyle {
                     color: theme.subtitle.color,
                     size: theme.subtitle.size,
@@ -171,7 +186,10 @@ impl PlotRenderer {
             if let Some(fill) = theme.plot_background.fill {
                 backend.draw_rect(
                     (total_area.x, total_area.y),
-                    (total_area.x + total_area.width, total_area.y + total_area.height),
+                    (
+                        total_area.x + total_area.width,
+                        total_area.y + total_area.height,
+                    ),
                     &RectStyle {
                         fill: Some(fill),
                         stroke: None,
@@ -185,13 +203,9 @@ impl PlotRenderer {
         // Compute panel grid dimensions
         let ncol = match &built.facet {
             Facet::Wrap { ncol, .. } => {
-                ncol.unwrap_or_else(|| {
-                    (built.panels.len() as f64).sqrt().ceil() as usize
-                })
+                ncol.unwrap_or_else(|| (built.panels.len() as f64).sqrt().ceil() as usize)
             }
-            Facet::Grid { .. } => {
-                built.panels.iter().map(|p| p.col).max().unwrap_or(0) + 1
-            }
+            Facet::Grid { .. } => built.panels.iter().map(|p| p.col).max().unwrap_or(0) + 1,
             Facet::None => 1,
         };
         let nrow = built.panels.len().div_ceil(ncol);
@@ -200,7 +214,9 @@ impl PlotRenderer {
         let gap_x = theme.get_panel_spacing_x();
         let gap_y = theme.get_panel_spacing_y();
         let panel_width = (plot_area.width - gap_x * (ncol as f64 - 1.0)) / ncol as f64;
-        let panel_height = (plot_area.height - gap_y * (nrow as f64 - 1.0) - strip_height * nrow as f64) / nrow as f64;
+        let panel_height =
+            (plot_area.height - gap_y * (nrow as f64 - 1.0) - strip_height * nrow as f64)
+                / nrow as f64;
 
         for (pi, panel) in built.panels.iter().enumerate() {
             let px = plot_area.x + panel.col as f64 * (panel_width + gap_x);
@@ -247,7 +263,10 @@ impl PlotRenderer {
                 if let Some(fill) = theme.panel_background.fill {
                     backend.draw_rect(
                         (panel_rect.x, panel_rect.y),
-                        (panel_rect.x + panel_rect.width, panel_rect.y + panel_rect.height),
+                        (
+                            panel_rect.x + panel_rect.width,
+                            panel_rect.y + panel_rect.height,
+                        ),
                         &RectStyle {
                             fill: Some(fill),
                             stroke: theme.panel_background.color,
@@ -282,7 +301,14 @@ impl PlotRenderer {
 
             if let (Some(xs), Some(ys)) = (x_scale, y_scale) {
                 if built.coord.gridlines() {
-                    axis::draw_gridlines(xs, ys, built.coord.as_ref(), theme, &panel_rect, backend)?;
+                    axis::draw_gridlines(
+                        xs,
+                        ys,
+                        built.coord.as_ref(),
+                        theme,
+                        &panel_rect,
+                        backend,
+                    )?;
                 }
 
                 // Bottom row gets x axis
@@ -335,7 +361,13 @@ impl PlotRenderer {
         }
 
         // Draw annotations
-        Self::draw_annotations(&built.annotations, &built.scales, built.coord.as_ref(), &plot_area, backend)?;
+        Self::draw_annotations(
+            &built.annotations,
+            &built.scales,
+            built.coord.as_ref(),
+            &plot_area,
+            backend,
+        )?;
 
         // Draw legend
         legend::draw_legend(&built.scales, theme, &plot_area, backend)?;
@@ -357,44 +389,75 @@ impl PlotRenderer {
 
         for ann in annotations {
             match ann {
-                Annotation::Text { label, x, y, size, color } => {
+                Annotation::Text {
+                    label,
+                    x,
+                    y,
+                    size,
+                    color,
+                } => {
                     let nx = x_scale.map(|s| s.map(&Value::Float(*x))).unwrap_or(0.0);
                     let ny = y_scale.map(|s| s.map(&Value::Float(*y))).unwrap_or(0.0);
                     let pos = coord.transform((nx, ny), plot_area);
-                    backend.draw_text(label, pos, &TextStyle {
-                        color: *color,
-                        size: *size,
-                        anchor: TextAnchor::Middle,
-                        angle: 0.0,
-                    })?;
+                    backend.draw_text(
+                        label,
+                        pos,
+                        &TextStyle {
+                            color: *color,
+                            size: *size,
+                            anchor: TextAnchor::Middle,
+                            angle: 0.0,
+                        },
+                    )?;
                 }
-                Annotation::Rect { xmin, xmax, ymin, ymax, fill, alpha } => {
+                Annotation::Rect {
+                    xmin,
+                    xmax,
+                    ymin,
+                    ymax,
+                    fill,
+                    alpha,
+                } => {
                     let nx0 = x_scale.map(|s| s.map(&Value::Float(*xmin))).unwrap_or(0.0);
                     let nx1 = x_scale.map(|s| s.map(&Value::Float(*xmax))).unwrap_or(1.0);
                     let ny0 = y_scale.map(|s| s.map(&Value::Float(*ymin))).unwrap_or(0.0);
                     let ny1 = y_scale.map(|s| s.map(&Value::Float(*ymax))).unwrap_or(1.0);
                     let tl = coord.transform((nx0, ny1), plot_area);
                     let br = coord.transform((nx1, ny0), plot_area);
-                    backend.draw_rect(tl, br, &RectStyle {
-                        fill: Some(*fill),
-                        stroke: None,
-                        stroke_width: 0.0,
-                        alpha: *alpha,
-                    })?;
+                    backend.draw_rect(
+                        tl,
+                        br,
+                        &RectStyle {
+                            fill: Some(*fill),
+                            stroke: None,
+                            stroke_width: 0.0,
+                            alpha: *alpha,
+                        },
+                    )?;
                 }
-                Annotation::Segment { x, y, xend, yend, color, width } => {
+                Annotation::Segment {
+                    x,
+                    y,
+                    xend,
+                    yend,
+                    color,
+                    width,
+                } => {
                     let nx0 = x_scale.map(|s| s.map(&Value::Float(*x))).unwrap_or(0.0);
                     let ny0 = y_scale.map(|s| s.map(&Value::Float(*y))).unwrap_or(0.0);
                     let nx1 = x_scale.map(|s| s.map(&Value::Float(*xend))).unwrap_or(1.0);
                     let ny1 = y_scale.map(|s| s.map(&Value::Float(*yend))).unwrap_or(1.0);
                     let p0 = coord.transform((nx0, ny0), plot_area);
                     let p1 = coord.transform((nx1, ny1), plot_area);
-                    backend.draw_line(&[p0, p1], &LineStyle {
-                        color: *color,
-                        alpha: 1.0,
-                        width: *width,
-                        linetype: Linetype::Solid,
-                    })?;
+                    backend.draw_line(
+                        &[p0, p1],
+                        &LineStyle {
+                            color: *color,
+                            alpha: 1.0,
+                            width: *width,
+                            linetype: Linetype::Solid,
+                        },
+                    )?;
                 }
             }
         }
@@ -409,22 +472,50 @@ struct PanelBackendAdapter<'a> {
 }
 
 impl<'a> DrawBackend for PanelBackendAdapter<'a> {
-    fn draw_circle(&mut self, center: (f64, f64), radius: f64, style: &crate::render::backend::PointStyle) -> Result<(), RenderError> {
+    fn draw_circle(
+        &mut self,
+        center: (f64, f64),
+        radius: f64,
+        style: &crate::render::backend::PointStyle,
+    ) -> Result<(), RenderError> {
         self.inner.draw_circle(center, radius, style)
     }
-    fn draw_line(&mut self, points: &[(f64, f64)], style: &crate::render::backend::LineStyle) -> Result<(), RenderError> {
+    fn draw_line(
+        &mut self,
+        points: &[(f64, f64)],
+        style: &crate::render::backend::LineStyle,
+    ) -> Result<(), RenderError> {
         self.inner.draw_line(points, style)
     }
-    fn draw_rect(&mut self, top_left: (f64, f64), bottom_right: (f64, f64), style: &RectStyle) -> Result<(), RenderError> {
+    fn draw_rect(
+        &mut self,
+        top_left: (f64, f64),
+        bottom_right: (f64, f64),
+        style: &RectStyle,
+    ) -> Result<(), RenderError> {
         self.inner.draw_rect(top_left, bottom_right, style)
     }
-    fn draw_text(&mut self, text: &str, pos: (f64, f64), style: &TextStyle) -> Result<(), RenderError> {
+    fn draw_text(
+        &mut self,
+        text: &str,
+        pos: (f64, f64),
+        style: &TextStyle,
+    ) -> Result<(), RenderError> {
         self.inner.draw_text(text, pos, style)
     }
-    fn draw_polygon(&mut self, points: &[(f64, f64)], style: &RectStyle) -> Result<(), RenderError> {
+    fn draw_polygon(
+        &mut self,
+        points: &[(f64, f64)],
+        style: &RectStyle,
+    ) -> Result<(), RenderError> {
         self.inner.draw_polygon(points, style)
     }
-    fn draw_shape(&mut self, center: (f64, f64), radius: f64, style: &crate::render::backend::PointStyle) -> Result<(), RenderError> {
+    fn draw_shape(
+        &mut self,
+        center: (f64, f64),
+        radius: f64,
+        style: &crate::render::backend::PointStyle,
+    ) -> Result<(), RenderError> {
         self.inner.draw_shape(center, radius, style)
     }
     fn plot_area(&self) -> crate::render::Rect {

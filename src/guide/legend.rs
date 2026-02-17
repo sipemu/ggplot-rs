@@ -23,14 +23,22 @@ pub fn draw_legend(
 
         if let Some(s) = color_scale {
             if s.is_discrete() {
-                let items: Vec<(String, String)> = s.breaks().iter().map(|(_, label)| (label.clone(), label.clone())).collect();
+                let items: Vec<(String, String)> = s
+                    .breaks()
+                    .iter()
+                    .map(|(_, label)| (label.clone(), label.clone()))
+                    .collect();
                 (items, Aesthetic::Color)
             } else {
                 return Ok(());
             }
         } else if let Some(s) = fill_scale {
             if s.is_discrete() {
-                let items: Vec<(String, String)> = s.breaks().iter().map(|(_, label)| (label.clone(), label.clone())).collect();
+                let items: Vec<(String, String)> = s
+                    .breaks()
+                    .iter()
+                    .map(|(_, label)| (label.clone(), label.clone()))
+                    .collect();
                 (items, Aesthetic::Fill)
             } else {
                 return Ok(());
@@ -105,7 +113,10 @@ pub fn draw_legend(
         // Label
         backend.draw_text(
             label,
-            (legend_x + swatch_size + theme.legend_spacing, y + swatch_size / 2.0),
+            (
+                legend_x + swatch_size + theme.legend_spacing,
+                y + swatch_size / 2.0,
+            ),
             &TextStyle {
                 color: theme.legend_text.color,
                 size: theme.legend_text.size,

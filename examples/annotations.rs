@@ -4,7 +4,9 @@ use polars::prelude::*;
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Sales data with a notable spike
     let month: Vec<f64> = (1..=12).map(|i| i as f64).collect();
-    let sales = vec![120.0, 135.0, 150.0, 180.0, 210.0, 310.0, 280.0, 250.0, 190.0, 170.0, 155.0, 140.0];
+    let sales = vec![
+        120.0, 135.0, 150.0, 180.0, 210.0, 310.0, 280.0, 250.0, 190.0, 170.0, 155.0, 140.0,
+    ];
 
     let df = df! {
         "month" => month,

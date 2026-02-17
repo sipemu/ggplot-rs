@@ -38,10 +38,18 @@ impl Geom for GeomSegment {
         _theme: &Theme,
         backend: &mut dyn DrawBackend,
     ) -> Result<(), RenderError> {
-        let x_col = data.column("x").ok_or(RenderError::MissingAesthetic("x".into()))?;
-        let y_col = data.column("y").ok_or(RenderError::MissingAesthetic("y".into()))?;
-        let xend_col = data.column("xend").ok_or(RenderError::MissingAesthetic("xend".into()))?;
-        let yend_col = data.column("yend").ok_or(RenderError::MissingAesthetic("yend".into()))?;
+        let x_col = data
+            .column("x")
+            .ok_or(RenderError::MissingAesthetic("x".into()))?;
+        let y_col = data
+            .column("y")
+            .ok_or(RenderError::MissingAesthetic("y".into()))?;
+        let xend_col = data
+            .column("xend")
+            .ok_or(RenderError::MissingAesthetic("xend".into()))?;
+        let yend_col = data
+            .column("yend")
+            .ok_or(RenderError::MissingAesthetic("yend".into()))?;
         let color_col = data.column("color");
 
         let plot_area = backend.plot_area();
@@ -79,8 +87,16 @@ impl Geom for GeomSegment {
         vec![Aesthetic::X, Aesthetic::Y, Aesthetic::Xend, Aesthetic::Yend]
     }
 
-    fn default_stat(&self) -> Box<dyn Stat> { Box::new(StatIdentity) }
-    fn default_position(&self) -> Box<dyn Position> { Box::new(PositionIdentity) }
-    fn default_params(&self) -> GeomParams { GeomParams::default() }
-    fn name(&self) -> &str { "segment" }
+    fn default_stat(&self) -> Box<dyn Stat> {
+        Box::new(StatIdentity)
+    }
+    fn default_position(&self) -> Box<dyn Position> {
+        Box::new(PositionIdentity)
+    }
+    fn default_params(&self) -> GeomParams {
+        GeomParams::default()
+    }
+    fn name(&self) -> &str {
+        "segment"
+    }
 }

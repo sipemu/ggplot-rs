@@ -29,7 +29,10 @@ impl ScaleSet {
 
     /// Get a scale for a specific aesthetic.
     pub fn get(&self, aes: &Aesthetic) -> Option<&dyn Scale> {
-        self.scales.iter().find(|s| s.aesthetic() == *aes).map(|s| s.as_ref())
+        self.scales
+            .iter()
+            .find(|s| s.aesthetic() == *aes)
+            .map(|s| s.as_ref())
     }
 
     /// Get mutable scale for a specific aesthetic.
@@ -47,7 +50,9 @@ impl ScaleSet {
         let values = data.column(col_name);
 
         let is_discrete = match values {
-            Some(vals) => vals.iter().any(|v| matches!(v, Value::Str(_) | Value::Bool(_))),
+            Some(vals) => vals
+                .iter()
+                .any(|v| matches!(v, Value::Str(_) | Value::Bool(_))),
             None => false,
         };
 

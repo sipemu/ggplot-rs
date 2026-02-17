@@ -65,11 +65,21 @@ impl Geom for GeomHline {
         Ok(())
     }
 
-    fn required_aes(&self) -> Vec<Aesthetic> { vec![] }
-    fn default_stat(&self) -> Box<dyn Stat> { Box::new(StatIdentity) }
-    fn default_position(&self) -> Box<dyn Position> { Box::new(PositionIdentity) }
-    fn default_params(&self) -> GeomParams { GeomParams::default() }
-    fn name(&self) -> &str { "hline" }
+    fn required_aes(&self) -> Vec<Aesthetic> {
+        vec![]
+    }
+    fn default_stat(&self) -> Box<dyn Stat> {
+        Box::new(StatIdentity)
+    }
+    fn default_position(&self) -> Box<dyn Position> {
+        Box::new(PositionIdentity)
+    }
+    fn default_params(&self) -> GeomParams {
+        GeomParams::default()
+    }
+    fn name(&self) -> &str {
+        "hline"
+    }
 }
 
 /// Vertical reference line spanning the entire plot height.
@@ -125,11 +135,21 @@ impl Geom for GeomVline {
         Ok(())
     }
 
-    fn required_aes(&self) -> Vec<Aesthetic> { vec![] }
-    fn default_stat(&self) -> Box<dyn Stat> { Box::new(StatIdentity) }
-    fn default_position(&self) -> Box<dyn Position> { Box::new(PositionIdentity) }
-    fn default_params(&self) -> GeomParams { GeomParams::default() }
-    fn name(&self) -> &str { "vline" }
+    fn required_aes(&self) -> Vec<Aesthetic> {
+        vec![]
+    }
+    fn default_stat(&self) -> Box<dyn Stat> {
+        Box::new(StatIdentity)
+    }
+    fn default_position(&self) -> Box<dyn Position> {
+        Box::new(PositionIdentity)
+    }
+    fn default_params(&self) -> GeomParams {
+        GeomParams::default()
+    }
+    fn name(&self) -> &str {
+        "vline"
+    }
 }
 
 /// Arbitrary line y = slope*x + intercept spanning the plot.
@@ -195,9 +215,19 @@ impl Geom for GeomAbline {
         Ok(())
     }
 
-    fn required_aes(&self) -> Vec<Aesthetic> { vec![] }
-    fn default_stat(&self) -> Box<dyn Stat> { Box::new(StatIdentity) }
-    fn default_position(&self) -> Box<dyn Position> { Box::new(PositionIdentity) }
-    fn default_params(&self) -> GeomParams { GeomParams::default() }
-    fn name(&self) -> &str { "abline" }
+    fn required_aes(&self) -> Vec<Aesthetic> {
+        vec![]
+    }
+    fn default_stat(&self) -> Box<dyn Stat> {
+        Box::new(StatIdentity)
+    }
+    fn default_position(&self) -> Box<dyn Position> {
+        Box::new(PositionIdentity)
+    }
+    fn default_params(&self) -> GeomParams {
+        GeomParams::default()
+    }
+    fn name(&self) -> &str {
+        "abline"
+    }
 }

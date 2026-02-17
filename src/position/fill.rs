@@ -43,7 +43,11 @@ impl Position for PositionFill {
                 .find(|(k, _)| k == &x_key)
                 .map(|(_, v)| *v)
                 .unwrap_or(1.0);
-            let total = if total.abs() < f64::EPSILON { 1.0 } else { total };
+            let total = if total.abs() < f64::EPSILON {
+                1.0
+            } else {
+                total
+            };
 
             let base = x_cumsum
                 .iter()

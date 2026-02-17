@@ -20,7 +20,10 @@ pub fn draw_x_axis(
     // Axis line
     if axis_line.visible {
         let left = (plot_area.x, plot_area.y + plot_area.height);
-        let right = (plot_area.x + plot_area.width, plot_area.y + plot_area.height);
+        let right = (
+            plot_area.x + plot_area.width,
+            plot_area.y + plot_area.height,
+        );
         backend.draw_line(
             &[left, right],
             &LineStyle {
@@ -52,7 +55,10 @@ pub fn draw_x_axis(
         if theme.axis_text_x.visible {
             backend.draw_text(
                 label,
-                (px, tick_y + tick_len + theme.legend_spacing / 2.0 + theme.axis_text_x.size / 2.0),
+                (
+                    px,
+                    tick_y + tick_len + theme.legend_spacing / 2.0 + theme.axis_text_x.size / 2.0,
+                ),
                 &TextStyle {
                     color: theme.axis_text_x.color,
                     size: theme.axis_text_x.size,
@@ -67,7 +73,12 @@ pub fn draw_x_axis(
     let title = scale.name();
     if !title.is_empty() && theme.axis_title_x.visible {
         let center_x = plot_area.x + plot_area.width / 2.0;
-        let title_y = plot_area.y + plot_area.height + tick_len + theme.axis_text_x.size + 8.0 + theme.axis_title_x.size / 2.0;
+        let title_y = plot_area.y
+            + plot_area.height
+            + tick_len
+            + theme.axis_text_x.size
+            + 8.0
+            + theme.axis_title_x.size / 2.0;
         backend.draw_text(
             title,
             (center_x, title_y),

@@ -5,7 +5,9 @@ use ggplot_rs::prelude::*;
 
 fn temp_path(name: &str) -> String {
     let dir = std::env::temp_dir();
-    dir.join(format!("ggplot_rs_test_{name}")).to_string_lossy().to_string()
+    dir.join(format!("ggplot_rs_test_{name}"))
+        .to_string_lossy()
+        .to_string()
 }
 
 #[test]
@@ -76,8 +78,24 @@ fn smoke_test_scatter_png() {
 #[test]
 fn test_line_plot() {
     let data = vec![
-        ("x".to_string(), vec![Value::Float(1.0), Value::Float(2.0), Value::Float(3.0), Value::Float(4.0)]),
-        ("y".to_string(), vec![Value::Float(1.0), Value::Float(4.0), Value::Float(2.0), Value::Float(5.0)]),
+        (
+            "x".to_string(),
+            vec![
+                Value::Float(1.0),
+                Value::Float(2.0),
+                Value::Float(3.0),
+                Value::Float(4.0),
+            ],
+        ),
+        (
+            "y".to_string(),
+            vec![
+                Value::Float(1.0),
+                Value::Float(4.0),
+                Value::Float(2.0),
+                Value::Float(5.0),
+            ],
+        ),
     ];
 
     let path = temp_path("line.svg");
@@ -121,9 +139,7 @@ fn test_bar_chart() {
 
 #[test]
 fn test_histogram() {
-    let values: Vec<Value> = (0..100)
-        .map(|i| Value::Float(i as f64 / 10.0))
-        .collect();
+    let values: Vec<Value> = (0..100).map(|i| Value::Float(i as f64 / 10.0)).collect();
 
     let data = vec![("x".to_string(), values)];
 
@@ -180,10 +196,7 @@ fn test_smooth() {
         .map(|i| Value::Float(2.0 * i as f64 + 5.0 + (i as f64 * 0.3).sin() * 3.0))
         .collect();
 
-    let data = vec![
-        ("x".to_string(), x_vals),
-        ("y".to_string(), y_vals),
-    ];
+    let data = vec![("x".to_string(), x_vals), ("y".to_string(), y_vals)];
 
     let path = temp_path("smooth.svg");
     GGPlot::new(data)
@@ -204,7 +217,13 @@ fn test_smooth() {
 fn test_colored_scatter() {
     let mut rows = Vec::new();
     for i in 0..30 {
-        let group = if i % 3 == 0 { "A" } else if i % 3 == 1 { "B" } else { "C" };
+        let group = if i % 3 == 0 {
+            "A"
+        } else if i % 3 == 1 {
+            "B"
+        } else {
+            "C"
+        };
         rows.push(HashMap::from([
             ("x".to_string(), Value::Float(i as f64)),
             ("y".to_string(), Value::Float((i as f64 * 0.5).sin() * 10.0)),
@@ -249,8 +268,14 @@ fn test_custom_size() {
 #[test]
 fn test_multiple_layers() {
     let data = vec![
-        ("x".to_string(), vec![Value::Float(1.0), Value::Float(2.0), Value::Float(3.0)]),
-        ("y".to_string(), vec![Value::Float(2.0), Value::Float(4.0), Value::Float(6.0)]),
+        (
+            "x".to_string(),
+            vec![Value::Float(1.0), Value::Float(2.0), Value::Float(3.0)],
+        ),
+        (
+            "y".to_string(),
+            vec![Value::Float(2.0), Value::Float(4.0), Value::Float(6.0)],
+        ),
     ];
 
     let path = temp_path("multi_layer.svg");

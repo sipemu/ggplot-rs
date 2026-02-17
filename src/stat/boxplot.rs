@@ -64,8 +64,14 @@ impl Stat for StatBoxplot {
         result.add_column("middle".to_string(), vec![Value::Float(median)]);
         result.add_column("upper".to_string(), vec![Value::Float(q3)]);
         result.add_column("ymax".to_string(), vec![Value::Float(ymax)]);
-        result.add_column("notchupper".to_string(), vec![Value::Float(median + 1.58 * iqr / (n as f64).sqrt())]);
-        result.add_column("notchlower".to_string(), vec![Value::Float(median - 1.58 * iqr / (n as f64).sqrt())]);
+        result.add_column(
+            "notchupper".to_string(),
+            vec![Value::Float(median + 1.58 * iqr / (n as f64).sqrt())],
+        );
+        result.add_column(
+            "notchlower".to_string(),
+            vec![Value::Float(median - 1.58 * iqr / (n as f64).sqrt())],
+        );
 
         // Store outliers as separate rows in a companion column
         if !outliers.is_empty() {
@@ -75,10 +81,7 @@ impl Stat for StatBoxplot {
                 .map(|v| v.to_string())
                 .collect::<Vec<_>>()
                 .join(",");
-            result.add_column(
-                "outliers".to_string(),
-                vec![Value::Str(outlier_str)],
-            );
+            result.add_column("outliers".to_string(), vec![Value::Str(outlier_str)]);
         }
 
         // Carry over fill/color

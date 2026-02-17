@@ -40,9 +40,15 @@ impl Geom for GeomErrorbar {
         _theme: &Theme,
         backend: &mut dyn DrawBackend,
     ) -> Result<(), RenderError> {
-        let x_col = data.column("x").ok_or(RenderError::MissingAesthetic("x".into()))?;
-        let ymin_col = data.column("ymin").ok_or(RenderError::MissingAesthetic("ymin".into()))?;
-        let ymax_col = data.column("ymax").ok_or(RenderError::MissingAesthetic("ymax".into()))?;
+        let x_col = data
+            .column("x")
+            .ok_or(RenderError::MissingAesthetic("x".into()))?;
+        let ymin_col = data
+            .column("ymin")
+            .ok_or(RenderError::MissingAesthetic("ymin".into()))?;
+        let ymax_col = data
+            .column("ymax")
+            .ok_or(RenderError::MissingAesthetic("ymax".into()))?;
 
         let plot_area = backend.plot_area();
         let x_scale = scales.get(&Aesthetic::X);
@@ -84,8 +90,16 @@ impl Geom for GeomErrorbar {
         vec![Aesthetic::X, Aesthetic::Ymin, Aesthetic::Ymax]
     }
 
-    fn default_stat(&self) -> Box<dyn Stat> { Box::new(StatIdentity) }
-    fn default_position(&self) -> Box<dyn Position> { Box::new(PositionIdentity) }
-    fn default_params(&self) -> GeomParams { GeomParams::default() }
-    fn name(&self) -> &str { "errorbar" }
+    fn default_stat(&self) -> Box<dyn Stat> {
+        Box::new(StatIdentity)
+    }
+    fn default_position(&self) -> Box<dyn Position> {
+        Box::new(PositionIdentity)
+    }
+    fn default_params(&self) -> GeomParams {
+        GeomParams::default()
+    }
+    fn name(&self) -> &str {
+        "errorbar"
+    }
 }

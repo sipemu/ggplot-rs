@@ -43,7 +43,10 @@ impl Stat for StatCount {
             x_values
         };
 
-        let y_values: Vec<Value> = counts.iter().map(|(_, c)| Value::Float(*c as f64)).collect();
+        let y_values: Vec<Value> = counts
+            .iter()
+            .map(|(_, c)| Value::Float(*c as f64))
+            .collect();
 
         result.add_column("x".to_string(), x_values);
         result.add_column("y".to_string(), y_values);
@@ -52,20 +55,14 @@ impl Stat for StatCount {
         if data.has_column("fill") {
             if let Some(fill_col) = data.column("fill") {
                 if let Some(first) = fill_col.first() {
-                    result.add_column(
-                        "fill".to_string(),
-                        vec![first.clone(); counts.len()],
-                    );
+                    result.add_column("fill".to_string(), vec![first.clone(); counts.len()]);
                 }
             }
         }
         if data.has_column("color") {
             if let Some(color_col) = data.column("color") {
                 if let Some(first) = color_col.first() {
-                    result.add_column(
-                        "color".to_string(),
-                        vec![first.clone(); counts.len()],
-                    );
+                    result.add_column("color".to_string(), vec![first.clone(); counts.len()]);
                 }
             }
         }

@@ -106,19 +106,27 @@ impl Theme {
     }
 
     pub fn get_panel_grid_major_x(&self) -> &ElementLine {
-        self.panel_grid_major_x.as_ref().unwrap_or(&self.panel_grid_major)
+        self.panel_grid_major_x
+            .as_ref()
+            .unwrap_or(&self.panel_grid_major)
     }
 
     pub fn get_panel_grid_major_y(&self) -> &ElementLine {
-        self.panel_grid_major_y.as_ref().unwrap_or(&self.panel_grid_major)
+        self.panel_grid_major_y
+            .as_ref()
+            .unwrap_or(&self.panel_grid_major)
     }
 
     pub fn get_panel_grid_minor_x(&self) -> &ElementLine {
-        self.panel_grid_minor_x.as_ref().unwrap_or(&self.panel_grid_minor)
+        self.panel_grid_minor_x
+            .as_ref()
+            .unwrap_or(&self.panel_grid_minor)
     }
 
     pub fn get_panel_grid_minor_y(&self) -> &ElementLine {
-        self.panel_grid_minor_y.as_ref().unwrap_or(&self.panel_grid_minor)
+        self.panel_grid_minor_y
+            .as_ref()
+            .unwrap_or(&self.panel_grid_minor)
     }
 
     pub fn get_panel_spacing_x(&self) -> f64 {
