@@ -17,6 +17,29 @@ pub struct GeomText {
     pub size: f64,
     pub color: (u8, u8, u8),
     pub alpha: f64,
+    /// Horizontal justification: 0.0 = left, 0.5 = center (default), 1.0 = right.
+    pub hjust: f64,
+    /// Vertical justification: 0.0 = bottom, 0.5 = middle (default), 1.0 = top.
+    pub vjust: f64,
+    /// Font family name (informational; actual rendering depends on backend).
+    pub fontfamily: String,
+}
+
+impl GeomText {
+    pub fn with_hjust(mut self, hjust: f64) -> Self {
+        self.hjust = hjust;
+        self
+    }
+
+    pub fn with_vjust(mut self, vjust: f64) -> Self {
+        self.vjust = vjust;
+        self
+    }
+
+    pub fn with_fontfamily(mut self, family: &str) -> Self {
+        self.fontfamily = family.to_string();
+        self
+    }
 }
 
 impl Default for GeomText {
@@ -25,6 +48,9 @@ impl Default for GeomText {
             size: 10.0,
             color: (0, 0, 0),
             alpha: 1.0,
+            hjust: 0.5,
+            vjust: 0.5,
+            fontfamily: String::new(),
         }
     }
 }
@@ -59,13 +85,14 @@ impl Geom for GeomText {
 
             let text = label_col[i].to_group_key();
 
+            let anchor = hjust_to_anchor(self.hjust);
             backend.draw_text(
                 &text,
                 (px, py),
                 &TextStyle {
                     color: self.color,
                     size: self.size,
-                    anchor: TextAnchor::Middle,
+                    anchor,
                     angle: 0.0,
                 },
             )?;
@@ -99,6 +126,29 @@ pub struct GeomLabel {
     pub fill: (u8, u8, u8),
     pub alpha: f64,
     pub padding: f64,
+    /// Horizontal justification: 0.0 = left, 0.5 = center (default), 1.0 = right.
+    pub hjust: f64,
+    /// Vertical justification: 0.0 = bottom, 0.5 = middle (default), 1.0 = top.
+    pub vjust: f64,
+    /// Font family name (informational; actual rendering depends on backend).
+    pub fontfamily: String,
+}
+
+impl GeomLabel {
+    pub fn with_hjust(mut self, hjust: f64) -> Self {
+        self.hjust = hjust;
+        self
+    }
+
+    pub fn with_vjust(mut self, vjust: f64) -> Self {
+        self.vjust = vjust;
+        self
+    }
+
+    pub fn with_fontfamily(mut self, family: &str) -> Self {
+        self.fontfamily = family.to_string();
+        self
+    }
 }
 
 impl Default for GeomLabel {
@@ -109,6 +159,9 @@ impl Default for GeomLabel {
             fill: (255, 255, 255),
             alpha: 0.8,
             padding: 3.0,
+            hjust: 0.5,
+            vjust: 0.5,
+            fontfamily: String::new(),
         }
     }
 }
@@ -159,13 +212,14 @@ impl Geom for GeomLabel {
             )?;
 
             // Text
+            let anchor = hjust_to_anchor(self.hjust);
             backend.draw_text(
                 &text,
                 (px, py),
                 &TextStyle {
                     color: self.color,
                     size: self.size,
-                    anchor: TextAnchor::Middle,
+                    anchor,
                     angle: 0.0,
                 },
             )?;
@@ -189,5 +243,16 @@ impl Geom for GeomLabel {
     }
     fn name(&self) -> &str {
         "label"
+    }
+}
+
+/// Map hjust (0.0 = left, 0.5 = center, 1.0 = right) to TextAnchor.
+fn hjust_to_anchor(hjust: f64) -> TextAnchor {
+    if hjust < 0.25 {
+        TextAnchor::Start
+    } else if hjust > 0.75 {
+        TextAnchor::End
+    } else {
+        TextAnchor::Middle
     }
 }

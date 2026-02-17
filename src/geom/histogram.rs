@@ -15,15 +15,32 @@ use super::{Geom, GeomParams};
 /// Histogram geometry (bar chart with StatBin).
 pub struct GeomHistogram {
     pub bins: usize,
+    pub binwidth: Option<f64>,
     pub fill: (u8, u8, u8),
     pub color: (u8, u8, u8),
     pub alpha: f64,
+}
+
+impl GeomHistogram {
+    /// Set bin width (overrides bins count).
+    pub fn with_binwidth(mut self, width: f64) -> Self {
+        self.binwidth = Some(width);
+        self
+    }
+
+    /// Set number of bins.
+    pub fn with_bins(mut self, bins: usize) -> Self {
+        self.bins = bins;
+        self.binwidth = None;
+        self
+    }
 }
 
 impl Default for GeomHistogram {
     fn default() -> Self {
         GeomHistogram {
             bins: 30,
+            binwidth: None,
             fill: (97, 156, 255),
             color: (50, 50, 50),
             alpha: 1.0,
@@ -95,7 +112,14 @@ impl Geom for GeomHistogram {
     }
 
     fn default_stat(&self) -> Box<dyn Stat> {
-        Box::new(StatBin { bins: self.bins })
+        let mut stat = StatBin {
+            bins: self.bins,
+            binwidth: self.binwidth,
+        };
+        if let Some(bw) = self.binwidth {
+            stat = stat.with_binwidth(bw);
+        }
+        Box::new(stat)
     }
 
     fn default_position(&self) -> Box<dyn Position> {

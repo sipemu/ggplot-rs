@@ -1,13 +1,14 @@
 use crate::aes::Aesthetic;
 use crate::data::Value;
 
+use super::format::LabelFormatter;
 use super::sec_axis::SecAxis;
 use super::transform::ScaleTransform;
 use super::util::{format_number, nice_step};
 use super::Scale;
 
 /// Continuous linear scale.
-#[derive(Clone, Debug)]
+#[derive(Clone)]
 pub struct ScaleContinuous {
     aesthetic: Aesthetic,
     name: String,
@@ -19,6 +20,7 @@ pub struct ScaleContinuous {
     custom_breaks: Option<Vec<f64>>,
     custom_labels: Option<Vec<String>>,
     pub(crate) sec_axis: Option<SecAxis>,
+    label_formatter: Option<LabelFormatter>,
 }
 
 impl ScaleContinuous {
@@ -34,6 +36,7 @@ impl ScaleContinuous {
             custom_breaks: None,
             custom_labels: None,
             sec_axis: None,
+            label_formatter: None,
         }
     }
 
@@ -71,6 +74,12 @@ impl ScaleContinuous {
         self
     }
 
+    /// Set a label formatter function (e.g., `label_comma`, `label_percent`).
+    pub fn with_label_formatter(mut self, f: LabelFormatter) -> Self {
+        self.label_formatter = Some(f);
+        self
+    }
+
     /// Add a secondary axis with a transformation function.
     pub fn with_sec_axis(mut self, sec: SecAxis) -> Self {
         self.sec_axis = Some(sec);
@@ -80,6 +89,14 @@ impl ScaleContinuous {
     /// Get the secondary axis, if any.
     pub fn sec_axis(&self) -> Option<&SecAxis> {
         self.sec_axis.as_ref()
+    }
+
+    fn format_label(&self, v: f64) -> String {
+        if let Some(f) = self.label_formatter {
+            f(v)
+        } else {
+            format_number(v)
+        }
     }
 
     fn expanded_range(&self) -> (f64, f64) {
@@ -144,9 +161,12 @@ impl Scale for ScaleContinuous {
                 .map(|(i, &v)| {
                     let pos = self.map(&Value::Float(v));
                     let label = if let Some(ref labels) = self.custom_labels {
-                        labels.get(i).cloned().unwrap_or_else(|| format_number(v))
+                        labels
+                            .get(i)
+                            .cloned()
+                            .unwrap_or_else(|| self.format_label(v))
                     } else {
-                        format_number(self.scale_transform.inverse(v))
+                        self.format_label(self.scale_transform.inverse(v))
                     };
                     (pos, label)
                 })
@@ -155,7 +175,7 @@ impl Scale for ScaleContinuous {
 
         let range = self.max - self.min;
         if range.abs() < f64::EPSILON {
-            let label = format_number(self.scale_transform.inverse(self.min));
+            let label = self.format_label(self.scale_transform.inverse(self.min));
             return vec![(0.5, label)];
         }
 
@@ -171,7 +191,7 @@ impl Scale for ScaleContinuous {
         while v <= emax + step * 0.001 {
             let pos = self.map(&Value::Float(v));
             // Labels show the original (inverse-transformed) value
-            let label = format_number(self.scale_transform.inverse(v));
+            let label = self.format_label(self.scale_transform.inverse(v));
             breaks.push((pos, label));
             v += step;
         }

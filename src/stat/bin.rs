@@ -7,11 +7,30 @@ use super::Stat;
 /// Bins continuous x values into histogram bins.
 pub struct StatBin {
     pub bins: usize,
+    pub binwidth: Option<f64>,
+}
+
+impl StatBin {
+    /// Set bin width (overrides bins count).
+    pub fn with_binwidth(mut self, width: f64) -> Self {
+        self.binwidth = Some(width);
+        self
+    }
+
+    /// Set number of bins.
+    pub fn with_bins(mut self, bins: usize) -> Self {
+        self.bins = bins;
+        self.binwidth = None;
+        self
+    }
 }
 
 impl Default for StatBin {
     fn default() -> Self {
-        StatBin { bins: 30 }
+        StatBin {
+            bins: 30,
+            binwidth: None,
+        }
     }
 }
 
@@ -37,21 +56,29 @@ impl Stat for StatBin {
             (min, max)
         };
 
-        let bin_width = (max - min) / self.bins as f64;
-        let mut counts = vec![0usize; self.bins];
+        // Determine bin width and count
+        let (bin_width, n_bins) = if let Some(bw) = self.binwidth {
+            let n = ((max - min) / bw).ceil() as usize;
+            (bw, n.max(1))
+        } else {
+            let bw = (max - min) / self.bins as f64;
+            (bw, self.bins)
+        };
+
+        let mut counts = vec![0usize; n_bins];
 
         for &v in &values {
             let bin = ((v - min) / bin_width).floor() as usize;
-            let bin = bin.min(self.bins - 1); // Clamp last value
+            let bin = bin.min(n_bins - 1); // Clamp last value
             counts[bin] += 1;
         }
 
         let total = values.len() as f64;
-        let mut x_vals = Vec::with_capacity(self.bins);
-        let mut y_vals = Vec::with_capacity(self.bins);
-        let mut density_vals = Vec::with_capacity(self.bins);
-        let mut xmin_vals = Vec::with_capacity(self.bins);
-        let mut xmax_vals = Vec::with_capacity(self.bins);
+        let mut x_vals = Vec::with_capacity(n_bins);
+        let mut y_vals = Vec::with_capacity(n_bins);
+        let mut density_vals = Vec::with_capacity(n_bins);
+        let mut xmin_vals = Vec::with_capacity(n_bins);
+        let mut xmax_vals = Vec::with_capacity(n_bins);
 
         for (i, &count) in counts.iter().enumerate() {
             let bin_min = min + i as f64 * bin_width;

@@ -1827,3 +1827,508 @@ fn test_legend_position_none() {
     // Just verify it renders without error
     std::fs::remove_file(&path).ok();
 }
+
+// ─── Tier 3: Scale fill/reverse convenience methods ──────────
+
+#[test]
+fn test_scale_fill_gradient() {
+    let data = vec![
+        ("x".to_string(), vec![Value::Float(1.0), Value::Float(2.0)]),
+        ("y".to_string(), vec![Value::Float(3.0), Value::Float(4.0)]),
+        (
+            "fill".to_string(),
+            vec![Value::Float(0.0), Value::Float(1.0)],
+        ),
+    ];
+    let path = temp_path("fill_gradient.svg");
+    GGPlot::new(data)
+        .aes(Aes::new().x("x").y("y").fill("fill"))
+        .geom_point()
+        .scale_fill_gradient(
+            RGBAColor {
+                r: 255,
+                g: 255,
+                b: 255,
+                a: 1.0,
+            },
+            RGBAColor {
+                r: 0,
+                g: 0,
+                b: 255,
+                a: 1.0,
+            },
+        )
+        .save(&path)
+        .expect("should render with fill gradient");
+    assert!(Path::new(&path).exists());
+    std::fs::remove_file(&path).ok();
+}
+
+#[test]
+fn test_scale_fill_gradient2() {
+    let data = vec![
+        (
+            "x".to_string(),
+            vec![Value::Float(1.0), Value::Float(2.0), Value::Float(3.0)],
+        ),
+        (
+            "y".to_string(),
+            vec![Value::Float(3.0), Value::Float(4.0), Value::Float(5.0)],
+        ),
+        (
+            "fill".to_string(),
+            vec![Value::Float(-1.0), Value::Float(0.0), Value::Float(1.0)],
+        ),
+    ];
+    let path = temp_path("fill_gradient2.svg");
+    GGPlot::new(data)
+        .aes(Aes::new().x("x").y("y").fill("fill"))
+        .geom_point()
+        .scale_fill_gradient2(
+            RGBAColor {
+                r: 255,
+                g: 0,
+                b: 0,
+                a: 1.0,
+            },
+            RGBAColor {
+                r: 255,
+                g: 255,
+                b: 255,
+                a: 1.0,
+            },
+            RGBAColor {
+                r: 0,
+                g: 0,
+                b: 255,
+                a: 1.0,
+            },
+        )
+        .save(&path)
+        .expect("should render with fill gradient2");
+    assert!(Path::new(&path).exists());
+    std::fs::remove_file(&path).ok();
+}
+
+#[test]
+fn test_scale_fill_viridis() {
+    let data = vec![
+        (
+            "x".to_string(),
+            vec![
+                Value::Str("a".into()),
+                Value::Str("b".into()),
+                Value::Str("c".into()),
+            ],
+        ),
+        (
+            "fill".to_string(),
+            vec![
+                Value::Str("a".into()),
+                Value::Str("b".into()),
+                Value::Str("c".into()),
+            ],
+        ),
+    ];
+    let path = temp_path("fill_viridis.svg");
+    GGPlot::new(data)
+        .aes(Aes::new().x("x").fill("fill"))
+        .geom_bar()
+        .scale_fill_viridis()
+        .save(&path)
+        .expect("should render with fill viridis");
+    assert!(Path::new(&path).exists());
+    std::fs::remove_file(&path).ok();
+}
+
+#[test]
+fn test_scale_fill_brewer() {
+    let data = vec![
+        (
+            "x".to_string(),
+            vec![
+                Value::Str("a".into()),
+                Value::Str("b".into()),
+                Value::Str("c".into()),
+            ],
+        ),
+        (
+            "fill".to_string(),
+            vec![
+                Value::Str("a".into()),
+                Value::Str("b".into()),
+                Value::Str("c".into()),
+            ],
+        ),
+    ];
+    let path = temp_path("fill_brewer.svg");
+    GGPlot::new(data)
+        .aes(Aes::new().x("x").fill("fill"))
+        .geom_bar()
+        .scale_fill_brewer(PaletteName::Set3)
+        .save(&path)
+        .expect("should render with fill brewer");
+    assert!(Path::new(&path).exists());
+    std::fs::remove_file(&path).ok();
+}
+
+#[test]
+fn test_scale_x_reverse() {
+    let data = xy_data();
+    let built = GGPlot::new(data)
+        .aes(Aes::new().x("x").y("y"))
+        .geom_point()
+        .scale_x_reverse()
+        .build();
+
+    // With reverse transform, data values get negated in the pipeline.
+    // So original x=1 becomes -1, x=10 becomes -10.
+    // When mapped, -1 (originally small x) should be at a higher position than -10.
+    let x_scale = built.scales.get(&Aesthetic::X).unwrap();
+    let pos_neg1 = x_scale.map(&Value::Float(-1.0));
+    let pos_neg10 = x_scale.map(&Value::Float(-10.0));
+    assert!(
+        pos_neg1 > pos_neg10,
+        "reverse: -1 (orig 1) should map higher than -10 (orig 10), got {pos_neg1} vs {pos_neg10}"
+    );
+}
+
+// ─── Tier 3: Label formatters ───────────────────────────────
+
+#[test]
+fn test_label_formatter_comma() {
+    let data = vec![
+        (
+            "x".to_string(),
+            vec![
+                Value::Float(1000.0),
+                Value::Float(5000.0),
+                Value::Float(10000.0),
+            ],
+        ),
+        (
+            "y".to_string(),
+            vec![
+                Value::Float(1000.0),
+                Value::Float(50000.0),
+                Value::Float(100000.0),
+            ],
+        ),
+    ];
+    let path = temp_path("formatter_comma.svg");
+    GGPlot::new(data)
+        .aes(Aes::new().x("x").y("y"))
+        .geom_point()
+        .scale_y_continuous(ScaleContinuous::new().with_label_formatter(label_comma))
+        .save(&path)
+        .expect("should render with comma formatter");
+    assert!(Path::new(&path).exists());
+    let content = std::fs::read_to_string(&path).unwrap();
+    // Labels should have commas
+    assert!(
+        content.contains(','),
+        "comma formatter should produce commas in labels"
+    );
+    std::fs::remove_file(&path).ok();
+}
+
+#[test]
+fn test_label_formatter_percent() {
+    let data = vec![
+        (
+            "x".to_string(),
+            vec![Value::Float(1.0), Value::Float(2.0), Value::Float(3.0)],
+        ),
+        (
+            "y".to_string(),
+            vec![Value::Float(0.1), Value::Float(0.5), Value::Float(0.9)],
+        ),
+    ];
+    let path = temp_path("formatter_percent.svg");
+    GGPlot::new(data)
+        .aes(Aes::new().x("x").y("y"))
+        .geom_point()
+        .scale_y_continuous(ScaleContinuous::new().with_label_formatter(label_percent))
+        .save(&path)
+        .expect("should render with percent formatter");
+    assert!(Path::new(&path).exists());
+    let content = std::fs::read_to_string(&path).unwrap();
+    assert!(
+        content.contains('%'),
+        "percent formatter should produce % in labels"
+    );
+    std::fs::remove_file(&path).ok();
+}
+
+#[test]
+fn test_label_formatter_dollar() {
+    let data = vec![
+        (
+            "x".to_string(),
+            vec![Value::Float(1.0), Value::Float(2.0), Value::Float(3.0)],
+        ),
+        (
+            "y".to_string(),
+            vec![
+                Value::Float(1000.0),
+                Value::Float(2000.0),
+                Value::Float(3000.0),
+            ],
+        ),
+    ];
+    let path = temp_path("formatter_dollar.svg");
+    GGPlot::new(data)
+        .aes(Aes::new().x("x").y("y"))
+        .geom_point()
+        .scale_y_continuous(ScaleContinuous::new().with_label_formatter(label_dollar))
+        .save(&path)
+        .expect("should render with dollar formatter");
+    assert!(Path::new(&path).exists());
+    let content = std::fs::read_to_string(&path).unwrap();
+    assert!(
+        content.contains('$'),
+        "dollar formatter should produce $ in labels"
+    );
+    std::fs::remove_file(&path).ok();
+}
+
+// ─── Tier 3: StatBin binwidth parameter ─────────────────────
+
+#[test]
+fn test_histogram_binwidth() {
+    let data = vec![(
+        "x".to_string(),
+        (0..100).map(|i| Value::Float(i as f64 / 10.0)).collect(),
+    )];
+    let path = temp_path("hist_binwidth.svg");
+    GGPlot::new(data)
+        .aes(Aes::new().x("x"))
+        .geom_histogram_with(GeomHistogram::default().with_binwidth(1.0))
+        .save(&path)
+        .expect("should render with binwidth");
+    assert!(Path::new(&path).exists());
+    std::fs::remove_file(&path).ok();
+}
+
+#[test]
+fn test_histogram_binwidth_build() {
+    let data = vec![(
+        "x".to_string(),
+        (0..100).map(|i| Value::Float(i as f64 / 10.0)).collect(),
+    )];
+    // With binwidth=2.0, range 0-9.9 should give ~5 bins
+    let built = GGPlot::new(data)
+        .aes(Aes::new().x("x"))
+        .geom_histogram_with(GeomHistogram::default().with_binwidth(2.0))
+        .build();
+
+    let nrows = built.layers[0].data.nrows();
+    assert!(
+        nrows == 5,
+        "binwidth=2.0 over range 0-9.9 should give 5 bins, got {nrows}"
+    );
+}
+
+#[test]
+fn test_histogram_custom_bins() {
+    let data = vec![(
+        "x".to_string(),
+        (0..100).map(|i| Value::Float(i as f64)).collect(),
+    )];
+    let built = GGPlot::new(data)
+        .aes(Aes::new().x("x"))
+        .geom_histogram_with(GeomHistogram::default().with_bins(10))
+        .build();
+
+    let nrows = built.layers[0].data.nrows();
+    assert_eq!(nrows, 10, "should have exactly 10 bins, got {nrows}");
+}
+
+// ─── Tier 3: Expanded palettes ──────────────────────────────
+
+#[test]
+fn test_palette_set3() {
+    let data = vec![
+        (
+            "x".to_string(),
+            vec![
+                Value::Str("a".into()),
+                Value::Str("b".into()),
+                Value::Str("c".into()),
+            ],
+        ),
+        (
+            "color".to_string(),
+            vec![
+                Value::Str("a".into()),
+                Value::Str("b".into()),
+                Value::Str("c".into()),
+            ],
+        ),
+    ];
+    let path = temp_path("palette_set3.svg");
+    GGPlot::new(data)
+        .aes(Aes::new().x("x").color("color"))
+        .geom_bar()
+        .scale_color_brewer(PaletteName::Set3)
+        .save(&path)
+        .expect("should render with Set3 palette");
+    assert!(Path::new(&path).exists());
+    std::fs::remove_file(&path).ok();
+}
+
+#[test]
+fn test_palette_magma() {
+    let data = vec![
+        (
+            "x".to_string(),
+            vec![
+                Value::Str("a".into()),
+                Value::Str("b".into()),
+                Value::Str("c".into()),
+            ],
+        ),
+        (
+            "color".to_string(),
+            vec![
+                Value::Str("a".into()),
+                Value::Str("b".into()),
+                Value::Str("c".into()),
+            ],
+        ),
+    ];
+    let path = temp_path("palette_magma.svg");
+    GGPlot::new(data)
+        .aes(Aes::new().x("x").color("color"))
+        .geom_bar()
+        .scale_color_brewer(PaletteName::Magma)
+        .save(&path)
+        .expect("should render with Magma palette");
+    assert!(Path::new(&path).exists());
+    std::fs::remove_file(&path).ok();
+}
+
+// ─── Tier 3: Guide configuration ───────────────────────────
+
+#[test]
+fn test_guide_title_override() {
+    let data = vec![
+        (
+            "x".to_string(),
+            vec![Value::Float(1.0), Value::Float(2.0), Value::Float(3.0)],
+        ),
+        (
+            "y".to_string(),
+            vec![Value::Float(1.0), Value::Float(2.0), Value::Float(3.0)],
+        ),
+        (
+            "color".to_string(),
+            vec![
+                Value::Str("a".into()),
+                Value::Str("b".into()),
+                Value::Str("c".into()),
+            ],
+        ),
+    ];
+    let path = temp_path("guide_title.svg");
+    GGPlot::new(data)
+        .aes(Aes::new().x("x").y("y").color("color"))
+        .geom_point()
+        .guides(GuideLegend::new().with_title("My Legend"))
+        .save(&path)
+        .expect("should render with guide title override");
+    assert!(Path::new(&path).exists());
+    let content = std::fs::read_to_string(&path).unwrap();
+    assert!(
+        content.contains("My Legend"),
+        "guide title should appear in SVG"
+    );
+    std::fs::remove_file(&path).ok();
+}
+
+#[test]
+fn test_guide_reverse() {
+    let data = vec![
+        (
+            "x".to_string(),
+            vec![Value::Float(1.0), Value::Float(2.0), Value::Float(3.0)],
+        ),
+        (
+            "y".to_string(),
+            vec![Value::Float(1.0), Value::Float(2.0), Value::Float(3.0)],
+        ),
+        (
+            "color".to_string(),
+            vec![
+                Value::Str("a".into()),
+                Value::Str("b".into()),
+                Value::Str("c".into()),
+            ],
+        ),
+    ];
+    let path = temp_path("guide_reverse.svg");
+    GGPlot::new(data)
+        .aes(Aes::new().x("x").y("y").color("color"))
+        .geom_point()
+        .guides(GuideLegend::new().reverse())
+        .save(&path)
+        .expect("should render with reversed legend");
+    assert!(Path::new(&path).exists());
+    std::fs::remove_file(&path).ok();
+}
+
+// ─── Tier 3: Text geom hjust/vjust ─────────────────────────
+
+#[test]
+fn test_geom_text_hjust() {
+    let data = vec![
+        (
+            "x".to_string(),
+            vec![Value::Float(1.0), Value::Float(2.0), Value::Float(3.0)],
+        ),
+        (
+            "y".to_string(),
+            vec![Value::Float(1.0), Value::Float(2.0), Value::Float(3.0)],
+        ),
+        (
+            "label".to_string(),
+            vec![
+                Value::Str("left".into()),
+                Value::Str("center".into()),
+                Value::Str("right".into()),
+            ],
+        ),
+    ];
+    let path = temp_path("text_hjust.svg");
+    GGPlot::new(data)
+        .aes(Aes::new().x("x").y("y").label("label"))
+        .geom_text_with(GeomText::default().with_hjust(0.0))
+        .save(&path)
+        .expect("should render with left-aligned text");
+    assert!(Path::new(&path).exists());
+    std::fs::remove_file(&path).ok();
+}
+
+#[test]
+fn test_geom_label_hjust_fontfamily() {
+    let data = vec![
+        ("x".to_string(), vec![Value::Float(1.0), Value::Float(2.0)]),
+        ("y".to_string(), vec![Value::Float(1.0), Value::Float(2.0)]),
+        (
+            "label".to_string(),
+            vec![Value::Str("A".into()), Value::Str("B".into())],
+        ),
+    ];
+    let path = temp_path("label_hjust.svg");
+    GGPlot::new(data)
+        .aes(Aes::new().x("x").y("y").label("label"))
+        .geom_label_with(
+            GeomLabel::default()
+                .with_hjust(1.0)
+                .with_fontfamily("monospace"),
+        )
+        .save(&path)
+        .expect("should render with right-aligned labels");
+    assert!(Path::new(&path).exists());
+    std::fs::remove_file(&path).ok();
+}

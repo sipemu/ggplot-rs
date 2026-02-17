@@ -85,6 +85,7 @@ pub struct GGPlot {
     pub(crate) labels: Labels,
     pub(crate) facet: Facet,
     pub(crate) annotations: Vec<Annotation>,
+    pub(crate) guide_legend: crate::guide::config::GuideLegend,
 }
 
 impl GGPlot {
@@ -100,6 +101,7 @@ impl GGPlot {
             labels: Labels::default(),
             facet: Facet::default(),
             annotations: Vec::new(),
+            guide_legend: crate::guide::config::GuideLegend::default(),
         }
     }
 
@@ -506,6 +508,60 @@ impl GGPlot {
         self.scale_color(s)
     }
 
+    pub fn scale_fill_gradient(
+        self,
+        low: crate::scale::color::RGBAColor,
+        high: crate::scale::color::RGBAColor,
+    ) -> Self {
+        use crate::scale::color::ScaleColorContinuous;
+        let s = ScaleColorContinuous::new(crate::aes::Aesthetic::Fill).with_colors(low, high);
+        self.scale_fill(s)
+    }
+
+    pub fn scale_color_gradient2(
+        self,
+        low: crate::scale::color::RGBAColor,
+        mid: crate::scale::color::RGBAColor,
+        high: crate::scale::color::RGBAColor,
+    ) -> Self {
+        use crate::scale::gradient::ScaleColorGradient2;
+        let s = ScaleColorGradient2::new(crate::aes::Aesthetic::Color).with_colors(low, mid, high);
+        self.scale_color(s)
+    }
+
+    pub fn scale_fill_gradient2(
+        self,
+        low: crate::scale::color::RGBAColor,
+        mid: crate::scale::color::RGBAColor,
+        high: crate::scale::color::RGBAColor,
+    ) -> Self {
+        use crate::scale::gradient::ScaleColorGradient2;
+        let s = ScaleColorGradient2::new(crate::aes::Aesthetic::Fill).with_colors(low, mid, high);
+        self.scale_fill(s)
+    }
+
+    pub fn scale_fill_viridis(self) -> Self {
+        use crate::scale::color::ScaleColorDiscrete;
+        use crate::scale::palettes::PaletteName;
+        let s = ScaleColorDiscrete::new(crate::aes::Aesthetic::Fill)
+            .with_named_palette(&PaletteName::Viridis);
+        self.scale_fill(s)
+    }
+
+    pub fn scale_fill_brewer(self, name: crate::scale::palettes::PaletteName) -> Self {
+        use crate::scale::color::ScaleColorDiscrete;
+        let s = ScaleColorDiscrete::new(crate::aes::Aesthetic::Fill).with_named_palette(&name);
+        self.scale_fill(s)
+    }
+
+    pub fn scale_x_reverse(self) -> Self {
+        self.scale_x_continuous(ScaleContinuous::new().with_transform(ScaleTransform::Reverse))
+    }
+
+    pub fn scale_y_reverse(self) -> Self {
+        self.scale_y_continuous(ScaleContinuous::new().with_transform(ScaleTransform::Reverse))
+    }
+
     pub fn scale_x_datetime(mut self, s: crate::scale::datetime::ScaleDateTime) -> Self {
         let s = s.for_aesthetic(crate::aes::Aesthetic::X);
         self.scales.push(Box::new(s));
@@ -685,6 +741,14 @@ impl GGPlot {
     /// Like R's `+ theme(axis.text.x = element_text(...))`.
     pub fn theme_update(mut self, update: crate::theme::ThemeUpdate) -> Self {
         self.theme = self.theme.update(update);
+        self
+    }
+
+    // ─── Guides ──────────────────────────────────────────────────
+
+    /// Configure legend guide (title, ncol, reverse).
+    pub fn guides(mut self, guide: crate::guide::config::GuideLegend) -> Self {
+        self.guide_legend = guide;
         self
     }
 

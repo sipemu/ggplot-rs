@@ -160,7 +160,13 @@ impl PlotRenderer {
         }
 
         // 9. Draw legend
-        legend::draw_legend(&built.scales, theme, &plot_area, backend)?;
+        legend::draw_legend(
+            &built.scales,
+            theme,
+            &plot_area,
+            backend,
+            &built.guide_legend,
+        )?;
 
         // 10. Draw caption
         if let Some(ref caption) = built.labels.caption {
@@ -375,7 +381,13 @@ impl PlotRenderer {
         )?;
 
         // Draw legend
-        legend::draw_legend(&built.scales, theme, &plot_area, backend)?;
+        legend::draw_legend(
+            &built.scales,
+            theme,
+            &plot_area,
+            backend,
+            &built.guide_legend,
+        )?;
 
         Ok(())
     }

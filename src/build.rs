@@ -27,6 +27,7 @@ pub struct BuiltPlot {
     /// Per-panel layer data. panels_data[panel_idx][layer_idx] = data for that panel+layer.
     pub panels_data: Vec<Vec<DataFrame>>,
     pub annotations: Vec<Annotation>,
+    pub guide_legend: crate::guide::config::GuideLegend,
 }
 
 /// The grammar pipeline: transforms a GGPlot specification into render-ready data.
@@ -44,6 +45,7 @@ impl PlotBuilder {
             labels,
             facet,
             annotations,
+            guide_legend,
         } = plot;
 
         let mut scale_set = ScaleSet::new();
@@ -86,6 +88,7 @@ impl PlotBuilder {
             panels,
             panels_data,
             annotations,
+            guide_legend,
         }
     }
 

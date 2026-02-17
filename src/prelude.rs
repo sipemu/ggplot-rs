@@ -35,6 +35,7 @@ pub use crate::geom::step::{GeomStep, StepDirection};
 pub use crate::geom::text::{GeomLabel, GeomText};
 pub use crate::geom::tile::GeomTile;
 pub use crate::geom::violin::GeomViolin;
+pub use crate::guide::config::GuideLegend;
 pub use crate::plot::{GGError, GGPlot, Labels};
 pub use crate::position::dodge::PositionDodge;
 pub use crate::position::dodge2::PositionDodge2;
@@ -50,6 +51,7 @@ pub use crate::scale::color::{RGBAColor, ScaleColorContinuous, ScaleColorDiscret
 pub use crate::scale::continuous::ScaleContinuous;
 pub use crate::scale::datetime::ScaleDateTime;
 pub use crate::scale::discrete::ScaleDiscrete;
+pub use crate::scale::format::{label_comma, label_dollar, label_percent, label_scientific};
 pub use crate::scale::gradient::ScaleColorGradient2;
 pub use crate::scale::manual::ScaleManual;
 pub use crate::scale::palettes::PaletteName;

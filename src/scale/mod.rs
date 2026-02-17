@@ -3,6 +3,7 @@ pub mod color;
 pub mod continuous;
 pub mod datetime;
 pub mod discrete;
+pub mod format;
 pub mod gradient;
 pub mod linetype;
 pub mod manual;

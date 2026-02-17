@@ -1,5 +1,6 @@
 use crate::aes::Aesthetic;
 use crate::data::Value;
+use crate::guide::config::GuideLegend;
 use crate::render::backend::{
     DrawBackend, LineStyle, Linetype, PointStyle, RectStyle, TextAnchor, TextStyle,
 };
@@ -23,6 +24,7 @@ pub fn draw_legend(
     theme: &Theme,
     plot_area: &Rect,
     backend: &mut dyn DrawBackend,
+    guide: &GuideLegend,
 ) -> Result<(), RenderError> {
     if matches!(theme.legend_position, LegendPosition::None) {
         return Ok(());
@@ -58,19 +60,20 @@ pub fn draw_legend(
         if scale.is_discrete() {
             if is_horizontal {
                 let width = draw_discrete_legend_at(
-                    scales, aes, scale, theme, offset_x, offset_y, backend,
+                    scales, aes, scale, theme, offset_x, offset_y, backend, guide,
                 )?;
                 offset_x += width + theme.legend_spacing * 2.0;
             } else {
                 let height = draw_discrete_legend_at(
-                    scales, aes, scale, theme, offset_x, offset_y, backend,
+                    scales, aes, scale, theme, offset_x, offset_y, backend, guide,
                 )?;
                 offset_y += height + theme.legend_spacing * 2.0;
             }
         } else {
             // Continuous legend (colorbar) — only for color/fill
             if matches!(aes, Aesthetic::Color | Aesthetic::Fill) {
-                let height = draw_continuous_legend_at(scale, theme, offset_x, offset_y, backend)?;
+                let height =
+                    draw_continuous_legend_at(scale, theme, offset_x, offset_y, backend, guide)?;
                 if is_horizontal {
                     offset_x += theme.legend_key_width
                         + theme.legend_text.size * 6.0
@@ -81,7 +84,7 @@ pub fn draw_legend(
             } else {
                 // Continuous size/alpha — draw as discrete-like with sampled breaks
                 let height = draw_discrete_legend_at(
-                    scales, aes, scale, theme, offset_x, offset_y, backend,
+                    scales, aes, scale, theme, offset_x, offset_y, backend, guide,
                 )?;
                 if is_horizontal {
                     offset_x += theme.legend_key_width
@@ -126,6 +129,7 @@ fn legend_position(theme: &Theme, plot_area: &Rect) -> (f64, f64, bool) {
 }
 
 /// Draw a discrete legend at a given position. Returns the height used.
+#[allow(clippy::too_many_arguments)]
 fn draw_discrete_legend_at(
     scales: &ScaleSet,
     aes: &Aesthetic,
@@ -134,20 +138,26 @@ fn draw_discrete_legend_at(
     legend_x: f64,
     legend_y: f64,
     backend: &mut dyn DrawBackend,
+    guide: &GuideLegend,
 ) -> Result<f64, RenderError> {
-    let breaks = scale.breaks();
+    let mut breaks = scale.breaks();
     if breaks.is_empty() {
         return Ok(0.0);
+    }
+
+    // Apply guide reverse
+    if guide.reverse {
+        breaks.reverse();
     }
 
     let item_height = theme.legend_key_height;
     let swatch_size = theme.legend_key_width;
 
-    // Draw legend title
-    let scale_name = scale.name();
-    let title_offset = if !scale_name.is_empty() {
+    // Draw legend title (guide title overrides scale name)
+    let title = guide.title.as_deref().unwrap_or_else(|| scale.name());
+    let title_offset = if !title.is_empty() {
         backend.draw_text(
-            scale_name,
+            title,
             (legend_x, legend_y),
             &TextStyle {
                 color: theme.legend_title.color,
@@ -301,6 +311,7 @@ fn draw_continuous_legend_at(
     legend_x: f64,
     legend_y: f64,
     backend: &mut dyn DrawBackend,
+    guide: &GuideLegend,
 ) -> Result<f64, RenderError> {
     let breaks = scale.breaks();
     if breaks.is_empty() {
@@ -310,11 +321,11 @@ fn draw_continuous_legend_at(
     let bar_width = theme.legend_key_width;
     let bar_height = theme.legend_key_height * 8.0;
 
-    // Draw legend title
-    let scale_name = scale.name();
-    let title_offset = if !scale_name.is_empty() {
+    // Draw legend title (guide title overrides scale name)
+    let title = guide.title.as_deref().unwrap_or_else(|| scale.name());
+    let title_offset = if !title.is_empty() {
         backend.draw_text(
-            scale_name,
+            title,
             (legend_x, legend_y),
             &TextStyle {
                 color: theme.legend_title.color,
