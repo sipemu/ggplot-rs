@@ -62,65 +62,153 @@ impl Geom for GeomSmooth {
             .ok_or(RenderError::MissingAesthetic("y".into()))?;
         let ymin_col = data.column("ymin");
         let ymax_col = data.column("ymax");
+        let color_col = data.column("color");
+        let fill_col = data.column("fill");
 
         let plot_area = backend.plot_area();
         let x_scale = scales.get(&Aesthetic::X);
         let y_scale = scales.get(&Aesthetic::Y);
 
-        // Draw confidence ribbon first (behind line)
-        if self.se {
-            if let (Some(ymin), Some(ymax)) = (ymin_col, ymax_col) {
-                let mut upper_points: Vec<(f64, f64)> = Vec::new();
-                let mut lower_points: Vec<(f64, f64)> = Vec::new();
+        // If there's a color/fill aesthetic, draw separate smooths per group
+        if let Some(cc) = color_col.or(fill_col) {
+            let mut groups: Vec<(String, Vec<usize>)> = Vec::new();
+            for (i, v) in cc.iter().enumerate() {
+                let key = v.to_group_key();
+                if let Some(entry) = groups.iter_mut().find(|(k, _)| k == &key) {
+                    entry.1.push(i);
+                } else {
+                    groups.push((key, vec![i]));
+                }
+            }
 
-                for i in 0..data.nrows() {
-                    let nx = x_scale.map(|s| s.map(&x_col[i])).unwrap_or(0.0);
-                    let ny_max = y_scale.map(|s| s.map(&ymax[i])).unwrap_or(0.0);
-                    let ny_min = y_scale.map(|s| s.map(&ymin[i])).unwrap_or(0.0);
+            for (_, indices) in &groups {
+                let first_idx = indices[0];
 
-                    upper_points.push(coord.transform((nx, ny_max), &plot_area));
-                    lower_points.push(coord.transform((nx, ny_min), &plot_area));
+                // Determine colors from mapped aesthetics
+                let line_color = color_col
+                    .and_then(|c| scales.map_color(&Aesthetic::Color, &c[first_idx]))
+                    .unwrap_or(self.color);
+                let ribbon_fill = fill_col
+                    .and_then(|f| scales.map_color(&Aesthetic::Fill, &f[first_idx]))
+                    .or_else(|| {
+                        color_col.and_then(|c| scales.map_color(&Aesthetic::Color, &c[first_idx]))
+                    })
+                    .unwrap_or(self.fill);
+
+                // Draw confidence ribbon
+                if self.se {
+                    if let (Some(ymin), Some(ymax)) = (ymin_col, ymax_col) {
+                        let mut upper_points: Vec<(f64, f64)> = Vec::new();
+                        let mut lower_points: Vec<(f64, f64)> = Vec::new();
+
+                        for &i in indices {
+                            let nx = x_scale.map(|s| s.map(&x_col[i])).unwrap_or(0.0);
+                            let ny_max = y_scale.map(|s| s.map(&ymax[i])).unwrap_or(0.0);
+                            let ny_min = y_scale.map(|s| s.map(&ymin[i])).unwrap_or(0.0);
+
+                            upper_points.push(coord.transform((nx, ny_max), &plot_area));
+                            lower_points.push(coord.transform((nx, ny_min), &plot_area));
+                        }
+
+                        let mut polygon = upper_points;
+                        lower_points.reverse();
+                        polygon.extend(lower_points);
+
+                        if polygon.len() >= 3 {
+                            backend.draw_polygon(
+                                &polygon,
+                                &RectStyle {
+                                    fill: Some(ribbon_fill),
+                                    stroke: None,
+                                    stroke_width: 0.0,
+                                    alpha: self.alpha,
+                                    clip: true,
+                                },
+                            )?;
+                        }
+                    }
                 }
 
-                // Build polygon: upper left-to-right, then lower right-to-left
-                let mut polygon = upper_points.clone();
-                lower_points.reverse();
-                polygon.extend(lower_points);
+                // Draw fitted line
+                let points: Vec<(f64, f64)> = indices
+                    .iter()
+                    .map(|&i| {
+                        let nx = x_scale.map(|s| s.map(&x_col[i])).unwrap_or(0.0);
+                        let ny = y_scale.map(|s| s.map(&y_col[i])).unwrap_or(0.0);
+                        coord.transform((nx, ny), &plot_area)
+                    })
+                    .collect();
 
-                if polygon.len() >= 3 {
-                    backend.draw_polygon(
-                        &polygon,
-                        &RectStyle {
-                            fill: Some(self.fill),
-                            stroke: None,
-                            stroke_width: 0.0,
-                            alpha: self.alpha,
-                            clip: true,
+                if points.len() >= 2 {
+                    backend.draw_line(
+                        &points,
+                        &LineStyle {
+                            color: line_color,
+                            alpha: 1.0,
+                            width: self.line_width,
+                            linetype: Linetype::Solid,
                         },
                     )?;
                 }
             }
-        }
+        } else {
+            // No grouping — original behavior with fixed colors
 
-        // Draw fitted line
-        let points: Vec<(f64, f64)> = (0..data.nrows())
-            .map(|i| {
-                let nx = x_scale.map(|s| s.map(&x_col[i])).unwrap_or(0.0);
-                let ny = y_scale.map(|s| s.map(&y_col[i])).unwrap_or(0.0);
-                coord.transform((nx, ny), &plot_area)
-            })
-            .collect();
+            // Draw confidence ribbon first (behind line)
+            if self.se {
+                if let (Some(ymin), Some(ymax)) = (ymin_col, ymax_col) {
+                    let mut upper_points: Vec<(f64, f64)> = Vec::new();
+                    let mut lower_points: Vec<(f64, f64)> = Vec::new();
 
-        if points.len() >= 2 {
-            backend.draw_line(
-                &points,
-                &LineStyle {
-                    color: self.color,
-                    alpha: 1.0,
-                    width: self.line_width,
-                    linetype: Linetype::Solid,
-                },
-            )?;
+                    for i in 0..data.nrows() {
+                        let nx = x_scale.map(|s| s.map(&x_col[i])).unwrap_or(0.0);
+                        let ny_max = y_scale.map(|s| s.map(&ymax[i])).unwrap_or(0.0);
+                        let ny_min = y_scale.map(|s| s.map(&ymin[i])).unwrap_or(0.0);
+
+                        upper_points.push(coord.transform((nx, ny_max), &plot_area));
+                        lower_points.push(coord.transform((nx, ny_min), &plot_area));
+                    }
+
+                    // Build polygon: upper left-to-right, then lower right-to-left
+                    let mut polygon = upper_points;
+                    lower_points.reverse();
+                    polygon.extend(lower_points);
+
+                    if polygon.len() >= 3 {
+                        backend.draw_polygon(
+                            &polygon,
+                            &RectStyle {
+                                fill: Some(self.fill),
+                                stroke: None,
+                                stroke_width: 0.0,
+                                alpha: self.alpha,
+                                clip: true,
+                            },
+                        )?;
+                    }
+                }
+            }
+
+            // Draw fitted line
+            let points: Vec<(f64, f64)> = (0..data.nrows())
+                .map(|i| {
+                    let nx = x_scale.map(|s| s.map(&x_col[i])).unwrap_or(0.0);
+                    let ny = y_scale.map(|s| s.map(&y_col[i])).unwrap_or(0.0);
+                    coord.transform((nx, ny), &plot_area)
+                })
+                .collect();
+
+            if points.len() >= 2 {
+                backend.draw_line(
+                    &points,
+                    &LineStyle {
+                        color: self.color,
+                        alpha: 1.0,
+                        width: self.line_width,
+                        linetype: Linetype::Solid,
+                    },
+                )?;
+            }
         }
 
         Ok(())

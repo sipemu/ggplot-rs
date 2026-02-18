@@ -15,6 +15,7 @@ pub struct ScaleContinuous {
     min: f64,
     max: f64,
     trained: bool,
+    filter_oob: bool,
     expand: (f64, f64), // multiplicative and additive expansion
     pub(crate) scale_transform: ScaleTransform,
     custom_breaks: Option<Vec<f64>>,
@@ -31,6 +32,7 @@ impl ScaleContinuous {
             min: f64::INFINITY,
             max: f64::NEG_INFINITY,
             trained: false,
+            filter_oob: false,
             expand: (0.05, 0.0),
             scale_transform: ScaleTransform::Identity,
             custom_breaks: None,
@@ -54,6 +56,7 @@ impl ScaleContinuous {
         self.min = min;
         self.max = max;
         self.trained = true;
+        self.filter_oob = true;
         self
     }
 
@@ -225,5 +228,13 @@ impl Scale for ScaleContinuous {
         self.min = min;
         self.max = max;
         self.trained = true;
+    }
+
+    fn filter_limits(&self) -> Option<(f64, f64)> {
+        if self.filter_oob && self.trained {
+            Some((self.min, self.max))
+        } else {
+            None
+        }
     }
 }

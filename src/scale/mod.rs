@@ -6,6 +6,7 @@ pub mod discrete;
 pub mod format;
 pub mod gradient;
 pub mod gradient_n;
+pub mod grey;
 pub mod linetype;
 pub mod manual;
 pub mod palettes;
@@ -86,5 +87,11 @@ pub trait Scale: Send + Sync {
     /// Override the trained domain limits (used by coord_cartesian zoom).
     fn set_limits(&mut self, _min: f64, _max: f64) {
         // Default no-op. Continuous scales override this.
+    }
+
+    /// Return OOB filter limits if this scale was created with explicit limits
+    /// (e.g., via xlim/ylim). Data outside these limits should be removed before stats.
+    fn filter_limits(&self) -> Option<(f64, f64)> {
+        None
     }
 }

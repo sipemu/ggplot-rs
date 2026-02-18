@@ -99,7 +99,12 @@ impl PlotBuilder {
     ) -> (Vec<Panel>, Vec<Vec<DataFrame>>) {
         match facet {
             Facet::None => (vec![], vec![]),
-            Facet::Wrap { var, ncol, .. } => {
+            Facet::Wrap {
+                var,
+                ncol,
+                labeller,
+                ..
+            } => {
                 // Collect unique levels from all layers' data
                 let mut levels: Vec<String> = Vec::new();
                 for bl in built_layers {
@@ -117,15 +122,16 @@ impl PlotBuilder {
                 let panels: Vec<Panel> = levels
                     .iter()
                     .enumerate()
-                    .map(|(i, label)| {
+                    .map(|(i, value)| {
                         let ncols =
                             ncol.unwrap_or_else(|| (levels.len() as f64).sqrt().ceil() as usize);
+                        let formatted = labeller.format(var, value);
                         Panel {
                             row: i / ncols.max(1),
                             col: i % ncols.max(1),
-                            label: label.clone(),
+                            label: formatted.clone(),
                             row_label: None,
-                            col_label: Some(label.clone()),
+                            col_label: Some(formatted),
                             rect: crate::render::Rect {
                                 x: 0.0,
                                 y: 0.0,
@@ -150,7 +156,10 @@ impl PlotBuilder {
                 (panels, panels_data)
             }
             Facet::Grid {
-                row_var, col_var, ..
+                row_var,
+                col_var,
+                labeller,
+                ..
             } => {
                 let mut row_levels: Vec<String> = Vec::new();
                 let mut col_levels: Vec<String> = Vec::new();
@@ -190,20 +199,30 @@ impl PlotBuilder {
 
                 for (ri, rl) in row_levels.iter().enumerate() {
                     for (ci, cl) in col_levels.iter().enumerate() {
+                        let row_fmt = if rl.is_empty() {
+                            None
+                        } else {
+                            let rv = row_var.as_deref().unwrap_or("");
+                            Some(labeller.format(rv, rl))
+                        };
+                        let col_fmt = if cl.is_empty() {
+                            None
+                        } else {
+                            let cv = col_var.as_deref().unwrap_or("");
+                            Some(labeller.format(cv, cl))
+                        };
+                        let label = match (&row_fmt, &col_fmt) {
+                            (Some(r), Some(c)) => format!("{r} | {c}"),
+                            (Some(r), None) => r.clone(),
+                            (None, Some(c)) => c.clone(),
+                            (None, None) => String::new(),
+                        };
                         panels.push(Panel {
                             row: ri,
                             col: ci,
-                            label: format!("{rl} | {cl}"),
-                            row_label: if rl.is_empty() {
-                                None
-                            } else {
-                                Some(rl.clone())
-                            },
-                            col_label: if cl.is_empty() {
-                                None
-                            } else {
-                                Some(cl.clone())
-                            },
+                            label,
+                            row_label: row_fmt,
+                            col_label: col_fmt,
                             rect: crate::render::Rect {
                                 x: 0.0,
                                 y: 0.0,
@@ -308,6 +327,9 @@ impl PlotBuilder {
             }
         }
 
+        // Step 5b: Filter out-of-bounds data (xlim/ylim filter before stats)
+        Self::filter_oob_data(&mut working_data, scale_set);
+
         // Step 6: Compute statistics
         let group_cols = Self::detect_group_columns(&working_data);
 
@@ -361,6 +383,64 @@ impl PlotBuilder {
             data: working_data,
             geom,
         }
+    }
+
+    /// Remove rows where x or y falls outside scale limits set via xlim/ylim.
+    fn filter_oob_data(data: &mut DataFrame, scale_set: &ScaleSet) {
+        let x_limits = scale_set.get(&Aesthetic::X).and_then(|s| s.filter_limits());
+        let y_limits = scale_set.get(&Aesthetic::Y).and_then(|s| s.filter_limits());
+
+        if x_limits.is_none() && y_limits.is_none() {
+            return;
+        }
+
+        let nrows = data.nrows();
+        let mut keep = vec![true; nrows];
+
+        if let Some((min, max)) = x_limits {
+            if let Some(col) = data.column("x") {
+                for (i, v) in col.iter().enumerate() {
+                    if let Some(f) = v.as_f64() {
+                        if f < min || f > max {
+                            keep[i] = false;
+                        }
+                    }
+                }
+            }
+        }
+
+        if let Some((min, max)) = y_limits {
+            if let Some(col) = data.column("y") {
+                for (i, v) in col.iter().enumerate() {
+                    if let Some(f) = v.as_f64() {
+                        if f < min || f > max {
+                            keep[i] = false;
+                        }
+                    }
+                }
+            }
+        }
+
+        // If nothing was filtered, skip the rebuild
+        if keep.iter().all(|&k| k) {
+            return;
+        }
+
+        let indices: Vec<usize> = keep
+            .iter()
+            .enumerate()
+            .filter(|(_, &k)| k)
+            .map(|(i, _)| i)
+            .collect();
+
+        let mut result = DataFrame::new();
+        for col_name in data.column_names() {
+            if let Some(src) = data.column(col_name) {
+                let vals: Vec<_> = indices.iter().map(|&i| src[i].clone()).collect();
+                result.add_column(col_name.to_string(), vals);
+            }
+        }
+        *data = result;
     }
 
     /// Detect which columns to group by for statistics.

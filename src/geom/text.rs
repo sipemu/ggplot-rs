@@ -23,6 +23,8 @@ pub struct GeomText {
     pub vjust: f64,
     /// Font family name (informational; actual rendering depends on backend).
     pub fontfamily: String,
+    /// When true, skip drawing labels that overlap previously drawn labels.
+    pub check_overlap: bool,
 }
 
 impl GeomText {
@@ -40,6 +42,11 @@ impl GeomText {
         self.fontfamily = family.to_string();
         self
     }
+
+    pub fn with_check_overlap(mut self, check: bool) -> Self {
+        self.check_overlap = check;
+        self
+    }
 }
 
 impl Default for GeomText {
@@ -51,6 +58,7 @@ impl Default for GeomText {
             hjust: 0.5,
             vjust: 0.5,
             fontfamily: String::new(),
+            check_overlap: false,
         }
     }
 }
@@ -78,12 +86,24 @@ impl Geom for GeomText {
         let x_scale = scales.get(&Aesthetic::X);
         let y_scale = scales.get(&Aesthetic::Y);
 
+        let mut drawn_bboxes: Vec<(f64, f64, f64, f64)> = Vec::new();
+
         for i in 0..data.nrows() {
             let nx = x_scale.map(|s| s.map(&x_col[i])).unwrap_or(0.0);
             let ny = y_scale.map(|s| s.map(&y_col[i])).unwrap_or(0.0);
             let (px, py) = coord.transform((nx, ny), &plot_area);
 
             let text = label_col[i].to_group_key();
+
+            if self.check_overlap {
+                let w = text.len() as f64 * self.size * 0.6;
+                let h = self.size;
+                let bbox = (px - w / 2.0, py - h / 2.0, px + w / 2.0, py + h / 2.0);
+                if bboxes_overlap(&bbox, &drawn_bboxes) {
+                    continue;
+                }
+                drawn_bboxes.push(bbox);
+            }
 
             let anchor = hjust_to_anchor(self.hjust);
             backend.draw_text(
@@ -133,6 +153,8 @@ pub struct GeomLabel {
     pub vjust: f64,
     /// Font family name (informational; actual rendering depends on backend).
     pub fontfamily: String,
+    /// When true, skip drawing labels that overlap previously drawn labels.
+    pub check_overlap: bool,
 }
 
 impl GeomLabel {
@@ -150,6 +172,11 @@ impl GeomLabel {
         self.fontfamily = family.to_string();
         self
     }
+
+    pub fn with_check_overlap(mut self, check: bool) -> Self {
+        self.check_overlap = check;
+        self
+    }
 }
 
 impl Default for GeomLabel {
@@ -163,6 +190,7 @@ impl Default for GeomLabel {
             hjust: 0.5,
             vjust: 0.5,
             fontfamily: String::new(),
+            check_overlap: false,
         }
     }
 }
@@ -190,6 +218,8 @@ impl Geom for GeomLabel {
         let x_scale = scales.get(&Aesthetic::X);
         let y_scale = scales.get(&Aesthetic::Y);
 
+        let mut drawn_bboxes: Vec<(f64, f64, f64, f64)> = Vec::new();
+
         for i in 0..data.nrows() {
             let nx = x_scale.map(|s| s.map(&x_col[i])).unwrap_or(0.0);
             let ny = y_scale.map(|s| s.map(&y_col[i])).unwrap_or(0.0);
@@ -199,6 +229,14 @@ impl Geom for GeomLabel {
             let approx_width = text.len() as f64 * self.size * 0.6;
             let half_w = approx_width / 2.0 + self.padding;
             let half_h = self.size / 2.0 + self.padding;
+
+            if self.check_overlap {
+                let bbox = (px - half_w, py - half_h, px + half_w, py + half_h);
+                if bboxes_overlap(&bbox, &drawn_bboxes) {
+                    continue;
+                }
+                drawn_bboxes.push(bbox);
+            }
 
             // Background rect
             backend.draw_rect(
@@ -258,4 +296,15 @@ fn hjust_to_anchor(hjust: f64) -> TextAnchor {
     } else {
         TextAnchor::Middle
     }
+}
+
+/// Check if a bbox overlaps any existing bbox.
+fn bboxes_overlap(candidate: &(f64, f64, f64, f64), existing: &[(f64, f64, f64, f64)]) -> bool {
+    for b in existing {
+        // Two rects overlap if they overlap on both axes
+        if candidate.0 < b.2 && candidate.2 > b.0 && candidate.1 < b.3 && candidate.3 > b.1 {
+            return true;
+        }
+    }
+    false
 }

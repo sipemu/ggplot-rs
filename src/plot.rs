@@ -9,10 +9,11 @@ use crate::coord::flip::CoordFlip;
 use crate::coord::polar::CoordPolar;
 use crate::coord::Coord;
 use crate::data::{DataFrame, GGData};
-use crate::facet::{Facet, FacetScales};
+use crate::facet::{Facet, FacetLabeller, FacetScales};
 use crate::geom::area::GeomArea;
 use crate::geom::bar::GeomBar;
 use crate::geom::bin2d::GeomBin2d;
+use crate::geom::blank::GeomBlank;
 use crate::geom::boxplot::GeomBoxplot;
 use crate::geom::col::GeomCol;
 use crate::geom::contour::GeomContour;
@@ -407,6 +408,10 @@ impl GGPlot {
         self.add_geom(geom)
     }
 
+    pub fn geom_blank(self) -> Self {
+        self.add_geom(GeomBlank)
+    }
+
     fn add_geom(mut self, geom: impl Geom + 'static) -> Self {
         let stat = geom.default_stat();
         let position = geom.default_position();
@@ -600,6 +605,24 @@ impl GGPlot {
         self.scale_fill(s)
     }
 
+    pub fn scale_color_grey(self) -> Self {
+        let s = crate::scale::grey::ScaleColorGrey::new(crate::aes::Aesthetic::Color);
+        self.scale_color(s)
+    }
+
+    pub fn scale_fill_grey(self) -> Self {
+        let s = crate::scale::grey::ScaleColorGrey::new(crate::aes::Aesthetic::Fill);
+        self.scale_fill(s)
+    }
+
+    pub fn scale_color_grey_with(self, s: crate::scale::grey::ScaleColorGrey) -> Self {
+        self.scale_color(s)
+    }
+
+    pub fn scale_fill_grey_with(self, s: crate::scale::grey::ScaleColorGrey) -> Self {
+        self.scale_fill(s)
+    }
+
     pub fn scale_x_reverse(self) -> Self {
         self.scale_x_continuous(ScaleContinuous::new().with_transform(ScaleTransform::Reverse))
     }
@@ -677,6 +700,7 @@ impl GGPlot {
             var: var.to_string(),
             ncol,
             scales: FacetScales::Fixed,
+            labeller: FacetLabeller::default(),
         };
         self
     }
@@ -686,6 +710,22 @@ impl GGPlot {
             var: var.to_string(),
             ncol,
             scales,
+            labeller: FacetLabeller::default(),
+        };
+        self
+    }
+
+    pub fn facet_wrap_labeller(
+        mut self,
+        var: &str,
+        ncol: Option<usize>,
+        labeller: FacetLabeller,
+    ) -> Self {
+        self.facet = Facet::Wrap {
+            var: var.to_string(),
+            ncol,
+            scales: FacetScales::Fixed,
+            labeller,
         };
         self
     }
@@ -695,6 +735,7 @@ impl GGPlot {
             row_var: row.map(String::from),
             col_var: col.map(String::from),
             scales: FacetScales::Fixed,
+            labeller: FacetLabeller::default(),
         };
         self
     }
@@ -709,6 +750,22 @@ impl GGPlot {
             row_var: row.map(String::from),
             col_var: col.map(String::from),
             scales,
+            labeller: FacetLabeller::default(),
+        };
+        self
+    }
+
+    pub fn facet_grid_labeller(
+        mut self,
+        row: Option<&str>,
+        col: Option<&str>,
+        labeller: FacetLabeller,
+    ) -> Self {
+        self.facet = Facet::Grid {
+            row_var: row.map(String::from),
+            col_var: col.map(String::from),
+            scales: FacetScales::Fixed,
+            labeller,
         };
         self
     }

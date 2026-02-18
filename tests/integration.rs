@@ -3096,3 +3096,317 @@ fn test_scale_expand_zero_heatmap() {
     assert!(content.contains("<rect"));
     std::fs::remove_file(&path).ok();
 }
+
+// ─── Tier 6 tests ──────────────────────────────────────────────────────
+
+#[test]
+fn test_geom_blank_extends_axis() {
+    // geom_blank() with data that extends x beyond the main layer should train scales
+    let main_data = vec![
+        HashMap::from([
+            ("x".to_string(), Value::Float(1.0)),
+            ("y".to_string(), Value::Float(2.0)),
+        ]),
+        HashMap::from([
+            ("x".to_string(), Value::Float(3.0)),
+            ("y".to_string(), Value::Float(4.0)),
+        ]),
+    ];
+
+    let blank_data = vec![HashMap::from([
+        ("x".to_string(), Value::Float(0.0)),
+        ("y".to_string(), Value::Float(10.0)),
+    ])];
+
+    let path = temp_path("geom_blank.svg");
+    GGPlot::new(main_data)
+        .aes(Aes::new().x("x").y("y"))
+        .geom_point()
+        .geom_blank()
+        .layer_data(blank_data)
+        .save(&path)
+        .expect("geom_blank should render without error");
+
+    let content = std::fs::read_to_string(&path).unwrap();
+    assert!(content.contains("<svg"));
+    // Only the geom_point circles should appear (no drawing from geom_blank)
+    assert!(content.contains("<circle"));
+    std::fs::remove_file(&path).ok();
+}
+
+#[test]
+fn test_geom_blank_build_trains_scales() {
+    let main_data = vec![HashMap::from([
+        ("x".to_string(), Value::Float(1.0)),
+        ("y".to_string(), Value::Float(2.0)),
+    ])];
+    let blank_data = vec![HashMap::from([
+        ("x".to_string(), Value::Float(0.0)),
+        ("y".to_string(), Value::Float(10.0)),
+    ])];
+
+    let built = GGPlot::new(main_data)
+        .aes(Aes::new().x("x").y("y"))
+        .geom_point()
+        .geom_blank()
+        .layer_data(blank_data)
+        .build();
+
+    // Y scale should include 10.0 from blank layer
+    let y_breaks = built.scales.get(&Aesthetic::Y).unwrap().breaks();
+    let max_break_val: f64 = y_breaks
+        .iter()
+        .filter_map(|(_, label)| label.parse::<f64>().ok())
+        .fold(f64::NEG_INFINITY, f64::max);
+    assert!(max_break_val >= 10.0, "Y axis should extend to at least 10");
+}
+
+#[test]
+fn test_scale_color_grey() {
+    let data = vec![
+        HashMap::from([
+            ("x".to_string(), Value::Float(1.0)),
+            ("y".to_string(), Value::Float(2.0)),
+            ("grp".to_string(), Value::Str("A".to_string())),
+        ]),
+        HashMap::from([
+            ("x".to_string(), Value::Float(2.0)),
+            ("y".to_string(), Value::Float(3.0)),
+            ("grp".to_string(), Value::Str("B".to_string())),
+        ]),
+        HashMap::from([
+            ("x".to_string(), Value::Float(3.0)),
+            ("y".to_string(), Value::Float(1.0)),
+            ("grp".to_string(), Value::Str("C".to_string())),
+        ]),
+    ];
+
+    let path = temp_path("scale_grey.svg");
+    GGPlot::new(data)
+        .aes(Aes::new().x("x").y("y").color("grp"))
+        .geom_point()
+        .scale_color_grey()
+        .save(&path)
+        .expect("scale_color_grey should render");
+
+    let content = std::fs::read_to_string(&path).unwrap();
+    assert!(content.contains("<svg"));
+    assert!(content.contains("<circle"));
+    std::fs::remove_file(&path).ok();
+}
+
+#[test]
+fn test_scale_fill_grey_custom_range() {
+    let data = vec![
+        HashMap::from([
+            ("x".to_string(), Value::Str("A".to_string())),
+            ("y".to_string(), Value::Float(5.0)),
+        ]),
+        HashMap::from([
+            ("x".to_string(), Value::Str("B".to_string())),
+            ("y".to_string(), Value::Float(3.0)),
+        ]),
+    ];
+
+    let path = temp_path("scale_fill_grey_custom.svg");
+    GGPlot::new(data)
+        .aes(Aes::new().x("x").y("y").fill("x"))
+        .geom_col()
+        .scale_fill_grey_with(ScaleColorGrey::new(Aesthetic::Fill).with_range(0.0, 1.0))
+        .save(&path)
+        .expect("scale_fill_grey custom range should render");
+
+    let content = std::fs::read_to_string(&path).unwrap();
+    assert!(content.contains("<svg"));
+    assert!(content.contains("<rect"));
+    std::fs::remove_file(&path).ok();
+}
+
+#[test]
+fn test_xlim_filters_data_before_stat() {
+    // With xlim(2, 4), data outside [2,4] should be removed before stat_smooth
+    let data: Vec<HashMap<String, Value>> = (0..10)
+        .map(|i| {
+            let x = i as f64;
+            HashMap::from([
+                ("x".to_string(), Value::Float(x)),
+                ("y".to_string(), Value::Float(x * 2.0)),
+            ])
+        })
+        .collect();
+
+    let built = GGPlot::new(data)
+        .aes(Aes::new().x("x").y("y"))
+        .geom_point()
+        .xlim(2.0, 7.0)
+        .build();
+
+    // The point layer data should only contain rows where x is in [2, 7]
+    let layer_data = &built.layers[0].data;
+    if let Some(x_col) = layer_data.column("x") {
+        for v in x_col {
+            let f = v.as_f64().unwrap();
+            assert!(
+                (2.0..=7.0).contains(&f),
+                "x={f} should be filtered out by xlim(2,7)"
+            );
+        }
+    }
+}
+
+#[test]
+fn test_coord_cartesian_does_not_filter() {
+    // coord_cartesian zoom should NOT filter data
+    let data: Vec<HashMap<String, Value>> = (0..10)
+        .map(|i| {
+            let x = i as f64;
+            HashMap::from([
+                ("x".to_string(), Value::Float(x)),
+                ("y".to_string(), Value::Float(x * 2.0)),
+            ])
+        })
+        .collect();
+
+    let built = GGPlot::new(data)
+        .aes(Aes::new().x("x").y("y"))
+        .geom_point()
+        .coord_cartesian_zoom(Some((2.0, 7.0)), None)
+        .build();
+
+    // All 10 rows should still be in the data
+    assert_eq!(built.layers[0].data.nrows(), 10);
+}
+
+#[test]
+fn test_facet_labeller_both() {
+    let data = vec![
+        HashMap::from([
+            ("x".to_string(), Value::Float(1.0)),
+            ("y".to_string(), Value::Float(2.0)),
+            ("grp".to_string(), Value::Str("A".to_string())),
+        ]),
+        HashMap::from([
+            ("x".to_string(), Value::Float(2.0)),
+            ("y".to_string(), Value::Float(3.0)),
+            ("grp".to_string(), Value::Str("B".to_string())),
+        ]),
+    ];
+
+    let path = temp_path("facet_labeller_both.svg");
+    GGPlot::new(data)
+        .aes(Aes::new().x("x").y("y"))
+        .geom_point()
+        .facet_wrap_labeller("grp", Some(2), FacetLabeller::Both)
+        .save(&path)
+        .expect("facet labeller Both should render");
+
+    let content = std::fs::read_to_string(&path).unwrap();
+    assert!(content.contains("<svg"));
+    // Strip labels should contain "grp: A" and "grp: B"
+    assert!(
+        content.contains("grp: A"),
+        "Should have 'grp: A' strip label"
+    );
+    assert!(
+        content.contains("grp: B"),
+        "Should have 'grp: B' strip label"
+    );
+    std::fs::remove_file(&path).ok();
+}
+
+#[test]
+fn test_facet_labeller_custom() {
+    let data = vec![
+        HashMap::from([
+            ("x".to_string(), Value::Float(1.0)),
+            ("y".to_string(), Value::Float(2.0)),
+            ("grp".to_string(), Value::Str("A".to_string())),
+        ]),
+        HashMap::from([
+            ("x".to_string(), Value::Float(2.0)),
+            ("y".to_string(), Value::Float(3.0)),
+            ("grp".to_string(), Value::Str("B".to_string())),
+        ]),
+    ];
+
+    fn my_labeller(_var: &str, val: &str) -> String {
+        format!("Group {val}")
+    }
+
+    let built = GGPlot::new(data)
+        .aes(Aes::new().x("x").y("y"))
+        .geom_point()
+        .facet_wrap_labeller("grp", Some(2), FacetLabeller::Custom(my_labeller))
+        .build();
+
+    assert_eq!(built.panels[0].label, "Group A");
+    assert_eq!(built.panels[1].label, "Group B");
+}
+
+#[test]
+fn test_check_overlap_text() {
+    // Many overlapping labels — check_overlap should produce valid SVG
+    let data: Vec<HashMap<String, Value>> = (0..20)
+        .map(|i| {
+            HashMap::from([
+                ("x".to_string(), Value::Float(1.0)), // all same position
+                ("y".to_string(), Value::Float(1.0)),
+                ("label".to_string(), Value::Str(format!("Label{i}"))),
+            ])
+        })
+        .collect();
+
+    let path = temp_path("check_overlap.svg");
+    GGPlot::new(data)
+        .aes(Aes::new().x("x").y("y").label("label"))
+        .geom_text_with(GeomText::default().with_check_overlap(true))
+        .save(&path)
+        .expect("check_overlap text should render");
+
+    let content = std::fs::read_to_string(&path).unwrap();
+    assert!(content.contains("<svg"));
+    // With check_overlap, only the first label should appear (all at same position)
+    assert!(content.contains("Label0"));
+    // Count how many <text> elements appear — should be fewer than 20
+    let text_count = content.matches("<text").count();
+    // At least title/axis labels exist, but data labels should be just 1
+    // We'll just check it's much less than 20 + overhead
+    assert!(
+        text_count < 25,
+        "check_overlap should reduce text count, got {text_count}"
+    );
+    std::fs::remove_file(&path).ok();
+}
+
+#[test]
+fn test_geom_smooth_with_color_groups() {
+    let mut data = Vec::new();
+    for grp in ["A", "B"] {
+        for i in 0..10 {
+            let x = i as f64;
+            let y = if grp == "A" { x * 2.0 } else { x * 0.5 + 5.0 };
+            data.push(HashMap::from([
+                ("x".to_string(), Value::Float(x)),
+                ("y".to_string(), Value::Float(y)),
+                ("grp".to_string(), Value::Str(grp.to_string())),
+            ]));
+        }
+    }
+
+    let path = temp_path("smooth_color_groups.svg");
+    GGPlot::new(data)
+        .aes(Aes::new().x("x").y("y").color("grp"))
+        .geom_point()
+        .geom_smooth()
+        .save(&path)
+        .expect("geom_smooth with color groups should render");
+
+    let content = std::fs::read_to_string(&path).unwrap();
+    assert!(content.contains("<svg"));
+    // Should have polylines/paths for the smooth lines
+    assert!(
+        content.contains("<polyline") || content.contains("<path"),
+        "Should have smooth lines rendered"
+    );
+    std::fs::remove_file(&path).ok();
+}
