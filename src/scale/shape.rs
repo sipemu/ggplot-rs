@@ -74,4 +74,12 @@ impl Scale for ScaleShapeDiscrete {
         let idx = self.levels.iter().position(|l| l == &key).unwrap_or(0);
         Some(PointShape::ALL[idx % PointShape::ALL.len()])
     }
+
+    fn clone_box(&self) -> Box<dyn Scale> {
+        Box::new(self.clone())
+    }
+
+    fn reset_training(&mut self) {
+        self.levels.clear();
+    }
 }

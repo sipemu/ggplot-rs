@@ -6,6 +6,7 @@ use super::Scale;
 /// Greyscale discrete color scale.
 /// Maps discrete levels to evenly-spaced grey values between `start` and `end`.
 /// Default range is 0.2 (dark grey) to 0.8 (light grey), where 0.0 = black and 1.0 = white.
+#[derive(Clone)]
 pub struct ScaleColorGrey {
     aesthetic: Aesthetic,
     name: String,
@@ -92,5 +93,13 @@ impl Scale for ScaleColorGrey {
         let idx = self.levels.iter().position(|l| l == &key).unwrap_or(0);
         let g = self.grey_for_index(idx);
         Some((g, g, g))
+    }
+
+    fn clone_box(&self) -> Box<dyn Scale> {
+        Box::new(self.clone())
+    }
+
+    fn reset_training(&mut self) {
+        self.levels.clear();
     }
 }

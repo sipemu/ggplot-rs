@@ -4,29 +4,27 @@ use crate::render::backend::Linetype;
 
 use super::Scale;
 
-/// Discrete linetype scale — maps categories to line dash patterns.
+/// Manual linetype scale — maps named levels to user-specified linetypes.
 #[derive(Clone, Debug)]
-pub struct ScaleLinetypeDiscrete {
+pub struct ScaleLinetypeManual {
     name: String,
     levels: Vec<String>,
+    linetypes: Vec<Linetype>,
 }
 
-impl Default for ScaleLinetypeDiscrete {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
-impl ScaleLinetypeDiscrete {
-    pub fn new() -> Self {
-        ScaleLinetypeDiscrete {
+impl ScaleLinetypeManual {
+    pub fn new(values: Vec<(&str, Linetype)>) -> Self {
+        let levels: Vec<String> = values.iter().map(|(k, _)| k.to_string()).collect();
+        let linetypes: Vec<Linetype> = values.iter().map(|(_, lt)| *lt).collect();
+        ScaleLinetypeManual {
             name: String::new(),
-            levels: Vec::new(),
+            levels,
+            linetypes,
         }
     }
 }
 
-impl Scale for ScaleLinetypeDiscrete {
+impl Scale for ScaleLinetypeManual {
     fn aesthetic(&self) -> Aesthetic {
         Aesthetic::Linetype
     }
@@ -72,7 +70,11 @@ impl Scale for ScaleLinetypeDiscrete {
     fn map_to_linetype(&self, value: &Value) -> Option<Linetype> {
         let key = value.to_group_key();
         let idx = self.levels.iter().position(|l| l == &key).unwrap_or(0);
-        Some(Linetype::ALL[idx % Linetype::ALL.len()])
+        if idx < self.linetypes.len() {
+            Some(self.linetypes[idx])
+        } else {
+            Some(self.linetypes[idx % self.linetypes.len()])
+        }
     }
 
     fn clone_box(&self) -> Box<dyn Scale> {

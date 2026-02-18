@@ -130,4 +130,14 @@ impl Scale for ScaleDiscrete {
     fn is_discrete(&self) -> bool {
         true
     }
+
+    fn clone_box(&self) -> Box<dyn Scale> {
+        Box::new(self.clone())
+    }
+
+    fn reset_training(&mut self) {
+        if self.limits.is_none() {
+            self.levels.clear();
+        }
+    }
 }

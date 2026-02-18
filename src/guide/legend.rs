@@ -25,6 +25,7 @@ pub fn draw_legend(
     plot_area: &Rect,
     backend: &mut dyn DrawBackend,
     guide: &GuideLegend,
+    suppressed: &std::collections::HashSet<Aesthetic>,
 ) -> Result<(), RenderError> {
     if matches!(theme.legend_position, LegendPosition::None) {
         return Ok(());
@@ -33,6 +34,10 @@ pub fn draw_legend(
     // Collect all aesthetics that have a scale with breaks
     let mut legend_scales: Vec<&Aesthetic> = Vec::new();
     for aes in LEGEND_AESTHETICS {
+        // Skip suppressed aesthetics
+        if suppressed.contains(aes) {
+            continue;
+        }
         if let Some(scale) = scales.get(aes) {
             if !scale.breaks().is_empty() {
                 // Don't duplicate Color/Fill if both exist with same breaks
@@ -382,12 +387,15 @@ fn draw_continuous_legend_at(
     }
 
     // Draw gradient bar as N thin horizontal slices
+    // Use data-domain values to avoid double-normalization in map_to_color()
+    let (data_min, data_max) = scale.domain().unwrap_or((0.0, 1.0));
     let n_slices = 50;
     let slice_height = bar_height / n_slices as f64;
     for i in 0..n_slices {
         let t = 1.0 - i as f64 / n_slices as f64;
+        let data_val = data_min + t * (data_max - data_min);
         let color = scale
-            .map_to_color(&Value::Float(t))
+            .map_to_color(&Value::Float(data_val))
             .unwrap_or((127, 127, 127));
         let sy = bar_top + i as f64 * slice_height;
         backend.draw_rect(

@@ -180,6 +180,14 @@ impl Scale for ScaleColorDiscrete {
         let c = self.color_for_value(value);
         Some((c.r, c.g, c.b))
     }
+
+    fn clone_box(&self) -> Box<dyn Scale> {
+        Box::new(self.clone())
+    }
+
+    fn reset_training(&mut self) {
+        self.levels.clear();
+    }
 }
 
 /// Continuous gradient color scale.
@@ -286,5 +294,22 @@ impl Scale for ScaleColorContinuous {
         let t = self.map(value);
         let c = self.color_at(t);
         Some((c.r, c.g, c.b))
+    }
+
+    fn domain(&self) -> Option<(f64, f64)> {
+        if self.min.is_finite() && self.max.is_finite() && self.min <= self.max {
+            Some((self.min, self.max))
+        } else {
+            None
+        }
+    }
+
+    fn clone_box(&self) -> Box<dyn Scale> {
+        Box::new(self.clone())
+    }
+
+    fn reset_training(&mut self) {
+        self.min = f64::INFINITY;
+        self.max = f64::NEG_INFINITY;
     }
 }

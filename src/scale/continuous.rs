@@ -237,4 +237,22 @@ impl Scale for ScaleContinuous {
             None
         }
     }
+
+    fn domain(&self) -> Option<(f64, f64)> {
+        if self.trained {
+            Some((self.min, self.max))
+        } else {
+            None
+        }
+    }
+
+    fn clone_box(&self) -> Box<dyn Scale> {
+        Box::new(self.clone())
+    }
+
+    fn reset_training(&mut self) {
+        self.min = f64::INFINITY;
+        self.max = f64::NEG_INFINITY;
+        self.trained = false;
+    }
 }

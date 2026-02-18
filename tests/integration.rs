@@ -3410,3 +3410,341 @@ fn test_geom_smooth_with_color_groups() {
     );
     std::fs::remove_file(&path).ok();
 }
+
+// ─── Tier 7 tests ─────────────────────────────────────────────────────
+
+#[test]
+fn tier7_validation_error_missing_aesthetic() {
+    // geom_point requires x and y — providing neither should fail
+    let data = vec![HashMap::from([("z".to_string(), Value::Float(1.0))])];
+
+    let result = GGPlot::new(data).aes(Aes::new()).geom_point().try_build();
+
+    let err = match result {
+        Err(e) => e,
+        Ok(_) => panic!("Expected validation error"),
+    };
+    let err_msg = format!("{err}");
+    assert!(
+        err_msg.contains("requires aesthetic"),
+        "Error should mention missing aesthetic: {err_msg}"
+    );
+}
+
+#[test]
+fn tier7_validation_save_propagates_error() {
+    let data = vec![HashMap::from([("z".to_string(), Value::Float(1.0))])];
+
+    let path = temp_path("validation_err.svg");
+    let result = GGPlot::new(data).aes(Aes::new()).geom_point().save(&path);
+
+    assert!(result.is_err());
+    let err_msg = format!("{}", result.unwrap_err());
+    assert!(err_msg.contains("Validation error"));
+}
+
+#[test]
+fn tier7_scale_linetype_manual_renders() {
+    let data = vec![
+        HashMap::from([
+            ("x".to_string(), Value::Float(1.0)),
+            ("y".to_string(), Value::Float(2.0)),
+            ("grp".to_string(), Value::Str("A".to_string())),
+        ]),
+        HashMap::from([
+            ("x".to_string(), Value::Float(2.0)),
+            ("y".to_string(), Value::Float(3.0)),
+            ("grp".to_string(), Value::Str("A".to_string())),
+        ]),
+        HashMap::from([
+            ("x".to_string(), Value::Float(1.0)),
+            ("y".to_string(), Value::Float(3.0)),
+            ("grp".to_string(), Value::Str("B".to_string())),
+        ]),
+        HashMap::from([
+            ("x".to_string(), Value::Float(2.0)),
+            ("y".to_string(), Value::Float(4.0)),
+            ("grp".to_string(), Value::Str("B".to_string())),
+        ]),
+    ];
+
+    let path = temp_path("linetype_manual.svg");
+    GGPlot::new(data)
+        .aes(Aes::new().x("x").y("y").linetype("grp"))
+        .geom_line()
+        .scale_linetype_manual(vec![("A", Linetype::Dashed), ("B", Linetype::Dotted)])
+        .save(&path)
+        .expect("scale_linetype_manual should render");
+
+    let content = std::fs::read_to_string(&path).unwrap();
+    assert!(content.contains("<svg"));
+    std::fs::remove_file(&path).ok();
+}
+
+#[test]
+fn tier7_scale_shape_manual_builds() {
+    let data = vec![
+        HashMap::from([
+            ("x".to_string(), Value::Float(1.0)),
+            ("y".to_string(), Value::Float(2.0)),
+            ("grp".to_string(), Value::Str("A".to_string())),
+        ]),
+        HashMap::from([
+            ("x".to_string(), Value::Float(2.0)),
+            ("y".to_string(), Value::Float(3.0)),
+            ("grp".to_string(), Value::Str("B".to_string())),
+        ]),
+    ];
+
+    let path = temp_path("shape_manual.svg");
+    GGPlot::new(data)
+        .aes(Aes::new().x("x").y("y").shape("grp"))
+        .geom_point()
+        .scale_shape_manual(vec![("A", PointShape::Square), ("B", PointShape::Triangle)])
+        .save(&path)
+        .expect("scale_shape_manual should render");
+
+    let content = std::fs::read_to_string(&path).unwrap();
+    assert!(content.contains("<svg"));
+    std::fs::remove_file(&path).ok();
+}
+
+#[test]
+fn tier7_colorbar_domain_correct() {
+    // Train a continuous color scale on data [100, 200] and verify domain
+    let data = vec![
+        HashMap::from([
+            ("x".to_string(), Value::Float(1.0)),
+            ("y".to_string(), Value::Float(2.0)),
+            ("val".to_string(), Value::Float(100.0)),
+        ]),
+        HashMap::from([
+            ("x".to_string(), Value::Float(2.0)),
+            ("y".to_string(), Value::Float(3.0)),
+            ("val".to_string(), Value::Float(200.0)),
+        ]),
+    ];
+
+    let built = GGPlot::new(data)
+        .aes(Aes::new().x("x").y("y").color("val"))
+        .geom_point()
+        .build();
+
+    // The color scale should have domain (100, 200), not (0, 1)
+    let color_scale = built.scales.get(&Aesthetic::Color).unwrap();
+    let domain = color_scale.domain();
+    assert!(
+        domain.is_some(),
+        "Continuous color scale should report domain"
+    );
+    let (dmin, dmax) = domain.unwrap();
+    assert!(
+        (dmin - 100.0).abs() < 1.0,
+        "Domain min should be ~100, got {dmin}"
+    );
+    assert!(
+        (dmax - 200.0).abs() < 1.0,
+        "Domain max should be ~200, got {dmax}"
+    );
+}
+
+#[test]
+fn tier7_show_legend_false_hides_layer() {
+    let data = vec![
+        HashMap::from([
+            ("x".to_string(), Value::Float(1.0)),
+            ("y".to_string(), Value::Float(2.0)),
+            ("grp".to_string(), Value::Str("A".to_string())),
+        ]),
+        HashMap::from([
+            ("x".to_string(), Value::Float(2.0)),
+            ("y".to_string(), Value::Float(3.0)),
+            ("grp".to_string(), Value::Str("B".to_string())),
+        ]),
+    ];
+
+    let built = GGPlot::new(data)
+        .aes(Aes::new().x("x").y("y").color("grp"))
+        .geom_point()
+        .show_legend(false)
+        .build();
+
+    assert!(
+        built.suppressed_aes.contains(&Aesthetic::Color),
+        "Color should be suppressed when show_legend(false)"
+    );
+}
+
+#[test]
+fn tier7_geom_density2d_renders() {
+    // Generate a small point cloud
+    let mut data = Vec::new();
+    for i in 0..50 {
+        let x = (i as f64 * 0.1).sin() * 3.0 + 5.0;
+        let y = (i as f64 * 0.15).cos() * 2.0 + 4.0;
+        data.push(HashMap::from([
+            ("x".to_string(), Value::Float(x)),
+            ("y".to_string(), Value::Float(y)),
+        ]));
+    }
+
+    let path = temp_path("density2d.svg");
+    GGPlot::new(data)
+        .aes(Aes::new().x("x").y("y"))
+        .geom_density2d()
+        .save(&path)
+        .expect("geom_density2d should render");
+
+    let content = std::fs::read_to_string(&path).unwrap();
+    assert!(content.contains("<svg"));
+    // Should have polylines for contour lines
+    assert!(
+        content.contains("<polyline"),
+        "Should have contour polylines"
+    );
+    std::fs::remove_file(&path).ok();
+}
+
+#[test]
+fn tier7_stat_density2d_produces_columns() {
+    let mut data = Vec::new();
+    for i in 0..30 {
+        let x = i as f64 * 0.3;
+        let y = (i as f64 * 0.2).sin() * 2.0;
+        data.push(HashMap::from([
+            ("x".to_string(), Value::Float(x)),
+            ("y".to_string(), Value::Float(y)),
+        ]));
+    }
+
+    let built = GGPlot::new(data)
+        .aes(Aes::new().x("x").y("y"))
+        .geom_density2d()
+        .build();
+
+    // The first layer's data should have x, y, level, group columns
+    assert!(built.layers[0].data.has_column("x"));
+    assert!(built.layers[0].data.has_column("y"));
+    assert!(built.layers[0].data.has_column("level"));
+    assert!(built.layers[0].data.has_column("group"));
+    assert!(
+        built.layers[0].data.nrows() > 0,
+        "Should produce contour data"
+    );
+}
+
+#[test]
+fn tier7_facet_wrap_free_y_different_domains() {
+    // Create data with two groups that have very different Y ranges
+    let mut data = Vec::new();
+    for i in 0..5 {
+        data.push(HashMap::from([
+            ("x".to_string(), Value::Float(i as f64)),
+            ("y".to_string(), Value::Float(i as f64)),
+            ("grp".to_string(), Value::Str("small".to_string())),
+        ]));
+    }
+    for i in 0..5 {
+        data.push(HashMap::from([
+            ("x".to_string(), Value::Float(i as f64)),
+            ("y".to_string(), Value::Float(i as f64 * 1000.0)),
+            ("grp".to_string(), Value::Str("large".to_string())),
+        ]));
+    }
+
+    let built = GGPlot::new(data)
+        .aes(Aes::new().x("x").y("y"))
+        .geom_point()
+        .facet_wrap_free("grp", None, FacetScales::FreeY)
+        .build();
+
+    assert_eq!(built.panels.len(), 2, "Should have 2 panels");
+    assert_eq!(built.panel_scales.len(), 2, "Should have per-panel scales");
+
+    // Y scales should be different between panels
+    let ys0 = built.panel_scales[0].get(&Aesthetic::Y).unwrap();
+    let ys1 = built.panel_scales[1].get(&Aesthetic::Y).unwrap();
+    let d0 = ys0.domain();
+    let d1 = ys1.domain();
+    assert!(
+        d0.is_some() && d1.is_some(),
+        "Both Y scales should have domains"
+    );
+    let (_, max0) = d0.unwrap();
+    let (_, max1) = d1.unwrap();
+    // One panel should have max ~4, the other ~4000
+    assert!(
+        (max0 - max1).abs() > 100.0,
+        "Y domains should differ significantly: max0={max0}, max1={max1}"
+    );
+}
+
+#[test]
+fn tier7_facet_wrap_free_x_different_domains() {
+    let mut data = Vec::new();
+    for i in 0..5 {
+        data.push(HashMap::from([
+            ("x".to_string(), Value::Float(i as f64)),
+            ("y".to_string(), Value::Float(1.0)),
+            ("grp".to_string(), Value::Str("A".to_string())),
+        ]));
+    }
+    for i in 0..5 {
+        data.push(HashMap::from([
+            ("x".to_string(), Value::Float(i as f64 * 100.0)),
+            ("y".to_string(), Value::Float(2.0)),
+            ("grp".to_string(), Value::Str("B".to_string())),
+        ]));
+    }
+
+    let built = GGPlot::new(data)
+        .aes(Aes::new().x("x").y("y"))
+        .geom_point()
+        .facet_wrap_free("grp", None, FacetScales::FreeX)
+        .build();
+
+    assert_eq!(built.panel_scales.len(), 2);
+
+    let xs0 = built.panel_scales[0].get(&Aesthetic::X).unwrap();
+    let xs1 = built.panel_scales[1].get(&Aesthetic::X).unwrap();
+    let d0 = xs0.domain();
+    let d1 = xs1.domain();
+    assert!(d0.is_some() && d1.is_some());
+    let (_, max0) = d0.unwrap();
+    let (_, max1) = d1.unwrap();
+    assert!(
+        (max0 - max1).abs() > 50.0,
+        "X domains should differ: max0={max0}, max1={max1}"
+    );
+}
+
+#[test]
+fn tier7_facet_grid_free_renders() {
+    let mut data = Vec::new();
+    for i in 0..5 {
+        data.push(HashMap::from([
+            ("x".to_string(), Value::Float(i as f64)),
+            ("y".to_string(), Value::Float(i as f64)),
+            ("grp".to_string(), Value::Str("A".to_string())),
+        ]));
+    }
+    for i in 0..5 {
+        data.push(HashMap::from([
+            ("x".to_string(), Value::Float(i as f64 * 100.0)),
+            ("y".to_string(), Value::Float(i as f64 * 100.0)),
+            ("grp".to_string(), Value::Str("B".to_string())),
+        ]));
+    }
+
+    let path = temp_path("facet_grid_free.svg");
+    GGPlot::new(data)
+        .aes(Aes::new().x("x").y("y"))
+        .geom_point()
+        .facet_grid_free(Some("grp"), None, FacetScales::Free)
+        .save(&path)
+        .expect("facet_grid_free should render");
+
+    let content = std::fs::read_to_string(&path).unwrap();
+    assert!(content.contains("<svg"));
+    std::fs::remove_file(&path).ok();
+}

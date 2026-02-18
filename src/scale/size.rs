@@ -111,4 +111,14 @@ impl Scale for ScaleSizeContinuous {
         let (lo, hi) = self.range;
         Some(lo + t * (hi - lo))
     }
+
+    fn clone_box(&self) -> Box<dyn Scale> {
+        Box::new(self.clone())
+    }
+
+    fn reset_training(&mut self) {
+        self.min = f64::INFINITY;
+        self.max = f64::NEG_INFINITY;
+        self.trained = false;
+    }
 }

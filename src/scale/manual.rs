@@ -81,4 +81,12 @@ impl Scale for ScaleManual {
             Some((c.r, c.g, c.b))
         }
     }
+
+    fn clone_box(&self) -> Box<dyn Scale> {
+        Box::new(self.clone())
+    }
+
+    fn reset_training(&mut self) {
+        self.levels.clear();
+    }
 }

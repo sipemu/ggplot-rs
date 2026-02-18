@@ -167,6 +167,14 @@ impl ScaleSet {
     }
 }
 
+impl Clone for ScaleSet {
+    fn clone(&self) -> Self {
+        ScaleSet {
+            scales: self.scales.iter().map(|s| s.clone_box()).collect(),
+        }
+    }
+}
+
 impl Default for ScaleSet {
     fn default() -> Self {
         Self::new()

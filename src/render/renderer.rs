@@ -180,6 +180,7 @@ impl PlotRenderer {
             &plot_area,
             backend,
             &built.guide_legend,
+            &built.suppressed_aes,
         )?;
 
         // 10. Draw caption
@@ -335,9 +336,16 @@ impl PlotRenderer {
                 backend.draw_line(&[(x0, y1), (x0, y0)], &style)?;
             }
 
+            // Use per-panel scales if free facets, otherwise global scales
+            let panel_scale_set = if pi < built.panel_scales.len() {
+                &built.panel_scales[pi]
+            } else {
+                &built.scales
+            };
+
             // Gridlines + axes for edge panels
-            let x_scale = built.scales.get(&Aesthetic::X);
-            let y_scale = built.scales.get(&Aesthetic::Y);
+            let x_scale = panel_scale_set.get(&Aesthetic::X);
+            let y_scale = panel_scale_set.get(&Aesthetic::Y);
 
             if let (Some(xs), Some(ys)) = (x_scale, y_scale) {
                 if built.coord.gridlines() {
@@ -366,8 +374,6 @@ impl PlotRenderer {
             if pi < built.panels_data.len() {
                 for (li, layer_data) in built.panels_data[pi].iter().enumerate() {
                     if li < built.layers.len() && layer_data.nrows() > 0 {
-                        // Create a temporary backend-like setup using the panel rect
-                        // We need to use the panel_rect as the plot_area
                         let mut panel_backend = PanelBackendAdapter {
                             inner: backend,
                             panel_rect: panel_rect.clone(),
@@ -375,7 +381,7 @@ impl PlotRenderer {
                         built.layers[li].geom.draw(
                             layer_data,
                             built.coord.as_ref(),
-                            &built.scales,
+                            panel_scale_set,
                             theme,
                             &mut panel_backend,
                         )?;
@@ -469,6 +475,7 @@ impl PlotRenderer {
             &plot_area,
             backend,
             &built.guide_legend,
+            &built.suppressed_aes,
         )?;
 
         Ok(())

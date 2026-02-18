@@ -1,34 +1,32 @@
 use crate::aes::Aesthetic;
 use crate::data::Value;
-use crate::render::backend::Linetype;
+use crate::render::backend::PointShape;
 
 use super::Scale;
 
-/// Discrete linetype scale — maps categories to line dash patterns.
+/// Manual shape scale — maps named levels to user-specified point shapes.
 #[derive(Clone, Debug)]
-pub struct ScaleLinetypeDiscrete {
+pub struct ScaleShapeManual {
     name: String,
     levels: Vec<String>,
+    shapes: Vec<PointShape>,
 }
 
-impl Default for ScaleLinetypeDiscrete {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
-impl ScaleLinetypeDiscrete {
-    pub fn new() -> Self {
-        ScaleLinetypeDiscrete {
+impl ScaleShapeManual {
+    pub fn new(values: Vec<(&str, PointShape)>) -> Self {
+        let levels: Vec<String> = values.iter().map(|(k, _)| k.to_string()).collect();
+        let shapes: Vec<PointShape> = values.iter().map(|(_, s)| *s).collect();
+        ScaleShapeManual {
             name: String::new(),
-            levels: Vec::new(),
+            levels,
+            shapes,
         }
     }
 }
 
-impl Scale for ScaleLinetypeDiscrete {
+impl Scale for ScaleShapeManual {
     fn aesthetic(&self) -> Aesthetic {
-        Aesthetic::Linetype
+        Aesthetic::Shape
     }
 
     fn train(&mut self, values: &[Value]) {
@@ -69,10 +67,14 @@ impl Scale for ScaleLinetypeDiscrete {
         true
     }
 
-    fn map_to_linetype(&self, value: &Value) -> Option<Linetype> {
+    fn map_to_shape(&self, value: &Value) -> Option<PointShape> {
         let key = value.to_group_key();
         let idx = self.levels.iter().position(|l| l == &key).unwrap_or(0);
-        Some(Linetype::ALL[idx % Linetype::ALL.len()])
+        if idx < self.shapes.len() {
+            Some(self.shapes[idx])
+        } else {
+            Some(self.shapes[idx % self.shapes.len()])
+        }
     }
 
     fn clone_box(&self) -> Box<dyn Scale> {

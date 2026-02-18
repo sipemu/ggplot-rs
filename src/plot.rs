@@ -21,6 +21,7 @@ use crate::geom::count::GeomCount;
 use crate::geom::crossbar::GeomCrossbar;
 use crate::geom::curve::GeomCurve;
 use crate::geom::density::GeomDensity;
+use crate::geom::density2d::GeomDensity2d;
 use crate::geom::dotplot::GeomDotplot;
 use crate::geom::errorbar::GeomErrorbar;
 use crate::geom::freqpoly::GeomFreqpoly;
@@ -75,6 +76,7 @@ pub struct Layer {
     pub stat: Box<dyn Stat>,
     pub position: Box<dyn Position>,
     pub params: GeomParams,
+    pub show_legend: Option<bool>,
 }
 
 /// The top-level plot specification — builder pattern.
@@ -408,6 +410,14 @@ impl GGPlot {
         self.add_geom(geom)
     }
 
+    pub fn geom_density2d(self) -> Self {
+        self.add_geom(GeomDensity2d::default())
+    }
+
+    pub fn geom_density2d_with(self, geom: GeomDensity2d) -> Self {
+        self.add_geom(geom)
+    }
+
     pub fn geom_blank(self) -> Self {
         self.add_geom(GeomBlank)
     }
@@ -423,6 +433,7 @@ impl GGPlot {
             stat,
             position,
             params,
+            show_legend: None,
         });
         self
     }
@@ -457,6 +468,15 @@ impl GGPlot {
     pub fn layer_aes(mut self, mapping: Aes) -> Self {
         if let Some(layer) = self.layers.last_mut() {
             layer.mapping = mapping;
+        }
+        self
+    }
+
+    /// Control whether the most recently added layer contributes to the legend.
+    /// `true` = always show, `false` = always hide, default (None) = auto.
+    pub fn show_legend(mut self, show: bool) -> Self {
+        if let Some(layer) = self.layers.last_mut() {
+            layer.show_legend = Some(show);
         }
         self
     }
@@ -603,6 +623,22 @@ impl GGPlot {
         use crate::scale::color::ScaleColorDiscrete;
         let s = ScaleColorDiscrete::new(crate::aes::Aesthetic::Fill).with_named_palette(&name);
         self.scale_fill(s)
+    }
+
+    pub fn scale_linetype_manual(
+        self,
+        values: Vec<(&str, crate::render::backend::Linetype)>,
+    ) -> Self {
+        let s = crate::scale::linetype_manual::ScaleLinetypeManual::new(values);
+        self.scale_color(s)
+    }
+
+    pub fn scale_shape_manual(
+        self,
+        values: Vec<(&str, crate::render::backend::PointShape)>,
+    ) -> Self {
+        let s = crate::scale::shape_manual::ScaleShapeManual::new(values);
+        self.scale_color(s)
     }
 
     pub fn scale_color_grey(self) -> Self {
@@ -942,10 +978,16 @@ impl GGPlot {
 
     // ─── Build and Render ────────────────────────────────────────
 
+    /// Build the plot without rendering, returning errors on validation failure.
+    pub fn try_build(self) -> Result<crate::build::BuiltPlot, GGError> {
+        PlotBuilder::build(self)
+    }
+
     /// Build the plot without rendering (analogous to R's ggplot_build()).
     /// Returns the fully computed BuiltPlot with layer data ready for inspection.
+    /// Panics on validation errors — use `try_build()` for error handling.
     pub fn build(self) -> crate::build::BuiltPlot {
-        PlotBuilder::build(self)
+        self.try_build().expect("plot build failed")
     }
 
     /// Build and save the plot to a file. Format determined by extension.
@@ -966,7 +1008,7 @@ impl GGPlot {
         let x_label = plot.labels.x.clone();
         let y_label = plot.labels.y.clone();
 
-        let mut built = PlotBuilder::build(plot);
+        let mut built = PlotBuilder::build(plot)?;
 
         // Apply user label overrides to scales
         if let Some(ref label) = x_label {
@@ -1056,6 +1098,7 @@ pub enum GGError {
     Render(RenderError),
     UnsupportedFormat(String),
     Io(std::io::Error),
+    ValidationError(String),
 }
 
 impl std::fmt::Display for GGError {
@@ -1064,6 +1107,7 @@ impl std::fmt::Display for GGError {
             GGError::Render(e) => write!(f, "Render error: {e}"),
             GGError::UnsupportedFormat(ext) => write!(f, "Unsupported output format: {ext}"),
             GGError::Io(e) => write!(f, "IO error: {e}"),
+            GGError::ValidationError(msg) => write!(f, "Validation error: {msg}"),
         }
     }
 }

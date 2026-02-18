@@ -180,4 +180,14 @@ impl Scale for ScaleDateTime {
         self.max = max;
         self.trained = true;
     }
+
+    fn clone_box(&self) -> Box<dyn Scale> {
+        Box::new(self.clone())
+    }
+
+    fn reset_training(&mut self) {
+        self.min = f64::INFINITY;
+        self.max = f64::NEG_INFINITY;
+        self.trained = false;
+    }
 }

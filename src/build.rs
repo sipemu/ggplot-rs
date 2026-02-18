@@ -2,9 +2,9 @@ use crate::aes::{mapping::apply_after_stat, mapping::resolve_mappings, Aes, Aest
 use crate::annotate::Annotation;
 use crate::coord::Coord;
 use crate::data::DataFrame;
-use crate::facet::{Facet, Panel};
+use crate::facet::{Facet, FacetScales, Panel};
 use crate::geom::Geom;
-use crate::plot::{GGPlot, Labels, Layer};
+use crate::plot::{GGError, GGPlot, Labels, Layer};
 use crate::position::PositionParams;
 use crate::scale::ScaleSet;
 use crate::theme::Theme;
@@ -13,6 +13,7 @@ use crate::theme::Theme;
 pub struct BuiltLayer {
     pub data: DataFrame,
     pub geom: Box<dyn Geom>,
+    pub show_legend: Option<bool>,
 }
 
 /// A fully built plot ready for rendering.
@@ -28,13 +29,17 @@ pub struct BuiltPlot {
     pub panels_data: Vec<Vec<DataFrame>>,
     pub annotations: Vec<Annotation>,
     pub guide_legend: crate::guide::config::GuideLegend,
+    /// Aesthetics suppressed from the legend (all layers with that aes set show_legend=false).
+    pub suppressed_aes: std::collections::HashSet<Aesthetic>,
+    /// Per-panel scale sets for free facets. Empty when FacetScales::Fixed.
+    pub panel_scales: Vec<ScaleSet>,
 }
 
 /// The grammar pipeline: transforms a GGPlot specification into render-ready data.
 pub struct PlotBuilder;
 
 impl PlotBuilder {
-    pub fn build(plot: GGPlot) -> BuiltPlot {
+    pub fn build(plot: GGPlot) -> Result<BuiltPlot, GGError> {
         let GGPlot {
             data: plot_data,
             mapping: plot_mapping,
@@ -58,7 +63,7 @@ impl PlotBuilder {
         let mut built_layers = Vec::new();
 
         for layer in layers {
-            let built = Self::build_layer(layer, &plot_data, &plot_mapping, &mut scale_set);
+            let built = Self::build_layer(layer, &plot_data, &plot_mapping, &mut scale_set)?;
             built_layers.push(built);
         }
 
@@ -78,7 +83,18 @@ impl PlotBuilder {
         // Compute facet panels
         let (panels, panels_data) = Self::compute_facets(&facet, &built_layers, &plot_data);
 
-        BuiltPlot {
+        // Compute suppressed aesthetics from show_legend flags.
+        let suppressed_aes = Self::compute_suppressed_aes(&built_layers);
+
+        // Compute per-panel scales for free facets
+        let facet_scales_mode = match &facet {
+            Facet::Wrap { scales, .. } => scales.clone(),
+            Facet::Grid { scales, .. } => scales.clone(),
+            Facet::None => FacetScales::Fixed,
+        };
+        let panel_scales = Self::compute_panel_scales(&facet_scales_mode, &panels_data, &scale_set);
+
+        Ok(BuiltPlot {
             layers: built_layers,
             scales: scale_set,
             coord,
@@ -89,7 +105,9 @@ impl PlotBuilder {
             panels_data,
             annotations,
             guide_legend,
-        }
+            suppressed_aes,
+            panel_scales,
+        })
     }
 
     fn compute_facets(
@@ -284,7 +302,7 @@ impl PlotBuilder {
         plot_data: &DataFrame,
         plot_mapping: &Aes,
         scale_set: &mut ScaleSet,
-    ) -> BuiltLayer {
+    ) -> Result<BuiltLayer, GGError> {
         let Layer {
             data: layer_data,
             mapping: layer_mapping,
@@ -292,6 +310,7 @@ impl PlotBuilder {
             stat,
             position,
             params: _,
+            show_legend,
         } = layer;
 
         // Step 1: Resolve data — use layer data if provided, else plot data
@@ -302,6 +321,21 @@ impl PlotBuilder {
 
         // Step 3: Evaluate aes — rename columns to canonical names
         let mut working_data = resolve_mappings(&source_data, &merged_mapping);
+
+        // Step 3b: Validate required aesthetics
+        let required = geom.required_aes();
+        if !required.is_empty() {
+            for aes in &required {
+                let col_name = aes.col_name();
+                if !working_data.has_column(col_name) {
+                    return Err(GGError::ValidationError(format!(
+                        "geom_{} requires aesthetic '{}' but it was not provided",
+                        geom.name(),
+                        col_name
+                    )));
+                }
+            }
+        }
 
         // Step 4: Ensure scales exist for each mapped aesthetic
         for m in &merged_mapping.mappings {
@@ -379,10 +413,11 @@ impl PlotBuilder {
         // Step 8: Train scales on this layer's data
         scale_set.train_layer(&working_data);
 
-        BuiltLayer {
+        Ok(BuiltLayer {
             data: working_data,
             geom,
-        }
+            show_legend,
+        })
     }
 
     /// Remove rows where x or y falls outside scale limits set via xlim/ylim.
@@ -441,6 +476,84 @@ impl PlotBuilder {
             }
         }
         *data = result;
+    }
+
+    /// Compute per-panel scale sets for free facet scales.
+    /// For each panel, clones the base scale set, resets freed axes, and retrains on panel data.
+    fn compute_panel_scales(
+        facet_scales: &FacetScales,
+        panels_data: &[Vec<DataFrame>],
+        base_scales: &ScaleSet,
+    ) -> Vec<ScaleSet> {
+        if matches!(facet_scales, FacetScales::Fixed) || panels_data.is_empty() {
+            return vec![];
+        }
+
+        let free_x = matches!(facet_scales, FacetScales::FreeX | FacetScales::Free);
+        let free_y = matches!(facet_scales, FacetScales::FreeY | FacetScales::Free);
+
+        panels_data
+            .iter()
+            .map(|panel_layers| {
+                let mut panel_set = base_scales.clone();
+
+                // Reset freed axis scales
+                if free_x {
+                    if let Some(s) = panel_set.get_mut(&Aesthetic::X) {
+                        s.reset_training();
+                    }
+                }
+                if free_y {
+                    if let Some(s) = panel_set.get_mut(&Aesthetic::Y) {
+                        s.reset_training();
+                    }
+                }
+
+                // Retrain on this panel's data
+                for layer_data in panel_layers {
+                    panel_set.train_layer(layer_data);
+                }
+
+                panel_set
+            })
+            .collect()
+    }
+
+    /// Compute which aesthetics should be suppressed from the legend.
+    /// An aesthetic is suppressed if every layer that has the corresponding column
+    /// sets show_legend=Some(false), and no layer has it as None or Some(true).
+    fn compute_suppressed_aes(built_layers: &[BuiltLayer]) -> std::collections::HashSet<Aesthetic> {
+        use std::collections::HashSet;
+        let legend_aes = [
+            Aesthetic::Color,
+            Aesthetic::Fill,
+            Aesthetic::Shape,
+            Aesthetic::Linetype,
+            Aesthetic::Size,
+            Aesthetic::Alpha,
+        ];
+        let mut suppressed = HashSet::new();
+        for aes in &legend_aes {
+            let col_name = aes.col_name();
+            let mut any_has = false;
+            let mut all_hidden = true;
+            for bl in built_layers {
+                if bl.data.has_column(col_name) {
+                    any_has = true;
+                    match bl.show_legend {
+                        Some(false) => {} // still hidden
+                        _ => {
+                            all_hidden = false;
+                            break;
+                        }
+                    }
+                }
+            }
+            if any_has && all_hidden {
+                suppressed.insert(aes.clone());
+            }
+        }
+        suppressed
     }
 
     /// Detect which columns to group by for statistics.

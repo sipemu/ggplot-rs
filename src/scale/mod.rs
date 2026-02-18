@@ -8,11 +8,13 @@ pub mod gradient;
 pub mod gradient_n;
 pub mod grey;
 pub mod linetype;
+pub mod linetype_manual;
 pub mod manual;
 pub mod palettes;
 pub mod scale_set;
 pub mod sec_axis;
 pub mod shape;
+pub mod shape_manual;
 pub mod size;
 pub mod transform;
 pub mod util;
@@ -94,4 +96,16 @@ pub trait Scale: Send + Sync {
     fn filter_limits(&self) -> Option<(f64, f64)> {
         None
     }
+
+    /// Return the trained data domain (min, max) for continuous scales.
+    /// Used by the colorbar legend to pass data-space values to map_to_color().
+    fn domain(&self) -> Option<(f64, f64)> {
+        None
+    }
+
+    /// Clone this scale into a boxed trait object.
+    fn clone_box(&self) -> Box<dyn Scale>;
+
+    /// Reset training state so the scale can be retrained on new data.
+    fn reset_training(&mut self) {}
 }

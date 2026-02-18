@@ -9,6 +9,7 @@ pub mod count;
 pub mod crossbar;
 pub mod curve;
 pub mod density;
+pub mod density2d;
 pub mod dotplot;
 pub mod errorbar;
 pub mod freqpoly;
