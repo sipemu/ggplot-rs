@@ -273,22 +273,34 @@ impl<'a, DB: DrawingBackend> DrawBackend for PlottersAdapter<'a, DB> {
         bottom_right: (f64, f64),
         style: &RectStyle,
     ) -> Result<(), RenderError> {
-        // Clamp rect to plot area
-        let clamped_tl = clip_point(top_left.0, top_left.1, &self.plot_area);
-        let clamped_br = clip_point(bottom_right.0, bottom_right.1, &self.plot_area);
+        let (tl, br) = if style.clip {
+            // Clamp rect to plot area (data elements only)
+            let clamped_tl = clip_point(top_left.0, top_left.1, &self.plot_area);
+            let clamped_br = clip_point(bottom_right.0, bottom_right.1, &self.plot_area);
 
-        // Skip if fully collapsed after clamping
-        if (clamped_tl.0 - clamped_br.0).abs() < 0.5 && (clamped_tl.1 - clamped_br.1).abs() < 0.5 {
-            // But don't skip if original rect was already small (it's a real data rect)
-            if (top_left.0 - bottom_right.0).abs() > 1.0
-                || (top_left.1 - bottom_right.1).abs() > 1.0
+            // Skip if fully collapsed after clamping
+            if (clamped_tl.0 - clamped_br.0).abs() < 0.5
+                && (clamped_tl.1 - clamped_br.1).abs() < 0.5
             {
-                return Ok(());
+                // But don't skip if original rect was already small (it's a real data rect)
+                if (top_left.0 - bottom_right.0).abs() > 1.0
+                    || (top_left.1 - bottom_right.1).abs() > 1.0
+                {
+                    return Ok(());
+                }
             }
-        }
 
-        let tl = (clamped_tl.0 as i32, clamped_tl.1 as i32);
-        let br = (clamped_br.0 as i32, clamped_br.1 as i32);
+            (
+                (clamped_tl.0 as i32, clamped_tl.1 as i32),
+                (clamped_br.0 as i32, clamped_br.1 as i32),
+            )
+        } else {
+            // No clipping — backgrounds, strips, legends
+            (
+                (top_left.0 as i32, top_left.1 as i32),
+                (bottom_right.0 as i32, bottom_right.1 as i32),
+            )
+        };
 
         if let Some(fill) = style.fill {
             let fill_color = to_rgba(fill, style.alpha);
@@ -324,7 +336,8 @@ impl<'a, DB: DrawingBackend> DrawBackend for PlottersAdapter<'a, DB> {
         style: &TextStyle,
     ) -> Result<(), RenderError> {
         let color = to_rgba(style.color, 1.0);
-        let font = ("sans-serif", style.size).into_font();
+        let family = style.family.as_deref().unwrap_or("sans-serif");
+        let font = (family, style.size).into_font();
 
         let pos_adj = match style.anchor {
             TextAnchor::Start => plotters::style::text_anchor::Pos::new(
@@ -341,29 +354,45 @@ impl<'a, DB: DrawingBackend> DrawBackend for PlottersAdapter<'a, DB> {
             ),
         };
 
-        let text_style = plotters::prelude::TextStyle::from(font)
-            .color(&color)
-            .pos(pos_adj);
-
-        if style.angle != 0.0 {
-            let transform = match style.angle as i32 {
-                270 | -90 => plotters::style::text_anchor::Pos::new(
-                    plotters::style::text_anchor::HPos::Center,
-                    plotters::style::text_anchor::VPos::Center,
+        let angle_i = style.angle.round() as i32;
+        if angle_i != 0 {
+            let (font_transform, rotated_pos) = match angle_i.rem_euclid(360) {
+                80..=100 => (
+                    FontTransform::Rotate90,
+                    plotters::style::text_anchor::Pos::new(
+                        plotters::style::text_anchor::HPos::Center,
+                        plotters::style::text_anchor::VPos::Center,
+                    ),
                 ),
-                _ => pos_adj,
+                170..=190 => (
+                    FontTransform::Rotate180,
+                    plotters::style::text_anchor::Pos::new(
+                        plotters::style::text_anchor::HPos::Center,
+                        plotters::style::text_anchor::VPos::Center,
+                    ),
+                ),
+                // 270° or -90° or 45° approximation (common ggplot2 x-axis rotation)
+                _ => (
+                    FontTransform::Rotate270,
+                    plotters::style::text_anchor::Pos::new(
+                        plotters::style::text_anchor::HPos::Right,
+                        plotters::style::text_anchor::VPos::Center,
+                    ),
+                ),
             };
 
-            let text_style =
-                plotters::prelude::TextStyle::from(("sans-serif", style.size).into_font())
-                    .color(&color)
-                    .transform(FontTransform::Rotate270)
-                    .pos(transform);
+            let text_style = plotters::prelude::TextStyle::from((family, style.size).into_font())
+                .color(&color)
+                .transform(font_transform)
+                .pos(rotated_pos);
 
             self.area
                 .draw_text(text, &text_style, (pos.0 as i32, pos.1 as i32))
                 .map_err(map_err)?;
         } else {
+            let text_style = plotters::prelude::TextStyle::from(font)
+                .color(&color)
+                .pos(pos_adj);
             self.area
                 .draw_text(text, &text_style, (pos.0 as i32, pos.1 as i32))
                 .map_err(map_err)?;

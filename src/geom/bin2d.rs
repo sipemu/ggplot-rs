@@ -77,6 +77,7 @@ impl Geom for GeomBin2d {
                     stroke: Some(self.color),
                     stroke_width: self.line_width,
                     alpha: self.alpha,
+                    clip: true,
                 },
             )?;
         }

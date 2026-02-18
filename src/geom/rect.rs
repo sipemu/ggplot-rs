@@ -79,6 +79,7 @@ impl Geom for GeomRect {
                     stroke: Some(self.color),
                     stroke_width: self.line_width,
                     alpha: self.alpha,
+                    clip: true,
                 },
             )?;
         }

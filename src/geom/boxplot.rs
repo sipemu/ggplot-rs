@@ -87,6 +87,7 @@ impl Geom for GeomBoxplot {
                     stroke: Some(self.color),
                     stroke_width: 1.0,
                     alpha: self.alpha,
+                    clip: true,
                 },
             )?;
 

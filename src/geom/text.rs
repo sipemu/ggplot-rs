@@ -94,6 +94,7 @@ impl Geom for GeomText {
                     size: self.size,
                     anchor,
                     angle: 0.0,
+                    family: None,
                 },
             )?;
         }
@@ -208,6 +209,7 @@ impl Geom for GeomLabel {
                     stroke: Some(self.color),
                     stroke_width: 0.5,
                     alpha: self.alpha,
+                    clip: true,
                 },
             )?;
 
@@ -221,6 +223,7 @@ impl Geom for GeomLabel {
                     size: self.size,
                     anchor,
                     angle: 0.0,
+                    family: None,
                 },
             )?;
         }

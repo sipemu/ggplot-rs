@@ -5,6 +5,7 @@ pub mod datetime;
 pub mod discrete;
 pub mod format;
 pub mod gradient;
+pub mod gradient_n;
 pub mod linetype;
 pub mod manual;
 pub mod palettes;

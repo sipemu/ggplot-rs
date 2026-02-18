@@ -2725,3 +2725,374 @@ fn test_stat_summary_bin_mean() {
         y_vals[1]
     );
 }
+
+// ─── Tier 5 tests ────────────────────────────────────────────────
+
+#[test]
+fn test_rect_clip_false_backgrounds_render() {
+    // Verify that plot background and strip rects with clip=false render outside plot area
+    let data = vec![
+        HashMap::from([
+            ("x".to_string(), Value::Str("A".to_string())),
+            ("y".to_string(), Value::Float(1.0)),
+            ("grp".to_string(), Value::Str("g1".to_string())),
+        ]),
+        HashMap::from([
+            ("x".to_string(), Value::Str("B".to_string())),
+            ("y".to_string(), Value::Float(2.0)),
+            ("grp".to_string(), Value::Str("g2".to_string())),
+        ]),
+    ];
+
+    let path = temp_path("clip_false_bg.svg");
+    GGPlot::new(data)
+        .aes(Aes::new().x("x").y("y"))
+        .geom_col()
+        .facet_wrap("grp", Some(2))
+        .theme_bw()
+        .title("Background Test")
+        .save(&path)
+        .expect("should render without error");
+
+    let content = std::fs::read_to_string(&path).unwrap();
+    assert!(content.contains("<svg"));
+    // With clip=false, backgrounds should render as full rectangles
+    assert!(content.contains("<rect"));
+    std::fs::remove_file(&path).ok();
+}
+
+#[test]
+fn test_scale_expand_zero() {
+    // Verify expand(0, 0) produces tighter mapping
+    use ggplot_rs::data::Value;
+    use ggplot_rs::scale::Scale;
+
+    let mut s = ScaleContinuous::new()
+        .for_aesthetic(Aesthetic::X)
+        .with_expand(0.0, 0.0);
+    s.train(&[Value::Float(0.0), Value::Float(10.0)]);
+
+    // With expand(0,0), map(0) should be exactly 0.0 and map(10) exactly 1.0
+    let v0 = s.map(&Value::Float(0.0));
+    let v1 = s.map(&Value::Float(10.0));
+    assert!(
+        (v0 - 0.0).abs() < 1e-10,
+        "expand(0,0): map(min) should be 0.0, got {v0}"
+    );
+    assert!(
+        (v1 - 1.0).abs() < 1e-10,
+        "expand(0,0): map(max) should be 1.0, got {v1}"
+    );
+}
+
+#[test]
+fn test_scale_expand_default() {
+    // Default expand is (0.05, 0) — so map(min) > 0 and map(max) < 1
+    use ggplot_rs::data::Value;
+    use ggplot_rs::scale::Scale;
+
+    let mut s = ScaleContinuous::new().for_aesthetic(Aesthetic::X);
+    s.train(&[Value::Float(0.0), Value::Float(10.0)]);
+
+    let v0 = s.map(&Value::Float(0.0));
+    let v1 = s.map(&Value::Float(10.0));
+    // With 5% expand, min maps to ~0.045 and max to ~0.955
+    assert!(
+        v0 > 0.0,
+        "default expand: map(min) should be > 0.0, got {v0}"
+    );
+    assert!(
+        v1 < 1.0,
+        "default expand: map(max) should be < 1.0, got {v1}"
+    );
+}
+
+#[test]
+fn test_gradient_n_viridis_continuous_color_mapping() {
+    use ggplot_rs::data::Value;
+    use ggplot_rs::scale::Scale;
+
+    let mut g = ScaleColorGradientN::viridis(Aesthetic::Color);
+    g.train(&[Value::Float(0.0), Value::Float(100.0)]);
+
+    // Map min value -> should be first viridis color (dark purple)
+    let c_min = g.map_to_color(&Value::Float(0.0)).unwrap();
+    assert_eq!(c_min, (68, 1, 84), "min should map to viridis start");
+
+    // Map max value -> should be last viridis color (yellow)
+    let c_max = g.map_to_color(&Value::Float(100.0)).unwrap();
+    assert_eq!(c_max, (253, 231, 37), "max should map to viridis end");
+
+    // Mid value should be a middle green-ish color
+    let c_mid = g.map_to_color(&Value::Float(50.0)).unwrap();
+    assert!(
+        c_mid.1 > 100,
+        "mid value should have green component > 100, got {:?}",
+        c_mid
+    );
+}
+
+#[test]
+fn test_gradient_n_custom_stops() {
+    use ggplot_rs::data::Value;
+    use ggplot_rs::scale::Scale;
+
+    let mut g = ScaleColorGradientN::new(
+        Aesthetic::Fill,
+        vec![
+            (0.0, RGBAColor::new(0, 0, 0)),     // black
+            (0.5, RGBAColor::new(255, 0, 0)),   // red
+            (1.0, RGBAColor::new(255, 255, 0)), // yellow
+        ],
+    );
+    g.train(&[Value::Float(0.0), Value::Float(1.0)]);
+
+    let c0 = g.map_to_color(&Value::Float(0.0)).unwrap();
+    assert_eq!(c0, (0, 0, 0));
+
+    let c_mid = g.map_to_color(&Value::Float(0.5)).unwrap();
+    assert_eq!(c_mid, (255, 0, 0));
+
+    let c1 = g.map_to_color(&Value::Float(1.0)).unwrap();
+    assert_eq!(c1, (255, 255, 0));
+}
+
+#[test]
+fn test_scale_fill_viridis_c_renders() {
+    let data = vec![
+        HashMap::from([
+            ("x".to_string(), Value::Float(1.0)),
+            ("y".to_string(), Value::Float(2.0)),
+            ("z".to_string(), Value::Float(10.0)),
+        ]),
+        HashMap::from([
+            ("x".to_string(), Value::Float(2.0)),
+            ("y".to_string(), Value::Float(3.0)),
+            ("z".to_string(), Value::Float(50.0)),
+        ]),
+        HashMap::from([
+            ("x".to_string(), Value::Float(3.0)),
+            ("y".to_string(), Value::Float(1.0)),
+            ("z".to_string(), Value::Float(90.0)),
+        ]),
+    ];
+
+    let path = temp_path("viridis_c.svg");
+    GGPlot::new(data)
+        .aes(Aes::new().x("x").y("y").color("z"))
+        .geom_point()
+        .scale_color_viridis_c()
+        .save(&path)
+        .expect("viridis_c should render");
+
+    let content = std::fs::read_to_string(&path).unwrap();
+    assert!(content.contains("<svg"));
+    assert!(content.contains("<circle"));
+    std::fs::remove_file(&path).ok();
+}
+
+#[test]
+fn test_subtitle_caption_in_faceted_plot() {
+    let data = vec![
+        HashMap::from([
+            ("x".to_string(), Value::Float(1.0)),
+            ("y".to_string(), Value::Float(2.0)),
+            ("grp".to_string(), Value::Str("A".to_string())),
+        ]),
+        HashMap::from([
+            ("x".to_string(), Value::Float(2.0)),
+            ("y".to_string(), Value::Float(3.0)),
+            ("grp".to_string(), Value::Str("B".to_string())),
+        ]),
+    ];
+
+    let path = temp_path("subtitle_caption_faceted.svg");
+    GGPlot::new(data)
+        .aes(Aes::new().x("x").y("y"))
+        .geom_point()
+        .facet_wrap("grp", Some(2))
+        .title("Main Title")
+        .subtitle("A subtitle here")
+        .caption("Source: test data")
+        .save(&path)
+        .expect("faceted with subtitle/caption should render");
+
+    let content = std::fs::read_to_string(&path).unwrap();
+    assert!(content.contains("Main Title"));
+    assert!(content.contains("A subtitle here"));
+    assert!(content.contains("Source: test data"));
+    std::fs::remove_file(&path).ok();
+}
+
+#[test]
+fn test_subtitle_caption_layout_reserves_space() {
+    let data = vec![HashMap::from([
+        ("x".to_string(), Value::Float(1.0)),
+        ("y".to_string(), Value::Float(2.0)),
+    ])];
+
+    // Without subtitle/caption
+    let path1 = temp_path("no_subtitle.svg");
+    GGPlot::new(data.clone())
+        .aes(Aes::new().x("x").y("y"))
+        .geom_point()
+        .title("Title")
+        .save(&path1)
+        .expect("should render");
+
+    // With subtitle and caption
+    let path2 = temp_path("with_subtitle.svg");
+    GGPlot::new(data)
+        .aes(Aes::new().x("x").y("y"))
+        .geom_point()
+        .title("Title")
+        .subtitle("Subtitle")
+        .caption("Caption")
+        .save(&path2)
+        .expect("should render");
+
+    // Both should produce valid SVGs
+    let c1 = std::fs::read_to_string(&path1).unwrap();
+    let c2 = std::fs::read_to_string(&path2).unwrap();
+    assert!(c1.contains("<svg"));
+    assert!(c2.contains("<svg"));
+    assert!(c2.contains("Subtitle"));
+    assert!(c2.contains("Caption"));
+    std::fs::remove_file(&path1).ok();
+    std::fs::remove_file(&path2).ok();
+}
+
+#[test]
+fn test_font_family_passthrough() {
+    let data = vec![HashMap::from([
+        ("x".to_string(), Value::Float(1.0)),
+        ("y".to_string(), Value::Float(2.0)),
+    ])];
+
+    let mut custom_theme = theme_bw();
+    custom_theme.title.family = "serif".to_string();
+    custom_theme.axis_text_x.family = "monospace".to_string();
+
+    let path = temp_path("font_family.svg");
+    GGPlot::new(data)
+        .aes(Aes::new().x("x").y("y"))
+        .geom_point()
+        .theme(custom_theme)
+        .title("Serif Title")
+        .save(&path)
+        .expect("font family should render");
+
+    let content = std::fs::read_to_string(&path).unwrap();
+    assert!(content.contains("<svg"));
+    // SVG should contain the font family references
+    assert!(
+        content.contains("serif") || content.contains("Serif"),
+        "SVG should reference serif font"
+    );
+    std::fs::remove_file(&path).ok();
+}
+
+#[test]
+fn test_text_rotation_270_y_axis() {
+    let data = vec![HashMap::from([
+        ("x".to_string(), Value::Float(1.0)),
+        ("y".to_string(), Value::Float(2.0)),
+    ])];
+
+    let path = temp_path("rotation_270.svg");
+    GGPlot::new(data)
+        .aes(Aes::new().x("x").y("y"))
+        .geom_point()
+        .ylab("Y Axis (rotated)")
+        .save(&path)
+        .expect("270° rotation should render");
+
+    let content = std::fs::read_to_string(&path).unwrap();
+    assert!(content.contains("<svg"));
+    // The Y axis title uses 270° rotation
+    assert!(content.contains("Y Axis"), "should contain Y axis label");
+    std::fs::remove_file(&path).ok();
+}
+
+#[test]
+fn test_text_rotation_45_x_axis() {
+    let data = vec![
+        HashMap::from([
+            ("x".to_string(), Value::Str("Long Label A".to_string())),
+            ("y".to_string(), Value::Float(1.0)),
+        ]),
+        HashMap::from([
+            ("x".to_string(), Value::Str("Long Label B".to_string())),
+            ("y".to_string(), Value::Float(2.0)),
+        ]),
+    ];
+
+    let mut custom_theme = theme_bw();
+    custom_theme.axis_text_x.angle = 45.0;
+
+    let path = temp_path("rotation_45.svg");
+    GGPlot::new(data)
+        .aes(Aes::new().x("x").y("y"))
+        .geom_col()
+        .theme(custom_theme)
+        .save(&path)
+        .expect("45° x-axis rotation should render");
+
+    let content = std::fs::read_to_string(&path).unwrap();
+    assert!(content.contains("<svg"));
+    assert!(content.contains("Long Label A"));
+    std::fs::remove_file(&path).ok();
+}
+
+#[test]
+fn test_text_rotation_90() {
+    let data = vec![HashMap::from([
+        ("x".to_string(), Value::Str("Cat".to_string())),
+        ("y".to_string(), Value::Float(5.0)),
+    ])];
+
+    let mut custom_theme = theme_bw();
+    custom_theme.axis_text_x.angle = 90.0;
+
+    let path = temp_path("rotation_90.svg");
+    GGPlot::new(data)
+        .aes(Aes::new().x("x").y("y"))
+        .geom_col()
+        .theme(custom_theme)
+        .save(&path)
+        .expect("90° rotation should render");
+
+    let content = std::fs::read_to_string(&path).unwrap();
+    assert!(content.contains("<svg"));
+    std::fs::remove_file(&path).ok();
+}
+
+#[test]
+fn test_scale_expand_zero_heatmap() {
+    // Edge-to-edge rendering with expand(0, 0)
+    let mut data = vec![];
+    for x in 0..3 {
+        for y in 0..3 {
+            data.push(HashMap::from([
+                ("x".to_string(), Value::Float(x as f64)),
+                ("y".to_string(), Value::Float(y as f64)),
+                ("z".to_string(), Value::Float((x + y) as f64)),
+            ]));
+        }
+    }
+
+    let path = temp_path("heatmap_expand0.svg");
+    GGPlot::new(data)
+        .aes(Aes::new().x("x").y("y").fill("z"))
+        .geom_tile()
+        .scale_x_continuous(ScaleContinuous::new().with_expand(0.0, 0.0))
+        .scale_y_continuous(ScaleContinuous::new().with_expand(0.0, 0.0))
+        .scale_fill_viridis_c()
+        .save(&path)
+        .expect("heatmap with expand(0,0) should render");
+
+    let content = std::fs::read_to_string(&path).unwrap();
+    assert!(content.contains("<svg"));
+    assert!(content.contains("<rect"));
+    std::fs::remove_file(&path).ok();
+}

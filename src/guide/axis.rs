@@ -53,6 +53,17 @@ pub fn draw_x_axis(
         }
 
         if theme.axis_text_x.visible {
+            let family = if theme.axis_text_x.family.is_empty() {
+                None
+            } else {
+                Some(theme.axis_text_x.family.clone())
+            };
+            // Adjust anchor for rotated labels
+            let anchor = if theme.axis_text_x.angle.abs() > 10.0 {
+                TextAnchor::End
+            } else {
+                TextAnchor::Middle
+            };
             backend.draw_text(
                 label,
                 (
@@ -62,8 +73,9 @@ pub fn draw_x_axis(
                 &TextStyle {
                     color: theme.axis_text_x.color,
                     size: theme.axis_text_x.size,
-                    anchor: TextAnchor::Middle,
+                    anchor,
                     angle: theme.axis_text_x.angle,
+                    family,
                 },
             )?;
         }
@@ -79,6 +91,11 @@ pub fn draw_x_axis(
             + theme.axis_text_x.size
             + 8.0
             + theme.axis_title_x.size / 2.0;
+        let family = if theme.axis_title_x.family.is_empty() {
+            None
+        } else {
+            Some(theme.axis_title_x.family.clone())
+        };
         backend.draw_text(
             title,
             (center_x, title_y),
@@ -87,6 +104,7 @@ pub fn draw_x_axis(
                 size: theme.axis_title_x.size,
                 anchor: TextAnchor::Middle,
                 angle: 0.0,
+                family,
             },
         )?;
     }
@@ -139,6 +157,11 @@ pub fn draw_y_axis(
         }
 
         if theme.axis_text_y.visible {
+            let family = if theme.axis_text_y.family.is_empty() {
+                None
+            } else {
+                Some(theme.axis_text_y.family.clone())
+            };
             backend.draw_text(
                 label,
                 (plot_area.x - tick_len - theme.legend_spacing, py),
@@ -147,6 +170,7 @@ pub fn draw_y_axis(
                     size: theme.axis_text_y.size,
                     anchor: TextAnchor::End,
                     angle: 0.0,
+                    family,
                 },
             )?;
         }
@@ -157,6 +181,11 @@ pub fn draw_y_axis(
     if !title.is_empty() && theme.axis_title_y.visible {
         let title_x = plot_area.x - tick_len - theme.axis_text_y.size * 3.5 - theme.legend_spacing;
         let center_y = plot_area.y + plot_area.height / 2.0;
+        let family = if theme.axis_title_y.family.is_empty() {
+            None
+        } else {
+            Some(theme.axis_title_y.family.clone())
+        };
         backend.draw_text(
             title,
             (title_x, center_y),
@@ -165,6 +194,7 @@ pub fn draw_y_axis(
                 size: theme.axis_title_y.size,
                 anchor: TextAnchor::Middle,
                 angle: 270.0,
+                family,
             },
         )?;
     }
@@ -229,6 +259,11 @@ pub fn draw_sec_y_axis(
                 label.clone()
             };
 
+            let family = if theme.axis_text_y.family.is_empty() {
+                None
+            } else {
+                Some(theme.axis_text_y.family.clone())
+            };
             backend.draw_text(
                 &sec_label,
                 (right_x + tick_len + theme.legend_spacing, py),
@@ -237,6 +272,7 @@ pub fn draw_sec_y_axis(
                     size: theme.axis_text_y.size,
                     anchor: TextAnchor::Start,
                     angle: 0.0,
+                    family,
                 },
             )?;
         }
@@ -246,6 +282,11 @@ pub fn draw_sec_y_axis(
     if !sec_axis.name.is_empty() && theme.axis_title_y.visible {
         let title_x = right_x + tick_len + theme.axis_text_y.size * 3.5 + theme.legend_spacing;
         let center_y = plot_area.y + plot_area.height / 2.0;
+        let family = if theme.axis_title_y.family.is_empty() {
+            None
+        } else {
+            Some(theme.axis_title_y.family.clone())
+        };
         backend.draw_text(
             &sec_axis.name,
             (title_x, center_y),
@@ -254,6 +295,7 @@ pub fn draw_sec_y_axis(
                 size: theme.axis_title_y.size,
                 anchor: TextAnchor::Middle,
                 angle: 90.0,
+                family,
             },
         )?;
     }

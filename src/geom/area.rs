@@ -76,6 +76,7 @@ impl Geom for GeomArea {
                     stroke: None,
                     stroke_width: 0.0,
                     alpha: self.alpha,
+                    clip: true,
                 },
             )?;
         }

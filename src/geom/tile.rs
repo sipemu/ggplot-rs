@@ -91,6 +91,7 @@ impl Geom for GeomTile {
                     stroke: Some(self.color),
                     stroke_width: self.line_width,
                     alpha: self.alpha,
+                    clip: true,
                 },
             )?;
         }

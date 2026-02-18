@@ -566,6 +566,34 @@ impl GGPlot {
         self.scale_fill(s)
     }
 
+    /// Continuous viridis color scale (for numeric data).
+    pub fn scale_color_viridis_c(self) -> Self {
+        use crate::scale::gradient_n::ScaleColorGradientN;
+        let s = ScaleColorGradientN::viridis(crate::aes::Aesthetic::Color);
+        self.scale_color(s)
+    }
+
+    /// Continuous viridis fill scale (for numeric data).
+    pub fn scale_fill_viridis_c(self) -> Self {
+        use crate::scale::gradient_n::ScaleColorGradientN;
+        let s = ScaleColorGradientN::viridis(crate::aes::Aesthetic::Fill);
+        self.scale_fill(s)
+    }
+
+    /// N-stop continuous color gradient.
+    pub fn scale_color_gradientn(self, stops: Vec<(f64, crate::scale::color::RGBAColor)>) -> Self {
+        use crate::scale::gradient_n::ScaleColorGradientN;
+        let s = ScaleColorGradientN::new(crate::aes::Aesthetic::Color, stops);
+        self.scale_color(s)
+    }
+
+    /// N-stop continuous fill gradient.
+    pub fn scale_fill_gradientn(self, stops: Vec<(f64, crate::scale::color::RGBAColor)>) -> Self {
+        use crate::scale::gradient_n::ScaleColorGradientN;
+        let s = ScaleColorGradientN::new(crate::aes::Aesthetic::Fill, stops);
+        self.scale_fill(s)
+    }
+
     pub fn scale_fill_brewer(self, name: crate::scale::palettes::PaletteName) -> Self {
         use crate::scale::color::ScaleColorDiscrete;
         let s = ScaleColorDiscrete::new(crate::aes::Aesthetic::Fill).with_named_palette(&name);
@@ -875,6 +903,8 @@ impl GGPlot {
 
         // Build the plot
         let has_title = plot.labels.title.is_some();
+        let has_subtitle = plot.labels.subtitle.is_some();
+        let has_caption = plot.labels.caption.is_some();
         let has_legend = plot.has_legend_mapping();
         let x_label = plot.labels.x.clone();
         let y_label = plot.labels.y.clone();
@@ -893,7 +923,15 @@ impl GGPlot {
             }
         }
 
-        let layout = PlotLayout::compute(w as f64, h as f64, &built.theme, has_title, has_legend);
+        let layout = PlotLayout::compute_full(
+            w as f64,
+            h as f64,
+            &built.theme,
+            has_title,
+            has_subtitle,
+            has_caption,
+            has_legend,
+        );
 
         // Determine backend from file extension
         let ext = path.rsplit('.').next().unwrap_or("svg").to_lowercase();

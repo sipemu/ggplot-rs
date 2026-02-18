@@ -55,6 +55,7 @@ pub use crate::scale::datetime::ScaleDateTime;
 pub use crate::scale::discrete::ScaleDiscrete;
 pub use crate::scale::format::{label_comma, label_dollar, label_percent, label_scientific};
 pub use crate::scale::gradient::ScaleColorGradient2;
+pub use crate::scale::gradient_n::ScaleColorGradientN;
 pub use crate::scale::manual::ScaleManual;
 pub use crate::scale::palettes::PaletteName;
 pub use crate::scale::sec_axis::SecAxis;

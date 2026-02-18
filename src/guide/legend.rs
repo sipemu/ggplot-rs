@@ -155,6 +155,11 @@ fn draw_discrete_legend_at(
 
     // Draw legend title (guide title overrides scale name)
     let title = guide.title.as_deref().unwrap_or_else(|| scale.name());
+    let legend_family = if theme.legend_title.family.is_empty() {
+        None
+    } else {
+        Some(theme.legend_title.family.clone())
+    };
     let title_offset = if !title.is_empty() {
         backend.draw_text(
             title,
@@ -164,6 +169,7 @@ fn draw_discrete_legend_at(
                 size: theme.legend_title.size,
                 anchor: TextAnchor::Start,
                 angle: 0.0,
+                family: legend_family,
             },
         )?;
         theme.legend_title.size + 4.0
@@ -186,6 +192,7 @@ fn draw_discrete_legend_at(
                     stroke: theme.legend_background.color,
                     stroke_width: theme.legend_background.width,
                     alpha: 1.0,
+                    clip: false,
                 },
             )?;
         }
@@ -207,6 +214,7 @@ fn draw_discrete_legend_at(
                         stroke: theme.legend_key.color,
                         stroke_width: theme.legend_key.width,
                         alpha: 1.0,
+                        clip: false,
                     },
                 )?;
             }
@@ -225,6 +233,7 @@ fn draw_discrete_legend_at(
                         stroke: None,
                         stroke_width: 0.0,
                         alpha: 1.0,
+                        clip: false,
                     },
                 )?;
             }
@@ -282,6 +291,7 @@ fn draw_discrete_legend_at(
                         stroke: None,
                         stroke_width: 0.0,
                         alpha,
+                        clip: false,
                     },
                 )?;
             }
@@ -289,6 +299,11 @@ fn draw_discrete_legend_at(
         }
 
         // Label
+        let label_family = if theme.legend_text.family.is_empty() {
+            None
+        } else {
+            Some(theme.legend_text.family.clone())
+        };
         backend.draw_text(
             label,
             (legend_x + swatch_size + theme.legend_spacing, center_y),
@@ -297,6 +312,7 @@ fn draw_discrete_legend_at(
                 size: theme.legend_text.size,
                 anchor: TextAnchor::Start,
                 angle: 0.0,
+                family: label_family,
             },
         )?;
     }
@@ -323,6 +339,11 @@ fn draw_continuous_legend_at(
 
     // Draw legend title (guide title overrides scale name)
     let title = guide.title.as_deref().unwrap_or_else(|| scale.name());
+    let cont_family = if theme.legend_title.family.is_empty() {
+        None
+    } else {
+        Some(theme.legend_title.family.clone())
+    };
     let title_offset = if !title.is_empty() {
         backend.draw_text(
             title,
@@ -332,6 +353,7 @@ fn draw_continuous_legend_at(
                 size: theme.legend_title.size,
                 anchor: TextAnchor::Start,
                 angle: 0.0,
+                family: cont_family,
             },
         )?;
         theme.legend_title.size + 4.0
@@ -353,6 +375,7 @@ fn draw_continuous_legend_at(
                     stroke: theme.legend_background.color,
                     stroke_width: theme.legend_background.width,
                     alpha: 1.0,
+                    clip: false,
                 },
             )?;
         }
@@ -375,6 +398,7 @@ fn draw_continuous_legend_at(
                 stroke: None,
                 stroke_width: 0.0,
                 alpha: 1.0,
+                clip: false,
             },
         )?;
     }
@@ -408,6 +432,11 @@ fn draw_continuous_legend_at(
             ],
             &border_style,
         )?;
+        let tick_family = if theme.legend_text.family.is_empty() {
+            None
+        } else {
+            Some(theme.legend_text.family.clone())
+        };
         backend.draw_text(
             label,
             (
@@ -419,6 +448,7 @@ fn draw_continuous_legend_at(
                 size: theme.legend_text.size,
                 anchor: TextAnchor::Start,
                 angle: 0.0,
+                family: tick_family,
             },
         )?;
     }

@@ -74,6 +74,13 @@ impl ScaleContinuous {
         self
     }
 
+    /// Set the expansion multiplier and additive constant.
+    /// Like R's `expand = c(mult, add)`. Default is `(0.05, 0.0)`.
+    pub fn with_expand(mut self, mult: f64, add: f64) -> Self {
+        self.expand = (mult, add);
+        self
+    }
+
     /// Set a label formatter function (e.g., `label_comma`, `label_percent`).
     pub fn with_label_formatter(mut self, f: LabelFormatter) -> Self {
         self.label_formatter = Some(f);

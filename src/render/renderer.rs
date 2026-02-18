@@ -37,6 +37,7 @@ impl PlotRenderer {
                         stroke: None,
                         stroke_width: 0.0,
                         alpha: 1.0,
+                        clip: false,
                     },
                 )?;
             }
@@ -56,6 +57,7 @@ impl PlotRenderer {
                         stroke: theme.panel_background.color,
                         stroke_width: theme.panel_background.width,
                         alpha: 1.0,
+                        clip: false,
                     },
                 )?;
             }
@@ -128,6 +130,11 @@ impl PlotRenderer {
         if let Some(ref title) = built.labels.title {
             let center_x = plot_area.x + plot_area.width / 2.0;
             let title_y = plot_area.y - theme.title.size * 0.9;
+            let family = if theme.title.family.is_empty() {
+                None
+            } else {
+                Some(theme.title.family.clone())
+            };
             backend.draw_text(
                 title,
                 (center_x, title_y.max(theme.title.size)),
@@ -136,6 +143,7 @@ impl PlotRenderer {
                     size: theme.title.size,
                     anchor: TextAnchor::Middle,
                     angle: 0.0,
+                    family,
                 },
             )?;
         }
@@ -144,6 +152,11 @@ impl PlotRenderer {
         if let Some(ref subtitle) = built.labels.subtitle {
             let center_x = plot_area.x + plot_area.width / 2.0;
             let subtitle_y = plot_area.y - 2.0;
+            let family = if theme.subtitle.family.is_empty() {
+                None
+            } else {
+                Some(theme.subtitle.family.clone())
+            };
             backend.draw_text(
                 subtitle,
                 (
@@ -155,6 +168,7 @@ impl PlotRenderer {
                     size: theme.subtitle.size,
                     anchor: TextAnchor::Middle,
                     angle: 0.0,
+                    family,
                 },
             )?;
         }
@@ -172,6 +186,11 @@ impl PlotRenderer {
         if let Some(ref caption) = built.labels.caption {
             let right_x = plot_area.x + plot_area.width;
             let caption_y = total_area.y + total_area.height - theme.caption.size * 0.5;
+            let family = if theme.caption.family.is_empty() {
+                None
+            } else {
+                Some(theme.caption.family.clone())
+            };
             backend.draw_text(
                 caption,
                 (right_x, caption_y),
@@ -180,6 +199,7 @@ impl PlotRenderer {
                     size: theme.caption.size,
                     anchor: TextAnchor::End,
                     angle: 0.0,
+                    family,
                 },
             )?;
         }
@@ -206,6 +226,7 @@ impl PlotRenderer {
                         stroke: None,
                         stroke_width: 0.0,
                         alpha: 1.0,
+                        clip: false,
                     },
                 )?;
             }
@@ -250,6 +271,7 @@ impl PlotRenderer {
                         stroke: theme.strip_background.color,
                         stroke_width: theme.strip_background.width,
                         alpha: 1.0,
+                        clip: false,
                     },
                 )?;
             }
@@ -257,6 +279,11 @@ impl PlotRenderer {
             // Strip label text
             if theme.strip_text.visible {
                 let label = panel.col_label.as_deref().unwrap_or(&panel.label);
+                let family = if theme.strip_text.family.is_empty() {
+                    None
+                } else {
+                    Some(theme.strip_text.family.clone())
+                };
                 backend.draw_text(
                     label,
                     (px + panel_width / 2.0, py + strip_height / 2.0),
@@ -265,6 +292,7 @@ impl PlotRenderer {
                         size: theme.strip_text.size,
                         anchor: TextAnchor::Middle,
                         angle: 0.0,
+                        family,
                     },
                 )?;
             }
@@ -283,6 +311,7 @@ impl PlotRenderer {
                             stroke: theme.panel_background.color,
                             stroke_width: theme.panel_background.width,
                             alpha: 1.0,
+                            clip: false,
                         },
                     )?;
                 }
@@ -359,6 +388,11 @@ impl PlotRenderer {
         if let Some(ref title) = built.labels.title {
             let center_x = plot_area.x + plot_area.width / 2.0;
             let title_y = plot_area.y - theme.title.size * 0.9;
+            let family = if theme.title.family.is_empty() {
+                None
+            } else {
+                Some(theme.title.family.clone())
+            };
             backend.draw_text(
                 title,
                 (center_x, title_y.max(theme.title.size)),
@@ -367,6 +401,54 @@ impl PlotRenderer {
                     size: theme.title.size,
                     anchor: TextAnchor::Middle,
                     angle: 0.0,
+                    family,
+                },
+            )?;
+        }
+
+        // Draw subtitle
+        if let Some(ref subtitle) = built.labels.subtitle {
+            let center_x = plot_area.x + plot_area.width / 2.0;
+            let subtitle_y = plot_area.y - 2.0;
+            let family = if theme.subtitle.family.is_empty() {
+                None
+            } else {
+                Some(theme.subtitle.family.clone())
+            };
+            backend.draw_text(
+                subtitle,
+                (
+                    center_x,
+                    subtitle_y.max(theme.title.size + theme.subtitle.size),
+                ),
+                &TextStyle {
+                    color: theme.subtitle.color,
+                    size: theme.subtitle.size,
+                    anchor: TextAnchor::Middle,
+                    angle: 0.0,
+                    family,
+                },
+            )?;
+        }
+
+        // Draw caption
+        if let Some(ref caption) = built.labels.caption {
+            let right_x = plot_area.x + plot_area.width;
+            let caption_y = total_area.y + total_area.height - theme.caption.size * 0.5;
+            let family = if theme.caption.family.is_empty() {
+                None
+            } else {
+                Some(theme.caption.family.clone())
+            };
+            backend.draw_text(
+                caption,
+                (right_x, caption_y),
+                &TextStyle {
+                    color: theme.caption.color,
+                    size: theme.caption.size,
+                    anchor: TextAnchor::End,
+                    angle: 0.0,
+                    family,
                 },
             )?;
         }
@@ -424,6 +506,7 @@ impl PlotRenderer {
                             size: *size,
                             anchor: TextAnchor::Middle,
                             angle: 0.0,
+                            family: None,
                         },
                     )?;
                 }
@@ -449,6 +532,7 @@ impl PlotRenderer {
                             stroke: None,
                             stroke_width: 0.0,
                             alpha: *alpha,
+                            clip: false,
                         },
                     )?;
                 }

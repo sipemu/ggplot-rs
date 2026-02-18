@@ -105,6 +105,9 @@ pub struct RectStyle {
     pub stroke: Option<(u8, u8, u8)>,
     pub stroke_width: f64,
     pub alpha: f64,
+    /// Whether to clip this rect to the plot area. Default `true` for data elements.
+    /// Set to `false` for non-data elements (backgrounds, strips, legends).
+    pub clip: bool,
 }
 
 impl Default for RectStyle {
@@ -114,6 +117,7 @@ impl Default for RectStyle {
             stroke: None,
             stroke_width: 1.0,
             alpha: 1.0,
+            clip: true,
         }
     }
 }
@@ -125,6 +129,8 @@ pub struct TextStyle {
     pub size: f64,
     pub anchor: TextAnchor,
     pub angle: f64,
+    /// Font family (e.g., "serif", "monospace"). None defaults to "sans-serif".
+    pub family: Option<String>,
 }
 
 impl Default for TextStyle {
@@ -134,6 +140,7 @@ impl Default for TextStyle {
             size: 12.0,
             anchor: TextAnchor::Middle,
             angle: 0.0,
+            family: None,
         }
     }
 }

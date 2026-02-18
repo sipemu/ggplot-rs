@@ -7,6 +7,8 @@ pub struct PlotLayout {
     pub total: Rect,
     pub plot_area: Rect,
     pub title_area: Rect,
+    pub subtitle_area: Rect,
+    pub caption_area: Rect,
     pub x_axis_area: Rect,
     pub y_axis_area: Rect,
     pub legend_area: Rect,
@@ -21,10 +23,35 @@ impl PlotLayout {
         has_title: bool,
         has_legend: bool,
     ) -> Self {
+        Self::compute_full(width, height, theme, has_title, false, false, has_legend)
+    }
+
+    /// Compute layout with full subtitle/caption support.
+    pub fn compute_full(
+        width: f64,
+        height: f64,
+        theme: &Theme,
+        has_title: bool,
+        has_subtitle: bool,
+        has_caption: bool,
+        has_legend: bool,
+    ) -> Self {
         let margin = &theme.plot_margin;
 
         let title_height = if has_title {
             theme.title.size * 2.0
+        } else {
+            0.0
+        };
+
+        let subtitle_height = if has_subtitle {
+            theme.subtitle.size * 1.5
+        } else {
+            0.0
+        };
+
+        let caption_height = if has_caption {
+            theme.caption.size * 1.8
         } else {
             0.0
         };
@@ -77,13 +104,15 @@ impl PlotLayout {
         };
 
         let plot_x = margin.left + y_axis_width + legend_left;
-        let plot_y = margin.top + title_height + legend_top;
+        let plot_y = margin.top + title_height + subtitle_height + legend_top;
         let plot_width =
             width - margin.left - margin.right - y_axis_width - legend_right - legend_left;
         let plot_height = height
             - margin.top
             - margin.bottom
             - title_height
+            - subtitle_height
+            - caption_height
             - x_axis_height
             - legend_top
             - legend_bottom;
@@ -109,6 +138,18 @@ impl PlotLayout {
                 y: margin.top,
                 width: plot_width,
                 height: title_height,
+            },
+            subtitle_area: Rect {
+                x: plot_x,
+                y: margin.top + title_height,
+                width: plot_width,
+                height: subtitle_height,
+            },
+            caption_area: Rect {
+                x: plot_x,
+                y: plot_y + plot_height + x_axis_height,
+                width: plot_width,
+                height: caption_height,
             },
             x_axis_area: Rect {
                 x: plot_x,

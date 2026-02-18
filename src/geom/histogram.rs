@@ -100,6 +100,7 @@ impl Geom for GeomHistogram {
                     stroke: Some(self.color),
                     stroke_width: 0.5,
                     alpha: self.alpha,
+                    clip: true,
                 },
             )?;
         }
