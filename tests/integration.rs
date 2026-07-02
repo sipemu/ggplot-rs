@@ -137,6 +137,45 @@ fn degenerate_input_does_not_panic() {
 }
 
 #[test]
+fn primary_color_sets_series_default() {
+    // Brand color drives a single-series geom that maps no color/fill.
+    let data = cols(&[("x", &[1.0, 2.0, 3.0]), ("y", &[1.0, 2.0, 3.0])]);
+    let svg = GGPlot::new(data)
+        .aes(Aes::new().x("x").y("y"))
+        .geom_point()
+        .primary_color((200, 10, 50))
+        .render_svg()
+        .unwrap();
+    assert!(
+        svg.contains("C80A32"),
+        "brand color should be used for points"
+    );
+}
+
+#[test]
+fn primary_color_yields_to_mapped_aesthetic() {
+    // An explicit color aesthetic wins over the brand color.
+    let data: Vec<(String, Vec<Value>)> = vec![
+        ("x".into(), vec![Value::Float(1.0), Value::Float(2.0)]),
+        ("y".into(), vec![Value::Float(1.0), Value::Float(2.0)]),
+        (
+            "g".into(),
+            vec![Value::Str("a".into()), Value::Str("b".into())],
+        ),
+    ];
+    let svg = GGPlot::new(data)
+        .aes(Aes::new().x("x").y("y").color("g"))
+        .geom_point()
+        .primary_color((200, 10, 50))
+        .render_svg()
+        .unwrap();
+    assert!(
+        !svg.contains("C80A32"),
+        "mapped color aesthetic should win over the brand color"
+    );
+}
+
+#[test]
 fn stat_supplies_geom_required_aes() {
     // Regression: geom_step requires y, but StatEcdf synthesizes it. Required-aes
     // validation must run against post-stat columns, so this must build without

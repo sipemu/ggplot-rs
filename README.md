@@ -186,6 +186,43 @@ let svg: String   = plot.clone().render_svg()?;          // or render_svg_with_s
 let png: Vec<u8>  = plot.render_png_with_size(400, 300)?; // fully-encoded PNG bytes
 ```
 
+## Theming & brand color
+
+Everything about a theme is set at **runtime**, so one render process can serve
+many tenants' brands without touching chart code.
+
+Inject a **brand/primary color** — it becomes the default for any single-series
+geom that has no `color`/`fill` aesthetic mapped (an explicit mapping always wins):
+
+```rust
+GGPlot::new(data)
+    .aes(Aes::new().x("day").y("count"))
+    .geom_col()
+    .primary_color((26, 153, 136)) // DataZoo teal — no per-chart color code
+    .render_svg()?;
+```
+
+Build a whole `Theme` at runtime and compose the brand into it:
+
+```rust
+let theme = theme_minimal().with_primary((26, 153, 136));
+GGPlot::new(data).aes(/* … */).geom_line().theme(theme);
+```
+
+Supply an **arbitrary sequential ramp** (e.g. a green→red risk score) instead of
+the built-in viridis/brewer scales — pass explicit `(offset, color)` stops:
+
+```rust
+GGPlot::new(data)
+    .aes(Aes::new().x("x").y("y").color("risk"))
+    .geom_point()
+    .scale_color_gradientn(vec![
+        (0.0, RGBAColor::new(0, 160, 80)),   // low  = green
+        (0.5, RGBAColor::new(240, 200, 0)),  // mid  = amber
+        (1.0, RGBAColor::new(200, 40, 40)),  // high = red
+    ]);
+```
+
 ## Feature Flags
 
 | Feature  | Default | Provides                                                        |

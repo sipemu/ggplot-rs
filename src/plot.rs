@@ -867,6 +867,14 @@ impl GGPlot {
         self
     }
 
+    /// Set the brand/primary color used as the default for single-series geoms
+    /// that have no color/fill aesthetic mapped. Composes with any theme — one
+    /// render process can serve different tenants' brands at render time.
+    pub fn primary_color(mut self, color: (u8, u8, u8)) -> Self {
+        self.theme.primary = Some(color);
+        self
+    }
+
     pub fn theme_minimal(mut self) -> Self {
         self.theme = crate::theme::presets::theme_minimal();
         self

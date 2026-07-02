@@ -82,4 +82,10 @@ pub trait Geom: Send + Sync {
 
     /// Name for debug/display.
     fn name(&self) -> &str;
+
+    /// Apply a brand/primary color to this geom's single-series default (its
+    /// `color` or `fill`). The build pipeline calls this only when the layer has
+    /// no color/fill aesthetic mapped, so an explicit mapping always wins. The
+    /// default is a no-op; series geoms override it.
+    fn set_series_color(&mut self, _color: (u8, u8, u8)) {}
 }

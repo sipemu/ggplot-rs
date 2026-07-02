@@ -95,4 +95,8 @@ impl Geom for GeomDotplot {
     fn name(&self) -> &str {
         "dotplot"
     }
+
+    fn set_series_color(&mut self, color: (u8, u8, u8)) {
+        self.fill = color;
+    }
 }

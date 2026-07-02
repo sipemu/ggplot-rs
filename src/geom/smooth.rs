@@ -237,4 +237,9 @@ impl Geom for GeomSmooth {
     fn name(&self) -> &str {
         "smooth"
     }
+
+    fn set_series_color(&mut self, color: (u8, u8, u8)) {
+        self.color = color;
+        self.fill = color;
+    }
 }

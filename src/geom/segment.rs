@@ -99,4 +99,8 @@ impl Geom for GeomSegment {
     fn name(&self) -> &str {
         "segment"
     }
+
+    fn set_series_color(&mut self, color: (u8, u8, u8)) {
+        self.color = color;
+    }
 }

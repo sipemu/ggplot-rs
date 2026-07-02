@@ -111,4 +111,8 @@ impl Geom for GeomRect {
     fn name(&self) -> &str {
         "rect"
     }
+
+    fn set_series_color(&mut self, color: (u8, u8, u8)) {
+        self.fill = color;
+    }
 }

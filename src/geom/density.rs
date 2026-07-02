@@ -159,4 +159,8 @@ impl Geom for GeomDensity {
     fn name(&self) -> &str {
         "density"
     }
+
+    fn set_series_color(&mut self, color: (u8, u8, u8)) {
+        self.fill = color;
+    }
 }

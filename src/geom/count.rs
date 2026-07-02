@@ -110,4 +110,8 @@ impl Geom for GeomCount {
     fn name(&self) -> &str {
         "count"
     }
+
+    fn set_series_color(&mut self, color: (u8, u8, u8)) {
+        self.color = color;
+    }
 }

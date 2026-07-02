@@ -63,7 +63,13 @@ impl PlotBuilder {
         let mut built_layers = Vec::new();
 
         for layer in layers {
-            let built = Self::build_layer(layer, &plot_data, &plot_mapping, &mut scale_set)?;
+            let built = Self::build_layer(
+                layer,
+                &plot_data,
+                &plot_mapping,
+                &mut scale_set,
+                theme.primary,
+            )?;
             built_layers.push(built);
         }
 
@@ -302,11 +308,12 @@ impl PlotBuilder {
         plot_data: &DataFrame,
         plot_mapping: &Aes,
         scale_set: &mut ScaleSet,
+        primary: Option<(u8, u8, u8)>,
     ) -> Result<BuiltLayer, GGError> {
         let Layer {
             data: layer_data,
             mapping: layer_mapping,
-            geom,
+            mut geom,
             stat,
             position,
             params: _,
@@ -318,6 +325,16 @@ impl PlotBuilder {
 
         // Step 2: Merge mappings — layer overrides plot-level
         let merged_mapping = plot_mapping.merge(&layer_mapping);
+
+        // Brand/primary color: apply to a single-series geom only when the layer
+        // maps neither color nor fill (an explicit aesthetic always wins).
+        if let Some(color) = primary {
+            let has_color = merged_mapping.get_mapping(&Aesthetic::Color).is_some();
+            let has_fill = merged_mapping.get_mapping(&Aesthetic::Fill).is_some();
+            if !has_color && !has_fill {
+                geom.set_series_color(color);
+            }
+        }
 
         // Step 3: Evaluate aes — rename columns to canonical names
         let mut working_data = resolve_mappings(&source_data, &merged_mapping);

@@ -113,4 +113,8 @@ impl Geom for GeomArea {
     fn name(&self) -> &str {
         "area"
     }
+
+    fn set_series_color(&mut self, color: (u8, u8, u8)) {
+        self.fill = color;
+    }
 }

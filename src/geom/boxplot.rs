@@ -198,4 +198,8 @@ impl Geom for GeomBoxplot {
     fn name(&self) -> &str {
         "boxplot"
     }
+
+    fn set_series_color(&mut self, color: (u8, u8, u8)) {
+        self.fill = color;
+    }
 }
