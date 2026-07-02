@@ -1055,6 +1055,14 @@ impl GGPlot {
     /// Set the brand/primary color used as the default for single-series geoms
     /// that have no color/fill aesthetic mapped. Composes with any theme — one
     /// render process can serve different tenants' brands at render time.
+    /// Place the legend inside the panel at panel-relative coordinates
+    /// (0..1, 0..1) — `(0,0)` bottom-left, `(1,1)` top-right (R's
+    /// `legend.position = c(x, y)`).
+    pub fn legend_position_inside(mut self, x: f64, y: f64) -> Self {
+        self.theme.legend_position = crate::theme::LegendPosition::Inside(x, y);
+        self
+    }
+
     pub fn primary_color(mut self, color: (u8, u8, u8)) -> Self {
         self.theme.primary = Some(color);
         self

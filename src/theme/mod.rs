@@ -11,6 +11,9 @@ pub enum LegendPosition {
     Top,
     Bottom,
     None,
+    /// Inside the panel at panel-relative coordinates (0..1, 0..1), like R's
+    /// `legend.position = c(x, y)`. `(0, 0)` is bottom-left, `(1, 1)` top-right.
+    Inside(f64, f64),
 }
 
 /// Plot margins (in pixels).

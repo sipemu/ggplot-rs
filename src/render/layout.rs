@@ -97,7 +97,8 @@ impl PlotLayout {
                 LegendPosition::Left => (0.0, legend_size, 0.0, 0.0),
                 LegendPosition::Top => (0.0, 0.0, legend_size, 0.0),
                 LegendPosition::Bottom => (0.0, 0.0, 0.0, legend_size),
-                LegendPosition::None => (0.0, 0.0, 0.0, 0.0),
+                // Inside/None overlay the panel, reserving no external space.
+                LegendPosition::None | LegendPosition::Inside(..) => (0.0, 0.0, 0.0, 0.0),
             }
         } else {
             (0.0, 0.0, 0.0, 0.0)
