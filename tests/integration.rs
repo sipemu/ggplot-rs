@@ -132,6 +132,51 @@ fn boxplot_trains_y_scale_on_extent() {
 }
 
 #[test]
+fn violin_positions_groups_on_discrete_x() {
+    // Regression: geom_violin used to collapse every discrete group to x=0 (the
+    // stat converted the group label to f64, yielding 0.0 for all). Verify the X
+    // scale stays discrete with one break per group, and the stat keeps the
+    // group label plus a normalized violinwidth column.
+    let mut rows = Vec::new();
+    for group in ["A", "B", "C"] {
+        let base = match group {
+            "A" => 10.0,
+            "B" => 20.0,
+            _ => 15.0,
+        };
+        for i in 0..30 {
+            rows.push(HashMap::from([
+                ("group".to_string(), Value::Str(group.to_string())),
+                ("value".to_string(), Value::Float(base + (i as f64) * 0.3)),
+            ]));
+        }
+    }
+
+    let built = GGPlot::new(rows)
+        .aes(Aes::new().x("group").y("value"))
+        .geom_violin()
+        .build();
+
+    let x_scale = built.scales.get(&Aesthetic::X).expect("X scale");
+    assert!(x_scale.is_discrete(), "X scale should be discrete");
+    assert_eq!(
+        x_scale.breaks().len(),
+        3,
+        "X axis should have one break per group"
+    );
+
+    // Stat output: keeps discrete group labels (not all collapsed) and a width col.
+    let layer = &built.layers[0];
+    assert!(
+        layer.data.has_column("violinwidth"),
+        "stat should emit violinwidth"
+    );
+    let xs = layer.data.column("x").expect("x column");
+    let distinct: std::collections::HashSet<String> = xs.iter().map(|v| format!("{v:?}")).collect();
+    assert_eq!(distinct.len(), 3, "each group must keep a distinct x value");
+}
+
+#[test]
 fn render_svg_in_memory() {
     let svg = GGPlot::new(sample_points())
         .aes(Aes::new().x("x").y("y"))

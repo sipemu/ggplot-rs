@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 use crate::aes::Aesthetic;
 use crate::coord::Coord;
 use crate::data::DataFrame;
@@ -40,61 +42,79 @@ impl Geom for GeomViolin {
         _theme: &Theme,
         backend: &mut dyn DrawBackend,
     ) -> Result<(), RenderError> {
+        let x_col = data
+            .column("x")
+            .ok_or(RenderError::MissingAesthetic("x".into()))?;
         let y_col = data
             .column("y")
             .ok_or(RenderError::MissingAesthetic("y".into()))?;
-        let xmin_col = data
-            .column("xmin")
-            .ok_or(RenderError::MissingAesthetic("xmin".into()))?;
-        let xmax_col = data
-            .column("xmax")
-            .ok_or(RenderError::MissingAesthetic("xmax".into()))?;
+        let width_col = data
+            .column("violinwidth")
+            .ok_or(RenderError::MissingAesthetic("violinwidth".into()))?;
         let fill_col = data.column("fill");
 
         let plot_area = backend.plot_area();
         let x_scale = scales.get(&Aesthetic::X);
         let y_scale = scales.get(&Aesthetic::Y);
 
-        let fill_color = fill_col
-            .and_then(|fc| {
-                if fc.is_empty() {
-                    None
-                } else {
-                    scales.map_color(&Aesthetic::Fill, &fc[0])
-                }
-            })
-            .unwrap_or(self.fill);
+        // Half-width of a group's slot, in the X scale's mapped space. Mirror the
+        // boxplot: discrete axes share the slot between all groups; continuous
+        // axes use a small fixed fraction.
+        let x_is_discrete = x_scale.map(|s| s.is_discrete()).unwrap_or(false);
+        let max_half_width = if x_is_discrete {
+            let n = x_scale.map(|s| s.breaks().len()).unwrap_or(1);
+            0.75 / (n.max(1) as f64 * 2.5)
+        } else {
+            0.03
+        };
 
-        // Build right side (xmax, y) top to bottom
-        let mut right_side: Vec<(f64, f64)> = Vec::new();
-        // Build left side (xmin, y) bottom to top
-        let mut left_side: Vec<(f64, f64)> = Vec::new();
-
-        for i in 0..data.nrows() {
-            let ny = y_scale.map(|s| s.map(&y_col[i])).unwrap_or(0.0);
-            let nxmax = x_scale.map(|s| s.map(&xmax_col[i])).unwrap_or(0.0);
-            let nxmin = x_scale.map(|s| s.map(&xmin_col[i])).unwrap_or(0.0);
-
-            right_side.push(coord.transform((nxmax, ny), &plot_area));
-            left_side.push(coord.transform((nxmin, ny), &plot_area));
+        // The stat vstacks one contiguous block of points per group; partition
+        // rows back into groups (keyed by the x value) and draw a polygon each.
+        let mut order: Vec<String> = Vec::new();
+        let mut groups: HashMap<String, Vec<usize>> = HashMap::new();
+        for (i, xv) in x_col.iter().enumerate() {
+            let key = format!("{xv:?}");
+            if !groups.contains_key(&key) {
+                order.push(key.clone());
+                groups.insert(key.clone(), Vec::new());
+            }
+            groups.get_mut(&key).unwrap().push(i);
         }
 
-        // Polygon: right side forward, left side reversed
-        let mut polygon = right_side;
-        left_side.reverse();
-        polygon.extend(left_side);
+        for key in &order {
+            let idxs = &groups[key];
+            let first = idxs[0];
+            let nx = x_scale.map(|s| s.map(&x_col[first])).unwrap_or(0.5);
+            let fill_color = fill_col
+                .and_then(|fc| scales.map_color(&Aesthetic::Fill, &fc[first]))
+                .unwrap_or(self.fill);
 
-        if polygon.len() >= 3 {
-            backend.draw_polygon(
-                &polygon,
-                &RectStyle {
-                    fill: Some(fill_color),
-                    stroke: Some(self.color),
-                    stroke_width: self.line_width,
-                    alpha: self.alpha,
-                    clip: true,
-                },
-            )?;
+            // Right side (top→bottom) then left side reversed to close the polygon.
+            let mut right_side: Vec<(f64, f64)> = Vec::with_capacity(idxs.len());
+            let mut left_side: Vec<(f64, f64)> = Vec::with_capacity(idxs.len());
+            for &i in idxs {
+                let ny = y_scale.map(|s| s.map(&y_col[i])).unwrap_or(0.0);
+                let half = width_col[i].as_f64().unwrap_or(0.0) * max_half_width;
+                right_side.push(coord.transform((nx + half, ny), &plot_area));
+                left_side.push(coord.transform((nx - half, ny), &plot_area));
+            }
+
+            let mut polygon = right_side;
+            left_side.reverse();
+            polygon.extend(left_side);
+
+            if polygon.len() >= 3 {
+                backend.draw_polygon(
+                    &polygon,
+                    &RectStyle {
+                        fill: Some(fill_color),
+                        stroke: Some(self.color),
+                        stroke_width: self.line_width,
+                        alpha: self.alpha,
+                        clip: true,
+                    },
+                )?;
+            }
         }
 
         Ok(())

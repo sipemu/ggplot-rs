@@ -5,7 +5,8 @@ use crate::scale::ScaleSet;
 use super::Stat;
 
 /// Kernel density estimation on Y per group (for violin plots).
-/// Outputs: y (eval points), xmin/xmax (mirrored density widths).
+/// Outputs: x (group value), y (eval points), violinwidth (density normalized to
+/// [0, 1]). The geom mirrors `violinwidth` around the group's x slot.
 pub struct StatYDensity {
     pub n_points: usize,
 }
@@ -29,11 +30,13 @@ impl Stat for StatYDensity {
             return DataFrame::new();
         }
 
-        // Get the group x position (use first x value or 0)
+        // Keep the group's x *value* as-is (e.g. the discrete label "A"). The geom
+        // maps it through the X scale, exactly like boxplot — converting to f64 here
+        // would collapse every discrete group to 0.0.
         let group_x = x_col
             .and_then(|c| c.first())
-            .and_then(|v| v.as_f64())
-            .unwrap_or(0.0);
+            .cloned()
+            .unwrap_or(Value::Float(0.0));
 
         let n = values.len() as f64;
         let mean = values.iter().sum::<f64>() / n;
@@ -51,8 +54,6 @@ impl Stat for StatYDensity {
 
         let mut x_vals = Vec::with_capacity(self.n_points);
         let mut y_vals = Vec::with_capacity(self.n_points);
-        let mut xmin_vals = Vec::with_capacity(self.n_points);
-        let mut xmax_vals = Vec::with_capacity(self.n_points);
 
         // Compute density at each evaluation point
         let mut densities = Vec::with_capacity(self.n_points);
@@ -70,26 +71,25 @@ impl Stat for StatYDensity {
             }
         }
 
-        // Scale density to a reasonable width (0.4 of unit spacing on each side)
+        // Normalize density to [0, 1] (peak = 1). The geom scales this by the
+        // per-group slot half-width, so the widest point fills the group's slot.
         let scale = if max_density > 0.0 {
-            0.4 / max_density
+            1.0 / max_density
         } else {
             1.0
         };
 
+        let mut width_vals = Vec::with_capacity(self.n_points);
         for (y, density) in &densities {
-            let half_width = density * scale;
-            x_vals.push(Value::Float(group_x));
+            x_vals.push(group_x.clone());
             y_vals.push(Value::Float(*y));
-            xmin_vals.push(Value::Float(group_x - half_width));
-            xmax_vals.push(Value::Float(group_x + half_width));
+            width_vals.push(Value::Float(density * scale));
         }
 
         let mut result = DataFrame::new();
         result.add_column("x".to_string(), x_vals);
         result.add_column("y".to_string(), y_vals);
-        result.add_column("xmin".to_string(), xmin_vals);
-        result.add_column("xmax".to_string(), xmax_vals);
+        result.add_column("violinwidth".to_string(), width_vals);
 
         // Carry over grouping columns
         for col_name in &["color", "fill", "group"] {
@@ -154,8 +154,19 @@ mod tests {
         let result = stat.compute_group(&data, &scales);
 
         assert!(result.nrows() > 0);
-        assert!(result.column("xmin").is_some());
-        assert!(result.column("xmax").is_some());
+        assert!(result.column("x").is_some());
         assert!(result.column("y").is_some());
+        assert!(result.column("violinwidth").is_some());
+        // Normalized width peaks at 1.0.
+        let max_w = result
+            .column("violinwidth")
+            .unwrap()
+            .iter()
+            .filter_map(|v| v.as_f64())
+            .fold(0.0_f64, f64::max);
+        assert!(
+            (max_w - 1.0).abs() < 1e-9,
+            "peak width should be 1.0, got {max_w}"
+        );
     }
 }

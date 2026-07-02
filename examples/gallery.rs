@@ -22,6 +22,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     histogram()?;
     bar()?;
     boxplot()?;
+    violin()?;
     continuous_color()?;
     facet()?;
     density()?;
@@ -157,6 +158,30 @@ fn boxplot() -> Result<(), Box<dyn std::error::Error>> {
         .ylab("Value")
         .theme_bw()
         .save_with_size(&out("boxplot"), W, H)?;
+    Ok(())
+}
+
+/// Violin plots of grouped distributions.
+fn violin() -> Result<(), Box<dyn std::error::Error>> {
+    let n = 360;
+    let group: Vec<&str> = (0..n).map(|i| ["X", "Y", "Z"][i % 3]).collect();
+    let value: Vec<f64> = (0..n)
+        .map(|i| {
+            let g = (i % 3) as f64;
+            g * 2.0 + (i as f64 * 0.5).sin() * 1.5 + ((i * 4231 % 100) as f64 / 100.0 - 0.5) * 2.5
+        })
+        .collect();
+
+    let df = df! { "group" => group, "value" => value }?;
+    GGPlot::new(df)
+        .aes(Aes::new().x("group").y("value").fill("group"))
+        .geom_violin()
+        .scale_fill_brewer(PaletteName::Accent)
+        .title("Violin")
+        .xlab("Group")
+        .ylab("Value")
+        .theme_minimal()
+        .save_with_size(&out("violin"), W, H)?;
     Ok(())
 }
 
