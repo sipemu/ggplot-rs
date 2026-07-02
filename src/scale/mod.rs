@@ -16,6 +16,7 @@ pub mod sec_axis;
 pub mod shape;
 pub mod shape_manual;
 pub mod size;
+pub mod steps;
 pub mod transform;
 pub mod util;
 

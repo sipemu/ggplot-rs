@@ -106,7 +106,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
 - **Continuous**: linear, log10, log2, ln, sqrt, reverse, logit, probit, pseudo-log, reciprocal, exp, and Box–Cox transforms
 - **Discrete**: automatic categorical mapping
-- **Color**: discrete palettes (Viridis, Brewer Set1/Dark2, etc.), continuous gradients, diverging gradient2, manual color assignment
+- **Color**: discrete palettes (Viridis, Brewer Set1/Dark2, etc.), continuous gradients, diverging gradient2, binned/stepped scales (`scale_color_steps`/`fermenter`), manual color assignment
 - **Shape & Linetype**: discrete mapping for point shapes and line styles
 
 ### Coordinates
