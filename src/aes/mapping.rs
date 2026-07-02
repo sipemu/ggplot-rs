@@ -19,6 +19,10 @@ pub fn resolve_mappings(data: &DataFrame, mapping: &Aes) -> DataFrame {
         let col_name = m.aesthetic.col_name();
         if let Some(values) = data.column(&m.column) {
             result.add_column(col_name.to_string(), values.to_vec());
+        } else if let Some(values) = super::expr::eval_expression(&m.column, data) {
+            // Computed aesthetic — `m.column` is an expression like "a / b" or
+            // "log(gdp)" rather than a bare column name.
+            result.add_column(col_name.to_string(), values);
         }
     }
 
