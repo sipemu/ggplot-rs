@@ -51,9 +51,15 @@ pub fn apply_after_stat(data: &mut DataFrame, mapping: &Aes) {
         let target = m.aesthetic.col_name();
         let source = &m.column;
 
-        // If the stat produced the source column, rename it to the target aesthetic
-        if let Some(values) = data.column(source) {
-            let values = values.to_vec();
+        // If the stat produced the source column, rename it to the target
+        // aesthetic; otherwise evaluate `source` as an expression over the
+        // stat output (e.g. after_stat_y("count / sum(count)") for proportions).
+        let values = if let Some(values) = data.column(source) {
+            Some(values.to_vec())
+        } else {
+            super::expr::eval_expression(source, data)
+        };
+        if let Some(values) = values {
             // Remove existing target column if any, then add the new mapping
             if data.has_column(target) {
                 if let Some(col) = data.column_mut(target) {

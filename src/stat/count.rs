@@ -49,7 +49,9 @@ impl Stat for StatCount {
             .collect();
 
         result.add_column("x".to_string(), x_values);
-        result.add_column("y".to_string(), y_values);
+        result.add_column("y".to_string(), y_values.clone());
+        // Expose the count under its ggplot stat name for after_stat expressions.
+        result.add_column("count".to_string(), y_values);
 
         // Carry over group columns
         if data.has_column("fill") {

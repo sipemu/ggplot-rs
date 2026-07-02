@@ -8,7 +8,10 @@
 //! `factor := unary ('^' factor)?`, `unary := ('-'|'+') unary | primary`,
 //! `primary := number | ident | ident '(' expr ')' | '(' expr ')'`.
 //! Functions: `ln`/`log`, `log10`, `log2`, `sqrt`, `exp`, `abs`, `sin`, `cos`,
-//! `tan`, `floor`, `ceil`, `round`, `sign`.
+//! `tan`, `floor`, `ceil`, `round`, `sign`. Aggregate functions reduce their
+//! argument over *all* rows to a scalar (broadcast to every row): `sum`, `mean`
+//! (`avg`), `max`, `min`, `count`, `median`, `prod` — enabling normalized
+//! `after_stat` mappings such as `"count / sum(count)"`.
 
 use crate::data::{DataFrame, Value};
 
@@ -180,6 +183,15 @@ fn eval(e: &Expr, data: &DataFrame, row: usize) -> Option<f64> {
             })
         }
         Expr::Func(name, a) => {
+            // Aggregate functions reduce the argument over all rows to a scalar,
+            // broadcast identically to every row (e.g. sum(count) for proportions).
+            if let Some(agg) = aggregate(name) {
+                let vals: Vec<f64> = (0..data.nrows())
+                    .filter_map(|r| eval(a, data, r))
+                    .filter(|v| v.is_finite())
+                    .collect();
+                return Some(agg(&vals));
+            }
             let x = eval(a, data, row)?;
             Some(match name.as_str() {
                 "ln" | "log" => x.ln(),
@@ -199,6 +211,40 @@ fn eval(e: &Expr, data: &DataFrame, row: usize) -> Option<f64> {
             })
         }
     }
+}
+
+/// If `name` is an aggregate function, return its reducer over a column's finite
+/// values. An empty input reduces to a neutral value (0 for sum/count, NaN for
+/// the rest, which becomes `Na`).
+fn aggregate(name: &str) -> Option<fn(&[f64]) -> f64> {
+    Some(match name {
+        "sum" => |v: &[f64]| v.iter().sum(),
+        "count" => |v: &[f64]| v.len() as f64,
+        "prod" => |v: &[f64]| v.iter().product(),
+        "mean" | "avg" => |v: &[f64]| {
+            if v.is_empty() {
+                f64::NAN
+            } else {
+                v.iter().sum::<f64>() / v.len() as f64
+            }
+        },
+        "max" => |v: &[f64]| v.iter().copied().fold(f64::NAN, f64::max),
+        "min" => |v: &[f64]| v.iter().copied().fold(f64::NAN, f64::min),
+        "median" => |v: &[f64]| {
+            if v.is_empty() {
+                return f64::NAN;
+            }
+            let mut s = v.to_vec();
+            s.sort_by(|a, b| a.partial_cmp(b).unwrap());
+            let m = s.len() / 2;
+            if s.len().is_multiple_of(2) {
+                (s[m - 1] + s[m]) / 2.0
+            } else {
+                s[m]
+            }
+        },
+        _ => return None,
+    })
 }
 
 fn references_known_column(e: &Expr, data: &DataFrame) -> bool {
@@ -282,6 +328,29 @@ mod tests {
         assert!(eval_expression("1 + 2", &d).is_none()); // no column referenced
         assert!(eval_expression("a +", &d).is_none()); // parse error
         assert!(eval_expression("a $ b", &d).is_none()); // bad char
+    }
+
+    #[test]
+    fn aggregates_broadcast_over_column() {
+        let mut d = DataFrame::new();
+        d.add_column(
+            "count".into(),
+            vec![Value::Float(1.0), Value::Float(3.0), Value::Float(4.0)],
+        );
+        // proportion = count / sum(count); sum = 8
+        assert_eq!(
+            f(&eval_expression("count / sum(count)", &d).unwrap()),
+            vec![0.125, 0.375, 0.5]
+        );
+        // normalized = count / max(count); max = 4
+        assert_eq!(
+            f(&eval_expression("count / max(count)", &d).unwrap()),
+            vec![0.25, 0.75, 1.0]
+        );
+        assert_eq!(
+            f(&eval_expression("mean(count)", &d).unwrap()),
+            vec![8.0 / 3.0; 3]
+        );
     }
 
     #[test]

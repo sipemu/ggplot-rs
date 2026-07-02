@@ -94,7 +94,10 @@ impl Stat for StatBin {
 
         let mut result = DataFrame::new();
         result.add_column("x".to_string(), x_vals);
-        result.add_column("y".to_string(), y_vals);
+        result.add_column("y".to_string(), y_vals.clone());
+        // Expose the count under its ggplot stat name for after_stat expressions
+        // (e.g. after_stat_y("count / sum(count)")).
+        result.add_column("count".to_string(), y_vals);
         result.add_column("density".to_string(), density_vals);
         result.add_column("xmin".to_string(), xmin_vals);
         result.add_column("xmax".to_string(), xmax_vals);
