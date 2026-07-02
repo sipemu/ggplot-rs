@@ -3,9 +3,78 @@ name = "ggplot-rs"
 version = "0.1.0"
 edition = "2021"
 description = "A Rust implementation of ggplot2's Grammar of Graphics"
+authors = ["Simon Müller <sm@data-zoo.de>"]
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/sipemu/ggplot-rs"
+homepage = "https://github.com/sipemu/ggplot-rs"
+documentation = "https://docs.rs/ggplot-rs"
+readme = "README.md"
+keywords = ["ggplot2", "plotting", "dataviz", "charts", "grammar"]
+categories = ["visualization", "science"]
 
 [dependencies]
 plotters = "0.3"
 indexmap = "2"
 rand = "0.8"
-polars = { version = "0.46", features = ["lazy"] }
+# Optional data-source adapters. Neither is needed for the core pipeline —
+# they only provide `GGData` conversions for external frame types.
+polars = { version = "0.46", features = ["lazy"], optional = true }
+arrow = { version = "53", default-features = false, optional = true }
+# In-memory PNG encoding for `render_png`. Already pulled in transitively by
+# plotters' bitmap backend, so this adds no extra compile cost.
+image = { version = "0.24", default-features = false, features = ["png"] }
+
+[features]
+# `polars` is on by default to preserve existing behaviour (prelude re-export +
+# `impl GGData for polars::DataFrame`). Downstream crates that don't want the
+# heavy polars tree can depend with `default-features = false`.
+default = ["polars"]
+polars = ["dep:polars"]
+# Zero-copy-friendly input path for Arrow-native producers (e.g. DuckDB).
+arrow = ["dep:arrow"]
+
+# All bundled examples build their input frames with the polars `df!` macro,
+# so they only compile when the `polars` feature is enabled.
+[[example]]
+name = "scatter"
+required-features = ["polars"]
+
+[[example]]
+name = "histogram"
+required-features = ["polars"]
+
+[[example]]
+name = "bar_chart"
+required-features = ["polars"]
+
+[[example]]
+name = "annotations"
+required-features = ["polars"]
+
+[[example]]
+name = "color_palettes"
+required-features = ["polars"]
+
+[[example]]
+name = "continuous_color"
+required-features = ["polars"]
+
+[[example]]
+name = "coord_flip"
+required-features = ["polars"]
+
+[[example]]
+name = "density"
+required-features = ["polars"]
+
+[[example]]
+name = "faceted"
+required-features = ["polars"]
+
+[[example]]
+name = "loess_smooth"
+required-features = ["polars"]
+
+[[example]]
+name = "log_scale"
+required-features = ["polars"]

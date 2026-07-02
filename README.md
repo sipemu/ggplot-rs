@@ -1,5 +1,11 @@
 # ggplot-rs
 
+[![CI](https://github.com/sipemu/ggplot-rs/actions/workflows/ci.yml/badge.svg)](https://github.com/sipemu/ggplot-rs/actions/workflows/ci.yml)
+[![Crates.io](https://img.shields.io/crates/v/ggplot-rs.svg)](https://crates.io/crates/ggplot-rs)
+[![Documentation](https://docs.rs/ggplot-rs/badge.svg)](https://docs.rs/ggplot-rs)
+[![codecov](https://codecov.io/gh/sipemu/ggplot-rs/branch/main/graph/badge.svg)](https://codecov.io/gh/sipemu/ggplot-rs)
+[![License: MIT OR Apache-2.0](https://img.shields.io/badge/license-MIT%2FApache--2.0-blue.svg)](#license)
+
 A Rust implementation of ggplot2's Grammar of Graphics, built on top of [polars](https://pola.rs/) DataFrames and the [plotters](https://github.com/plotters-rs/plotters) rendering backend.
 
 ## Quick Start
@@ -69,7 +75,7 @@ let df = df! {
 GGPlot::new(df)
 ```
 
-Legacy row-oriented and column-oriented inputs are also supported:
+Row-oriented and column-oriented inputs are also supported:
 
 ```rust
 // Row-oriented
@@ -79,6 +85,46 @@ GGPlot::new(rows)
 // Column-oriented
 let cols: Vec<(String, Vec<Value>)> = vec![/* ... */];
 GGPlot::new(cols)
+```
+
+Arrow-native producers (e.g. DuckDB) can feed a `RecordBatch` directly with the
+`arrow` feature:
+
+```rust
+// Cargo.toml: ggplot-rs = { version = "0.1", features = ["arrow"] }
+let batch: arrow::record_batch::RecordBatch = /* ... */;
+GGPlot::new(batch)
+```
+
+## Rendering
+
+Save to a file (format inferred from the extension — `svg`, `png`, `jpg`, ...):
+
+```rust
+plot.save("out.svg")?;              // 800x600 default
+plot.save_with_size("out.png", 1200, 800)?;
+plot.ggsave("out.png", 6.0, 4.0, 150.0)?; // width_in, height_in, dpi
+```
+
+Or render in memory — no temp files — which is what you want when serving charts
+from a web/MCP service:
+
+```rust
+let svg: String   = plot.clone().render_svg()?;          // or render_svg_with_size(w, h)
+let png: Vec<u8>  = plot.render_png_with_size(400, 300)?; // fully-encoded PNG bytes
+```
+
+## Feature Flags
+
+| Feature  | Default | Provides                                                        |
+| -------- | :-----: | --------------------------------------------------------------- |
+| `polars` |   yes   | `impl GGData for polars::DataFrame` + `polars` re-export         |
+| `arrow`  |   no    | `impl GGData for arrow::RecordBatch` (Arrow/DuckDB input)        |
+
+To skip the heavy polars dependency (e.g. an Arrow-only service), disable defaults:
+
+```toml
+ggplot-rs = { version = "0.1", default-features = false, features = ["arrow"] }
 ```
 
 ## Examples
@@ -101,7 +147,22 @@ cargo run --example color_palettes
 
 ## Dependencies
 
-- [polars](https://crates.io/crates/polars) 0.46 — DataFrame input
 - [plotters](https://crates.io/crates/plotters) 0.3 — SVG/PNG rendering
+- [image](https://crates.io/crates/image) 0.24 — in-memory PNG encoding
 - [indexmap](https://crates.io/crates/indexmap) 2 — ordered maps for internal data
 - [rand](https://crates.io/crates/rand) 0.8 — jitter positioning
+- [polars](https://crates.io/crates/polars) 0.46 — DataFrame input *(optional, default)*
+- [arrow](https://crates.io/crates/arrow) 53 — Arrow `RecordBatch` input *(optional)*
+
+## License
+
+Licensed under either of
+
+- Apache License, Version 2.0 ([LICENSE-APACHE](LICENSE-APACHE) or <http://www.apache.org/licenses/LICENSE-2.0>)
+- MIT license ([LICENSE-MIT](LICENSE-MIT) or <http://opensource.org/licenses/MIT>)
+
+at your option.
+
+Unless you explicitly state otherwise, any contribution intentionally submitted
+for inclusion in the work by you, as defined in the Apache-2.0 license, shall be
+dual licensed as above, without any additional terms or conditions.

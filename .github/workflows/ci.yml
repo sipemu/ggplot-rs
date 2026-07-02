@@ -9,7 +9,7 @@ env:
   CARGO_TERM_COLOR: always
 
 jobs:
-  ci:
+  test:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -26,11 +26,51 @@ jobs:
       - name: Format check
         run: cargo fmt --all -- --check
 
-      - name: Clippy
+      - name: Clippy (default)
         run: cargo clippy --all-targets -- -D warnings
 
-      - name: Tests
+      - name: Clippy (no default features)
+        run: cargo clippy --all-targets --no-default-features -- -D warnings
+
+      - name: Clippy (arrow only)
+        run: cargo clippy --all-targets --no-default-features --features arrow -- -D warnings
+
+      - name: Tests (default)
         run: cargo test
+
+      - name: Tests (no default features)
+        run: cargo test --no-default-features
+
+      - name: Tests (arrow)
+        run: cargo test --no-default-features --features arrow
 
       - name: Build examples
         run: cargo build --examples
+
+  coverage:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install system dependencies
+        run: sudo apt-get update && sudo apt-get install -y libfontconfig1-dev
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: llvm-tools-preview
+
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Install cargo-llvm-cov
+        uses: taiki-e/install-action@cargo-llvm-cov
+
+      - name: Generate coverage (all features)
+        run: cargo llvm-cov --all-features --workspace --lcov --output-path lcov.info
+
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@v4
+        with:
+          files: lcov.info
+          fail_ci_if_error: false
+        env:
+          CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}

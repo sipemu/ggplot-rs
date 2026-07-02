@@ -997,10 +997,82 @@ impl GGPlot {
 
     /// Build and save with custom dimensions.
     pub fn save_with_size(self, path: &str, w: u32, h: u32) -> Result<(), GGError> {
-        // Apply label overrides to scales
+        let (built, layout) = self.prepare(w, h)?;
+
+        // Determine backend from file extension
+        let ext = path.rsplit('.').next().unwrap_or("svg").to_lowercase();
+
+        match ext.as_str() {
+            "svg" => {
+                let backend = plotters::prelude::SVGBackend::new(path, (w, h));
+                Self::render_into(backend.into_drawing_area(), &built, &layout)?;
+            }
+            "png" | "bmp" | "gif" | "jpeg" | "jpg" | "tiff" => {
+                let backend = plotters::prelude::BitMapBackend::new(path, (w, h));
+                Self::render_into(backend.into_drawing_area(), &built, &layout)?;
+            }
+            _ => {
+                return Err(GGError::UnsupportedFormat(ext));
+            }
+        }
+
+        Ok(())
+    }
+
+    /// Render the plot to an in-memory SVG document (default 800x600).
+    ///
+    /// Unlike [`save`](Self::save), this writes nothing to disk — handy for
+    /// serving charts from a web/MCP service.
+    pub fn render_svg(self) -> Result<String, GGError> {
+        self.render_svg_with_size(800, 600)
+    }
+
+    /// Render the plot to an in-memory SVG document with custom dimensions.
+    pub fn render_svg_with_size(self, w: u32, h: u32) -> Result<String, GGError> {
+        let (built, layout) = self.prepare(w, h)?;
+        let mut buf = String::new();
+        {
+            let backend = plotters::prelude::SVGBackend::with_string(&mut buf, (w, h));
+            Self::render_into(backend.into_drawing_area(), &built, &layout)?;
+        }
+        Ok(buf)
+    }
+
+    /// Render the plot to in-memory PNG bytes (default 800x600).
+    ///
+    /// Returns a fully-encoded PNG, ready to write to an HTTP response or
+    /// embed as a data URI — no temp files involved.
+    pub fn render_png(self) -> Result<Vec<u8>, GGError> {
+        self.render_png_with_size(800, 600)
+    }
+
+    /// Render the plot to in-memory PNG bytes with custom dimensions.
+    pub fn render_png_with_size(self, w: u32, h: u32) -> Result<Vec<u8>, GGError> {
+        let (built, layout) = self.prepare(w, h)?;
+
+        // plotters' BitMapBackend draws into a raw RGB buffer; we then encode
+        // that buffer to PNG via the `image` crate.
+        let mut rgb = vec![0u8; (w as usize) * (h as usize) * 3];
+        {
+            let backend = plotters::prelude::BitMapBackend::with_buffer(&mut rgb, (w, h));
+            Self::render_into(backend.into_drawing_area(), &built, &layout)?;
+        }
+
+        let img = image::RgbImage::from_raw(w, h, rgb).ok_or_else(|| {
+            GGError::Render(RenderError::BackendError(
+                "PNG buffer size mismatch".to_string(),
+            ))
+        })?;
+        let mut out = std::io::Cursor::new(Vec::new());
+        img.write_to(&mut out, image::ImageOutputFormat::Png)
+            .map_err(|e| GGError::Render(RenderError::BackendError(format!("{:?}", e))))?;
+        Ok(out.into_inner())
+    }
+
+    /// Shared pipeline: build the plot, apply label overrides, compute layout.
+    fn prepare(self, w: u32, h: u32) -> Result<(crate::build::BuiltPlot, PlotLayout), GGError> {
         let plot = self;
 
-        // Build the plot
         let has_title = plot.labels.title.is_some();
         let has_subtitle = plot.labels.subtitle.is_some();
         let has_caption = plot.labels.caption.is_some();
@@ -1032,35 +1104,25 @@ impl GGPlot {
             has_legend,
         );
 
-        // Determine backend from file extension
-        let ext = path.rsplit('.').next().unwrap_or("svg").to_lowercase();
+        Ok((built, layout))
+    }
 
-        match ext.as_str() {
-            "svg" => {
-                let backend = plotters::prelude::SVGBackend::new(path, (w, h));
-                let area = backend.into_drawing_area();
-                area.fill(&plotters::prelude::WHITE)
-                    .map_err(|e| GGError::Render(RenderError::BackendError(format!("{:?}", e))))?;
-                let mut adapter = PlottersAdapter::new(&area, layout.plot_area.clone());
-                PlotRenderer::render(&built, &mut adapter).map_err(GGError::Render)?;
-                area.present()
-                    .map_err(|e| GGError::Render(RenderError::BackendError(format!("{:?}", e))))?;
-            }
-            "png" | "bmp" | "gif" | "jpeg" | "jpg" | "tiff" => {
-                let backend = plotters::prelude::BitMapBackend::new(path, (w, h));
-                let area = backend.into_drawing_area();
-                area.fill(&plotters::prelude::WHITE)
-                    .map_err(|e| GGError::Render(RenderError::BackendError(format!("{:?}", e))))?;
-                let mut adapter = PlottersAdapter::new(&area, layout.plot_area.clone());
-                PlotRenderer::render(&built, &mut adapter).map_err(GGError::Render)?;
-                area.present()
-                    .map_err(|e| GGError::Render(RenderError::BackendError(format!("{:?}", e))))?;
-            }
-            _ => {
-                return Err(GGError::UnsupportedFormat(ext));
-            }
-        }
-
+    /// Fill the background, render the built plot, and flush — for any backend.
+    fn render_into<DB>(
+        area: plotters::drawing::DrawingArea<DB, plotters::coord::Shift>,
+        built: &crate::build::BuiltPlot,
+        layout: &PlotLayout,
+    ) -> Result<(), GGError>
+    where
+        DB: plotters::prelude::DrawingBackend,
+        DB::ErrorType: 'static,
+    {
+        area.fill(&plotters::prelude::WHITE)
+            .map_err(|e| GGError::Render(RenderError::BackendError(format!("{:?}", e))))?;
+        let mut adapter = PlottersAdapter::new(&area, layout.plot_area.clone());
+        PlotRenderer::render(built, &mut adapter).map_err(GGError::Render)?;
+        area.present()
+            .map_err(|e| GGError::Render(RenderError::BackendError(format!("{:?}", e))))?;
         Ok(())
     }
 

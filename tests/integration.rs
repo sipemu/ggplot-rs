@@ -76,6 +76,48 @@ fn smoke_test_scatter_png() {
     std::fs::remove_file(&path).ok();
 }
 
+fn sample_points() -> Vec<HashMap<String, Value>> {
+    vec![
+        HashMap::from([
+            ("x".to_string(), Value::Float(1.0)),
+            ("y".to_string(), Value::Float(2.0)),
+        ]),
+        HashMap::from([
+            ("x".to_string(), Value::Float(2.0)),
+            ("y".to_string(), Value::Float(4.0)),
+        ]),
+        HashMap::from([
+            ("x".to_string(), Value::Float(3.0)),
+            ("y".to_string(), Value::Float(5.0)),
+        ]),
+    ]
+}
+
+#[test]
+fn render_svg_in_memory() {
+    let svg = GGPlot::new(sample_points())
+        .aes(Aes::new().x("x").y("y"))
+        .geom_point()
+        .render_svg()
+        .expect("should render SVG to string");
+
+    assert!(svg.contains("<svg"));
+    assert!(svg.contains("<circle"));
+}
+
+#[test]
+fn render_png_in_memory() {
+    let png = GGPlot::new(sample_points())
+        .aes(Aes::new().x("x").y("y"))
+        .geom_point()
+        .render_png_with_size(400, 300)
+        .expect("should render PNG to bytes");
+
+    // Non-trivial output and a valid PNG magic header.
+    assert!(png.len() > 100);
+    assert_eq!(&png[..8], &[0x89, b'P', b'N', b'G', 0x0d, 0x0a, 0x1a, 0x0a]);
+}
+
 #[test]
 fn test_line_plot() {
     let data = vec![

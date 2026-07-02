@@ -84,4 +84,5 @@ pub use crate::theme::presets::{
     theme_linedraw_base, theme_minimal, theme_minimal_base, theme_void, theme_void_base,
 };
 pub use crate::theme::{LegendPosition, Margin, Theme, ThemeUpdate};
+#[cfg(feature = "polars")]
 pub use polars;
