@@ -55,7 +55,10 @@ pub use crate::scale::color::{RGBAColor, ScaleColorContinuous, ScaleColorDiscret
 pub use crate::scale::continuous::ScaleContinuous;
 pub use crate::scale::datetime::ScaleDateTime;
 pub use crate::scale::discrete::ScaleDiscrete;
-pub use crate::scale::format::{label_comma, label_dollar, label_percent, label_scientific};
+pub use crate::scale::format::{
+    label_bytes, label_comma, label_dollar, label_number, label_ordinal, label_percent,
+    label_scientific, label_si,
+};
 pub use crate::scale::gradient::ScaleColorGradient2;
 pub use crate::scale::gradient_n::ScaleColorGradientN;
 pub use crate::scale::grey::ScaleColorGrey;

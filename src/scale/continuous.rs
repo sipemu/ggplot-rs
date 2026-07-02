@@ -84,9 +84,13 @@ impl ScaleContinuous {
         self
     }
 
-    /// Set a label formatter function (e.g., `label_comma`, `label_percent`).
-    pub fn with_label_formatter(mut self, f: LabelFormatter) -> Self {
-        self.label_formatter = Some(f);
+    /// Set a label formatter. Accepts a plain `fn` (e.g. `label_comma`) or a
+    /// configurable formatter such as `label_si()` / `label_number(...)`.
+    pub fn with_label_formatter<F>(mut self, f: F) -> Self
+    where
+        F: Fn(f64) -> String + Send + Sync + 'static,
+    {
+        self.label_formatter = Some(std::sync::Arc::new(f));
         self
     }
 
@@ -102,7 +106,7 @@ impl ScaleContinuous {
     }
 
     fn format_label(&self, v: f64) -> String {
-        if let Some(f) = self.label_formatter {
+        if let Some(f) = &self.label_formatter {
             f(v)
         } else {
             format_number(v)

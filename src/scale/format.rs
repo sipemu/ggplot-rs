@@ -1,5 +1,8 @@
 //! Label formatting functions for scale breaks.
-//! Analogous to R's `scales` package (comma, percent, dollar, scientific).
+//! Analogous to R's `scales` package (comma, percent, dollar, scientific,
+//! number, SI, ordinal, bytes).
+
+use std::sync::Arc;
 
 /// Format with comma separators for thousands (e.g., 1,234,567).
 pub fn label_comma(v: f64) -> String {
@@ -75,8 +78,107 @@ fn add_commas(s: &str) -> String {
     }
 }
 
-/// A label formatter function type.
-pub type LabelFormatter = fn(f64) -> String;
+/// A label formatter — any `Fn(f64) -> String`. The plain `label_*` functions
+/// coerce into this, and the configurable `label_number`/`label_si`/… builders
+/// return one directly.
+pub type LabelFormatter = Arc<dyn Fn(f64) -> String + Send + Sync>;
+
+/// Round `v` to a multiple of `accuracy` and format with the implied decimals.
+fn format_accuracy(v: f64, accuracy: Option<f64>) -> String {
+    match accuracy {
+        Some(acc) if acc > 0.0 => {
+            let rounded = (v / acc).round() * acc;
+            let decimals = (-acc.log10().floor()).max(0.0) as usize;
+            add_commas(&format!("{rounded:.decimals$}"))
+        }
+        _ => label_comma(v),
+    }
+}
+
+/// General configurable number formatter (R's `scales::label_number`).
+/// Multiplies by `scale`, rounds to `accuracy` (None = trim), and wraps in
+/// `prefix`/`suffix`.
+pub fn label_number(
+    accuracy: Option<f64>,
+    prefix: &str,
+    suffix: &str,
+    scale: f64,
+) -> impl Fn(f64) -> String + Send + Sync {
+    let prefix = prefix.to_string();
+    let suffix = suffix.to_string();
+    move |v: f64| format!("{prefix}{}{suffix}", format_accuracy(v * scale, accuracy))
+}
+
+/// SI-prefixed number formatter: 1_500 → "1.5k", 2.3e6 → "2.3M", 5e-4 → "500µ".
+pub fn label_si() -> impl Fn(f64) -> String + Send + Sync {
+    |v: f64| {
+        if v == 0.0 {
+            return "0".to_string();
+        }
+        let a = v.abs();
+        let (div, suffix) = if a >= 1e12 {
+            (1e12, "T")
+        } else if a >= 1e9 {
+            (1e9, "G")
+        } else if a >= 1e6 {
+            (1e6, "M")
+        } else if a >= 1e3 {
+            (1e3, "k")
+        } else if a >= 1.0 {
+            (1.0, "")
+        } else if a >= 1e-3 {
+            (1e-3, "m")
+        } else if a >= 1e-6 {
+            (1e-6, "µ")
+        } else {
+            (1e-9, "n")
+        };
+        let scaled = v / div;
+        let s = format!("{scaled:.1}");
+        let s = s.trim_end_matches('0').trim_end_matches('.');
+        format!("{s}{suffix}")
+    }
+}
+
+/// Ordinal formatter: 1 → "1st", 2 → "2nd", 3 → "3rd", 11 → "11th".
+pub fn label_ordinal() -> impl Fn(f64) -> String + Send + Sync {
+    |v: f64| {
+        let n = v.round() as i64;
+        let suffix = match (n.rem_euclid(10), n.rem_euclid(100)) {
+            (1, r) if r != 11 => "st",
+            (2, r) if r != 12 => "nd",
+            (3, r) if r != 13 => "rd",
+            _ => "th",
+        };
+        format!("{n}{suffix}")
+    }
+}
+
+/// Byte-size formatter. `binary = true` uses 1024-based KiB/MiB; otherwise
+/// 1000-based kB/MB.
+pub fn label_bytes(binary: bool) -> impl Fn(f64) -> String + Send + Sync {
+    let (base, units): (f64, &[&str]) = if binary {
+        (1024.0, &["B", "KiB", "MiB", "GiB", "TiB"])
+    } else {
+        (1000.0, &["B", "kB", "MB", "GB", "TB"])
+    };
+    move |v: f64| {
+        let a = v.abs();
+        if a < base {
+            return format!("{} {}", v.round() as i64, units[0]);
+        }
+        let mut val = a;
+        let mut i = 0;
+        while val >= base && i < units.len() - 1 {
+            val /= base;
+            i += 1;
+        }
+        let s = format!("{val:.1}");
+        let s = s.trim_end_matches('0').trim_end_matches('.');
+        let sign = if v < 0.0 { "-" } else { "" };
+        format!("{sign}{s} {}", units[i])
+    }
+}
 
 #[cfg(test)]
 mod tests {
@@ -110,5 +212,47 @@ mod tests {
         assert_eq!(label_scientific(12345.0), "1.23e4");
         assert_eq!(label_scientific(0.0), "0");
         assert_eq!(label_scientific(100.0), "1e2");
+    }
+
+    #[test]
+    fn test_label_si() {
+        let f = label_si();
+        assert_eq!(f(1500.0), "1.5k");
+        assert_eq!(f(2_300_000.0), "2.3M");
+        assert_eq!(f(5e9), "5G");
+        assert_eq!(f(0.0), "0");
+        assert_eq!(f(0.0005), "500µ");
+        assert_eq!(f(-4000.0), "-4k");
+    }
+
+    #[test]
+    fn test_label_number() {
+        let f = label_number(Some(0.1), "", " kg", 1.0);
+        assert_eq!(f(4.16), "4.2 kg");
+        let pct = label_number(Some(1.0), "", "%", 100.0);
+        assert_eq!(pct(0.25), "25%");
+        let money = label_number(None, "€", "", 1.0);
+        assert_eq!(money(1500.0), "€1,500");
+    }
+
+    #[test]
+    fn test_label_ordinal() {
+        let f = label_ordinal();
+        assert_eq!(f(1.0), "1st");
+        assert_eq!(f(2.0), "2nd");
+        assert_eq!(f(3.0), "3rd");
+        assert_eq!(f(4.0), "4th");
+        assert_eq!(f(11.0), "11th");
+        assert_eq!(f(22.0), "22nd");
+    }
+
+    #[test]
+    fn test_label_bytes() {
+        let f = label_bytes(false);
+        assert_eq!(f(500.0), "500 B");
+        assert_eq!(f(1500.0), "1.5 kB");
+        assert_eq!(f(2_000_000.0), "2 MB");
+        let b = label_bytes(true);
+        assert_eq!(b(1024.0), "1 KiB");
     }
 }
