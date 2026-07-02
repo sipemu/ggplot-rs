@@ -96,7 +96,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
 ### Geoms
 
-`geom_point`, `geom_line`, `geom_bar`, `geom_col`, `geom_histogram`, `geom_boxplot`, `geom_violin`, `geom_smooth`, `geom_density`, `geom_area`, `geom_ribbon`, `geom_errorbar`, `geom_segment`, `geom_rug`, `geom_text`, `geom_label`, `geom_tile`, `geom_raster`, `geom_bin2d`, `geom_hex`, `geom_contour`, `geom_path`, `geom_step`, `geom_hline`, `geom_vline`, `geom_abline`, and more (40+)
+`geom_point`, `geom_line`, `geom_bar`, `geom_col`, `geom_histogram`, `geom_boxplot`, `geom_violin`, `geom_smooth`, `geom_density`, `geom_area`, `geom_ribbon`, `geom_errorbar`, `geom_segment`, `geom_rug`, `geom_text`, `geom_label`, `geom_tile`, `geom_raster`, `geom_bin2d`, `geom_hex`, `geom_contour`, `geom_contour_filled`, `geom_path`, `geom_step`, `geom_hline`, `geom_vline`, `geom_abline`, and more (40+)
 
 ### Stats
 
