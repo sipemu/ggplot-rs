@@ -12,6 +12,23 @@ pub enum SmoothMethod {
     Lm,
     /// LOESS with configurable span.
     Loess { span: f64 },
+    /// Generalized linear model via anofox-regression (Gaussian or Poisson).
+    #[cfg(feature = "regression")]
+    Glm { family: SmoothFamily },
+    /// Robust linear regression (Huber M-estimator) via anofox-regression.
+    #[cfg(feature = "regression")]
+    Rlm,
+}
+
+/// GLM family for regression-backed smoothing (`SmoothMethod::Glm`).
+#[cfg(feature = "regression")]
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
+pub enum SmoothFamily {
+    /// Ordinary least squares (identity link).
+    #[default]
+    Gaussian,
+    /// Poisson regression (log link) for count responses.
+    Poisson,
 }
 
 /// Smoothing statistic — supports both linear regression and LOESS.
@@ -46,6 +63,10 @@ impl Stat for StatSmooth {
                 };
                 loess.compute_group(data, scales)
             }
+            #[cfg(feature = "regression")]
+            SmoothMethod::Glm { family } => self.compute_glm(data, Some(*family)),
+            #[cfg(feature = "regression")]
+            SmoothMethod::Rlm => self.compute_glm(data, None),
         }
     }
 
@@ -147,6 +168,97 @@ impl StatSmooth {
         if !ymin_vals.is_empty() {
             result.add_column("ymin".to_string(), ymin_vals);
             result.add_column("ymax".to_string(), ymax_vals);
+        }
+        result
+    }
+
+    /// GLM / robust-linear smoothing backed by anofox-regression. `family = None`
+    /// selects the robust (Huber) fit; `Some(..)` selects a GLM family. A
+    /// confidence-interval ribbon (ymin/ymax) is emitted when `self.se` is set.
+    #[cfg(feature = "regression")]
+    fn compute_glm(&self, data: &DataFrame, family: Option<SmoothFamily>) -> DataFrame {
+        use anofox_regression::solvers::{
+            FittedRegressor, HuberRegressor, OlsRegressor, PoissonRegressor, Regressor,
+        };
+        use anofox_regression::{IntervalType, PoissonFamily, RegressionOptions};
+        use faer::{Col, Mat};
+
+        let (x_col, y_col) = match (data.column("x"), data.column("y")) {
+            (Some(x), Some(y)) => (x, y),
+            _ => return DataFrame::new(),
+        };
+        let pairs: Vec<(f64, f64)> = x_col
+            .iter()
+            .zip(y_col.iter())
+            .filter_map(|(x, y)| Some((x.as_f64()?, y.as_f64()?)))
+            .collect();
+        if pairs.len() < 2 {
+            return DataFrame::new();
+        }
+
+        let n = pairs.len();
+        let x = Mat::from_fn(n, 1, |i, _| pairs[i].0);
+        let y = Col::from_fn(n, |i| pairs[i].1);
+        let x_min = pairs.iter().map(|p| p.0).fold(f64::INFINITY, f64::min);
+        let x_max = pairs.iter().map(|p| p.0).fold(f64::NEG_INFINITY, f64::max);
+        let steps = self.n_points.max(2);
+        let grid = Mat::from_fn(steps, 1, |k, _| {
+            x_min + (x_max - x_min) * k as f64 / (steps - 1) as f64
+        });
+        let interval = if self.se {
+            Some(IntervalType::Confidence)
+        } else {
+            None
+        };
+
+        // Fit the requested model and predict (with interval) over the grid.
+        let pred = match family {
+            None => match HuberRegressor::new().fit(&x, &y) {
+                Ok(f) => f.predict_with_interval(&grid, interval, 0.95),
+                Err(_) => return DataFrame::new(),
+            },
+            Some(SmoothFamily::Gaussian) => {
+                match OlsRegressor::new(RegressionOptions::default()).fit(&x, &y) {
+                    Ok(f) => f.predict_with_interval(&grid, interval, 0.95),
+                    Err(_) => return DataFrame::new(),
+                }
+            }
+            Some(SmoothFamily::Poisson) => {
+                let reg =
+                    PoissonRegressor::new(RegressionOptions::default(), PoissonFamily::default());
+                match reg.fit(&x, &y) {
+                    Ok(f) => f.predict_with_interval(&grid, interval, 0.95),
+                    Err(_) => return DataFrame::new(),
+                }
+            }
+        };
+
+        let mut x_vals = Vec::with_capacity(steps);
+        let mut y_vals = Vec::with_capacity(steps);
+        let mut ymin_vals = Vec::with_capacity(steps);
+        let mut ymax_vals = Vec::with_capacity(steps);
+        for k in 0..steps {
+            x_vals.push(Value::Float(grid[(k, 0)]));
+            y_vals.push(Value::Float(pred.fit[k]));
+            if self.se {
+                ymin_vals.push(Value::Float(pred.lower[k]));
+                ymax_vals.push(Value::Float(pred.upper[k]));
+            }
+        }
+
+        let mut result = DataFrame::new();
+        result.add_column("x".to_string(), x_vals);
+        result.add_column("y".to_string(), y_vals);
+        if self.se {
+            result.add_column("ymin".to_string(), ymin_vals);
+            result.add_column("ymax".to_string(), ymax_vals);
+        }
+        for col_name in &["color", "fill", "group"] {
+            if let Some(col) = data.column(col_name) {
+                if let Some(first) = col.first() {
+                    result.add_column(col_name.to_string(), vec![first.clone(); steps]);
+                }
+            }
         }
         result
     }

@@ -81,6 +81,8 @@ pub use crate::stat::identity::StatIdentity;
 pub use crate::stat::loess::StatLoess;
 #[cfg(feature = "regression")]
 pub use crate::stat::quantile::StatQuantile;
+#[cfg(feature = "regression")]
+pub use crate::stat::smooth::SmoothFamily;
 pub use crate::stat::smooth::SmoothMethod;
 pub use crate::stat::sum::StatSum;
 pub use crate::stat::summary::{StatSummary, SummaryFun};

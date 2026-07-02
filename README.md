@@ -234,7 +234,7 @@ GGPlot::new(data)
 | ------------ | :-----: | ----------------------------------------------------------- |
 | `polars`     |   yes   | `impl GGData for polars::DataFrame` + `polars` re-export     |
 | `arrow`      |   no    | `impl GGData for arrow::RecordBatch` (Arrow/DuckDB input)    |
-| `regression` |   no    | `stat_quantile` / `geom_quantile` via anofox-regression      |
+| `regression` |   no    | `stat_quantile`/`geom_quantile` + `geom_smooth` glm/rlm via anofox-regression |
 
 To skip the heavy polars dependency (e.g. an Arrow-only service), disable defaults:
 
