@@ -56,6 +56,31 @@ cargo run --features cli --bin ggplot-rs -- <args>
 - `--theme`: `gray bw minimal classic dark light void linedraw`.
 - Output size: `--width` `--height` (pixels; default 800×600).
 
+## Theming (colors & custom themes)
+
+- `--palette NAME` — discrete color/fill palette: `Set1 Set2 Set3 Dark2 Paired Accent`, sequential (`Blues Greens Reds YlOrRd …`), diverging (`RdBu Spectral PiYG …`), or perceptual (`viridis magma plasma inferno`).
+- `--primary "r,g,b"` — brand color for single-series geoms with no color/fill mapped, e.g. `--primary "26,153,136"`.
+- `--theme-config FILE` — a **TOML or JSON** file of element overrides applied on top of the preset (or its own `base`). This is full custom theming. Example `theme.toml`:
+  ```toml
+  base = "minimal"          # preset to start from
+  primary = [200, 60, 40]
+  palette = "RdBu"
+  [title]
+  size = 22
+  color = [40, 40, 90]
+  [panel_background]
+  fill = [248, 246, 240]
+  [panel_grid_minor]
+  visible = false
+  [axis_text_x]
+  angle = 45
+  [legend]
+  position = "inside"       # top/bottom/left/right/none/inside
+  x = 0.9
+  y = 0.9
+  ```
+  Sections: `title subtitle caption axis_title_x/y axis_text_x/y legend_title legend_text strip_text` (`size`/`color`/`family`/`angle`/`visible`); `axis_line axis_ticks panel_grid_major panel_grid_minor panel_border` (`color`/`width`/`visible`); `panel_background plot_background legend_background strip_background` (`fill`/`color`/`width`/`visible`). Colors are `[r, g, b]`.
+
 ## Examples
 
 ```sh
