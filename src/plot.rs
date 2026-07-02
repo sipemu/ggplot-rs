@@ -178,12 +178,27 @@ impl GGPlot {
         self.add_geom(GeomHline::new(yintercept))
     }
 
+    /// Add a horizontal reference line with custom styling (color/linetype/width).
+    pub fn geom_hline_with(self, geom: GeomHline) -> Self {
+        self.add_geom(geom)
+    }
+
     pub fn geom_vline(self, xintercept: f64) -> Self {
         self.add_geom(GeomVline::new(xintercept))
     }
 
+    /// Add a vertical reference line with custom styling (color/linetype/width).
+    pub fn geom_vline_with(self, geom: GeomVline) -> Self {
+        self.add_geom(geom)
+    }
+
     pub fn geom_abline(self, slope: f64, intercept: f64) -> Self {
         self.add_geom(GeomAbline::new(slope, intercept))
+    }
+
+    /// Add a slope/intercept reference line with custom styling.
+    pub fn geom_abline_with(self, geom: GeomAbline) -> Self {
+        self.add_geom(geom)
     }
 
     pub fn geom_text(self) -> Self {

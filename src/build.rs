@@ -322,20 +322,15 @@ impl PlotBuilder {
         // Step 3: Evaluate aes — rename columns to canonical names
         let mut working_data = resolve_mappings(&source_data, &merged_mapping);
 
-        // Step 3b: Validate required aesthetics
-        let required = geom.required_aes();
-        if !required.is_empty() {
-            for aes in &required {
-                let col_name = aes.col_name();
-                if !working_data.has_column(col_name) {
-                    return Err(GGError::ValidationError(format!(
-                        "geom_{} requires aesthetic '{}' but it was not provided",
-                        geom.name(),
-                        col_name
-                    )));
-                }
-            }
-        }
+        // Remember which columns the user actually supplied (pre-stat). A required
+        // aesthetic is satisfied if it was present here OR is synthesized by the
+        // stat (checked after Step 6) — e.g. boxplot maps `y` then the stat turns
+        // it into ymin/ymax, while StatEcdf produces `y` that wasn't mapped.
+        let pre_stat_columns: Vec<String> = working_data
+            .column_names()
+            .iter()
+            .map(|s| s.to_string())
+            .collect();
 
         // Step 4: Ensure scales exist for each mapped aesthetic
         for m in &merged_mapping.mappings {
@@ -382,6 +377,23 @@ impl PlotBuilder {
 
         // Step 6a: Apply after_stat() mappings (rename stat-computed columns)
         apply_after_stat(&mut working_data, &merged_mapping);
+
+        // Step 6a-validate: A required aesthetic must have been supplied by the
+        // user (pre-stat) or synthesized by the stat (post-stat). This lets
+        // StatEcdf produce `y` for geom_step, while boxplot — which maps `y` then
+        // consumes it into ymin/ymax — still validates. Empty input has the
+        // column in neither place, so genuinely-missing aesthetics still error.
+        for aes in &geom.required_aes() {
+            let col_name = aes.col_name();
+            let supplied = pre_stat_columns.iter().any(|c| c == col_name);
+            if !supplied && !working_data.has_column(col_name) {
+                return Err(GGError::ValidationError(format!(
+                    "geom_{} requires aesthetic '{}' but it was not provided",
+                    geom.name(),
+                    col_name
+                )));
+            }
+        }
 
         // Step 6b: Ensure scales for stat-computed aesthetics (e.g. y from StatCount/StatBin)
         let stat_aes = [

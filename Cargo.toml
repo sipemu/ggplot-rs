@@ -39,6 +39,10 @@ arrow = ["dep:arrow"]
 name = "gallery"
 required-features = ["polars"]
 
+# Polars-free: builds and runs with --no-default-features too.
+[[example]]
+name = "supplier_leadtime"
+
 [[example]]
 name = "scatter"
 required-features = ["polars"]
