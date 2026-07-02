@@ -17,15 +17,22 @@ pub fn draw_x_axis(
     let axis_line = theme.get_axis_line_x();
     let axis_ticks = theme.get_axis_ticks_x();
 
+    // Axis position: bottom (default) or top. `dir` points away from the panel.
+    let top = scale.axis_position_opposite();
+    let edge_y = if top {
+        plot_area.y
+    } else {
+        plot_area.y + plot_area.height
+    };
+    let dir = if top { -1.0 } else { 1.0 };
+
     // Axis line
     if axis_line.visible {
-        let left = (plot_area.x, plot_area.y + plot_area.height);
-        let right = (
-            plot_area.x + plot_area.width,
-            plot_area.y + plot_area.height,
-        );
         backend.draw_line(
-            &[left, right],
+            &[
+                (plot_area.x, edge_y),
+                (plot_area.x + plot_area.width, edge_y),
+            ],
             &LineStyle {
                 color: axis_line.color,
                 width: axis_line.width,
@@ -39,11 +46,10 @@ pub fn draw_x_axis(
     let dodge = theme.axis_text_x_dodge.max(1);
     for (i, (pos, label)) in breaks.iter().enumerate() {
         let (px, _py) = coord.transform((*pos, 0.0), plot_area);
-        let tick_y = plot_area.y + plot_area.height;
 
         if axis_ticks.visible {
             backend.draw_line(
-                &[(px, tick_y), (px, tick_y + tick_len)],
+                &[(px, edge_y), (px, edge_y + dir * tick_len)],
                 &LineStyle {
                     color: axis_ticks.color,
                     width: axis_ticks.width,
@@ -71,11 +77,12 @@ pub fn draw_x_axis(
                 label,
                 (
                     px,
-                    tick_y
-                        + tick_len
-                        + theme.legend_spacing / 2.0
-                        + theme.axis_text_x.size / 2.0
-                        + row_offset,
+                    edge_y
+                        + dir
+                            * (tick_len
+                                + theme.legend_spacing / 2.0
+                                + theme.axis_text_x.size / 2.0
+                                + row_offset),
                 ),
                 &TextStyle {
                     color: theme.axis_text_x.color,
@@ -92,12 +99,8 @@ pub fn draw_x_axis(
     let title = scale.name();
     if !title.is_empty() && theme.axis_title_x.visible {
         let center_x = plot_area.x + plot_area.width / 2.0;
-        let title_y = plot_area.y
-            + plot_area.height
-            + tick_len
-            + theme.axis_text_x.size
-            + 8.0
-            + theme.axis_title_x.size / 2.0;
+        let title_y = edge_y
+            + dir * (tick_len + theme.axis_text_x.size + 8.0 + theme.axis_title_x.size / 2.0);
         let family = if theme.axis_title_x.family.is_empty() {
             None
         } else {

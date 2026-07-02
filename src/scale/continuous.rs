@@ -16,7 +16,11 @@ pub struct ScaleContinuous {
     max: f64,
     trained: bool,
     filter_oob: bool,
-    expand: (f64, f64), // multiplicative and additive expansion
+    // Per-side expansion: (mult_lower, add_lower, mult_upper, add_upper).
+    expand: (f64, f64, f64, f64),
+    // Axis position: false = default (bottom for x, left for y), true = opposite
+    // side (top for x, right for y).
+    position_opposite: bool,
     pub(crate) scale_transform: ScaleTransform,
     custom_breaks: Option<Vec<f64>>,
     custom_labels: Option<Vec<String>>,
@@ -33,7 +37,8 @@ impl ScaleContinuous {
             max: f64::NEG_INFINITY,
             trained: false,
             filter_oob: false,
-            expand: (0.05, 0.0),
+            expand: (0.05, 0.0, 0.05, 0.0),
+            position_opposite: false,
             scale_transform: ScaleTransform::Identity,
             custom_breaks: None,
             custom_labels: None,
@@ -78,9 +83,28 @@ impl ScaleContinuous {
     }
 
     /// Set the expansion multiplier and additive constant.
-    /// Like R's `expand = c(mult, add)`. Default is `(0.05, 0.0)`.
+    /// Like R's `expand = c(mult, add)`, applied symmetrically. Default `(0.05, 0.0)`.
     pub fn with_expand(mut self, mult: f64, add: f64) -> Self {
-        self.expand = (mult, add);
+        self.expand = (mult, add, mult, add);
+        self
+    }
+
+    /// Per-side expansion (R's `expansion(mult = c(l, u), add = c(l, u))`):
+    /// separate multiplicative/additive expansion for the lower and upper ends.
+    pub fn with_expand_sides(
+        mut self,
+        mult_lower: f64,
+        add_lower: f64,
+        mult_upper: f64,
+        add_upper: f64,
+    ) -> Self {
+        self.expand = (mult_lower, add_lower, mult_upper, add_upper);
+        self
+    }
+
+    /// Place this axis on the opposite side (x → top, y → right).
+    pub fn with_position_opposite(mut self) -> Self {
+        self.position_opposite = true;
         self
     }
 
@@ -115,9 +139,13 @@ impl ScaleContinuous {
 
     fn expanded_range(&self) -> (f64, f64) {
         let range = self.max - self.min;
-        let mult = self.expand.0;
-        let add = self.expand.1;
-        (self.min - range * mult - add, self.max + range * mult + add)
+        let (ml, al, mu, au) = self.expand;
+        (self.min - range * ml - al, self.max + range * mu + au)
+    }
+
+    /// Whether this axis should be drawn on the opposite side (x → top, y → right).
+    pub fn is_opposite(&self) -> bool {
+        self.position_opposite
     }
 }
 
@@ -248,6 +276,10 @@ impl Scale for ScaleContinuous {
         } else {
             None
         }
+    }
+
+    fn axis_position_opposite(&self) -> bool {
+        self.position_opposite
     }
 
     fn clone_box(&self) -> Box<dyn Scale> {
