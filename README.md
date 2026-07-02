@@ -135,7 +135,7 @@ GGPlot::new(data)
     .geom_point();
 ```
 
-Supports `+ - * / % ^`, parentheses, and `ln`/`log`/`log10`/`log2`/`sqrt`/`exp`/`abs`/`sin`/`cos`/`tan`/`floor`/`ceil`/`round`/`sign`. A plain column name is used directly (so existing mappings are unchanged); anything else is parsed and evaluated per row.
+Supports `+ - * / % ^`, parentheses, and `ln`/`log`/`log10`/`log2`/`sqrt`/`exp`/`abs`/`sin`/`cos`/`tan`/`floor`/`ceil`/`round`/`sign`. A plain column name is used directly (so existing mappings are unchanged); anything else is parsed and evaluated per row. The same expressions work in `after_stat` mappings, plus aggregate functions (`sum`, `mean`, `max`, `min`, `count`, `median`, `prod`) that reduce over all rows — e.g. `.after_stat_y("count / sum(count)")` for proportion histograms.
 
 ## Data Input
 
