@@ -98,9 +98,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
 `geom_point`, `geom_line`, `geom_bar`, `geom_col`, `geom_histogram`, `geom_boxplot`, `geom_smooth`, `geom_density`, `geom_area`, `geom_ribbon`, `geom_errorbar`, `geom_segment`, `geom_rug`, `geom_text`, `geom_label`, `geom_hline`, `geom_vline`, `geom_abline`
 
-### Stats (10)
+### Stats
 
-`StatIdentity`, `StatCount`, `StatBin`, `StatBoxplot`, `StatSmooth` (Lm + Loess), `StatDensity`, `StatLoess`, `StatSummary`, `StatEcdf`, `StatFunction`
+`StatIdentity`, `StatCount`, `StatBin`, `StatBoxplot`, `StatSmooth` (Lm + Loess), `StatDensity`, `StatLoess`, `StatSummary`, `StatEcdf`, `StatFunction`, `StatEllipse`, `StatContour`, `StatBin2d`, `StatBinHex`, `StatSum`, `StatYDensity`, `StatQQ`, and more
 
 ### Scales
 

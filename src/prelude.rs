@@ -70,6 +70,7 @@ pub use crate::stat::bin::StatBin;
 pub use crate::stat::count::StatCount;
 pub use crate::stat::density2d::StatDensity2d;
 pub use crate::stat::ecdf::StatEcdf;
+pub use crate::stat::ellipse::StatEllipse;
 pub use crate::stat::function::StatFunction;
 pub use crate::stat::identity::StatIdentity;
 pub use crate::stat::loess::StatLoess;

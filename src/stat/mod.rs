@@ -8,6 +8,7 @@ pub mod count;
 pub mod density;
 pub mod density2d;
 pub mod ecdf;
+pub mod ellipse;
 pub mod function;
 pub mod identity;
 pub mod loess;
