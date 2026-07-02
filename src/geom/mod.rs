@@ -23,6 +23,7 @@ pub mod point;
 pub mod pointrange;
 pub mod polygon;
 pub mod qq;
+pub mod raster;
 pub mod rect;
 pub mod refline;
 pub mod ribbon;

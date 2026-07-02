@@ -28,6 +28,7 @@ pub use crate::geom::point::GeomPoint;
 pub use crate::geom::pointrange::GeomPointrange;
 pub use crate::geom::polygon::GeomPolygon;
 pub use crate::geom::qq::{GeomQQ, GeomQQLine};
+pub use crate::geom::raster::GeomRaster;
 pub use crate::geom::rect::GeomRect;
 pub use crate::geom::refline::{GeomAbline, GeomHline, GeomVline};
 pub use crate::geom::ribbon::GeomRibbon;
@@ -79,6 +80,7 @@ pub use crate::stat::loess::StatLoess;
 pub use crate::stat::smooth::SmoothMethod;
 pub use crate::stat::sum::StatSum;
 pub use crate::stat::summary::{StatSummary, SummaryFun};
+pub use crate::stat::summary2d::StatSummary2d;
 pub use crate::stat::summary_bin::StatSummaryBin;
 pub use crate::theme::elements::{ElementLine, ElementRect, ElementText};
 pub use crate::theme::presets::{
