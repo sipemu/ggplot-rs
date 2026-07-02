@@ -69,6 +69,7 @@ pub use crate::scale::palettes::PaletteName;
 pub use crate::scale::sec_axis::SecAxis;
 pub use crate::scale::shape_manual::ScaleShapeManual;
 pub use crate::scale::size::ScaleSizeContinuous;
+pub use crate::scale::steps::ScaleColorSteps;
 pub use crate::scale::transform::ScaleTransform;
 pub use crate::stat::bin::StatBin;
 pub use crate::stat::count::StatCount;

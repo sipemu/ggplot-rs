@@ -655,6 +655,83 @@ impl GGPlot {
         self.scale_fill(s)
     }
 
+    /// Binned (stepped) two-colour continuous colour scale — buckets the mapped
+    /// variable into `n_bins` bins, each a discrete colour, with a stepped legend.
+    pub fn scale_color_steps(
+        self,
+        low: crate::scale::color::RGBAColor,
+        high: crate::scale::color::RGBAColor,
+        n_bins: usize,
+    ) -> Self {
+        let s = crate::scale::steps::ScaleColorSteps::two(
+            crate::aes::Aesthetic::Color,
+            (low.r, low.g, low.b),
+            (high.r, high.g, high.b),
+            n_bins,
+        );
+        self.scale_color(s)
+    }
+
+    /// Binned N-stop continuous colour scale.
+    pub fn scale_color_stepsn(
+        self,
+        stops: Vec<crate::scale::color::RGBAColor>,
+        n_bins: usize,
+    ) -> Self {
+        let s = crate::scale::steps::ScaleColorSteps::new(
+            crate::aes::Aesthetic::Color,
+            stops.iter().map(|c| (c.r, c.g, c.b)).collect(),
+            n_bins,
+        );
+        self.scale_color(s)
+    }
+
+    /// Binned ColorBrewer colour scale (R's `scale_color_fermenter`).
+    pub fn scale_color_fermenter(
+        self,
+        name: crate::scale::palettes::PaletteName,
+        n_bins: usize,
+    ) -> Self {
+        let stops = crate::scale::palettes::palette(&name)
+            .iter()
+            .map(|c| (c.r, c.g, c.b))
+            .collect();
+        let s =
+            crate::scale::steps::ScaleColorSteps::new(crate::aes::Aesthetic::Color, stops, n_bins);
+        self.scale_color(s)
+    }
+
+    /// Binned (stepped) two-colour continuous fill scale.
+    pub fn scale_fill_steps(
+        self,
+        low: crate::scale::color::RGBAColor,
+        high: crate::scale::color::RGBAColor,
+        n_bins: usize,
+    ) -> Self {
+        let s = crate::scale::steps::ScaleColorSteps::two(
+            crate::aes::Aesthetic::Fill,
+            (low.r, low.g, low.b),
+            (high.r, high.g, high.b),
+            n_bins,
+        );
+        self.scale_fill(s)
+    }
+
+    /// Binned ColorBrewer fill scale.
+    pub fn scale_fill_fermenter(
+        self,
+        name: crate::scale::palettes::PaletteName,
+        n_bins: usize,
+    ) -> Self {
+        let stops = crate::scale::palettes::palette(&name)
+            .iter()
+            .map(|c| (c.r, c.g, c.b))
+            .collect();
+        let s =
+            crate::scale::steps::ScaleColorSteps::new(crate::aes::Aesthetic::Fill, stops, n_bins);
+        self.scale_fill(s)
+    }
+
     pub fn scale_fill_brewer(self, name: crate::scale::palettes::PaletteName) -> Self {
         use crate::scale::color::ScaleColorDiscrete;
         let s = ScaleColorDiscrete::new(crate::aes::Aesthetic::Fill).with_named_palette(&name);
