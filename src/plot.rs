@@ -744,6 +744,64 @@ impl GGPlot {
         self.scale_y_continuous(ScaleContinuous::new().with_transform(ScaleTransform::Ln))
     }
 
+    /// Logit-transformed x axis (for proportions in (0, 1)).
+    pub fn scale_x_logit(self) -> Self {
+        self.scale_x_continuous(ScaleContinuous::new().with_transform(ScaleTransform::Logit))
+    }
+
+    pub fn scale_y_logit(self) -> Self {
+        self.scale_y_continuous(ScaleContinuous::new().with_transform(ScaleTransform::Logit))
+    }
+
+    /// Probit-transformed x axis (inverse normal CDF, for proportions in (0, 1)).
+    pub fn scale_x_probit(self) -> Self {
+        self.scale_x_continuous(ScaleContinuous::new().with_transform(ScaleTransform::Probit))
+    }
+
+    pub fn scale_y_probit(self) -> Self {
+        self.scale_y_continuous(ScaleContinuous::new().with_transform(ScaleTransform::Probit))
+    }
+
+    /// Sign-preserving pseudo-log x axis (handles zero and negative values).
+    pub fn scale_x_pseudo_log(self) -> Self {
+        self.scale_x_continuous(ScaleContinuous::new().with_transform(ScaleTransform::PseudoLog))
+    }
+
+    pub fn scale_y_pseudo_log(self) -> Self {
+        self.scale_y_continuous(ScaleContinuous::new().with_transform(ScaleTransform::PseudoLog))
+    }
+
+    /// Reciprocal (1/x) x axis.
+    pub fn scale_x_reciprocal(self) -> Self {
+        self.scale_x_continuous(ScaleContinuous::new().with_transform(ScaleTransform::Reciprocal))
+    }
+
+    pub fn scale_y_reciprocal(self) -> Self {
+        self.scale_y_continuous(ScaleContinuous::new().with_transform(ScaleTransform::Reciprocal))
+    }
+
+    /// Exponential x axis (labels spaced logarithmically).
+    pub fn scale_x_exp(self) -> Self {
+        self.scale_x_continuous(ScaleContinuous::new().with_transform(ScaleTransform::Exp))
+    }
+
+    pub fn scale_y_exp(self) -> Self {
+        self.scale_y_continuous(ScaleContinuous::new().with_transform(ScaleTransform::Exp))
+    }
+
+    /// Box–Cox x axis with the given lambda (x > 0).
+    pub fn scale_x_boxcox(self, lambda: f64) -> Self {
+        self.scale_x_continuous(
+            ScaleContinuous::new().with_transform(ScaleTransform::BoxCox(lambda)),
+        )
+    }
+
+    pub fn scale_y_boxcox(self, lambda: f64) -> Self {
+        self.scale_y_continuous(
+            ScaleContinuous::new().with_transform(ScaleTransform::BoxCox(lambda)),
+        )
+    }
+
     // ─── Faceting ─────────────────────────────────────────────────
 
     pub fn facet_wrap(mut self, var: &str, ncol: Option<usize>) -> Self {
