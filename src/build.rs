@@ -108,6 +108,30 @@ impl PlotBuilder {
         let y_span = axis_span(&Aesthetic::Y);
         coord.set_domains(x_span, y_span);
 
+        // Apply after_scale() color derivations: copy the source aesthetic's
+        // column to the target and register a lightness-modified clone of the
+        // source scale, so the target aesthetic draws the mapped source color
+        // adjusted in lightness (e.g. a darker border derived from the fill).
+        for spec in &plot_mapping.after_scale {
+            if let Some(src_scale) = scale_set.get(&spec.source) {
+                let modified = crate::scale::modified::ScaleColorModified::new(
+                    src_scale.clone_box(),
+                    spec.target.clone(),
+                    spec.lightness,
+                );
+                let (src_col, tgt_col) = (spec.source.col_name(), spec.target.col_name());
+                for bl in &mut built_layers {
+                    if !bl.data.has_column(tgt_col) {
+                        if let Some(vals) = bl.data.column(src_col) {
+                            let vals = vals.to_vec();
+                            bl.data.add_column(tgt_col.to_string(), vals);
+                        }
+                    }
+                }
+                scale_set.add(Box::new(modified));
+            }
+        }
+
         // Compute facet panels
         let (panels, panels_data) = Self::compute_facets(&facet, &built_layers, &plot_data);
 
