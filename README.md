@@ -111,7 +111,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
 ### Coordinates
 
-`coord_cartesian`, `coord_flip`, `coord_fixed`
+`coord_cartesian`, `coord_flip`, `coord_fixed`, `coord_polar`, `coord_trans`
 
 ### Faceting
 

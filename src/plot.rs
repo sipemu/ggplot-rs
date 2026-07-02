@@ -1018,6 +1018,25 @@ impl GGPlot {
         self
     }
 
+    /// Transform the coordinate space at draw time (R's `coord_trans`) — stats are
+    /// computed on raw data but drawn on non-linear axes. Pass a per-axis
+    /// [`ScaleTransform`] (e.g. `Some(ScaleTransform::Log10)`), `None` to leave an
+    /// axis linear.
+    pub fn coord_trans(mut self, x: Option<ScaleTransform>, y: Option<ScaleTransform>) -> Self {
+        self.coord = Box::new(crate::coord::trans::CoordTrans::new(x, y));
+        self
+    }
+
+    /// `coord_trans` on the y-axis only.
+    pub fn coord_trans_y(self, y: ScaleTransform) -> Self {
+        self.coord_trans(None, Some(y))
+    }
+
+    /// `coord_trans` on the x-axis only.
+    pub fn coord_trans_x(self, x: ScaleTransform) -> Self {
+        self.coord_trans(Some(x), None)
+    }
+
     /// Zoom into a region without filtering data (unlike xlim/ylim which filter).
     pub fn coord_cartesian_zoom(
         mut self,

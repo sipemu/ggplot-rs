@@ -45,7 +45,7 @@ impl PlotBuilder {
             mapping: plot_mapping,
             layers,
             scales: user_scales,
-            coord,
+            mut coord,
             theme,
             labels,
             facet,
@@ -90,6 +90,23 @@ impl PlotBuilder {
         if let Some((min, max)) = coord.zoom_y() {
             scale_set.set_limits(&Aesthetic::Y, min, max);
         }
+
+        // Supply trained axis spans to the coordinate system (used by coord_trans).
+        // pmin/pmax are the panel positions of the domain endpoints, so the coord
+        // can invert the scale's (linearly expanded) mapping exactly.
+        let axis_span = |aes: &Aesthetic| {
+            scale_set.get(aes).and_then(|s| {
+                s.domain().map(|(min, max)| crate::coord::AxisSpan {
+                    min,
+                    max,
+                    pmin: s.map(&crate::data::Value::Float(min)),
+                    pmax: s.map(&crate::data::Value::Float(max)),
+                })
+            })
+        };
+        let x_span = axis_span(&Aesthetic::X);
+        let y_span = axis_span(&Aesthetic::Y);
+        coord.set_domains(x_span, y_span);
 
         // Compute facet panels
         let (panels, panels_data) = Self::compute_facets(&facet, &built_layers, &plot_data);
