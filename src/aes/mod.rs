@@ -1,3 +1,4 @@
+pub mod expr;
 pub mod mapping;
 
 pub use mapping::{apply_after_stat, resolve_mappings};

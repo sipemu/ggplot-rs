@@ -125,6 +125,18 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
 `annotate_text`, `annotate_rect`, `annotate_segment`
 
+### Computed aesthetics
+
+An aesthetic can map an **expression** over columns, not just a bare column name:
+
+```rust
+GGPlot::new(data)
+    .aes(Aes::new().x("log10(gdp)").y("pop / 1e6").color("deaths / cases"))
+    .geom_point();
+```
+
+Supports `+ - * / % ^`, parentheses, and `ln`/`log`/`log10`/`log2`/`sqrt`/`exp`/`abs`/`sin`/`cos`/`tan`/`floor`/`ceil`/`round`/`sign`. A plain column name is used directly (so existing mappings are unchanged); anything else is parsed and evaluated per row.
+
 ## Data Input
 
 `GGPlot::new` accepts anything implementing the `GGData` trait. Nothing here
