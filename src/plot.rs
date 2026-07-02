@@ -357,6 +357,15 @@ impl GGPlot {
         self.add_geom(geom)
     }
 
+    /// Dense regular grid of filled cells (heatmap/raster) from x, y, fill.
+    pub fn geom_raster(self) -> Self {
+        self.add_geom(crate::geom::raster::GeomRaster::default())
+    }
+
+    pub fn geom_raster_with(self, geom: crate::geom::raster::GeomRaster) -> Self {
+        self.add_geom(geom)
+    }
+
     pub fn geom_polygon(self) -> Self {
         self.add_geom(GeomPolygon::default())
     }

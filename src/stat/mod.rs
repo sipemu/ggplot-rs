@@ -17,6 +17,7 @@ pub mod qq;
 pub mod smooth;
 pub mod sum;
 pub mod summary;
+pub mod summary2d;
 pub mod summary_bin;
 pub mod ydensity;
 
