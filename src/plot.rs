@@ -464,6 +464,17 @@ impl GGPlot {
         self.add_geom(geom)
     }
 
+    /// Filled contour bands from gridded (x, y, z) data — draws polygons filled by
+    /// band level. Pair with a continuous fill scale (e.g. `scale_fill_viridis_c`).
+    pub fn geom_contour_filled(self) -> Self {
+        self.add_geom(GeomPolygon {
+            line_width: 0.0,
+            alpha: 1.0,
+            ..GeomPolygon::default()
+        })
+        .stat(crate::stat::contour_filled::StatContourFilled::default())
+    }
+
     pub fn geom_density2d(self) -> Self {
         self.add_geom(GeomDensity2d::default())
     }

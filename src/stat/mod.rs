@@ -4,6 +4,7 @@ pub mod bindot;
 pub mod binhex;
 pub mod boxplot;
 pub mod contour;
+pub mod contour_filled;
 pub mod count;
 pub mod density;
 pub mod density2d;

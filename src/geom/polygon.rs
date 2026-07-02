@@ -92,7 +92,9 @@ impl Geom for GeomPolygon {
                 &points,
                 &RectStyle {
                     fill: Some(fill_color),
-                    stroke: Some(self.color),
+                    // No outline when line_width <= 0 (e.g. filled contour bands,
+                    // where per-triangle strokes would show the triangulation).
+                    stroke: (self.line_width > 0.0).then_some(self.color),
                     stroke_width: self.line_width,
                     alpha: self.alpha,
                     clip: true,
