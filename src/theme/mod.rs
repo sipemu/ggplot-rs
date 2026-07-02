@@ -80,6 +80,9 @@ pub struct Theme {
 
     // ── Scalar spacing/sizing ──
     pub axis_ticks_length: f64,
+    /// Number of rows to stagger x-axis tick labels across (R's
+    /// `guide_axis(n.dodge = ...)`); 1 = no dodging.
+    pub axis_text_x_dodge: usize,
     pub legend_key_width: f64,
     pub legend_key_height: f64,
     pub legend_spacing: f64,

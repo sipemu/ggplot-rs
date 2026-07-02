@@ -158,6 +158,7 @@ pub fn theme_gray_base(base_size: f64) -> Theme {
 
         // ── Scalar spacing/sizing ──
         axis_ticks_length: half_line / 2.0,
+        axis_text_x_dodge: 1,
         legend_key_width: 12.0,
         legend_key_height: 18.0,
         legend_spacing: 4.0,
@@ -514,6 +515,7 @@ pub fn theme_void_base(base_size: f64) -> Theme {
         strip_background: ElementRect::blank(),
 
         axis_ticks_length: 0.0,
+        axis_text_x_dodge: 1,
         legend_key_width: 12.0,
         legend_key_height: 18.0,
         legend_spacing: 4.0,

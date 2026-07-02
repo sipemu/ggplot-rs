@@ -36,7 +36,8 @@ pub fn draw_x_axis(
     }
 
     // Ticks and labels
-    for (pos, label) in &breaks {
+    let dodge = theme.axis_text_x_dodge.max(1);
+    for (i, (pos, label)) in breaks.iter().enumerate() {
         let (px, _py) = coord.transform((*pos, 0.0), plot_area);
         let tick_y = plot_area.y + plot_area.height;
 
@@ -64,11 +65,17 @@ pub fn draw_x_axis(
             } else {
                 TextAnchor::Middle
             };
+            // Stagger labels across `dodge` rows to avoid overlap.
+            let row_offset = (i % dodge) as f64 * (theme.axis_text_x.size + 2.0);
             backend.draw_text(
                 label,
                 (
                     px,
-                    tick_y + tick_len + theme.legend_spacing / 2.0 + theme.axis_text_x.size / 2.0,
+                    tick_y
+                        + tick_len
+                        + theme.legend_spacing / 2.0
+                        + theme.axis_text_x.size / 2.0
+                        + row_offset,
                 ),
                 &TextStyle {
                     color: theme.axis_text_x.color,
