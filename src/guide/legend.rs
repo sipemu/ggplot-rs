@@ -130,6 +130,11 @@ fn legend_position(theme: &Theme, plot_area: &Rect) -> (f64, f64, bool) {
             true,
         ),
         LegendPosition::None => (0.0, 0.0, false),
+        LegendPosition::Inside(fx, fy) => (
+            plot_area.x + fx * plot_area.width,
+            plot_area.y + (1.0 - fy) * plot_area.height,
+            false,
+        ),
     }
 }
 
