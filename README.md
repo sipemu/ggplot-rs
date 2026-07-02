@@ -23,50 +23,120 @@ regenerate them all with `cargo run --example gallery`.
 
 <table>
   <tr>
-    <td align="center">
-      <img src="assets/gallery/scatter.png" width="400" alt="Grouped scatter"><br>
-      <sub>Grouped scatter · <code>geom_point</code> + Brewer palette</sub>
+    <td align="center" width="33%">
+      <img src="assets/gallery/scatter.png" width="260" alt="Grouped scatter"><br>
+      <sub>Grouped scatter · <code>geom_point</code></sub>
     </td>
-    <td align="center">
-      <img src="assets/gallery/smooth.png" width="400" alt="LOESS smoothing"><br>
-      <sub>LOESS trend + CI band · <code>geom_smooth</code></sub>
+    <td align="center" width="33%">
+      <img src="assets/gallery/smooth.png" width="260" alt="LOESS smoothing"><br>
+      <sub>LOESS trend + CI · <code>geom_smooth</code></sub>
+    </td>
+    <td align="center" width="33%">
+      <img src="assets/gallery/continuous_color.png" width="260" alt="Continuous color"><br>
+      <sub>Continuous color · viridis</sub>
     </td>
   </tr>
   <tr>
     <td align="center">
-      <img src="assets/gallery/histogram.png" width="400" alt="Histogram"><br>
+      <img src="assets/gallery/histogram.png" width="260" alt="Histogram"><br>
       <sub>Histogram · <code>geom_histogram</code></sub>
     </td>
     <td align="center">
-      <img src="assets/gallery/bar.png" width="400" alt="Bar chart"><br>
-      <sub>Bar chart · <code>geom_bar</code> + fill palette</sub>
+      <img src="assets/gallery/density.png" width="260" alt="Density by group"><br>
+      <sub>Densities · <code>geom_density</code></sub>
+    </td>
+    <td align="center">
+      <img src="assets/gallery/bar.png" width="260" alt="Bar chart"><br>
+      <sub>Bar chart · <code>geom_bar</code></sub>
     </td>
   </tr>
   <tr>
     <td align="center">
-      <img src="assets/gallery/boxplot.png" width="400" alt="Boxplot"><br>
-      <sub>Grouped boxplots · <code>geom_boxplot</code></sub>
+      <img src="assets/gallery/boxplot.png" width="260" alt="Boxplot"><br>
+      <sub>Boxplots · <code>geom_boxplot</code></sub>
     </td>
     <td align="center">
-      <img src="assets/gallery/violin.png" width="400" alt="Violin"><br>
-      <sub>Grouped violins · <code>geom_violin</code></sub>
+      <img src="assets/gallery/violin.png" width="260" alt="Violin"><br>
+      <sub>Violins · <code>geom_violin</code></sub>
+    </td>
+    <td align="center">
+      <img src="assets/gallery/jitter.png" width="260" alt="Jitter"><br>
+      <sub>Jittered points · <code>geom_jitter</code></sub>
     </td>
   </tr>
   <tr>
     <td align="center">
-      <img src="assets/gallery/density.png" width="400" alt="Density by group"><br>
-      <sub>Overlapping densities · <code>geom_density</code></sub>
+      <img src="assets/gallery/contour_filled.png" width="260" alt="Filled contours"><br>
+      <sub>Filled contours · <code>geom_contour_filled</code></sub>
     </td>
     <td align="center">
-      <img src="assets/gallery/continuous_color.png" width="400" alt="Continuous color"><br>
-      <sub>Continuous color · viridis gradient</sub>
+      <img src="assets/gallery/hexbin.png" width="260" alt="Hex binning"><br>
+      <sub>Hex binning · <code>geom_hex</code></sub>
+    </td>
+    <td align="center">
+      <img src="assets/gallery/heatmap.png" width="260" alt="Heatmap"><br>
+      <sub>Heatmap · <code>geom_tile</code></sub>
     </td>
   </tr>
   <tr>
-    <td align="center" colspan="2">
-      <img src="assets/gallery/facet.png" width="400" alt="Facet wrap"><br>
+    <td align="center">
+      <img src="assets/gallery/ribbon.png" width="260" alt="Ribbon"><br>
+      <sub>Confidence band · <code>geom_ribbon</code></sub>
+    </td>
+    <td align="center">
+      <img src="assets/gallery/area.png" width="260" alt="Stacked area"><br>
+      <sub>Stacked area · <code>geom_area</code></sub>
+    </td>
+    <td align="center">
+      <img src="assets/gallery/facet.png" width="260" alt="Facet wrap"><br>
       <sub>Small multiples · <code>facet_wrap</code></sub>
     </td>
+  </tr>
+</table>
+
+### Themes
+
+The same plot under each built-in theme — swap with a single `.theme(theme_*())` call.
+
+<table>
+  <tr>
+    <td align="center" width="33%">
+      <img src="assets/gallery/theme_gray.png" width="240" alt="theme_gray"><br>
+      <sub><code>theme_gray</code> (default)</sub>
+    </td>
+    <td align="center" width="33%">
+      <img src="assets/gallery/theme_bw.png" width="240" alt="theme_bw"><br>
+      <sub><code>theme_bw</code></sub>
+    </td>
+    <td align="center" width="33%">
+      <img src="assets/gallery/theme_minimal.png" width="240" alt="theme_minimal"><br>
+      <sub><code>theme_minimal</code></sub>
+    </td>
+  </tr>
+  <tr>
+    <td align="center">
+      <img src="assets/gallery/theme_classic.png" width="240" alt="theme_classic"><br>
+      <sub><code>theme_classic</code></sub>
+    </td>
+    <td align="center">
+      <img src="assets/gallery/theme_light.png" width="240" alt="theme_light"><br>
+      <sub><code>theme_light</code></sub>
+    </td>
+    <td align="center">
+      <img src="assets/gallery/theme_dark.png" width="240" alt="theme_dark"><br>
+      <sub><code>theme_dark</code></sub>
+    </td>
+  </tr>
+  <tr>
+    <td align="center">
+      <img src="assets/gallery/theme_linedraw.png" width="240" alt="theme_linedraw"><br>
+      <sub><code>theme_linedraw</code></sub>
+    </td>
+    <td align="center">
+      <img src="assets/gallery/theme_void.png" width="240" alt="theme_void"><br>
+      <sub><code>theme_void</code></sub>
+    </td>
+    <td align="center"></td>
   </tr>
 </table>
 
@@ -115,7 +185,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
 ### Faceting
 
-`facet_wrap` and `facet_grid` with configurable free/fixed scales
+`facet_wrap` and `facet_grid` with free/fixed scales, proportional panel sizing
+(`space = "free"` via `facet_grid_space`), and multi-variable columns
+(`facet_grid_multi`, R's `rows ~ b + c`). Computed stats (density/histogram) are
+estimated per panel.
 
 ### Themes
 
@@ -125,9 +198,15 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
 `annotate_text`, `annotate_rect`, `annotate_segment`
 
-### Axis label rotation
+### Guides & axes
 
-`GGPlot::axis_text_x_angle(deg)` / `axis_text_y_angle(deg)` rotate tick labels (R's `guide_axis(angle = ...)`), useful for long category labels. Call after any `theme_*()` preset.
+- **Legend inside the panel** at panel-relative coords: `legend_position_inside(x, y)` (R's `legend.position = c(x, y)`).
+- **Axis label rotation**: `axis_text_x_angle(deg)` / `axis_text_y_angle(deg)` (R's `guide_axis(angle = ...)`).
+- **Label dodging**: `axis_text_x_dodge(n)` staggers crowded x labels across `n` rows (`guide_axis(n.dodge)`).
+- **Corner tag**: `tag("A")` for figure-panel labels (`labs(tag)`).
+- **Axis position & expansion**: `ScaleContinuous::with_position_opposite()` (x-axis on top / y on the right) and `with_expand_sides(...)` for per-side expansion.
+
+Call theme-related builders after any `theme_*()` preset.
 
 ### Computed aesthetics
 
@@ -191,7 +270,7 @@ result, with polars switched off:
 
 ```toml
 # Cargo.toml — no polars in the dependency tree
-ggplot-rs = { version = "0.1", default-features = false, features = ["arrow"] }
+ggplot-rs = { version = "0.6", default-features = false, features = ["arrow"] }
 ```
 
 ```rust
@@ -276,11 +355,12 @@ GGPlot::new(data)
 | `polars`     |   yes   | `impl GGData for polars::DataFrame` + `polars` re-export     |
 | `arrow`      |   no    | `impl GGData for arrow::RecordBatch` (Arrow/DuckDB input)    |
 | `regression` |   no    | `stat_quantile`/`geom_quantile` + `geom_smooth` glm/rlm via anofox-regression |
+| `cli`        |   no    | the `ggplot-rs` command-line tool (parquet/CSV/DuckDB → SVG/PNG), via clap + bundled DuckDB |
 
 To skip the heavy polars dependency (e.g. an Arrow-only service), disable defaults:
 
 ```toml
-ggplot-rs = { version = "0.1", default-features = false, features = ["arrow"] }
+ggplot-rs = { version = "0.6", default-features = false, features = ["arrow"] }
 ```
 
 ## Examples
@@ -311,6 +391,7 @@ cargo run --example supplier_leadtime  # polars-free; runs with --no-default-fea
 - [rand](https://crates.io/crates/rand) 0.8 — jitter positioning
 - [polars](https://crates.io/crates/polars) 0.46 — DataFrame input *(optional, default)*
 - [arrow](https://crates.io/crates/arrow) 53 — Arrow `RecordBatch` input *(optional)*
+- [clap](https://crates.io/crates/clap) 4 + [duckdb](https://crates.io/crates/duckdb) 1 (bundled) — the `cli` tool *(optional)*
 
 ## License
 

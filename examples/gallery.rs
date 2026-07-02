@@ -9,6 +9,9 @@ use std::f64::consts::PI;
 
 const W: u32 = 640;
 const H: u32 = 480;
+// Smaller thumbnails for the theme gallery.
+const TW: u32 = 480;
+const TH: u32 = 340;
 
 fn out(name: &str) -> String {
     format!("assets/gallery/{name}.png")
@@ -26,6 +29,13 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     continuous_color()?;
     facet()?;
     density()?;
+    contour_filled()?;
+    hexbin()?;
+    heatmap()?;
+    jitter()?;
+    ribbon()?;
+    area_stack()?;
+    themes()?;
 
     println!("Gallery written to assets/gallery/");
     Ok(())
@@ -263,5 +273,177 @@ fn density() -> Result<(), Box<dyn std::error::Error>> {
         .ylab("Density")
         .theme_minimal()
         .save_with_size(&out("density"), W, H)?;
+    Ok(())
+}
+
+/// Filled contour bands from a gridded surface.
+fn contour_filled() -> Result<(), Box<dyn std::error::Error>> {
+    let (mut x, mut y, mut z) = (Vec::new(), Vec::new(), Vec::new());
+    for i in 0..40 {
+        for j in 0..40 {
+            let xv = i as f64 * 0.25 - 5.0;
+            let yv = j as f64 * 0.25 - 5.0;
+            x.push(xv);
+            y.push(yv);
+            z.push((xv * 0.6).sin() * (yv * 0.6).cos() + (-(xv * xv + yv * yv) / 30.0).exp());
+        }
+    }
+    let df = df! { "x" => x, "y" => y, "z" => z }?;
+    GGPlot::new(df)
+        .aes(Aes::new().x("x").y("y"))
+        .geom_contour_filled()
+        .scale_fill_viridis_c()
+        .title("Filled Contours")
+        .theme_minimal()
+        .save_with_size(&out("contour_filled"), W, H)?;
+    Ok(())
+}
+
+/// Hexagonal binning of a 2-D point cloud.
+fn hexbin() -> Result<(), Box<dyn std::error::Error>> {
+    let n = 4000;
+    let x: Vec<f64> = (0..n)
+        .map(|i| {
+            let t = i as f64;
+            (t * 0.017).sin() * 2.0 + ((i * 7919 % 1000) as f64 / 1000.0 - 0.5) * 3.0
+        })
+        .collect();
+    let y: Vec<f64> = (0..n)
+        .map(|i| {
+            let t = i as f64;
+            (t * 0.017).cos() * 2.0 + ((i * 6323 % 1000) as f64 / 1000.0 - 0.5) * 3.0
+        })
+        .collect();
+    let df = df! { "x" => x, "y" => y }?;
+    GGPlot::new(df)
+        .aes(Aes::new().x("x").y("y"))
+        .geom_hex()
+        .scale_fill_viridis_c()
+        .title("Hex Binning")
+        .theme_minimal()
+        .save_with_size(&out("hexbin"), W, H)?;
+    Ok(())
+}
+
+/// Heatmap of a gridded value with `geom_tile`.
+fn heatmap() -> Result<(), Box<dyn std::error::Error>> {
+    let (mut x, mut y, mut fill) = (Vec::new(), Vec::new(), Vec::new());
+    for i in 0..14 {
+        for j in 0..14 {
+            x.push(i as f64);
+            y.push(j as f64);
+            fill.push((i as f64 * 0.5).sin() * (j as f64 * 0.5).cos());
+        }
+    }
+    let df = df! { "x" => x, "y" => y, "fill" => fill }?;
+    GGPlot::new(df)
+        .aes(Aes::new().x("x").y("y").fill("fill"))
+        .geom_tile()
+        .scale_fill_viridis_c()
+        .title("Heatmap")
+        .theme_minimal()
+        .save_with_size(&out("heatmap"), W, H)?;
+    Ok(())
+}
+
+/// Jittered categorical scatter (`geom_jitter`).
+fn jitter() -> Result<(), Box<dyn std::error::Error>> {
+    let n = 300;
+    let group: Vec<&str> = (0..n).map(|i| ["Control", "Low", "High"][i % 3]).collect();
+    let value: Vec<f64> = (0..n)
+        .map(|i| {
+            let base = (i % 3) as f64 * 1.5;
+            base + ((i * 5701 % 1000) as f64 / 1000.0 - 0.5) * 2.0
+        })
+        .collect();
+    let df = df! { "group" => group, "value" => value }?;
+    GGPlot::new(df)
+        .aes(Aes::new().x("group").y("value").color("group"))
+        .geom_jitter()
+        .scale_color_brewer(PaletteName::Dark2)
+        .title("Jittered Points")
+        .theme_minimal()
+        .save_with_size(&out("jitter"), W, H)?;
+    Ok(())
+}
+
+/// A confidence band (`geom_ribbon`) under a line.
+fn ribbon() -> Result<(), Box<dyn std::error::Error>> {
+    let n = 80;
+    let x: Vec<f64> = (0..n).map(|i| i as f64 * 0.15).collect();
+    let y: Vec<f64> = x.iter().map(|v| v.sin() + v * 0.1).collect();
+    let ymin: Vec<f64> = y.iter().map(|v| v - 0.4).collect();
+    let ymax: Vec<f64> = y.iter().map(|v| v + 0.4).collect();
+    let df = df! { "x" => x, "y" => y, "ymin" => ymin, "ymax" => ymax }?;
+    GGPlot::new(df)
+        .aes(Aes::new().x("x").y("y").ymin("ymin").ymax("ymax"))
+        .geom_ribbon()
+        .geom_line()
+        .primary_color((49, 130, 189))
+        .title("Ribbon + Line")
+        .theme_minimal()
+        .save_with_size(&out("ribbon"), W, H)?;
+    Ok(())
+}
+
+/// Stacked areas by group.
+fn area_stack() -> Result<(), Box<dyn std::error::Error>> {
+    let n = 40;
+    let mut x = Vec::new();
+    let mut y = Vec::new();
+    let mut g = Vec::new();
+    for grp in ["North", "South", "East"] {
+        for i in 0..n {
+            x.push(i as f64);
+            let base = match grp {
+                "North" => 2.0,
+                "South" => 3.0,
+                _ => 1.5,
+            };
+            y.push(base + (i as f64 * 0.2).sin().abs() * base);
+            g.push(grp);
+        }
+    }
+    let df = df! { "x" => x, "y" => y, "g" => g }?;
+    GGPlot::new(df)
+        .aes(Aes::new().x("x").y("y").fill("g"))
+        .geom_area()
+        .scale_fill_brewer(PaletteName::Set2)
+        .title("Stacked Area")
+        .theme_minimal()
+        .save_with_size(&out("area"), W, H)?;
+    Ok(())
+}
+
+/// The same plot rendered under every built-in theme.
+fn themes() -> Result<(), Box<dyn std::error::Error>> {
+    let n = 90;
+    let x: Vec<f64> = (0..n).map(|i| i as f64 * 0.1).collect();
+    let y: Vec<f64> = (0..n)
+        .map(|i| (i as f64 * 0.1).sin() + (i % 3) as f64 * 0.5)
+        .collect();
+    let g: Vec<&str> = (0..n).map(|i| ["A", "B", "C"][i % 3]).collect();
+    let df = df! { "x" => x, "y" => y, "g" => g }?;
+
+    type ThemeFn = fn() -> Theme;
+    let variants: [(&str, ThemeFn); 8] = [
+        ("gray", theme_gray),
+        ("bw", theme_bw),
+        ("minimal", theme_minimal),
+        ("classic", theme_classic),
+        ("light", theme_light),
+        ("dark", theme_dark),
+        ("linedraw", theme_linedraw),
+        ("void", theme_void),
+    ];
+    for (name, make) in variants {
+        GGPlot::new(df.clone())
+            .aes(Aes::new().x("x").y("y").color("g"))
+            .geom_point()
+            .theme(make())
+            .scale_color_brewer(PaletteName::Dark2)
+            .title(&format!("theme_{name}"))
+            .save_with_size(&out(&format!("theme_{name}")), TW, TH)?;
+    }
     Ok(())
 }
