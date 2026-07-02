@@ -58,7 +58,12 @@ impl PlotLayout {
 
         let x_axis_height = theme.axis_ticks_length
             + if theme.axis_text_x.visible {
-                theme.axis_text_x.size + 4.0
+                // Rotated labels extend vertically, so reserve more bottom space.
+                if theme.axis_text_x.angle.abs() > 10.0 {
+                    theme.axis_text_x.size * 5.0
+                } else {
+                    theme.axis_text_x.size + 4.0
+                }
             } else {
                 0.0
             }
