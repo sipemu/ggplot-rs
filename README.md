@@ -141,6 +141,31 @@ GGPlot::new(data)
 
 Supports `+ - * / % ^`, parentheses, and `ln`/`log`/`log10`/`log2`/`sqrt`/`exp`/`abs`/`sin`/`cos`/`tan`/`floor`/`ceil`/`round`/`sign`. A plain column name is used directly (so existing mappings are unchanged); anything else is parsed and evaluated per row. `after_scale_fill_from_color(l)` / `after_scale_color_from_fill(l)` derive one color aesthetic from another's mapped color, lightness-adjusted (`after_scale`); `Aes::stage(aes, start, after_stat)` maps an aesthetic at two pipeline stages. The same expressions work in `after_stat` mappings, plus aggregate functions (`sum`, `mean`, `max`, `min`, `count`, `median`, `prod`) that reduce over all rows — e.g. `.after_stat_y("count / sum(count)")` for proportion histograms.
 
+## Command-line tool
+
+A `ggplot-rs` CLI (behind the `cli` feature) plots **parquet**/**CSV** files or
+**DuckDB SQL** straight from the shell — DuckDB is the query engine:
+
+```sh
+cargo install ggplot-rs --features cli
+
+# discover columns first, then plot
+ggplot-rs --parquet sales.parquet --describe
+ggplot-rs --parquet sales.parquet --x month --y revenue --geom line -o rev.png
+
+# aggregate with SQL (reads parquet globs), faceted bars
+ggplot-rs --sql "SELECT region, sum(qty) q FROM 'orders/*.parquet' GROUP BY 1" \
+  --x region --y q --geom col --facet-wrap region --theme minimal -o orders.svg
+```
+
+Flags: `--x/--y/--color/--fill/--size/--shape/--group`, `--geom`, `--facet-wrap/--facet-grid`,
+`--log-x/--log-y/--flip`, `--title/--subtitle/--xlab/--ylab/--caption`, `--theme`,
+`-o FILE`/`--stdout`, `--width/--height`. Run `--describe` to list a source's columns and types.
+
+**AI-ready:** the repo ships a Claude Code skill at `.claude/skills/plot-data/` that
+teaches an agent the describe-then-map-then-render workflow, so "plot this parquet"
+just works.
+
 ## Data Input
 
 `GGPlot::new` accepts anything implementing the `GGData` trait. Nothing here

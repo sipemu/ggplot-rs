@@ -70,8 +70,10 @@ jobs:
       - name: Install cargo-llvm-cov
         uses: taiki-e/install-action@cargo-llvm-cov
 
-      - name: Generate coverage (all features)
-        run: cargo llvm-cov --all-features --workspace --lcov --output-path lcov.info
+      - name: Generate coverage
+        # Explicit features (not --all-features) to skip the `cli` feature, whose
+        # bundled DuckDB is a slow C++ build and is exercised outside CI.
+        run: cargo llvm-cov --features polars,arrow,regression --workspace --lcov --output-path lcov.info
 
       - name: Upload coverage to Codecov
         uses: codecov/codecov-action@v4
