@@ -563,6 +563,7 @@ fn labels_and_guides_render_ok() {
         x: Some("X".into()),
         y: Some("Y".into()),
         caption: Some("Cap".into()),
+        tag: Some("A".into()),
     }));
     assert_render_ok(
         plot_xy()

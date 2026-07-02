@@ -62,7 +62,8 @@ impl PlotLayout {
                 if theme.axis_text_x.angle.abs() > 10.0 {
                     theme.axis_text_x.size * 5.0
                 } else {
-                    theme.axis_text_x.size + 4.0
+                    // Dodged labels stack across N rows.
+                    (theme.axis_text_x.size + 4.0) * theme.axis_text_x_dodge.max(1) as f64
                 }
             } else {
                 0.0

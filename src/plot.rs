@@ -66,6 +66,8 @@ pub struct Labels {
     pub x: Option<String>,
     pub y: Option<String>,
     pub caption: Option<String>,
+    /// Corner tag (R's `labs(tag = ...)`), e.g. "A" for figure panels.
+    pub tag: Option<String>,
 }
 
 /// A single layer in the plot.
@@ -1085,6 +1087,13 @@ impl GGPlot {
         self
     }
 
+    /// Stagger x-axis tick labels across `n` rows to avoid overlap (R's
+    /// `guides(x = guide_axis(n.dodge = n))`). `1` = no dodging.
+    pub fn axis_text_x_dodge(mut self, n: usize) -> Self {
+        self.theme.axis_text_x_dodge = n.max(1);
+        self
+    }
+
     /// Set the brand/primary color used as the default for single-series geoms
     /// that have no color/fill aesthetic mapped. Composes with any theme — one
     /// render process can serve different tenants' brands at render time.
@@ -1174,11 +1183,21 @@ impl GGPlot {
         if labels.caption.is_some() {
             self.labels.caption = labels.caption;
         }
+        if labels.tag.is_some() {
+            self.labels.tag = labels.tag;
+        }
         self
     }
 
     pub fn title(mut self, title: &str) -> Self {
         self.labels.title = Some(title.to_string());
+        self
+    }
+
+    /// Corner tag label (R's `labs(tag = ...)`), drawn at the top-left — handy
+    /// for labelling figure panels ("A", "B", …).
+    pub fn tag(mut self, tag: &str) -> Self {
+        self.labels.tag = Some(tag.to_string());
         self
     }
 

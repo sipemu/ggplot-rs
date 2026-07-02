@@ -205,6 +205,40 @@ impl PlotRenderer {
             )?;
         }
 
+        // 11. Draw corner tag (labs(tag = ...))
+        Self::draw_tag(&built.labels, theme, &total_area, backend)?;
+
+        Ok(())
+    }
+
+    /// Draw the corner tag label at the top-left of the plot area.
+    fn draw_tag(
+        labels: &crate::plot::Labels,
+        theme: &crate::theme::Theme,
+        total_area: &crate::render::Rect,
+        backend: &mut dyn DrawBackend,
+    ) -> Result<(), RenderError> {
+        if let Some(ref tag) = labels.tag {
+            let family = if theme.title.family.is_empty() {
+                None
+            } else {
+                Some(theme.title.family.clone())
+            };
+            backend.draw_text(
+                tag,
+                (
+                    total_area.x + theme.title.size,
+                    total_area.y + theme.title.size,
+                ),
+                &TextStyle {
+                    color: theme.title.color,
+                    size: theme.title.size,
+                    anchor: TextAnchor::Start,
+                    angle: 0.0,
+                    family,
+                },
+            )?;
+        }
         Ok(())
     }
 
@@ -477,6 +511,9 @@ impl PlotRenderer {
             &built.guide_legend,
             &built.suppressed_aes,
         )?;
+
+        // Draw corner tag (labs(tag = ...))
+        Self::draw_tag(&built.labels, theme, &total_area, backend)?;
 
         Ok(())
     }
