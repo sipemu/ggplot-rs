@@ -13,6 +13,7 @@ use clap::Parser;
 use ggplot_rs::prelude::*;
 
 mod load;
+mod theme;
 
 /// Plot parquet files and DuckDB SQL from the shell.
 #[derive(Parser, Debug)]
@@ -94,6 +95,15 @@ struct Args {
     /// Theme: gray, bw, minimal, classic, dark, light, void, linedraw.
     #[arg(long, default_value = "gray")]
     theme: String,
+    /// Custom theme: a TOML/JSON file of element overrides on top of the preset.
+    #[arg(long, value_name = "FILE")]
+    theme_config: Option<String>,
+    /// Discrete color/fill palette (Set1, Dark2, viridis, RdBu, …).
+    #[arg(long, value_name = "NAME")]
+    palette: Option<String>,
+    /// Brand/primary color "r,g,b" — default for single-series geoms.
+    #[arg(long, value_name = "R,G,B")]
+    primary: Option<String>,
 
     // ─── output ───────────────────────────────────────────────────
     /// Output file; format from extension (.svg/.png/.jpg/...).
@@ -235,18 +245,33 @@ fn build_plot(args: &Args, columns: Vec<(String, Vec<Value>)>) -> Result<GGPlot,
         plot = plot.coord_flip();
     }
 
-    // Theme (applied before labels so labels aren't reset).
-    plot = match args.theme.as_str() {
-        "gray" | "grey" => plot.theme(theme_gray()),
-        "bw" => plot.theme(theme_bw()),
-        "minimal" => plot.theme(theme_minimal()),
-        "classic" => plot.theme(theme_classic()),
-        "dark" => plot.theme(theme_dark()),
-        "light" => plot.theme(theme_light()),
-        "void" => plot.theme(theme_void()),
-        "linedraw" => plot.theme(theme_linedraw()),
-        other => return Err(format!("unknown --theme '{other}'")),
+    // Theme: preset → optional custom config overrides → optional --primary.
+    let cfg = match &args.theme_config {
+        Some(path) => Some(theme::load(path)?),
+        None => None,
     };
+    let base_name = cfg
+        .as_ref()
+        .and_then(|c| c.base.clone())
+        .unwrap_or_else(|| args.theme.clone());
+    let mut th = theme::preset(&base_name)?;
+    if let Some(c) = &cfg {
+        th = theme::apply(c, th)?;
+    }
+    if let Some(p) = &args.primary {
+        th.primary = Some(theme::parse_rgb(p)?);
+    }
+    plot = plot.theme(th);
+
+    // Palette (flag wins over the config file), applied to color and fill.
+    let palette = args
+        .palette
+        .clone()
+        .or_else(|| cfg.as_ref().and_then(|c| c.palette.clone()));
+    if let Some(name) = palette {
+        let p = theme::parse_palette(&name)?;
+        plot = plot.scale_color_brewer(p.clone()).scale_fill_brewer(p);
+    }
 
     Ok(plot)
 }

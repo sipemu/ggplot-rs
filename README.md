@@ -238,8 +238,33 @@ ggplot-rs --sql "SELECT region, sum(qty) q FROM 'orders/*.parquet' GROUP BY 1" \
 ```
 
 Flags: `--x/--y/--color/--fill/--size/--shape/--group`, `--geom`, `--facet-wrap/--facet-grid`,
-`--log-x/--log-y/--flip`, `--title/--subtitle/--xlab/--ylab/--caption`, `--theme`,
-`-o FILE`/`--stdout`, `--width/--height`. Run `--describe` to list a source's columns and types.
+`--log-x/--log-y/--flip`, `--title/--subtitle/--xlab/--ylab/--caption`, `-o FILE`/`--stdout`,
+`--width/--height`. Run `--describe` to list a source's columns and types.
+
+**Theming from the CLI:** `--theme <preset>` (gray/bw/minimal/…), `--palette <name>`
+(Set1/Dark2/viridis/RdBu/…), `--primary "r,g,b"` (brand color), and `--theme-config <file>`
+— a TOML/JSON file of element overrides for full custom theming:
+
+```sh
+ggplot-rs --parquet d.parquet --x a --y b --color g --palette Dark2 --primary "26,153,136" -o p.png
+ggplot-rs --parquet d.parquet --x a --y b --color g --theme-config brand.toml -o p.png
+```
+
+```toml
+# brand.toml — applied on top of the base preset
+base = "minimal"
+palette = "RdBu"
+primary = [200, 60, 40]
+[title]
+size = 22
+color = [40, 40, 90]
+[panel_background]
+fill = [248, 246, 240]
+[legend]
+position = "inside"
+x = 0.9
+y = 0.9
+```
 
 **AI-ready:** the repo ships a Claude Code skill at `.claude/skills/plot-data/` that
 teaches an agent the describe-then-map-then-render workflow, so "plot this parquet"

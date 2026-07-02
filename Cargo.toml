@@ -51,6 +51,10 @@ image = { version = "0.24", default-features = false, features = ["png"] }
 # parquet/CSV and running SQL. Both are optional and off by default.
 clap = { version = "4", features = ["derive"], optional = true }
 duckdb = { version = "1", features = ["bundled"], optional = true }
+# Theme-config parsing for the CLI (TOML/JSON).
+serde = { version = "1", features = ["derive"], optional = true }
+toml = { version = "0.8", optional = true }
+serde_json = { version = "1", optional = true }
 
 [features]
 # `polars` is on by default to preserve existing behaviour (prelude re-export +
@@ -63,7 +67,7 @@ arrow = ["dep:arrow"]
 # Regression-backed stats (stat_quantile, glm smooth) via anofox-regression.
 regression = ["dep:anofox-regression", "dep:faer"]
 # `ggplot-rs` command-line tool: plot parquet files and DuckDB SQL from the shell.
-cli = ["dep:clap", "dep:duckdb"]
+cli = ["dep:clap", "dep:duckdb", "dep:serde", "dep:toml", "dep:serde_json"]
 
 # The CLI binary (built only with `--features cli`).
 [[bin]]
