@@ -169,7 +169,7 @@ pub fn draw_y_axis(
                     color: theme.axis_text_y.color,
                     size: theme.axis_text_y.size,
                     anchor: TextAnchor::End,
-                    angle: 0.0,
+                    angle: theme.axis_text_y.angle,
                     family,
                 },
             )?;
@@ -271,7 +271,7 @@ pub fn draw_sec_y_axis(
                     color: theme.axis_text_y.color,
                     size: theme.axis_text_y.size,
                     anchor: TextAnchor::Start,
-                    angle: 0.0,
+                    angle: theme.axis_text_y.angle,
                     family,
                 },
             )?;

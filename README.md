@@ -125,6 +125,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
 `annotate_text`, `annotate_rect`, `annotate_segment`
 
+### Axis label rotation
+
+`GGPlot::axis_text_x_angle(deg)` / `axis_text_y_angle(deg)` rotate tick labels (R's `guide_axis(angle = ...)`), useful for long category labels. Call after any `theme_*()` preset.
+
 ### Computed aesthetics
 
 An aesthetic can map an **expression** over columns, not just a bare column name:

@@ -1071,6 +1071,20 @@ impl GGPlot {
         self
     }
 
+    /// Rotate the x-axis tick labels by `degrees` (R's
+    /// `guides(x = guide_axis(angle = ...))` / `axis.text.x = element_text(angle)`).
+    /// Useful for long category labels. Call after any `theme_*()` preset.
+    pub fn axis_text_x_angle(mut self, degrees: f64) -> Self {
+        self.theme.axis_text_x.angle = degrees;
+        self
+    }
+
+    /// Rotate the y-axis tick labels by `degrees`.
+    pub fn axis_text_y_angle(mut self, degrees: f64) -> Self {
+        self.theme.axis_text_y.angle = degrees;
+        self
+    }
+
     /// Set the brand/primary color used as the default for single-series geoms
     /// that have no color/fill aesthetic mapped. Composes with any theme — one
     /// render process can serve different tenants' brands at render time.
