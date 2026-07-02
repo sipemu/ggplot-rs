@@ -23,10 +23,13 @@ impl PlotLayout {
         has_title: bool,
         has_legend: bool,
     ) -> Self {
-        Self::compute_full(width, height, theme, has_title, false, false, has_legend)
+        Self::compute_full(
+            width, height, theme, has_title, false, false, has_legend, false,
+        )
     }
 
     /// Compute layout with full subtitle/caption support.
+    #[allow(clippy::too_many_arguments)]
     pub fn compute_full(
         width: f64,
         height: f64,
@@ -35,6 +38,7 @@ impl PlotLayout {
         has_subtitle: bool,
         has_caption: bool,
         has_legend: bool,
+        x_axis_top: bool,
     ) -> Self {
         let margin = &theme.plot_margin;
 
@@ -111,7 +115,12 @@ impl PlotLayout {
         };
 
         let plot_x = margin.left + y_axis_width + legend_left;
-        let plot_y = margin.top + title_height + subtitle_height + legend_top;
+        // A top x-axis reserves its space above the panel instead of below.
+        let plot_y = margin.top
+            + title_height
+            + subtitle_height
+            + legend_top
+            + if x_axis_top { x_axis_height } else { 0.0 };
         let plot_width =
             width - margin.left - margin.right - y_axis_width - legend_right - legend_left;
         let plot_height = height

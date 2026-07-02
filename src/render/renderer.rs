@@ -129,7 +129,19 @@ impl PlotRenderer {
         // 7. Draw title
         if let Some(ref title) = built.labels.title {
             let center_x = plot_area.x + plot_area.width / 2.0;
-            let title_y = plot_area.y - theme.title.size * 0.9;
+            // A top x-axis occupies the space just above the panel — lift the
+            // title above it so they don't overlap.
+            let x_axis_top = built
+                .scales
+                .get(&Aesthetic::X)
+                .map(|s| s.axis_position_opposite())
+                .unwrap_or(false);
+            let x_axis_lift = if x_axis_top {
+                theme.axis_ticks_length + theme.axis_text_x.size + theme.legend_spacing
+            } else {
+                0.0
+            };
+            let title_y = plot_area.y - theme.title.size * 0.9 - x_axis_lift;
             let family = if theme.title.family.is_empty() {
                 None
             } else {

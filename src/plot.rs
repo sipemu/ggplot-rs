@@ -1362,6 +1362,12 @@ impl GGPlot {
             }
         }
 
+        let x_axis_top = built
+            .scales
+            .get(&crate::aes::Aesthetic::X)
+            .map(|s| s.axis_position_opposite())
+            .unwrap_or(false);
+
         let layout = PlotLayout::compute_full(
             w as f64,
             h as f64,
@@ -1370,6 +1376,7 @@ impl GGPlot {
             has_subtitle,
             has_caption,
             has_legend,
+            x_axis_top,
         );
 
         Ok((built, layout))

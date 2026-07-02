@@ -105,6 +105,11 @@ pub trait Scale: Send + Sync {
         None
     }
 
+    /// Whether this axis is drawn on the opposite side (x → top, y → right).
+    fn axis_position_opposite(&self) -> bool {
+        false
+    }
+
     /// Clone this scale into a boxed trait object.
     fn clone_box(&self) -> Box<dyn Scale>;
 
