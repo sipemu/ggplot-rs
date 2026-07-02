@@ -1,6 +1,6 @@
 [package]
 name = "ggplot-rs"
-version = "0.1.0"
+version = "0.2.0"
 edition = "2021"
 description = "A Rust implementation of ggplot2's Grammar of Graphics"
 authors = ["Simon Müller <sm@data-zoo.de>"]
