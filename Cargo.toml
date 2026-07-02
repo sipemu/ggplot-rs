@@ -36,6 +36,12 @@ rand = "0.8"
 # they only provide `GGData` conversions for external frame types.
 polars = { version = "0.46", features = ["lazy"], optional = true }
 arrow = { version = "53", default-features = false, optional = true }
+# Regression backend for stat_quantile / geom_smooth glm (issues #10, #11).
+anofox-regression = { version = "0.5", optional = true }
+faer = { version = "0.23", default-features = false, features = [
+    "std",
+    "linalg",
+], optional = true }
 # In-memory PNG encoding for `render_png`. Already pulled in transitively by
 # plotters' bitmap backend, so this adds no extra compile cost.
 image = { version = "0.24", default-features = false, features = ["png"] }
@@ -48,6 +54,8 @@ default = ["polars"]
 polars = ["dep:polars"]
 # Zero-copy-friendly input path for Arrow-native producers (e.g. DuckDB).
 arrow = ["dep:arrow"]
+# Regression-backed stats (stat_quantile, glm smooth) via anofox-regression.
+regression = ["dep:anofox-regression", "dep:faer"]
 
 # All bundled examples build their input frames with the polars `df!` macro,
 # so they only compile when the `polars` feature is enabled.

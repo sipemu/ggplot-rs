@@ -44,6 +44,12 @@ jobs:
       - name: Tests (arrow)
         run: cargo test --no-default-features --features arrow
 
+      - name: Clippy (regression)
+        run: cargo clippy --all-targets --features regression -- -D warnings
+
+      - name: Tests (regression)
+        run: cargo test --features regression
+
       - name: Build examples
         run: cargo build --examples
 

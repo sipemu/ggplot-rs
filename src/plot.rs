@@ -293,6 +293,24 @@ impl GGPlot {
             .stat(crate::stat::ellipse::StatEllipse::new(level))
     }
 
+    /// Add a quantile-regression line for each `tau` as a separate path layer
+    /// (R's `stat_quantile`). Backed by anofox-regression (feature `regression`).
+    #[cfg(feature = "regression")]
+    pub fn stat_quantile(mut self, taus: &[f64]) -> Self {
+        for &tau in taus {
+            self = self
+                .geom_path()
+                .stat(crate::stat::quantile::StatQuantile::new(tau));
+        }
+        self
+    }
+
+    /// Quantile-regression lines at the quartiles (0.25, 0.5, 0.75).
+    #[cfg(feature = "regression")]
+    pub fn geom_quantile(self) -> Self {
+        self.stat_quantile(&[0.25, 0.5, 0.75])
+    }
+
     pub fn geom_step(self) -> Self {
         self.add_geom(GeomStep::default())
     }
