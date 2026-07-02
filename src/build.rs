@@ -62,6 +62,10 @@ impl PlotBuilder {
 
         let mut built_layers = Vec::new();
 
+        // Faceting variables — used to group stat computation per panel so a
+        // computed stat (density/histogram) is estimated per panel, not pooled.
+        let facet_vars = Self::facet_vars(&facet);
+
         for layer in layers {
             let built = Self::build_layer(
                 layer,
@@ -69,6 +73,7 @@ impl PlotBuilder {
                 &plot_mapping,
                 &mut scale_set,
                 theme.primary,
+                &facet_vars,
             )?;
             built_layers.push(built);
         }
@@ -114,6 +119,17 @@ impl PlotBuilder {
             suppressed_aes,
             panel_scales,
         })
+    }
+
+    /// The column name(s) a facet splits on, if any.
+    fn facet_vars(facet: &Facet) -> Vec<String> {
+        match facet {
+            Facet::None => vec![],
+            Facet::Wrap { var, .. } => vec![var.clone()],
+            Facet::Grid {
+                row_var, col_var, ..
+            } => row_var.iter().chain(col_var.iter()).cloned().collect(),
+        }
     }
 
     fn compute_facets(
@@ -309,6 +325,7 @@ impl PlotBuilder {
         plot_mapping: &Aes,
         scale_set: &mut ScaleSet,
         primary: Option<(u8, u8, u8)>,
+        facet_vars: &[String],
     ) -> Result<BuiltLayer, GGError> {
         let Layer {
             data: layer_data,
@@ -376,15 +393,33 @@ impl PlotBuilder {
         // Step 5b: Filter out-of-bounds data (xlim/ylim filter before stats)
         Self::filter_oob_data(&mut working_data, scale_set);
 
-        // Step 6: Compute statistics
-        let group_cols = Self::detect_group_columns(&working_data);
+        // Step 6: Compute statistics. Group by aesthetic groups AND the facet
+        // variables, so a computed stat (density/histogram/…) is estimated per
+        // panel rather than on pooled data; the facet column is then re-attached
+        // to each group's output so faceting can split it back out.
+        let mut group_cols = Self::detect_group_columns(&working_data);
+        for fv in facet_vars {
+            if working_data.has_column(fv) && !group_cols.contains(fv) {
+                group_cols.push(fv.clone());
+            }
+        }
 
         working_data = if !group_cols.is_empty() {
             let groups =
                 working_data.group_by(&group_cols.iter().map(|s| s.as_str()).collect::<Vec<_>>());
             let mut result = DataFrame::new();
             for group in groups {
-                let computed = stat.compute_group(&group, scale_set);
+                let mut computed = stat.compute_group(&group, scale_set);
+                let n = computed.nrows();
+                if n > 0 {
+                    for fv in facet_vars {
+                        if !computed.has_column(fv) {
+                            if let Some(val) = group.column(fv).and_then(|c| c.first()).cloned() {
+                                computed.add_column(fv.clone(), vec![val; n]);
+                            }
+                        }
+                    }
+                }
                 result.vstack(&computed);
             }
             result
