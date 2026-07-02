@@ -1103,7 +1103,7 @@ dependencies = [
 
 [[package]]
 name = "ggplot-rs"
-version = "0.4.0"
+version = "0.5.0"
 dependencies = [
  "anofox-regression",
  "arrow",
