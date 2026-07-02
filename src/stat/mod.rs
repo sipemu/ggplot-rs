@@ -14,6 +14,8 @@ pub mod identity;
 pub mod loess;
 pub mod marching_squares;
 pub mod qq;
+#[cfg(feature = "regression")]
+pub mod quantile;
 pub mod smooth;
 pub mod sum;
 pub mod summary;

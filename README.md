@@ -100,7 +100,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
 ### Stats
 
-`StatIdentity`, `StatCount`, `StatBin`, `StatBoxplot`, `StatSmooth` (Lm + Loess), `StatDensity`, `StatLoess`, `StatSummary`, `StatEcdf`, `StatFunction`, `StatEllipse`, `StatContour`, `StatBin2d`, `StatBinHex`, `StatSum`, `StatYDensity`, `StatQQ`, and more
+`StatIdentity`, `StatCount`, `StatBin`, `StatBoxplot`, `StatSmooth` (Lm + Loess), `StatDensity`, `StatLoess`, `StatSummary`, `StatEcdf`, `StatFunction`, `StatEllipse`, `StatContour`, `StatBin2d`, `StatBinHex`, `StatSum`, `StatYDensity`, `StatQQ`, `StatSummary2d`, `StatQuantile` (feature `regression`), and more
 
 ### Scales
 
@@ -230,10 +230,11 @@ GGPlot::new(data)
 
 ## Feature Flags
 
-| Feature  | Default | Provides                                                        |
-| -------- | :-----: | --------------------------------------------------------------- |
-| `polars` |   yes   | `impl GGData for polars::DataFrame` + `polars` re-export         |
-| `arrow`  |   no    | `impl GGData for arrow::RecordBatch` (Arrow/DuckDB input)        |
+| Feature      | Default | Provides                                                    |
+| ------------ | :-----: | ----------------------------------------------------------- |
+| `polars`     |   yes   | `impl GGData for polars::DataFrame` + `polars` re-export     |
+| `arrow`      |   no    | `impl GGData for arrow::RecordBatch` (Arrow/DuckDB input)    |
+| `regression` |   no    | `stat_quantile` / `geom_quantile` via anofox-regression      |
 
 To skip the heavy polars dependency (e.g. an Arrow-only service), disable defaults:
 
