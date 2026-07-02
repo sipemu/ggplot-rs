@@ -6,7 +6,15 @@
 [![codecov](https://codecov.io/gh/sipemu/ggplot-rs/branch/main/graph/badge.svg)](https://codecov.io/gh/sipemu/ggplot-rs)
 [![License: MIT OR Apache-2.0](https://img.shields.io/badge/license-MIT%2FApache--2.0-blue.svg)](#license)
 
-A Rust implementation of ggplot2's Grammar of Graphics, built on top of [polars](https://pola.rs/) DataFrames and the [plotters](https://github.com/plotters-rs/plotters) rendering backend.
+A Rust implementation of ggplot2's Grammar of Graphics, rendering through the
+[plotters](https://github.com/plotters-rs/plotters) backend.
+
+**No polars required.** [polars](https://pola.rs/) is a convenient — and fully
+optional — input adapter. The core pipeline runs on its own internal DataFrame,
+so you can plot straight from plain Rust vectors, or from
+[Apache Arrow](https://arrow.apache.org/) `RecordBatch`es produced by
+[DuckDB](https://duckdb.org/) — with polars switched off entirely. See
+[Data Input](#data-input) and [Feature Flags](#feature-flags).
 
 ## Gallery
 
@@ -40,16 +48,22 @@ regenerate them all with `cargo run --example gallery`.
       <sub>Grouped boxplots · <code>geom_boxplot</code></sub>
     </td>
     <td align="center">
-      <img src="assets/gallery/density.png" width="400" alt="Density by group"><br>
-      <sub>Overlapping densities · <code>geom_density</code></sub>
+      <img src="assets/gallery/violin.png" width="400" alt="Violin"><br>
+      <sub>Grouped violins · <code>geom_violin</code></sub>
     </td>
   </tr>
   <tr>
     <td align="center">
+      <img src="assets/gallery/density.png" width="400" alt="Density by group"><br>
+      <sub>Overlapping densities · <code>geom_density</code></sub>
+    </td>
+    <td align="center">
       <img src="assets/gallery/continuous_color.png" width="400" alt="Continuous color"><br>
       <sub>Continuous color · viridis gradient</sub>
     </td>
-    <td align="center">
+  </tr>
+  <tr>
+    <td align="center" colspan="2">
       <img src="assets/gallery/facet.png" width="400" alt="Facet wrap"><br>
       <sub>Small multiples · <code>facet_wrap</code></sub>
     </td>
@@ -113,7 +127,38 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
 ## Data Input
 
-The primary input type is `polars::DataFrame`:
+`GGPlot::new` accepts anything implementing the `GGData` trait. Nothing here
+requires polars — pick whichever source fits your stack.
+
+**Plain Rust — zero optional dependencies:**
+
+```rust
+// Column-oriented
+let cols: Vec<(String, Vec<Value>)> = vec![
+    ("x".into(), vec![Value::Float(1.0), Value::Float(2.0), Value::Float(3.0)]),
+    ("y".into(), vec![Value::Float(4.0), Value::Float(5.0), Value::Float(6.0)]),
+];
+GGPlot::new(cols)
+
+// Row-oriented
+let rows: Vec<HashMap<String, Value>> = vec![/* ... */];
+GGPlot::new(rows)
+```
+
+**Apache Arrow / DuckDB** — feed a `RecordBatch` straight from a DuckDB query
+result, with polars switched off:
+
+```toml
+# Cargo.toml — no polars in the dependency tree
+ggplot-rs = { version = "0.1", default-features = false, features = ["arrow"] }
+```
+
+```rust
+let batch: arrow::record_batch::RecordBatch = /* DuckDB query → Arrow */;
+GGPlot::new(batch)
+```
+
+**polars** (optional, enabled by default) — for `df!` and polars pipelines:
 
 ```rust
 let df = df! {
@@ -121,27 +166,6 @@ let df = df! {
     "y" => [4.0, 5.0, 6.0],
 }?;
 GGPlot::new(df)
-```
-
-Row-oriented and column-oriented inputs are also supported:
-
-```rust
-// Row-oriented
-let rows: Vec<HashMap<String, Value>> = vec![/* ... */];
-GGPlot::new(rows)
-
-// Column-oriented
-let cols: Vec<(String, Vec<Value>)> = vec![/* ... */];
-GGPlot::new(cols)
-```
-
-Arrow-native producers (e.g. DuckDB) can feed a `RecordBatch` directly with the
-`arrow` feature:
-
-```rust
-// Cargo.toml: ggplot-rs = { version = "0.1", features = ["arrow"] }
-let batch: arrow::record_batch::RecordBatch = /* ... */;
-GGPlot::new(batch)
 ```
 
 ## Rendering
