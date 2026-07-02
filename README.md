@@ -8,6 +8,54 @@
 
 A Rust implementation of ggplot2's Grammar of Graphics, built on top of [polars](https://pola.rs/) DataFrames and the [plotters](https://github.com/plotters-rs/plotters) rendering backend.
 
+## Gallery
+
+Every image below is produced by [`examples/gallery.rs`](examples/gallery.rs) —
+regenerate them all with `cargo run --example gallery`.
+
+<table>
+  <tr>
+    <td align="center">
+      <img src="assets/gallery/scatter.png" width="400" alt="Grouped scatter"><br>
+      <sub>Grouped scatter · <code>geom_point</code> + Brewer palette</sub>
+    </td>
+    <td align="center">
+      <img src="assets/gallery/smooth.png" width="400" alt="LOESS smoothing"><br>
+      <sub>LOESS trend + CI band · <code>geom_smooth</code></sub>
+    </td>
+  </tr>
+  <tr>
+    <td align="center">
+      <img src="assets/gallery/histogram.png" width="400" alt="Histogram"><br>
+      <sub>Histogram · <code>geom_histogram</code></sub>
+    </td>
+    <td align="center">
+      <img src="assets/gallery/bar.png" width="400" alt="Bar chart"><br>
+      <sub>Bar chart · <code>geom_bar</code> + fill palette</sub>
+    </td>
+  </tr>
+  <tr>
+    <td align="center">
+      <img src="assets/gallery/boxplot.png" width="400" alt="Boxplot"><br>
+      <sub>Grouped boxplots · <code>geom_boxplot</code></sub>
+    </td>
+    <td align="center">
+      <img src="assets/gallery/density.png" width="400" alt="Density by group"><br>
+      <sub>Overlapping densities · <code>geom_density</code></sub>
+    </td>
+  </tr>
+  <tr>
+    <td align="center">
+      <img src="assets/gallery/continuous_color.png" width="400" alt="Continuous color"><br>
+      <sub>Continuous color · viridis gradient</sub>
+    </td>
+    <td align="center">
+      <img src="assets/gallery/facet.png" width="400" alt="Facet wrap"><br>
+      <sub>Small multiples · <code>facet_wrap</code></sub>
+    </td>
+  </tr>
+</table>
+
 ## Quick Start
 
 ```rust

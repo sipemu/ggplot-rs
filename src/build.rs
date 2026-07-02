@@ -413,6 +413,17 @@ impl PlotBuilder {
         // Step 8: Train scales on this layer's data
         scale_set.train_layer(&working_data);
 
+        // Step 8b: Positional scales also need to see stat-computed extent columns
+        // (e.g. boxplot/errorbar/pointrange emit ymin/ymax but no "y"). Without
+        // this the Y (or X) scale would never train on the range and collapse.
+        for (col, aes) in &stat_aes {
+            if let Some(values) = working_data.column(col) {
+                if let Some(scale) = scale_set.get_mut(aes) {
+                    scale.train(values);
+                }
+            }
+        }
+
         Ok(BuiltLayer {
             data: working_data,
             geom,

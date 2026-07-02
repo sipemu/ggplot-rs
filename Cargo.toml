@@ -36,6 +36,10 @@ arrow = ["dep:arrow"]
 # All bundled examples build their input frames with the polars `df!` macro,
 # so they only compile when the `polars` feature is enabled.
 [[example]]
+name = "gallery"
+required-features = ["polars"]
+
+[[example]]
 name = "scatter"
 required-features = ["polars"]
 

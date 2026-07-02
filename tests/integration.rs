@@ -94,6 +94,44 @@ fn sample_points() -> Vec<HashMap<String, Value>> {
 }
 
 #[test]
+fn boxplot_trains_y_scale_on_extent() {
+    // Regression: boxplot emits ymin/ymax (no "y" column), so the Y scale must
+    // train on those extent columns or it collapses and boxes render off-panel.
+    let mut rows = Vec::new();
+    for group in ["A", "B", "C"] {
+        let base = match group {
+            "A" => 10.0,
+            "B" => 20.0,
+            _ => 15.0,
+        };
+        for i in 0..20 {
+            rows.push(HashMap::from([
+                ("group".to_string(), Value::Str(group.to_string())),
+                ("value".to_string(), Value::Float(base + (i as f64) * 0.5)),
+            ]));
+        }
+    }
+
+    let built = GGPlot::new(rows)
+        .aes(Aes::new().x("group").y("value"))
+        .geom_boxplot()
+        .build();
+
+    let (ymin, ymax) = built
+        .scales
+        .get(&Aesthetic::Y)
+        .expect("Y scale should exist")
+        .domain()
+        .expect("Y scale should have a trained domain");
+
+    // Data spans 10..29.5 across groups; the trained domain must cover it,
+    // not collapse to a degenerate/zero range.
+    assert!(ymax - ymin > 5.0, "Y domain collapsed: ({ymin}, {ymax})");
+    assert!(ymin <= 12.0, "Y domain min too high: {ymin}");
+    assert!(ymax >= 25.0, "Y domain max too low: {ymax}");
+}
+
+#[test]
 fn render_svg_in_memory() {
     let svg = GGPlot::new(sample_points())
         .aes(Aes::new().x("x").y("y"))
