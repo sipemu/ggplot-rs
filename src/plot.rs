@@ -281,6 +281,18 @@ impl GGPlot {
         self.add_geom(geom)
     }
 
+    /// Add a confidence-ellipse layer (default 95%) as a path per group.
+    pub fn stat_ellipse(self) -> Self {
+        self.geom_path()
+            .stat(crate::stat::ellipse::StatEllipse::default())
+    }
+
+    /// Add a confidence-ellipse layer at the given level (0, 1).
+    pub fn stat_ellipse_level(self, level: f64) -> Self {
+        self.geom_path()
+            .stat(crate::stat::ellipse::StatEllipse::new(level))
+    }
+
     pub fn geom_step(self) -> Self {
         self.add_geom(GeomStep::default())
     }
