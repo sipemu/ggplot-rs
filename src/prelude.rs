@@ -2,7 +2,7 @@ pub use crate::aes::{Aes, Aesthetic};
 pub use crate::annotate::Annotation;
 pub use crate::coord::polar::CoordPolar;
 pub use crate::data::{GGData, Value};
-pub use crate::facet::{FacetLabeller, FacetScales};
+pub use crate::facet::{FacetLabeller, FacetScales, FacetSpace};
 pub use crate::geom::area::GeomArea;
 pub use crate::geom::bar::GeomBar;
 pub use crate::geom::bin2d::GeomBin2d;

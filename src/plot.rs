@@ -9,7 +9,7 @@ use crate::coord::flip::CoordFlip;
 use crate::coord::polar::CoordPolar;
 use crate::coord::Coord;
 use crate::data::{DataFrame, GGData};
-use crate::facet::{Facet, FacetLabeller, FacetScales};
+use crate::facet::{Facet, FacetLabeller, FacetScales, FacetSpace};
 use crate::geom::area::GeomArea;
 use crate::geom::bar::GeomBar;
 use crate::geom::bin2d::GeomBin2d;
@@ -974,6 +974,7 @@ impl GGPlot {
             col_var: col.map(String::from),
             scales: FacetScales::Fixed,
             labeller: FacetLabeller::default(),
+            space: FacetSpace::Fixed,
         };
         self
     }
@@ -989,6 +990,69 @@ impl GGPlot {
             col_var: col.map(String::from),
             scales,
             labeller: FacetLabeller::default(),
+            space: FacetSpace::Fixed,
+        };
+        self
+    }
+
+    /// `facet_grid` over **multiple** column variables (R's `rows ~ b + c`):
+    /// the columns become the combination of the given variables' values.
+    /// Also accepts free scales + proportional `space` for full parity.
+    pub fn facet_grid_multi(
+        mut self,
+        row: Option<&str>,
+        cols: &[&str],
+        scales: FacetScales,
+        space: FacetSpace,
+    ) -> Self {
+        let col_var = if cols.len() > 1 {
+            // Build a synthetic column that is the interaction of the col vars.
+            let n = self.data.nrows();
+            let mut combined = Vec::with_capacity(n);
+            for i in 0..n {
+                let parts: Vec<String> = cols
+                    .iter()
+                    .map(|c| {
+                        self.data
+                            .column(c)
+                            .and_then(|col| col.get(i))
+                            .map(|v| v.to_group_key())
+                            .unwrap_or_default()
+                    })
+                    .collect();
+                combined.push(crate::data::Value::Str(parts.join(" . ")));
+            }
+            let name = "__facet_cols__".to_string();
+            self.data.add_column(name.clone(), combined);
+            Some(name)
+        } else {
+            cols.first().map(|s| s.to_string())
+        };
+        self.facet = Facet::Grid {
+            row_var: row.map(String::from),
+            col_var,
+            scales,
+            labeller: FacetLabeller::default(),
+            space,
+        };
+        self
+    }
+
+    /// `facet_grid` with proportional panel sizing (R's `space =`): panels are
+    /// sized to their data range. Typically paired with free scales.
+    pub fn facet_grid_space(
+        mut self,
+        row: Option<&str>,
+        col: Option<&str>,
+        scales: FacetScales,
+        space: FacetSpace,
+    ) -> Self {
+        self.facet = Facet::Grid {
+            row_var: row.map(String::from),
+            col_var: col.map(String::from),
+            scales,
+            labeller: FacetLabeller::default(),
+            space,
         };
         self
     }
@@ -1004,6 +1068,7 @@ impl GGPlot {
             col_var: col.map(String::from),
             scales: FacetScales::Fixed,
             labeller,
+            space: FacetSpace::Fixed,
         };
         self
     }

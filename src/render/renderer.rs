@@ -292,14 +292,84 @@ impl PlotRenderer {
         let strip_height = theme.strip_text.size + 8.0;
         let gap_x = theme.get_panel_spacing_x();
         let gap_y = theme.get_panel_spacing_y();
-        let panel_width = (plot_area.width - gap_x * (ncol as f64 - 1.0)) / ncol as f64;
-        let panel_height =
-            (plot_area.height - gap_y * (nrow as f64 - 1.0) - strip_height * nrow as f64)
-                / nrow as f64;
+
+        // Proportional panel sizing (R's `space =`): free_x sizes columns to
+        // their data x-range, free_y sizes rows to their y-range. Fixed = equal.
+        let space = match &built.facet {
+            Facet::Grid { space, .. } => space.clone(),
+            _ => crate::facet::FacetSpace::Fixed,
+        };
+        let extent = |pi: usize, col: &str| -> Option<f64> {
+            let (mut lo, mut hi) = (f64::INFINITY, f64::NEG_INFINITY);
+            for df in &built.panels_data[pi] {
+                if let Some(c) = df.column(col) {
+                    for v in c {
+                        if let Some(f) = v.as_f64() {
+                            lo = lo.min(f);
+                            hi = hi.max(f);
+                        }
+                    }
+                }
+            }
+            (lo <= hi).then_some(hi - lo)
+        };
+        let avail_w = plot_area.width - gap_x * (ncol as f64 - 1.0);
+        let col_widths: Vec<f64> = if space.free_x() && ncol > 0 {
+            let mut ranges = vec![0.0f64; ncol];
+            for (pi, panel) in built.panels.iter().enumerate() {
+                if let Some(r) = extent(pi, "x") {
+                    ranges[panel.col] = ranges[panel.col].max(r);
+                }
+            }
+            let total: f64 = ranges.iter().sum();
+            if total > 0.0 {
+                ranges.iter().map(|r| avail_w * (r / total)).collect()
+            } else {
+                vec![avail_w / ncol as f64; ncol]
+            }
+        } else {
+            vec![avail_w / ncol.max(1) as f64; ncol.max(1)]
+        };
+        let mut col_x = vec![plot_area.x; ncol.max(1)];
+        {
+            let mut acc = plot_area.x;
+            for c in 0..ncol {
+                col_x[c] = acc;
+                acc += col_widths[c] + gap_x;
+            }
+        }
+
+        let avail_h = plot_area.height - gap_y * (nrow as f64 - 1.0) - strip_height * nrow as f64;
+        let row_heights: Vec<f64> = if space.free_y() && nrow > 0 {
+            let mut ranges = vec![0.0f64; nrow];
+            for (pi, panel) in built.panels.iter().enumerate() {
+                if let Some(r) = extent(pi, "y") {
+                    ranges[panel.row] = ranges[panel.row].max(r);
+                }
+            }
+            let total: f64 = ranges.iter().sum();
+            if total > 0.0 {
+                ranges.iter().map(|r| avail_h * (r / total)).collect()
+            } else {
+                vec![avail_h / nrow as f64; nrow]
+            }
+        } else {
+            vec![avail_h / nrow.max(1) as f64; nrow.max(1)]
+        };
+        let mut row_y = vec![plot_area.y; nrow.max(1)];
+        {
+            let mut acc = plot_area.y;
+            for r in 0..nrow {
+                row_y[r] = acc;
+                acc += row_heights[r] + strip_height + gap_y;
+            }
+        }
 
         for (pi, panel) in built.panels.iter().enumerate() {
-            let px = plot_area.x + panel.col as f64 * (panel_width + gap_x);
-            let py = plot_area.y + panel.row as f64 * (panel_height + strip_height + gap_y);
+            let panel_width = col_widths[panel.col];
+            let panel_height = row_heights[panel.row];
+            let px = col_x[panel.col];
+            let py = row_y[panel.row];
 
             let panel_rect = crate::render::Rect {
                 x: px,

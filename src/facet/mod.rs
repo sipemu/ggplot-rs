@@ -12,6 +12,26 @@ pub enum FacetScales {
     Free,
 }
 
+/// Whether facet panels are sized proportionally to their data range
+/// (R's `space =`). `Fixed` = equal-size panels (default).
+#[derive(Clone, Debug, Default, PartialEq)]
+pub enum FacetSpace {
+    #[default]
+    Fixed,
+    FreeX,
+    FreeY,
+    Free,
+}
+
+impl FacetSpace {
+    pub fn free_x(&self) -> bool {
+        matches!(self, FacetSpace::FreeX | FacetSpace::Free)
+    }
+    pub fn free_y(&self) -> bool {
+        matches!(self, FacetSpace::FreeY | FacetSpace::Free)
+    }
+}
+
 /// How facet strip labels are formatted.
 #[derive(Clone, Default)]
 pub enum FacetLabeller {
@@ -61,6 +81,8 @@ pub enum Facet {
         col_var: Option<String>,
         scales: FacetScales,
         labeller: FacetLabeller,
+        #[doc = "Proportional panel sizing (R's `space =`)."]
+        space: FacetSpace,
     },
 }
 
