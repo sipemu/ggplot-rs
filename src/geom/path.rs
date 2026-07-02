@@ -147,4 +147,8 @@ impl Geom for GeomPath {
     fn name(&self) -> &str {
         "path"
     }
+
+    fn set_series_color(&mut self, color: (u8, u8, u8)) {
+        self.color = color;
+    }
 }

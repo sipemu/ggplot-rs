@@ -118,4 +118,8 @@ impl Geom for GeomTile {
     fn name(&self) -> &str {
         "tile"
     }
+
+    fn set_series_color(&mut self, color: (u8, u8, u8)) {
+        self.fill = color;
+    }
 }

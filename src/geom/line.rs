@@ -165,4 +165,8 @@ impl Geom for GeomLine {
     fn name(&self) -> &str {
         "line"
     }
+
+    fn set_series_color(&mut self, color: (u8, u8, u8)) {
+        self.color = color;
+    }
 }

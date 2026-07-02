@@ -93,6 +93,108 @@ fn sample_points() -> Vec<HashMap<String, Value>> {
     ]
 }
 
+/// Build column-oriented float data for the degenerate-input tests.
+fn cols(pairs: &[(&str, &[f64])]) -> Vec<(String, Vec<Value>)> {
+    pairs
+        .iter()
+        .map(|(n, v)| (n.to_string(), v.iter().map(|f| Value::Float(*f)).collect()))
+        .collect()
+}
+
+#[test]
+fn empty_input_errs_without_panicking() {
+    // A stateless renderer may be handed an empty result set; it must return an
+    // Err (reaching this assertion at all proves it did not panic).
+    let empty = cols(&[("x", &[]), ("y", &[])]);
+    let r = GGPlot::new(empty)
+        .aes(Aes::new().x("x").y("y"))
+        .geom_point()
+        .render_svg();
+    assert!(r.is_err(), "empty data should error, got {r:?}");
+}
+
+#[test]
+fn degenerate_input_does_not_panic() {
+    // Single-row, zero-variance, all-identical, NaN and Inf inputs must all come
+    // back as Ok/Err — never a panic. Completing this test is the assertion.
+    let xs: &[&[f64]] = &[
+        &[5.0],
+        &[5.0, 5.0, 5.0, 5.0],
+        &[f64::NAN, f64::NAN],
+        &[1.0, f64::INFINITY],
+    ];
+    for x in xs {
+        let _ = GGPlot::new(cols(&[("x", x)]))
+            .aes(Aes::new().x("x"))
+            .geom_histogram()
+            .render_svg();
+        let y: Vec<f64> = (0..x.len()).map(|i| i as f64).collect();
+        let _ = GGPlot::new(cols(&[("x", x), ("y", &y)]))
+            .aes(Aes::new().x("x").y("y"))
+            .geom_point()
+            .render_png_with_size(120, 90);
+    }
+}
+
+#[test]
+fn primary_color_sets_series_default() {
+    // Brand color drives a single-series geom that maps no color/fill.
+    let data = cols(&[("x", &[1.0, 2.0, 3.0]), ("y", &[1.0, 2.0, 3.0])]);
+    let svg = GGPlot::new(data)
+        .aes(Aes::new().x("x").y("y"))
+        .geom_point()
+        .primary_color((200, 10, 50))
+        .render_svg()
+        .unwrap();
+    assert!(
+        svg.contains("C80A32"),
+        "brand color should be used for points"
+    );
+}
+
+#[test]
+fn primary_color_yields_to_mapped_aesthetic() {
+    // An explicit color aesthetic wins over the brand color.
+    let data: Vec<(String, Vec<Value>)> = vec![
+        ("x".into(), vec![Value::Float(1.0), Value::Float(2.0)]),
+        ("y".into(), vec![Value::Float(1.0), Value::Float(2.0)]),
+        (
+            "g".into(),
+            vec![Value::Str("a".into()), Value::Str("b".into())],
+        ),
+    ];
+    let svg = GGPlot::new(data)
+        .aes(Aes::new().x("x").y("y").color("g"))
+        .geom_point()
+        .primary_color((200, 10, 50))
+        .render_svg()
+        .unwrap();
+    assert!(
+        !svg.contains("C80A32"),
+        "mapped color aesthetic should win over the brand color"
+    );
+}
+
+#[test]
+fn stat_supplies_geom_required_aes() {
+    // Regression: geom_step requires y, but StatEcdf synthesizes it. Required-aes
+    // validation must run against post-stat columns, so this must build without
+    // a ValidationError for the missing (pre-stat) y.
+    let data = cols(&[("x", &[1.0, 2.0, 2.0, 3.0, 5.0, 8.0])]);
+    let built = GGPlot::new(data)
+        .aes(Aes::new().x("x"))
+        .geom_step()
+        .stat(StatEcdf)
+        .try_build();
+    assert!(
+        built.is_ok(),
+        "ecdf via geom_step should build, got {:?}",
+        built.err()
+    );
+    let layer = &built.unwrap().layers[0];
+    assert!(layer.data.has_column("y"), "ecdf should produce y");
+}
+
 #[test]
 fn boxplot_trains_y_scale_on_extent() {
     // Regression: boxplot emits ymin/ymax (no "y" column), so the Y scale must

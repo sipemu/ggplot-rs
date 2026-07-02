@@ -124,4 +124,8 @@ impl Geom for GeomBar {
     fn name(&self) -> &str {
         "bar"
     }
+
+    fn set_series_color(&mut self, color: (u8, u8, u8)) {
+        self.fill = color;
+    }
 }

@@ -93,6 +93,10 @@ impl Geom for GeomQQ {
     fn name(&self) -> &str {
         "qq"
     }
+
+    fn set_series_color(&mut self, color: (u8, u8, u8)) {
+        self.color = color;
+    }
 }
 
 /// QQ line geometry — reference line through Q1/Q3 on the QQ plot.
@@ -173,5 +177,9 @@ impl Geom for GeomQQLine {
 
     fn name(&self) -> &str {
         "qq_line"
+    }
+
+    fn set_series_color(&mut self, color: (u8, u8, u8)) {
+        self.color = color;
     }
 }

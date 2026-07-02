@@ -140,4 +140,8 @@ impl Geom for GeomCurve {
     fn name(&self) -> &str {
         "curve"
     }
+
+    fn set_series_color(&mut self, color: (u8, u8, u8)) {
+        self.color = color;
+    }
 }

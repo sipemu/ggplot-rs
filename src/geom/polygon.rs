@@ -122,4 +122,8 @@ impl Geom for GeomPolygon {
     fn name(&self) -> &str {
         "polygon"
     }
+
+    fn set_series_color(&mut self, color: (u8, u8, u8)) {
+        self.fill = color;
+    }
 }

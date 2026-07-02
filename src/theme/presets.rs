@@ -170,6 +170,7 @@ pub fn theme_gray_base(base_size: f64) -> Theme {
         panel_spacing: half_line,
         panel_spacing_x: None,
         panel_spacing_y: None,
+        primary: None,
     }
 }
 
@@ -525,5 +526,6 @@ pub fn theme_void_base(base_size: f64) -> Theme {
         panel_spacing: 0.0,
         panel_spacing_x: None,
         panel_spacing_y: None,
+        primary: None,
     }
 }

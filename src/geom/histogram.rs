@@ -134,4 +134,8 @@ impl Geom for GeomHistogram {
     fn name(&self) -> &str {
         "histogram"
     }
+
+    fn set_series_color(&mut self, color: (u8, u8, u8)) {
+        self.fill = color;
+    }
 }

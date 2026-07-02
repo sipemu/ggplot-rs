@@ -84,9 +84,27 @@ pub struct Theme {
     pub panel_spacing: f64,
     pub panel_spacing_x: Option<f64>,
     pub panel_spacing_y: Option<f64>,
+
+    // ── Brand / primary color ──
+    /// Optional brand color. When set, geoms that draw a single un-mapped series
+    /// (no color/fill aesthetic) use it as their default instead of the geom's
+    /// built-in color. Lets one render process serve multiple tenants' brands.
+    pub primary: Option<(u8, u8, u8)>,
 }
 
 impl Theme {
+    /// Resolve the effective series color: the theme's brand color if set,
+    /// otherwise the geom's own default.
+    pub fn primary_or(&self, fallback: (u8, u8, u8)) -> (u8, u8, u8) {
+        self.primary.unwrap_or(fallback)
+    }
+
+    /// Set the brand/primary color (builder style).
+    pub fn with_primary(mut self, color: (u8, u8, u8)) -> Self {
+        self.primary = Some(color);
+        self
+    }
+
     // ── Fallback accessors for Option fields ──
 
     pub fn get_axis_line_x(&self) -> &ElementLine {

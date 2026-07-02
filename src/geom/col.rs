@@ -114,4 +114,8 @@ impl Geom for GeomCol {
     fn name(&self) -> &str {
         "col"
     }
+
+    fn set_series_color(&mut self, color: (u8, u8, u8)) {
+        self.fill = color;
+    }
 }

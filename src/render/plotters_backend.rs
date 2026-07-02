@@ -1,9 +1,44 @@
+use std::collections::HashSet;
+use std::sync::{Mutex, OnceLock};
+
 use plotters::prelude::*;
+use plotters::style::FontStyle;
 
 use super::backend::{
     DrawBackend, LineStyle, PointShape, PointStyle, RectStyle, TextAnchor, TextStyle,
 };
 use super::{Rect, RenderError};
+
+/// A font bundled into the binary so text renders in a headless container with
+/// no system fonts / fontconfig. DejaVu Sans (Bitstream Vera–derived license,
+/// freely redistributable) — broad glyph coverage keeps labels tofu-free.
+const BUNDLED_FONT: &[u8] = include_bytes!("../../assets/fonts/DejaVuSans.ttf");
+
+fn registered_families() -> &'static Mutex<HashSet<String>> {
+    static REGISTERED: OnceLock<Mutex<HashSet<String>>> = OnceLock::new();
+    REGISTERED.get_or_init(|| Mutex::new(HashSet::new()))
+}
+
+/// Ensure the bundled font is registered under `family` (idempotent).
+///
+/// With plotters' `ab_glyph` backend there is no system-font lookup: every
+/// family used for layout must be registered first. We map *all* requested
+/// families to the one bundled font, so any family name lays out correctly
+/// headlessly; SVG output still carries the requested family name for browsers.
+fn ensure_font(family: &str) {
+    let mut set = registered_families().lock().unwrap();
+    if set.insert(family.to_string()) {
+        for style in [
+            FontStyle::Normal,
+            FontStyle::Bold,
+            FontStyle::Italic,
+            FontStyle::Oblique,
+        ] {
+            // Ignore the result: a malformed font would surface as a draw error.
+            let _ = plotters::style::register_font(family, style, BUNDLED_FONT);
+        }
+    }
+}
 
 /// Adapter from plotters' DrawingArea to our DrawBackend trait.
 pub struct PlottersAdapter<'a, DB: DrawingBackend> {
@@ -337,6 +372,7 @@ impl<'a, DB: DrawingBackend> DrawBackend for PlottersAdapter<'a, DB> {
     ) -> Result<(), RenderError> {
         let color = to_rgba(style.color, 1.0);
         let family = style.family.as_deref().unwrap_or("sans-serif");
+        ensure_font(family);
         let font = (family, style.size).into_font();
 
         let pos_adj = match style.anchor {

@@ -63,7 +63,13 @@ impl PlotBuilder {
         let mut built_layers = Vec::new();
 
         for layer in layers {
-            let built = Self::build_layer(layer, &plot_data, &plot_mapping, &mut scale_set)?;
+            let built = Self::build_layer(
+                layer,
+                &plot_data,
+                &plot_mapping,
+                &mut scale_set,
+                theme.primary,
+            )?;
             built_layers.push(built);
         }
 
@@ -302,11 +308,12 @@ impl PlotBuilder {
         plot_data: &DataFrame,
         plot_mapping: &Aes,
         scale_set: &mut ScaleSet,
+        primary: Option<(u8, u8, u8)>,
     ) -> Result<BuiltLayer, GGError> {
         let Layer {
             data: layer_data,
             mapping: layer_mapping,
-            geom,
+            mut geom,
             stat,
             position,
             params: _,
@@ -319,23 +326,28 @@ impl PlotBuilder {
         // Step 2: Merge mappings — layer overrides plot-level
         let merged_mapping = plot_mapping.merge(&layer_mapping);
 
+        // Brand/primary color: apply to a single-series geom only when the layer
+        // maps neither color nor fill (an explicit aesthetic always wins).
+        if let Some(color) = primary {
+            let has_color = merged_mapping.get_mapping(&Aesthetic::Color).is_some();
+            let has_fill = merged_mapping.get_mapping(&Aesthetic::Fill).is_some();
+            if !has_color && !has_fill {
+                geom.set_series_color(color);
+            }
+        }
+
         // Step 3: Evaluate aes — rename columns to canonical names
         let mut working_data = resolve_mappings(&source_data, &merged_mapping);
 
-        // Step 3b: Validate required aesthetics
-        let required = geom.required_aes();
-        if !required.is_empty() {
-            for aes in &required {
-                let col_name = aes.col_name();
-                if !working_data.has_column(col_name) {
-                    return Err(GGError::ValidationError(format!(
-                        "geom_{} requires aesthetic '{}' but it was not provided",
-                        geom.name(),
-                        col_name
-                    )));
-                }
-            }
-        }
+        // Remember which columns the user actually supplied (pre-stat). A required
+        // aesthetic is satisfied if it was present here OR is synthesized by the
+        // stat (checked after Step 6) — e.g. boxplot maps `y` then the stat turns
+        // it into ymin/ymax, while StatEcdf produces `y` that wasn't mapped.
+        let pre_stat_columns: Vec<String> = working_data
+            .column_names()
+            .iter()
+            .map(|s| s.to_string())
+            .collect();
 
         // Step 4: Ensure scales exist for each mapped aesthetic
         for m in &merged_mapping.mappings {
@@ -382,6 +394,23 @@ impl PlotBuilder {
 
         // Step 6a: Apply after_stat() mappings (rename stat-computed columns)
         apply_after_stat(&mut working_data, &merged_mapping);
+
+        // Step 6a-validate: A required aesthetic must have been supplied by the
+        // user (pre-stat) or synthesized by the stat (post-stat). This lets
+        // StatEcdf produce `y` for geom_step, while boxplot — which maps `y` then
+        // consumes it into ymin/ymax — still validates. Empty input has the
+        // column in neither place, so genuinely-missing aesthetics still error.
+        for aes in &geom.required_aes() {
+            let col_name = aes.col_name();
+            let supplied = pre_stat_columns.iter().any(|c| c == col_name);
+            if !supplied && !working_data.has_column(col_name) {
+                return Err(GGError::ValidationError(format!(
+                    "geom_{} requires aesthetic '{}' but it was not provided",
+                    geom.name(),
+                    col_name
+                )));
+            }
+        }
 
         // Step 6b: Ensure scales for stat-computed aesthetics (e.g. y from StatCount/StatBin)
         let stat_aes = [

@@ -113,4 +113,8 @@ impl Geom for GeomJitter {
     fn name(&self) -> &str {
         "jitter"
     }
+
+    fn set_series_color(&mut self, color: (u8, u8, u8)) {
+        self.color = color;
+    }
 }
