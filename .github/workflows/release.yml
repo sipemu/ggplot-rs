@@ -1,0 +1,40 @@
+name: Release
+
+# Publishes the crate to crates.io when a GitHub Release is published.
+# Create one with e.g. `gh release create v0.1.0 --generate-notes` — the tag
+# must match the `version` in Cargo.toml (prefixed with `v`).
+on:
+  release:
+    types: [published]
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install system dependencies
+        run: sudo apt-get update && sudo apt-get install -y libfontconfig1-dev
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Verify tag matches Cargo.toml version
+        run: |
+          crate_version="$(cargo metadata --no-deps --format-version 1 \
+            | grep -o '"version":"[^"]*"' | head -n1 | cut -d'"' -f4)"
+          tag_version="${GITHUB_REF_NAME#v}"
+          echo "Cargo.toml: $crate_version | tag: $tag_version"
+          if [ "$crate_version" != "$tag_version" ]; then
+            echo "::error::Tag '$GITHUB_REF_NAME' does not match Cargo.toml version '$crate_version'"
+            exit 1
+          fi
+
+      - name: Publish to crates.io
+        run: cargo publish
+        env:
+          CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
