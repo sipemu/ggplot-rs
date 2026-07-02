@@ -71,10 +71,22 @@ pub struct AesMapping {
     pub stage: MappingStage,
 }
 
+/// A post-scale aesthetic derivation (R's `after_scale`): the `target` color
+/// aesthetic is set to the `source` aesthetic's *mapped* color, adjusted in
+/// lightness (`+` toward white, `-` toward black, in `-1.0..=1.0`).
+#[derive(Clone, Debug)]
+pub struct AfterScaleSpec {
+    pub target: Aesthetic,
+    pub source: Aesthetic,
+    pub lightness: f64,
+}
+
 /// Builder for aesthetic mappings.
 #[derive(Clone, Debug, Default)]
 pub struct Aes {
     pub mappings: Vec<AesMapping>,
+    /// Post-scale color derivations (`after_scale`).
+    pub after_scale: Vec<AfterScaleSpec>,
 }
 
 impl Aes {
@@ -94,6 +106,47 @@ impl Aes {
     fn push_after_stat(mut self, col: &str, aesthetic: Aesthetic) -> Self {
         self.mappings.push(AesMapping {
             column: col.to_string(),
+            aesthetic,
+            stage: MappingStage::AfterStat,
+        });
+        self
+    }
+
+    // ─── after_scale() — post-scale color derivation ────────────
+
+    /// Set `fill` to the mapped `color` with adjusted lightness (R's
+    /// `aes(fill = after_scale(...))`). `lightness` in `-1.0..=1.0`: positive
+    /// lightens toward white, negative darkens toward black.
+    pub fn after_scale_fill_from_color(mut self, lightness: f64) -> Self {
+        self.after_scale.push(AfterScaleSpec {
+            target: Aesthetic::Fill,
+            source: Aesthetic::Color,
+            lightness,
+        });
+        self
+    }
+
+    /// Set `color` to the mapped `fill` with adjusted lightness — useful for a
+    /// darker border around a filled shape (`color = after_scale(darken(fill))`).
+    pub fn after_scale_color_from_fill(mut self, lightness: f64) -> Self {
+        self.after_scale.push(AfterScaleSpec {
+            target: Aesthetic::Color,
+            source: Aesthetic::Fill,
+            lightness,
+        });
+        self
+    }
+
+    /// `stage(start, after_stat)`: map `aesthetic` from `start` before the stat
+    /// and re-map it from `after_stat` afterwards (R's `stage()`).
+    pub fn stage(mut self, aesthetic: Aesthetic, start: &str, after_stat: &str) -> Self {
+        self.mappings.push(AesMapping {
+            column: start.to_string(),
+            aesthetic: aesthetic.clone(),
+            stage: MappingStage::BeforeStat,
+        });
+        self.mappings.push(AesMapping {
+            column: after_stat.to_string(),
             aesthetic,
             stage: MappingStage::AfterStat,
         });

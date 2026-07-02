@@ -10,6 +10,7 @@ pub mod grey;
 pub mod linetype;
 pub mod linetype_manual;
 pub mod manual;
+pub mod modified;
 pub mod palettes;
 pub mod scale_set;
 pub mod sec_axis;
