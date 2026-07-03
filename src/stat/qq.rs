@@ -75,8 +75,8 @@ impl Stat for StatQQ {
         let mut y_vals = Vec::with_capacity(n);
 
         for (i, &val) in values.iter().enumerate() {
-            // R's ppoints(): (i + 1 - a) / (n + 1 - 2*a) where a = 3/8 for n > 10
-            let a = if n > 10 { 3.0 / 8.0 } else { 0.5 };
+            // R's ppoints(): (i + 1 - a) / (n + 1 - 2*a) where a = 3/8 for n <= 10 (matches R's ppoints)
+            let a = if n <= 10 { 3.0 / 8.0 } else { 0.5 };
             let p = (i as f64 + 1.0 - a) / (n as f64 + 1.0 - 2.0 * a);
             let theoretical = qnorm(p);
             x_vals.push(Value::Float(theoretical));
@@ -140,7 +140,7 @@ impl Stat for StatQQLine {
         let intercept = sample_q1 - slope * theo_q1;
 
         // Extend line to cover full theoretical range using R's ppoints formula
-        let a = if n > 10 { 3.0 / 8.0 } else { 0.5 };
+        let a = if n <= 10 { 3.0 / 8.0 } else { 0.5 };
         let x_min = qnorm((1.0 - a) / (n as f64 + 1.0 - 2.0 * a));
         let x_max = qnorm((n as f64 - a) / (n as f64 + 1.0 - 2.0 * a));
 
