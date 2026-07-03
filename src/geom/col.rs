@@ -12,6 +12,30 @@ use crate::theme::Theme;
 
 use super::{Geom, GeomParams};
 
+/// Tessellate a bar — angle span `[t0, t1]`, radius span `[r0, r1]` in
+/// normalized coords — into a radial-sector polygon of pixel points under a
+/// polar `coord`. Both arcs are sampled so the fill follows the circle.
+pub(crate) fn polar_sector(
+    coord: &dyn Coord,
+    area: &crate::render::Rect,
+    t0: f64,
+    t1: f64,
+    r0: f64,
+    r1: f64,
+) -> Vec<(f64, f64)> {
+    const N: usize = 24;
+    let mut pts = Vec::with_capacity(2 * (N + 1));
+    for k in 0..=N {
+        let t = t0 + (t1 - t0) * k as f64 / N as f64;
+        pts.push(coord.transform((t, r1), area));
+    }
+    for k in 0..=N {
+        let t = t1 + (t0 - t1) * k as f64 / N as f64;
+        pts.push(coord.transform((t, r0), area));
+    }
+    pts
+}
+
 /// Column geometry — like GeomBar but with pre-computed heights (uses StatIdentity).
 pub struct GeomCol {
     pub fill: (u8, u8, u8),
@@ -68,9 +92,6 @@ impl Geom for GeomCol {
                 0.02
             };
 
-            let (left_px, top_px) = coord.transform((nx - half_width, ny), &plot_area);
-            let (right_px, bottom_px) = coord.transform((nx + half_width, ny_base), &plot_area);
-
             let (fr, fg, fb) = if let Some(fc) = fill_col {
                 scales
                     .map_color(&Aesthetic::Fill, &fc[i])
@@ -78,18 +99,36 @@ impl Geom for GeomCol {
             } else {
                 self.fill
             };
+            let style = RectStyle {
+                fill: Some((fr, fg, fb)),
+                stroke: Some(self.color),
+                stroke_width: 0.5,
+                alpha: self.alpha,
+                clip: !coord.is_polar(),
+            };
 
-            backend.draw_rect(
-                (left_px, top_px.min(bottom_px)),
-                (right_px, top_px.max(bottom_px)),
-                &RectStyle {
-                    fill: Some((fr, fg, fb)),
-                    stroke: Some(self.color),
-                    stroke_width: 0.5,
-                    alpha: self.alpha,
-                    clip: true,
-                },
-            )?;
+            if coord.is_polar() {
+                // A bar becomes a radial sector: tessellate the outer arc
+                // (radius = value) and the inner arc (radius = base) so the
+                // filled polygon follows the circle instead of a warped quad.
+                let points = polar_sector(
+                    coord,
+                    &plot_area,
+                    nx - half_width,
+                    nx + half_width,
+                    ny_base,
+                    ny,
+                );
+                backend.draw_polygon(&points, &style)?;
+            } else {
+                let (left_px, top_px) = coord.transform((nx - half_width, ny), &plot_area);
+                let (right_px, bottom_px) = coord.transform((nx + half_width, ny_base), &plot_area);
+                backend.draw_rect(
+                    (left_px, top_px.min(bottom_px)),
+                    (right_px, top_px.max(bottom_px)),
+                    &style,
+                )?;
+            }
         }
 
         Ok(())
