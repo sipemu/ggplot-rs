@@ -1409,6 +1409,22 @@ impl GGPlot {
         Ok(buf)
     }
 
+    /// Render to SVG through the self-contained [`SvgBackend`](crate::render::svg_backend::SvgBackend)
+    /// — a plotters-free path that drives the same `PlotRenderer`, proving the
+    /// `DrawBackend` abstraction (and needing no glyph rasterization).
+    pub fn render_svg_native(self) -> Result<String, GGError> {
+        self.render_svg_native_with_size(800, 600)
+    }
+
+    /// [`render_svg_native`](Self::render_svg_native) with an explicit size.
+    pub fn render_svg_native_with_size(self, w: u32, h: u32) -> Result<String, GGError> {
+        let (built, layout) = self.prepare(w, h)?;
+        let mut backend =
+            crate::render::svg_backend::SvgBackend::new(w, h, layout.plot_area.clone());
+        PlotRenderer::render(&built, &mut backend).map_err(GGError::Render)?;
+        Ok(backend.finish())
+    }
+
     /// Render the plot to in-memory PNG bytes (default 800x600).
     ///
     /// Returns a fully-encoded PNG, ready to write to an HTTP response or
