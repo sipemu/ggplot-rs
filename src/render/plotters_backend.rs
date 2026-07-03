@@ -13,6 +13,8 @@ use super::{Rect, RenderError};
 /// no system fonts / fontconfig. DejaVu Sans (Bitstream Vera–derived license,
 /// freely redistributable) — broad glyph coverage keeps labels tofu-free.
 const BUNDLED_FONT: &[u8] = include_bytes!("../../assets/fonts/DejaVuSans.ttf");
+const BUNDLED_FONT_BOLD: &[u8] = include_bytes!("../../assets/fonts/DejaVuSans-Bold.ttf");
+const BUNDLED_FONT_OBLIQUE: &[u8] = include_bytes!("../../assets/fonts/DejaVuSans-Oblique.ttf");
 
 fn registered_families() -> &'static Mutex<HashSet<String>> {
     static REGISTERED: OnceLock<Mutex<HashSet<String>>> = OnceLock::new();
@@ -28,14 +30,16 @@ fn registered_families() -> &'static Mutex<HashSet<String>> {
 fn ensure_font(family: &str) {
     let mut set = registered_families().lock().unwrap();
     if set.insert(family.to_string()) {
-        for style in [
-            FontStyle::Normal,
-            FontStyle::Bold,
-            FontStyle::Italic,
-            FontStyle::Oblique,
+        // Register the matching DejaVu face per style so bold/italic actually
+        // render bold/italic (R's element_text(face = ...)).
+        for (style, bytes) in [
+            (FontStyle::Normal, BUNDLED_FONT),
+            (FontStyle::Bold, BUNDLED_FONT_BOLD),
+            (FontStyle::Italic, BUNDLED_FONT_OBLIQUE),
+            (FontStyle::Oblique, BUNDLED_FONT_OBLIQUE),
         ] {
             // Ignore the result: a malformed font would surface as a draw error.
-            let _ = plotters::style::register_font(family, style, BUNDLED_FONT);
+            let _ = plotters::style::register_font(family, style, bytes);
         }
     }
 }
@@ -373,7 +377,12 @@ impl<'a, DB: DrawingBackend> DrawBackend for PlottersAdapter<'a, DB> {
         let color = to_rgba(style.color, 1.0);
         let family = style.family.as_deref().unwrap_or("sans-serif");
         ensure_font(family);
-        let font = (family, style.size).into_font();
+        let font_style = match style.face {
+            crate::render::backend::FontFace::Plain => FontStyle::Normal,
+            crate::render::backend::FontFace::Bold => FontStyle::Bold,
+            crate::render::backend::FontFace::Italic => FontStyle::Italic,
+        };
+        let font = (family, style.size).into_font().style(font_style);
 
         let pos_adj = match style.anchor {
             TextAnchor::Start => plotters::style::text_anchor::Pos::new(

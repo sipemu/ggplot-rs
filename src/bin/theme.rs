@@ -48,12 +48,14 @@ pub struct ThemeConfig {
 #[serde(default, deny_unknown_fields)]
 pub struct TextCfg {
     pub family: Option<String>,
+    /// Font face: "plain", "bold", or "italic".
+    pub face: Option<String>,
     pub size: Option<f64>,
     pub color: Option<[u8; 3]>,
-    pub angle: Option<f64>,
     /// Horizontal justification: 0 = left, 0.5 = center, 1 = right.
     pub hjust: Option<f64>,
     pub vjust: Option<f64>,
+    pub angle: Option<f64>,
     pub visible: Option<bool>,
 }
 
@@ -113,17 +115,17 @@ pub fn preset(name: &str) -> Result<Theme, String> {
 
 /// Apply the config's element overrides onto `base`.
 pub fn apply(cfg: &ThemeConfig, mut t: Theme) -> Result<Theme, String> {
-    text(&cfg.text, &mut t.text);
-    text(&cfg.title, &mut t.title);
-    text(&cfg.subtitle, &mut t.subtitle);
-    text(&cfg.caption, &mut t.caption);
-    text(&cfg.axis_title_x, &mut t.axis_title_x);
-    text(&cfg.axis_title_y, &mut t.axis_title_y);
-    text(&cfg.axis_text_x, &mut t.axis_text_x);
-    text(&cfg.axis_text_y, &mut t.axis_text_y);
-    text(&cfg.legend_title, &mut t.legend_title);
-    text(&cfg.legend_text, &mut t.legend_text);
-    text(&cfg.strip_text, &mut t.strip_text);
+    text(&cfg.text, &mut t.text)?;
+    text(&cfg.title, &mut t.title)?;
+    text(&cfg.subtitle, &mut t.subtitle)?;
+    text(&cfg.caption, &mut t.caption)?;
+    text(&cfg.axis_title_x, &mut t.axis_title_x)?;
+    text(&cfg.axis_title_y, &mut t.axis_title_y)?;
+    text(&cfg.axis_text_x, &mut t.axis_text_x)?;
+    text(&cfg.axis_text_y, &mut t.axis_text_y)?;
+    text(&cfg.legend_title, &mut t.legend_title)?;
+    text(&cfg.legend_text, &mut t.legend_text)?;
+    text(&cfg.strip_text, &mut t.strip_text)?;
 
     line(&cfg.axis_line, &mut t.axis_line)?;
     line(&cfg.axis_ticks, &mut t.axis_ticks)?;
@@ -145,10 +147,18 @@ pub fn apply(cfg: &ThemeConfig, mut t: Theme) -> Result<Theme, String> {
     Ok(t)
 }
 
-fn text(cfg: &Option<TextCfg>, el: &mut ElementText) {
+fn text(cfg: &Option<TextCfg>, el: &mut ElementText) -> Result<(), String> {
     if let Some(c) = cfg {
         if let Some(v) = &c.family {
             el.family = v.clone();
+        }
+        if let Some(f) = &c.face {
+            el.face = match f.to_lowercase().as_str() {
+                "plain" | "normal" => FontFace::Plain,
+                "bold" => FontFace::Bold,
+                "italic" | "oblique" => FontFace::Italic,
+                other => return Err(format!("unknown face '{other}'")),
+            };
         }
         if let Some(v) = c.size {
             el.size = v;
@@ -169,6 +179,7 @@ fn text(cfg: &Option<TextCfg>, el: &mut ElementText) {
             el.visible = v;
         }
     }
+    Ok(())
 }
 
 fn line(cfg: &Option<LineCfg>, el: &mut ElementLine) -> Result<(), String> {

@@ -90,6 +90,7 @@ pub fn draw_x_axis(
                     anchor,
                     angle: theme.axis_text_x.angle,
                     family,
+                    face: theme.axis_text_x.face,
                 },
             )?;
         }
@@ -123,6 +124,7 @@ pub fn draw_x_axis(
                 anchor,
                 angle: 0.0,
                 family,
+                face: theme.axis_title_x.face,
             },
         )?;
     }
@@ -189,6 +191,7 @@ pub fn draw_y_axis(
                     anchor: TextAnchor::End,
                     angle: theme.axis_text_y.angle,
                     family,
+                    face: theme.axis_text_y.face,
                 },
             )?;
         }
@@ -213,6 +216,7 @@ pub fn draw_y_axis(
                 anchor: TextAnchor::Middle,
                 angle: 270.0,
                 family,
+                face: theme.axis_title_y.face,
             },
         )?;
     }
@@ -291,6 +295,7 @@ pub fn draw_sec_y_axis(
                     anchor: TextAnchor::Start,
                     angle: theme.axis_text_y.angle,
                     family,
+                    face: theme.axis_text_y.face,
                 },
             )?;
         }
@@ -314,6 +319,7 @@ pub fn draw_sec_y_axis(
                 anchor: TextAnchor::Middle,
                 angle: 90.0,
                 family,
+                face: theme.axis_title_y.face,
             },
         )?;
     }

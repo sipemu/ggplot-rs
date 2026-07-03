@@ -50,7 +50,7 @@ pub use crate::position::jitter::PositionJitter;
 pub use crate::position::jitterdodge::PositionJitterDodge;
 pub use crate::position::nudge::PositionNudge;
 pub use crate::position::stack::PositionStack;
-pub use crate::render::backend::{Linetype, PointShape};
+pub use crate::render::backend::{FontFace, Linetype, PointShape};
 pub use crate::scale::alpha::ScaleAlphaContinuous;
 pub use crate::scale::color::{RGBAColor, ScaleColorContinuous, ScaleColorDiscrete};
 pub use crate::scale::continuous::ScaleContinuous;

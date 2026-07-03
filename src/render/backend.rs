@@ -131,6 +131,17 @@ pub struct TextStyle {
     pub angle: f64,
     /// Font family (e.g., "serif", "monospace"). None defaults to "sans-serif".
     pub family: Option<String>,
+    /// Font face (R's `element_text(face = ...)`).
+    pub face: FontFace,
+}
+
+/// Font face / weight (R's `element_text(face = ...)`).
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
+pub enum FontFace {
+    #[default]
+    Plain,
+    Bold,
+    Italic,
 }
 
 impl Default for TextStyle {
@@ -141,6 +152,7 @@ impl Default for TextStyle {
             anchor: TextAnchor::Middle,
             angle: 0.0,
             family: None,
+            face: crate::render::backend::FontFace::Plain,
         }
     }
 }
