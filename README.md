@@ -435,6 +435,6 @@ dual licensed as above, without any additional terms or conditions.
 
 ### Bundled font
 
-`assets/fonts/DejaVuSans.ttf` is bundled for headless text rendering. DejaVu Sans
+`assets/fonts/DejaVuSans.ttf` (plus `-Bold` and `-Oblique` faces) are bundled for headless text rendering, including bold/italic (`element_text(face=)`). DejaVu Sans
 is distributed under a permissive, freely-redistributable license (Bitstream Vera
 + Arev) — see [`assets/fonts/LICENSE-DejaVu.txt`](assets/fonts/LICENSE-DejaVu.txt).

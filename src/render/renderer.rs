@@ -156,6 +156,7 @@ impl PlotRenderer {
                     anchor,
                     angle: 0.0,
                     family,
+                    face: theme.title.face,
                 },
             )?;
         }
@@ -178,6 +179,7 @@ impl PlotRenderer {
                     anchor,
                     angle: 0.0,
                     family,
+                    face: theme.subtitle.face,
                 },
             )?;
         }
@@ -210,6 +212,7 @@ impl PlotRenderer {
                     anchor,
                     angle: 0.0,
                     family,
+                    face: theme.caption.face,
                 },
             )?;
         }
@@ -262,6 +265,7 @@ impl PlotRenderer {
                     anchor: TextAnchor::Start,
                     angle: 0.0,
                     family,
+                    face: theme.title.face,
                 },
             )?;
         }
@@ -424,6 +428,7 @@ impl PlotRenderer {
                         anchor: TextAnchor::Middle,
                         angle: 0.0,
                         family,
+                        face: theme.strip_text.face,
                     },
                 )?;
             }
@@ -538,6 +543,7 @@ impl PlotRenderer {
                     anchor,
                     angle: 0.0,
                     family,
+                    face: theme.title.face,
                 },
             )?;
         }
@@ -560,6 +566,7 @@ impl PlotRenderer {
                     anchor,
                     angle: 0.0,
                     family,
+                    face: theme.subtitle.face,
                 },
             )?;
         }
@@ -582,6 +589,7 @@ impl PlotRenderer {
                     anchor,
                     angle: 0.0,
                     family,
+                    face: theme.caption.face,
                 },
             )?;
         }
@@ -644,6 +652,7 @@ impl PlotRenderer {
                             anchor: TextAnchor::Middle,
                             angle: 0.0,
                             family: None,
+                            face: crate::render::backend::FontFace::Plain,
                         },
                     )?;
                 }

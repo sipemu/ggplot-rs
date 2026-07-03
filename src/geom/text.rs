@@ -115,6 +115,7 @@ impl Geom for GeomText {
                     anchor,
                     angle: 0.0,
                     family: None,
+                    face: crate::render::backend::FontFace::Plain,
                 },
             )?;
         }
@@ -262,6 +263,7 @@ impl Geom for GeomLabel {
                     anchor,
                     angle: 0.0,
                     family: None,
+                    face: crate::render::backend::FontFace::Plain,
                 },
             )?;
         }

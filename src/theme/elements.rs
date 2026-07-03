@@ -2,6 +2,8 @@
 #[derive(Clone, Debug)]
 pub struct ElementText {
     pub family: String,
+    /// Font face (R's `element_text(face = ...)`).
+    pub face: crate::render::backend::FontFace,
     pub size: f64,
     pub color: (u8, u8, u8),
     pub angle: f64,
@@ -24,6 +26,7 @@ impl Default for ElementText {
     fn default() -> Self {
         ElementText {
             family: "sans-serif".to_string(),
+            face: crate::render::backend::FontFace::Plain,
             size: 12.0,
             color: (0, 0, 0),
             angle: 0.0,

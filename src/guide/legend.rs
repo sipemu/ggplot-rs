@@ -180,6 +180,7 @@ fn draw_discrete_legend_at(
                 anchor: TextAnchor::Start,
                 angle: 0.0,
                 family: legend_family,
+                face: theme.legend_title.face,
             },
         )?;
         theme.legend_title.size + 4.0
@@ -323,6 +324,7 @@ fn draw_discrete_legend_at(
                 anchor: TextAnchor::Start,
                 angle: 0.0,
                 family: label_family,
+                face: theme.legend_text.face,
             },
         )?;
     }
@@ -364,6 +366,7 @@ fn draw_continuous_legend_at(
                 anchor: TextAnchor::Start,
                 angle: 0.0,
                 family: cont_family,
+                face: theme.legend_title.face,
             },
         )?;
         theme.legend_title.size + 4.0
@@ -462,6 +465,7 @@ fn draw_continuous_legend_at(
                 anchor: TextAnchor::Start,
                 angle: 0.0,
                 family: tick_family,
+                face: theme.legend_text.face,
             },
         )?;
     }
