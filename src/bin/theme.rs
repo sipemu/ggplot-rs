@@ -15,6 +15,12 @@ pub struct ThemeConfig {
     pub primary: Option<[u8; 3]>,
     /// Discrete color/fill palette name (e.g. "Set1", "viridis").
     pub palette: Option<String>,
+    /// Fix the panel's height:width ratio (R's `aspect.ratio`).
+    pub aspect_ratio: Option<f64>,
+    /// Draw gridlines over the data (R's `panel.ontop`).
+    pub panel_ontop: Option<bool>,
+    /// Draw minor tick marks (R's `axis.minor.ticks`).
+    pub axis_minor_ticks: Option<bool>,
 
     /// Root text element — its `family`/`color` cascade to all text elements
     /// that don't override them.
@@ -140,6 +146,15 @@ pub fn apply(cfg: &ThemeConfig, mut t: Theme) -> Result<Theme, String> {
 
     if let Some([r, g, b]) = cfg.primary {
         t.primary = Some((r, g, b));
+    }
+    if let Some(r) = cfg.aspect_ratio {
+        t.aspect_ratio = Some(r);
+    }
+    if let Some(b) = cfg.panel_ontop {
+        t.panel_ontop = b;
+    }
+    if let Some(b) = cfg.axis_minor_ticks {
+        t.axis_minor_ticks = b;
     }
     if let Some(l) = &cfg.legend {
         t.legend_position = legend_position(l)?;

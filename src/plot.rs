@@ -1159,6 +1159,25 @@ impl GGPlot {
         self
     }
 
+    /// Fix the panel's height:width ratio (R's `aspect.ratio`). Call after any
+    /// `theme_*()` preset.
+    pub fn aspect_ratio(mut self, ratio: f64) -> Self {
+        self.theme.aspect_ratio = Some(ratio);
+        self
+    }
+
+    /// Draw gridlines on top of the data layers (R's `panel.ontop`).
+    pub fn panel_ontop(mut self) -> Self {
+        self.theme.panel_ontop = true;
+        self
+    }
+
+    /// Draw minor tick marks between major ticks (R's `axis.minor.ticks`).
+    pub fn axis_minor_ticks(mut self) -> Self {
+        self.theme.axis_minor_ticks = true;
+        self
+    }
+
     /// Set the brand/primary color used as the default for single-series geoms
     /// that have no color/fill aesthetic mapped. Composes with any theme — one
     /// render process can serve different tenants' brands at render time.

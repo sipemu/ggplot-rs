@@ -96,6 +96,14 @@ pub struct Theme {
     /// (no color/fill aesthetic) use it as their default instead of the geom's
     /// built-in color. Lets one render process serve multiple tenants' brands.
     pub primary: Option<(u8, u8, u8)>,
+
+    // ── Advanced layout (R's theme() extras) ──
+    /// Fix the panel's height:width ratio (R's `aspect.ratio`). `None` = free.
+    pub aspect_ratio: Option<f64>,
+    /// Draw gridlines on top of the data layers (R's `panel.ontop`).
+    pub panel_ontop: bool,
+    /// Draw minor tick marks between major ticks (R's `axis.minor.ticks`).
+    pub axis_minor_ticks: bool,
 }
 
 impl Theme {

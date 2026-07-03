@@ -96,6 +96,22 @@ pub fn draw_x_axis(
         }
     }
 
+    // Minor ticks between majors.
+    if theme.axis_minor_ticks && axis_ticks.visible {
+        for pos in minor_breaks(&breaks) {
+            let (px, _) = coord.transform((pos, 0.0), plot_area);
+            backend.draw_line(
+                &[(px, edge_y), (px, edge_y + dir * tick_len * 0.5)],
+                &LineStyle {
+                    color: axis_ticks.color,
+                    width: axis_ticks.width,
+                    alpha: 1.0,
+                    linetype: axis_ticks.linetype,
+                },
+            )?;
+        }
+    }
+
     // Axis title
     let title = scale.name();
     if !title.is_empty() && theme.axis_title_x.visible {
@@ -192,6 +208,22 @@ pub fn draw_y_axis(
                     angle: theme.axis_text_y.angle,
                     family,
                     face: theme.axis_text_y.face,
+                },
+            )?;
+        }
+    }
+
+    // Minor ticks between majors.
+    if theme.axis_minor_ticks && axis_ticks.visible {
+        for pos in minor_breaks(&breaks) {
+            let (_, py) = coord.transform((0.0, pos), plot_area);
+            backend.draw_line(
+                &[(plot_area.x - tick_len * 0.5, py), (plot_area.x, py)],
+                &LineStyle {
+                    color: axis_ticks.color,
+                    width: axis_ticks.width,
+                    alpha: 1.0,
+                    linetype: axis_ticks.linetype,
                 },
             )?;
         }
