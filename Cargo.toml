@@ -75,6 +75,14 @@ name = "ggplot-rs"
 path = "src/bin/ggplot.rs"
 required-features = ["cli"]
 
+[dev-dependencies]
+criterion = "0.5"
+
+# Criterion benchmarks for the build/stat/render hot paths.
+[[bench]]
+name = "pipeline"
+harness = false
+
 # All bundled examples build their input frames with the polars `df!` macro,
 # so they only compile when the `polars` feature is enabled.
 [[example]]

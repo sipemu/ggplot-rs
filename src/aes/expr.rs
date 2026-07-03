@@ -265,15 +265,44 @@ pub fn eval_expression(expr: &str, data: &DataFrame) -> Option<Vec<Value>> {
     if !references_known_column(&parsed, data) {
         return None;
     }
+    // Precompute aggregate sub-expressions once (constant across rows) so per-row
+    // evaluation stays O(n) instead of O(n²) for e.g. `count / sum(count)`.
+    let folded = fold_aggregates(&parsed, data);
     let n = data.nrows();
     let mut out = Vec::with_capacity(n);
     for row in 0..n {
-        out.push(match eval(&parsed, data, row) {
+        out.push(match eval(&folded, data, row) {
             Some(v) if v.is_finite() => Value::Float(v),
             _ => Value::Na,
         });
     }
     Some(out)
+}
+
+/// Replace every aggregate `Func` node with the scalar it evaluates to over all
+/// rows (folding inner-first), leaving a row-independent expression.
+fn fold_aggregates(e: &Expr, data: &DataFrame) -> Expr {
+    match e {
+        Expr::Func(name, a) => {
+            let inner = fold_aggregates(a, data);
+            if let Some(agg) = aggregate(name) {
+                let vals: Vec<f64> = (0..data.nrows())
+                    .filter_map(|r| eval(&inner, data, r))
+                    .filter(|v| v.is_finite())
+                    .collect();
+                Expr::Num(agg(&vals))
+            } else {
+                Expr::Func(name.clone(), Box::new(inner))
+            }
+        }
+        Expr::Bin(op, a, b) => Expr::Bin(
+            *op,
+            Box::new(fold_aggregates(a, data)),
+            Box::new(fold_aggregates(b, data)),
+        ),
+        Expr::Neg(a) => Expr::Neg(Box::new(fold_aggregates(a, data))),
+        Expr::Num(_) | Expr::Col(_) => e.clone(),
+    }
 }
 
 #[cfg(test)]
