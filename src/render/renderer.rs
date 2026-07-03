@@ -135,8 +135,9 @@ impl PlotRenderer {
         )?;
 
         // 7. Draw title
+        let title_ref = Self::title_ref_rect(theme, &plot_area, &total_area);
         if let Some(ref title) = built.labels.title {
-            let (tx, anchor) = Self::hjust_pos(&theme.title, &plot_area);
+            let (tx, anchor) = Self::hjust_pos(&theme.title, &title_ref);
             // A top x-axis occupies the space just above the panel — lift the
             // title above it so they don't overlap.
             let x_axis_top = built
@@ -171,7 +172,7 @@ impl PlotRenderer {
 
         // 8. Draw subtitle
         if let Some(ref subtitle) = built.labels.subtitle {
-            let (sx, anchor) = Self::hjust_pos(&theme.subtitle, &plot_area);
+            let (sx, anchor) = Self::hjust_pos(&theme.subtitle, &title_ref);
             let subtitle_y = plot_area.y - 2.0;
             let family = if theme.subtitle.family.is_empty() {
                 None
@@ -204,7 +205,7 @@ impl PlotRenderer {
 
         // 10. Draw caption
         if let Some(ref caption) = built.labels.caption {
-            let (cx, anchor) = Self::hjust_pos(&theme.caption, &plot_area);
+            let (cx, anchor) = Self::hjust_pos(&theme.caption, &title_ref);
             let caption_y = total_area.y + total_area.height - theme.caption.size * 0.5;
             let family = if theme.caption.family.is_empty() {
                 None
@@ -248,7 +249,26 @@ impl PlotRenderer {
         (x, anchor)
     }
 
-    /// Draw the corner tag label at the top-left of the plot area.
+    /// Horizontal reference rect for titles: the panel or the whole plot width
+    /// (R's `plot.title.position`).
+    fn title_ref_rect(
+        theme: &crate::theme::Theme,
+        plot_area: &crate::render::Rect,
+        total_area: &crate::render::Rect,
+    ) -> crate::render::Rect {
+        match theme.title_position {
+            crate::theme::TitlePosition::Panel => plot_area.clone(),
+            crate::theme::TitlePosition::Plot => crate::render::Rect {
+                x: total_area.x + theme.plot_margin.left,
+                y: plot_area.y,
+                width: (total_area.width - theme.plot_margin.left - theme.plot_margin.right)
+                    .max(1.0),
+                height: plot_area.height,
+            },
+        }
+    }
+
+    /// Draw the corner tag label (position from `plot.tag.position`).
     fn draw_tag(
         labels: &crate::plot::Labels,
         theme: &crate::theme::Theme,
@@ -261,16 +281,23 @@ impl PlotRenderer {
             } else {
                 Some(theme.title.family.clone())
             };
+            use crate::theme::TagPosition::*;
+            let pad = theme.title.size;
+            let (left, right) = (total_area.x + pad, total_area.x + total_area.width - pad);
+            let (top, bottom) = (total_area.y + pad, total_area.y + total_area.height - pad);
+            let (x, y, anchor) = match theme.tag_position {
+                TopLeft => (left, top, TextAnchor::Start),
+                TopRight => (right, top, TextAnchor::End),
+                BottomLeft => (left, bottom, TextAnchor::Start),
+                BottomRight => (right, bottom, TextAnchor::End),
+            };
             backend.draw_text(
                 tag,
-                (
-                    total_area.x + theme.title.size,
-                    total_area.y + theme.title.size,
-                ),
+                (x, y),
                 &TextStyle {
                     color: theme.title.color,
                     size: theme.title.size,
-                    anchor: TextAnchor::Start,
+                    anchor,
                     angle: 0.0,
                     family,
                     face: theme.title.face,
@@ -534,8 +561,9 @@ impl PlotRenderer {
         }
 
         // Draw title
+        let title_ref = Self::title_ref_rect(theme, &plot_area, &total_area);
         if let Some(ref title) = built.labels.title {
-            let (tx, anchor) = Self::hjust_pos(&theme.title, &plot_area);
+            let (tx, anchor) = Self::hjust_pos(&theme.title, &title_ref);
             let title_y = plot_area.y - theme.title.size * 0.9;
             let family = if theme.title.family.is_empty() {
                 None
@@ -558,7 +586,7 @@ impl PlotRenderer {
 
         // Draw subtitle
         if let Some(ref subtitle) = built.labels.subtitle {
-            let (sx, anchor) = Self::hjust_pos(&theme.subtitle, &plot_area);
+            let (sx, anchor) = Self::hjust_pos(&theme.subtitle, &title_ref);
             let subtitle_y = plot_area.y - 2.0;
             let family = if theme.subtitle.family.is_empty() {
                 None
@@ -581,7 +609,7 @@ impl PlotRenderer {
 
         // Draw caption
         if let Some(ref caption) = built.labels.caption {
-            let (cx, anchor) = Self::hjust_pos(&theme.caption, &plot_area);
+            let (cx, anchor) = Self::hjust_pos(&theme.caption, &title_ref);
             let caption_y = total_area.y + total_area.height - theme.caption.size * 0.5;
             let family = if theme.caption.family.is_empty() {
                 None

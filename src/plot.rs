@@ -1178,6 +1178,25 @@ impl GGPlot {
         self
     }
 
+    /// Align title/subtitle/caption to the panel or the whole plot width
+    /// (R's `plot.title.position`).
+    pub fn title_position(mut self, pos: crate::theme::TitlePosition) -> Self {
+        self.theme.title_position = pos;
+        self
+    }
+
+    /// Corner for the `tag()` label (R's `plot.tag.position`).
+    pub fn tag_position(mut self, pos: crate::theme::TagPosition) -> Self {
+        self.theme.tag_position = pos;
+        self
+    }
+
+    /// Force the legend key layout direction (R's `legend.direction`).
+    pub fn legend_direction(mut self, dir: crate::theme::LegendDirection) -> Self {
+        self.theme.legend_direction = Some(dir);
+        self
+    }
+
     /// Set the brand/primary color used as the default for single-series geoms
     /// that have no color/fill aesthetic mapped. Composes with any theme — one
     /// render process can serve different tenants' brands at render time.

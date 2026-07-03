@@ -21,6 +21,12 @@ pub struct ThemeConfig {
     pub panel_ontop: Option<bool>,
     /// Draw minor tick marks (R's `axis.minor.ticks`).
     pub axis_minor_ticks: Option<bool>,
+    /// Title alignment reference: "panel" or "plot" (R's `plot.title.position`).
+    pub title_position: Option<String>,
+    /// Tag corner: "topleft", "topright", "bottomleft", "bottomright".
+    pub tag_position: Option<String>,
+    /// Legend layout: "vertical" or "horizontal" (R's `legend.direction`).
+    pub legend_direction: Option<String>,
 
     /// Root text element — its `family`/`color` cascade to all text elements
     /// that don't override them.
@@ -155,6 +161,29 @@ pub fn apply(cfg: &ThemeConfig, mut t: Theme) -> Result<Theme, String> {
     }
     if let Some(b) = cfg.axis_minor_ticks {
         t.axis_minor_ticks = b;
+    }
+    if let Some(p) = &cfg.title_position {
+        t.title_position = match p.to_lowercase().as_str() {
+            "panel" => TitlePosition::Panel,
+            "plot" => TitlePosition::Plot,
+            other => return Err(format!("unknown title_position '{other}'")),
+        };
+    }
+    if let Some(p) = &cfg.tag_position {
+        t.tag_position = match p.to_lowercase().as_str() {
+            "topleft" => TagPosition::TopLeft,
+            "topright" => TagPosition::TopRight,
+            "bottomleft" => TagPosition::BottomLeft,
+            "bottomright" => TagPosition::BottomRight,
+            other => return Err(format!("unknown tag_position '{other}'")),
+        };
+    }
+    if let Some(d) = &cfg.legend_direction {
+        t.legend_direction = Some(match d.to_lowercase().as_str() {
+            "vertical" => LegendDirection::Vertical,
+            "horizontal" => LegendDirection::Horizontal,
+            other => return Err(format!("unknown legend_direction '{other}'")),
+        });
     }
     if let Some(l) = &cfg.legend {
         t.legend_position = legend_position(l)?;

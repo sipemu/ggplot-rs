@@ -16,6 +16,32 @@ pub enum LegendPosition {
     Inside(f64, f64),
 }
 
+/// Whether title/subtitle/caption align to the panel or the whole plot width
+/// (R's `plot.title.position` / `plot.caption.position`).
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
+pub enum TitlePosition {
+    #[default]
+    Panel,
+    Plot,
+}
+
+/// Corner for the `labs(tag)` label (R's `plot.tag.position`).
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
+pub enum TagPosition {
+    #[default]
+    TopLeft,
+    TopRight,
+    BottomLeft,
+    BottomRight,
+}
+
+/// Layout direction of the legend keys (R's `legend.direction`).
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub enum LegendDirection {
+    Vertical,
+    Horizontal,
+}
+
 /// Plot margins (in pixels).
 #[derive(Clone, Debug)]
 pub struct Margin {
@@ -104,6 +130,13 @@ pub struct Theme {
     pub panel_ontop: bool,
     /// Draw minor tick marks between major ticks (R's `axis.minor.ticks`).
     pub axis_minor_ticks: bool,
+    /// Whether title/subtitle/caption align to the panel or the whole plot
+    /// (R's `plot.title.position` / `plot.caption.position`).
+    pub title_position: TitlePosition,
+    /// Corner for the `labs(tag)` label (R's `plot.tag.position`).
+    pub tag_position: TagPosition,
+    /// Legend key layout direction; `None` = auto from `legend_position`.
+    pub legend_direction: Option<LegendDirection>,
 }
 
 impl Theme {
