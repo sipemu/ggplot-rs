@@ -2343,7 +2343,9 @@ fn test_histogram_binwidth_build() {
         "x".to_string(),
         (0..100).map(|i| Value::Float(i as f64 / 10.0)).collect(),
     )];
-    // With binwidth=2.0, range 0-9.9 should give ~5 bins
+    // With binwidth=2.0 over range 0-9.9, ggplot2 centers bins on 0 (boundary =
+    // width/2), shifting the first bin to [-1, 1), which yields 6 bins — matches
+    // `geom_histogram(binwidth = 2)` in R ggplot2 4.0.3.
     let built = GGPlot::new(data)
         .aes(Aes::new().x("x"))
         .geom_histogram_with(GeomHistogram::default().with_binwidth(2.0))
@@ -2351,8 +2353,8 @@ fn test_histogram_binwidth_build() {
 
     let nrows = built.layers[0].data.nrows();
     assert!(
-        nrows == 5,
-        "binwidth=2.0 over range 0-9.9 should give 5 bins, got {nrows}"
+        nrows == 6,
+        "binwidth=2.0 over range 0-9.9 should give 6 bins (ggplot2-centered), got {nrows}"
     );
 }
 
