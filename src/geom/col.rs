@@ -77,12 +77,21 @@ impl Geom for GeomCol {
         let y_scale = scales.get(&Aesthetic::Y);
         let x_is_discrete = x_scale.map(|s| s.is_discrete()).unwrap_or(false);
 
+        let ymin_col = data.column("ymin");
+
         for i in 0..data.nrows() {
             let nx = x_scale.map(|s| s.map(&x_col[i])).unwrap_or(0.0);
             let ny = y_scale.map(|s| s.map(&y_col[i])).unwrap_or(0.0);
-            let ny_base = y_scale
-                .map(|s| s.map(&crate::data::Value::Float(0.0)))
-                .unwrap_or(0.0);
+            // Honor a stacked/filled base (ymin) so stacked columns draw as
+            // distinct segments rather than all from zero.
+            let ny_base = ymin_col
+                .and_then(|c| c[i].as_f64())
+                .and_then(|v| y_scale.map(|s| s.map(&crate::data::Value::Float(v))))
+                .unwrap_or_else(|| {
+                    y_scale
+                        .map(|s| s.map(&crate::data::Value::Float(0.0)))
+                        .unwrap_or(0.0)
+                });
 
             let half_width = if x_is_discrete {
                 let n_breaks = x_scale.map(|s| s.breaks().len()).unwrap_or(1);

@@ -49,15 +49,16 @@ impl Position for PositionFill {
                 total
             };
 
-            let base = x_cumsum
+            // ggplot2 puts the first group at the top, so fill downward from 1.
+            let consumed = x_cumsum
                 .iter()
                 .find(|(k, _)| k == &x_key)
                 .map(|(_, v)| *v)
                 .unwrap_or(0.0);
 
             let norm_y = y_val / total;
-            ymin_vals.push(Value::Float(base));
-            new_y.push(Value::Float(base + norm_y));
+            new_y.push(Value::Float(1.0 - consumed));
+            ymin_vals.push(Value::Float(1.0 - consumed - norm_y));
 
             if let Some(entry) = x_cumsum.iter_mut().find(|(k, _)| k == &x_key) {
                 entry.1 += norm_y;
