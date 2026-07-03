@@ -114,6 +114,7 @@ fn theme_accessors_exercised() {
             color: (10, 20, 30),
             width: 0.7,
             visible: true,
+            ..Default::default()
         }))
         .set_axis_line_y(Some(ElementLine::blank()))
         .set_axis_ticks_x(Some(ElementLine::default()))

@@ -67,6 +67,7 @@ pub fn theme_gray_base(base_size: f64) -> Theme {
             color: (51, 51, 51), // grey20
             width: 0.5,
             visible: true,
+            linetype: crate::render::backend::Linetype::Solid,
         },
         panel_background: ElementRect {
             fill: Some((235, 235, 235)), // grey92
@@ -78,11 +79,13 @@ pub fn theme_gray_base(base_size: f64) -> Theme {
             color: (255, 255, 255), // white
             width: 1.0,
             visible: true,
+            linetype: crate::render::backend::Linetype::Solid,
         },
         panel_grid_minor: ElementLine {
             color: (255, 255, 255), // white (same as major, just thinner)
             width: 0.5,
             visible: true,
+            linetype: crate::render::backend::Linetype::Solid,
         },
         plot_background: ElementRect {
             fill: Some((255, 255, 255)),
@@ -198,16 +201,19 @@ pub fn theme_bw_base(base_size: f64) -> Theme {
             color: (51, 51, 51), // grey20
             width: 1.0,
             visible: true,
+            linetype: crate::render::backend::Linetype::Solid,
         },
         panel_grid_major: ElementLine {
             color: (235, 235, 235), // grey92
             width: 0.5,
             visible: true,
+            linetype: crate::render::backend::Linetype::Solid,
         },
         panel_grid_minor: ElementLine {
             color: (235, 235, 235), // grey92, thinner
             width: 0.25,
             visible: true,
+            linetype: crate::render::backend::Linetype::Solid,
         },
         strip_background: ElementRect {
             fill: Some((217, 217, 217)), // grey85
@@ -242,11 +248,13 @@ pub fn theme_minimal_base(base_size: f64) -> Theme {
             color: (235, 235, 235), // grey92 (from bw)
             width: 0.5,
             visible: true,
+            linetype: crate::render::backend::Linetype::Solid,
         },
         panel_grid_minor: ElementLine {
             color: (235, 235, 235),
             width: 0.25,
             visible: true,
+            linetype: crate::render::backend::Linetype::Solid,
         },
         plot_background: ElementRect::blank(),
         legend_background: ElementRect::blank(),
@@ -274,11 +282,13 @@ pub fn theme_classic_base(base_size: f64) -> Theme {
             color: (0, 0, 0),
             width: 0.5,
             visible: true,
+            linetype: crate::render::backend::Linetype::Solid,
         },
         axis_ticks: ElementLine {
             color: (0, 0, 0),
             width: 0.5,
             visible: true,
+            linetype: crate::render::backend::Linetype::Solid,
         },
         strip_background: ElementRect {
             fill: Some((255, 255, 255)),
@@ -305,21 +315,25 @@ pub fn theme_linedraw_base(base_size: f64) -> Theme {
             color: (0, 0, 0),
             width: 1.0,
             visible: true,
+            linetype: crate::render::backend::Linetype::Solid,
         },
         panel_grid_major: ElementLine {
             color: (0, 0, 0), // black, very thin
             width: 0.1,
             visible: true,
+            linetype: crate::render::backend::Linetype::Solid,
         },
         panel_grid_minor: ElementLine {
             color: (0, 0, 0), // black, extremely thin
             width: 0.05,
             visible: true,
+            linetype: crate::render::backend::Linetype::Solid,
         },
         axis_ticks: ElementLine {
             color: (0, 0, 0),
             width: 0.5,
             visible: true,
+            linetype: crate::render::backend::Linetype::Solid,
         },
         strip_background: ElementRect {
             fill: Some((0, 0, 0)), // black
@@ -357,21 +371,25 @@ pub fn theme_light_base(base_size: f64) -> Theme {
             color: (179, 179, 179), // grey70
             width: 1.0,
             visible: true,
+            linetype: crate::render::backend::Linetype::Solid,
         },
         panel_grid_major: ElementLine {
             color: (222, 222, 222), // grey87
             width: 0.5,
             visible: true,
+            linetype: crate::render::backend::Linetype::Solid,
         },
         panel_grid_minor: ElementLine {
             color: (222, 222, 222), // grey87, thinner
             width: 0.25,
             visible: true,
+            linetype: crate::render::backend::Linetype::Solid,
         },
         axis_ticks: ElementLine {
             color: (179, 179, 179), // grey70
             width: 0.5,
             visible: true,
+            linetype: crate::render::backend::Linetype::Solid,
         },
         legend_key: ElementRect {
             fill: Some((255, 255, 255)),
@@ -418,16 +436,19 @@ pub fn theme_dark_base(base_size: f64) -> Theme {
             color: (107, 107, 107), // ~grey42
             width: 0.5,
             visible: true,
+            linetype: crate::render::backend::Linetype::Solid,
         },
         panel_grid_minor: ElementLine {
             color: (107, 107, 107), // ~grey42, thinner
             width: 0.25,
             visible: true,
+            linetype: crate::render::backend::Linetype::Solid,
         },
         axis_ticks: ElementLine {
             color: (51, 51, 51), // grey20
             width: 0.5,
             visible: true,
+            linetype: crate::render::backend::Linetype::Solid,
         },
         strip_background: ElementRect {
             fill: Some((38, 38, 38)), // ~grey15
