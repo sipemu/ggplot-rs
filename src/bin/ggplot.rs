@@ -250,14 +250,13 @@ fn build_plot(args: &Args, columns: Vec<(String, Vec<Value>)>) -> Result<GGPlot,
         Some(path) => Some(theme::load(path)?),
         None => None,
     };
-    let base_name = cfg
-        .as_ref()
-        .and_then(|c| c.base.clone())
-        .unwrap_or_else(|| args.theme.clone());
-    let mut th = theme::preset(&base_name)?;
-    if let Some(c) = &cfg {
-        th = theme::apply(c, th)?;
-    }
+    // Start from the --theme preset; the config (which may set its own `base`)
+    // overrides on top.
+    let base = theme::preset(&args.theme)?;
+    let mut th = match &cfg {
+        Some(c) => c.apply(base)?,
+        None => base,
+    };
     if let Some(p) = &args.primary {
         th.primary = Some(theme::parse_rgb(p)?);
     }

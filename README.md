@@ -382,6 +382,7 @@ GGPlot::new(data)
 | `polars`     |   yes   | `impl GGData for polars::DataFrame` + `polars` re-export     |
 | `arrow`      |   no    | `impl GGData for arrow::RecordBatch` (Arrow/DuckDB input)    |
 | `regression` |   no    | `stat_quantile`/`geom_quantile` + `geom_smooth` glm/rlm via anofox-regression |
+| `serde`      |   no    | `theme::config::ThemeConfig` — a serde-deserialisable partial theme overlay (TOML/JSON) |
 | `cli`        |   no    | the `ggplot-rs` command-line tool (parquet/CSV/DuckDB → SVG/PNG), via clap + bundled DuckDB |
 
 To skip the heavy polars dependency (e.g. an Arrow-only service), disable defaults:

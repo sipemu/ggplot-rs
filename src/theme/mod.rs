@@ -1,3 +1,5 @@
+#[cfg(feature = "serde")]
+pub mod config;
 pub mod elements;
 pub mod presets;
 

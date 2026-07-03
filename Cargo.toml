@@ -66,8 +66,10 @@ polars = ["dep:polars"]
 arrow = ["dep:arrow"]
 # Regression-backed stats (stat_quantile, glm smooth) via anofox-regression.
 regression = ["dep:anofox-regression", "dep:faer"]
+# Serde-deserialisable theme config (theme::config::ThemeConfig).
+serde = ["dep:serde"]
 # `ggplot-rs` command-line tool: plot parquet files and DuckDB SQL from the shell.
-cli = ["dep:clap", "dep:duckdb", "dep:serde", "dep:toml", "dep:serde_json"]
+cli = ["dep:clap", "dep:duckdb", "serde", "dep:toml", "dep:serde_json"]
 
 # The CLI binary (built only with `--features cli`).
 [[bin]]
