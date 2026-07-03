@@ -12,9 +12,43 @@ use super::{Rect, RenderError};
 /// A font bundled into the binary so text renders in a headless container with
 /// no system fonts / fontconfig. DejaVu Sans (Bitstream Vera–derived license,
 /// freely redistributable) — broad glyph coverage keeps labels tofu-free.
-const BUNDLED_FONT: &[u8] = include_bytes!("../../assets/fonts/DejaVuSans.ttf");
-const BUNDLED_FONT_BOLD: &[u8] = include_bytes!("../../assets/fonts/DejaVuSans-Bold.ttf");
-const BUNDLED_FONT_OBLIQUE: &[u8] = include_bytes!("../../assets/fonts/DejaVuSans-Oblique.ttf");
+const SANS: &[u8] = include_bytes!("../../assets/fonts/DejaVuSans.ttf");
+const SANS_BOLD: &[u8] = include_bytes!("../../assets/fonts/DejaVuSans-Bold.ttf");
+const SANS_OBLIQUE: &[u8] = include_bytes!("../../assets/fonts/DejaVuSans-Oblique.ttf");
+const SERIF: &[u8] = include_bytes!("../../assets/fonts/DejaVuSerif.ttf");
+const SERIF_BOLD: &[u8] = include_bytes!("../../assets/fonts/DejaVuSerif-Bold.ttf");
+const SERIF_ITALIC: &[u8] = include_bytes!("../../assets/fonts/DejaVuSerif-Italic.ttf");
+const MONO: &[u8] = include_bytes!("../../assets/fonts/DejaVuSansMono.ttf");
+const MONO_BOLD: &[u8] = include_bytes!("../../assets/fonts/DejaVuSansMono-Bold.ttf");
+
+/// Pick the DejaVu face set (per style) that matches a requested family name, so
+/// `family = "serif"` / `"monospace"` render with real serif/mono glyphs — not
+/// just the SVG attribute — headlessly.
+fn faces_for(family: &str) -> [(FontStyle, &'static [u8]); 4] {
+    let f = family.to_lowercase();
+    if f.contains("mono") || f.contains("courier") {
+        [
+            (FontStyle::Normal, MONO),
+            (FontStyle::Bold, MONO_BOLD),
+            (FontStyle::Italic, MONO),
+            (FontStyle::Oblique, MONO),
+        ]
+    } else if f == "serif" || f.contains("times") || (f.contains("serif") && !f.contains("sans")) {
+        [
+            (FontStyle::Normal, SERIF),
+            (FontStyle::Bold, SERIF_BOLD),
+            (FontStyle::Italic, SERIF_ITALIC),
+            (FontStyle::Oblique, SERIF_ITALIC),
+        ]
+    } else {
+        [
+            (FontStyle::Normal, SANS),
+            (FontStyle::Bold, SANS_BOLD),
+            (FontStyle::Italic, SANS_OBLIQUE),
+            (FontStyle::Oblique, SANS_OBLIQUE),
+        ]
+    }
+}
 
 fn registered_families() -> &'static Mutex<HashSet<String>> {
     static REGISTERED: OnceLock<Mutex<HashSet<String>>> = OnceLock::new();
@@ -30,14 +64,9 @@ fn registered_families() -> &'static Mutex<HashSet<String>> {
 fn ensure_font(family: &str) {
     let mut set = registered_families().lock().unwrap();
     if set.insert(family.to_string()) {
-        // Register the matching DejaVu face per style so bold/italic actually
-        // render bold/italic (R's element_text(face = ...)).
-        for (style, bytes) in [
-            (FontStyle::Normal, BUNDLED_FONT),
-            (FontStyle::Bold, BUNDLED_FONT_BOLD),
-            (FontStyle::Italic, BUNDLED_FONT_OBLIQUE),
-            (FontStyle::Oblique, BUNDLED_FONT_OBLIQUE),
-        ] {
+        // Register the matching DejaVu family + face per style so serif/mono and
+        // bold/italic actually render (not just carry the SVG attribute).
+        for (style, bytes) in faces_for(family) {
             // Ignore the result: a malformed font would surface as a draw error.
             let _ = plotters::style::register_font(family, style, bytes);
         }
