@@ -53,16 +53,20 @@ impl Stat for StatBin2d {
             (y_min, y_max)
         };
 
-        let bw_x = (x_max - x_min) / self.bins_x as f64;
-        let bw_y = (y_max - y_min) / self.bins_y as f64;
+        // Match ggplot2's geom_bin2d: width spans the range in `bins - 1` steps,
+        // with a bin *edge* aligned to 0 (boundary = 0), and right-closed cells.
+        let bw_x = (x_max - x_min) / (self.bins_x.max(2) - 1) as f64;
+        let bw_y = (y_max - y_min) / (self.bins_y.max(2) - 1) as f64;
+        let (x_origin, nbx) = super::bin::aligned_bins_at(x_min, x_max, bw_x, 0.0);
+        let (y_origin, nby) = super::bin::aligned_bins_at(y_min, y_max, bw_y, 0.0);
 
-        let mut counts = vec![vec![0usize; self.bins_y]; self.bins_x];
+        let mut counts = vec![vec![0usize; nby]; nbx];
 
         for i in 0..n {
-            let bx = ((xs[i] - x_min) / bw_x).floor() as usize;
-            let by = ((ys[i] - y_min) / bw_y).floor() as usize;
-            let bx = bx.min(self.bins_x - 1);
-            let by = by.min(self.bins_y - 1);
+            let bx =
+                (((xs[i] - x_origin) / bw_x).ceil() as i64 - 1).clamp(0, nbx as i64 - 1) as usize;
+            let by =
+                (((ys[i] - y_origin) / bw_y).ceil() as i64 - 1).clamp(0, nby as i64 - 1) as usize;
             counts[bx][by] += 1;
         }
 
@@ -77,9 +81,9 @@ impl Stat for StatBin2d {
                 if count == 0 {
                     continue;
                 }
-                let cell_xmin = x_min + bx as f64 * bw_x;
+                let cell_xmin = x_origin + bx as f64 * bw_x;
                 let cell_xmax = cell_xmin + bw_x;
-                let cell_ymin = y_min + by as f64 * bw_y;
+                let cell_ymin = y_origin + by as f64 * bw_y;
                 let cell_ymax = cell_ymin + bw_y;
 
                 xmin_vals.push(Value::Float(cell_xmin));
