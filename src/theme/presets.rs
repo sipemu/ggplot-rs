@@ -110,6 +110,7 @@ pub fn theme_gray_base(base_size: f64) -> Theme {
         caption: ElementText {
             size: axis_text_size, // rel(0.8)
             color: (0, 0, 0),
+            hjust: 1.0, // right-aligned by default (R's plot.caption)
             ..Default::default()
         },
         legend_title: ElementText {

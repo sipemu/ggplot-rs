@@ -98,7 +98,15 @@ pub fn draw_x_axis(
     // Axis title
     let title = scale.name();
     if !title.is_empty() && theme.axis_title_x.visible {
-        let center_x = plot_area.x + plot_area.width / 2.0;
+        let hjust = theme.axis_title_x.hjust.clamp(0.0, 1.0);
+        let center_x = plot_area.x + hjust * plot_area.width;
+        let anchor = if hjust <= 0.02 {
+            TextAnchor::Start
+        } else if hjust >= 0.98 {
+            TextAnchor::End
+        } else {
+            TextAnchor::Middle
+        };
         let title_y = edge_y
             + dir * (tick_len + theme.axis_text_x.size + 8.0 + theme.axis_title_x.size / 2.0);
         let family = if theme.axis_title_x.family.is_empty() {
@@ -112,7 +120,7 @@ pub fn draw_x_axis(
             &TextStyle {
                 color: theme.axis_title_x.color,
                 size: theme.axis_title_x.size,
-                anchor: TextAnchor::Middle,
+                anchor,
                 angle: 0.0,
                 family,
             },
