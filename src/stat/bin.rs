@@ -4,15 +4,20 @@ use crate::scale::ScaleSet;
 
 use super::Stat;
 
-/// ggplot2 bin alignment: place bins so a boundary sits at `width/2` (i.e. a
-/// bin is centered on 0), then return the left edge of the first bin (`origin`,
-/// which is ≤ `min`) and the number of bins needed to cover `[min, max]`.
-fn aligned_bins(min: f64, max: f64, width: f64) -> (f64, usize) {
-    let boundary = width / 2.0;
+/// ggplot2 bin alignment: place bins so an edge falls on `boundary` (mod
+/// `width`), then return the left edge of the first bin (`origin`, ≤ `min`) and
+/// the number of bins needed to cover `[min, max]`.
+pub(crate) fn aligned_bins_at(min: f64, max: f64, width: f64, boundary: f64) -> (f64, usize) {
     let shift = ((min - boundary) / width).floor();
     let origin = boundary + shift * width;
     let n = (((max - origin) / width).ceil() as usize).max(1);
     (origin, n)
+}
+
+/// 1-D histogram alignment: a *bin* is centered on 0 (`boundary = width/2`),
+/// matching `geom_histogram`.
+fn aligned_bins(min: f64, max: f64, width: f64) -> (f64, usize) {
+    aligned_bins_at(min, max, width, width / 2.0)
 }
 
 /// Bins continuous x values into histogram bins.
