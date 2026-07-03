@@ -1415,6 +1415,9 @@ impl GGPlot {
 
         let mut built = PlotBuilder::build(plot)?;
 
+        // Resolve R-style theme inheritance (root `text` → child text elements).
+        built.theme.resolve_inheritance();
+
         // Apply user label overrides to scales
         if let Some(ref label) = x_label {
             if let Some(s) = built.scales.get_mut(&crate::aes::Aesthetic::X) {

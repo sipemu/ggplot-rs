@@ -111,6 +111,36 @@ impl Theme {
         self
     }
 
+    /// Resolve R-style element inheritance: text-child elements still at the
+    /// default `family`/`color` inherit them from the root `text` element, so
+    /// setting only `theme.text.family` restyles every text element. Child
+    /// elements that already override a property keep it. Called once before
+    /// rendering.
+    pub fn resolve_inheritance(&mut self) {
+        let root = self.text.clone();
+        let def = ElementText::default();
+        let children: [&mut ElementText; 10] = [
+            &mut self.title,
+            &mut self.subtitle,
+            &mut self.caption,
+            &mut self.axis_text_x,
+            &mut self.axis_text_y,
+            &mut self.axis_title_x,
+            &mut self.axis_title_y,
+            &mut self.legend_title,
+            &mut self.legend_text,
+            &mut self.strip_text,
+        ];
+        for el in children {
+            if el.family == def.family {
+                el.family = root.family.clone();
+            }
+            if el.color == def.color {
+                el.color = root.color;
+            }
+        }
+    }
+
     // ── Fallback accessors for Option fields ──
 
     pub fn get_axis_line_x(&self) -> &ElementLine {

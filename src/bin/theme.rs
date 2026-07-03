@@ -16,6 +16,9 @@ pub struct ThemeConfig {
     /// Discrete color/fill palette name (e.g. "Set1", "viridis").
     pub palette: Option<String>,
 
+    /// Root text element — its `family`/`color` cascade to all text elements
+    /// that don't override them.
+    pub text: Option<TextCfg>,
     pub title: Option<TextCfg>,
     pub subtitle: Option<TextCfg>,
     pub caption: Option<TextCfg>,
@@ -110,6 +113,7 @@ pub fn preset(name: &str) -> Result<Theme, String> {
 
 /// Apply the config's element overrides onto `base`.
 pub fn apply(cfg: &ThemeConfig, mut t: Theme) -> Result<Theme, String> {
+    text(&cfg.text, &mut t.text);
     text(&cfg.title, &mut t.title);
     text(&cfg.subtitle, &mut t.subtitle);
     text(&cfg.caption, &mut t.caption);
