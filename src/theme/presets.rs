@@ -179,6 +179,9 @@ pub fn theme_gray_base(base_size: f64) -> Theme {
         aspect_ratio: None,
         panel_ontop: false,
         axis_minor_ticks: false,
+        title_position: crate::theme::TitlePosition::Panel,
+        tag_position: crate::theme::TagPosition::TopLeft,
+        legend_direction: None,
     }
 }
 
@@ -557,5 +560,8 @@ pub fn theme_void_base(base_size: f64) -> Theme {
         aspect_ratio: None,
         panel_ontop: false,
         axis_minor_ticks: false,
+        title_position: crate::theme::TitlePosition::Panel,
+        tag_position: crate::theme::TagPosition::TopLeft,
+        legend_direction: None,
     }
 }

@@ -54,7 +54,11 @@ pub fn draw_legend(
     }
 
     // Compute legend origin based on position
-    let (legend_x, legend_y, is_horizontal) = legend_position(theme, plot_area);
+    let (legend_x, legend_y, mut is_horizontal) = legend_position(theme, plot_area);
+    // legend.direction overrides the auto layout from the position.
+    if let Some(dir) = theme.legend_direction {
+        is_horizontal = matches!(dir, crate::theme::LegendDirection::Horizontal);
+    }
 
     let mut offset_y = legend_y;
     let mut offset_x = legend_x;

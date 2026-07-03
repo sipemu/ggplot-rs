@@ -95,6 +95,8 @@ pub use crate::theme::presets::{
     theme_gray, theme_gray_base, theme_light, theme_light_base, theme_linedraw,
     theme_linedraw_base, theme_minimal, theme_minimal_base, theme_void, theme_void_base,
 };
-pub use crate::theme::{LegendPosition, Margin, Theme, ThemeUpdate};
+pub use crate::theme::{
+    LegendDirection, LegendPosition, Margin, TagPosition, Theme, ThemeUpdate, TitlePosition,
+};
 #[cfg(feature = "polars")]
 pub use polars;
