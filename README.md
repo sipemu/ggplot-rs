@@ -260,6 +260,8 @@ size = 22
 color = [40, 40, 90]
 [panel_background]
 fill = [248, 246, 240]
+[panel_grid_major]
+linetype = "dashed"
 [legend]
 position = "inside"
 x = 0.9

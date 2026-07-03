@@ -40,6 +40,8 @@ pub struct ElementLine {
     pub color: (u8, u8, u8),
     pub width: f64,
     pub visible: bool,
+    /// Line style (R's `element_line(linetype = ...)`).
+    pub linetype: crate::render::backend::Linetype,
 }
 
 impl ElementLine {
@@ -58,6 +60,7 @@ impl Default for ElementLine {
             color: (0, 0, 0),
             width: 1.0,
             visible: true,
+            linetype: crate::render::backend::Linetype::Solid,
         }
     }
 }

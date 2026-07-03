@@ -57,6 +57,8 @@ pub struct LineCfg {
     pub color: Option<[u8; 3]>,
     pub width: Option<f64>,
     pub visible: Option<bool>,
+    /// "solid", "dashed", "dotted", "dashdot", "longdash", "twodash".
+    pub linetype: Option<String>,
 }
 
 #[derive(Deserialize, Default)]
@@ -116,11 +118,11 @@ pub fn apply(cfg: &ThemeConfig, mut t: Theme) -> Result<Theme, String> {
     text(&cfg.legend_text, &mut t.legend_text);
     text(&cfg.strip_text, &mut t.strip_text);
 
-    line(&cfg.axis_line, &mut t.axis_line);
-    line(&cfg.axis_ticks, &mut t.axis_ticks);
-    line(&cfg.panel_grid_major, &mut t.panel_grid_major);
-    line(&cfg.panel_grid_minor, &mut t.panel_grid_minor);
-    line(&cfg.panel_border, &mut t.panel_border);
+    line(&cfg.axis_line, &mut t.axis_line)?;
+    line(&cfg.axis_ticks, &mut t.axis_ticks)?;
+    line(&cfg.panel_grid_major, &mut t.panel_grid_major)?;
+    line(&cfg.panel_grid_minor, &mut t.panel_grid_minor)?;
+    line(&cfg.panel_border, &mut t.panel_border)?;
 
     rect(&cfg.panel_background, &mut t.panel_background);
     rect(&cfg.plot_background, &mut t.plot_background);
@@ -156,7 +158,7 @@ fn text(cfg: &Option<TextCfg>, el: &mut ElementText) {
     }
 }
 
-fn line(cfg: &Option<LineCfg>, el: &mut ElementLine) {
+fn line(cfg: &Option<LineCfg>, el: &mut ElementLine) -> Result<(), String> {
     if let Some(c) = cfg {
         if let Some([r, g, b]) = c.color {
             el.color = (r, g, b);
@@ -167,7 +169,23 @@ fn line(cfg: &Option<LineCfg>, el: &mut ElementLine) {
         if let Some(v) = c.visible {
             el.visible = v;
         }
+        if let Some(lt) = &c.linetype {
+            el.linetype = parse_linetype(lt)?;
+        }
     }
+    Ok(())
+}
+
+fn parse_linetype(s: &str) -> Result<Linetype, String> {
+    Ok(match s.to_lowercase().as_str() {
+        "solid" => Linetype::Solid,
+        "dashed" => Linetype::Dashed,
+        "dotted" => Linetype::Dotted,
+        "dashdot" => Linetype::DashDot,
+        "longdash" => Linetype::LongDash,
+        "twodash" => Linetype::TwoDash,
+        other => return Err(format!("unknown linetype '{other}'")),
+    })
 }
 
 fn rect(cfg: &Option<RectCfg>, el: &mut ElementRect) {

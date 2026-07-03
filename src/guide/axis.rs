@@ -1,5 +1,5 @@
 use crate::coord::Coord;
-use crate::render::backend::{DrawBackend, LineStyle, Linetype, TextAnchor, TextStyle};
+use crate::render::backend::{DrawBackend, LineStyle, TextAnchor, TextStyle};
 use crate::render::{Rect, RenderError};
 use crate::scale::Scale;
 use crate::theme::Theme;
@@ -37,7 +37,7 @@ pub fn draw_x_axis(
                 color: axis_line.color,
                 width: axis_line.width,
                 alpha: 1.0,
-                linetype: Linetype::Solid,
+                linetype: axis_line.linetype,
             },
         )?;
     }
@@ -54,7 +54,7 @@ pub fn draw_x_axis(
                     color: axis_ticks.color,
                     width: axis_ticks.width,
                     alpha: 1.0,
-                    linetype: Linetype::Solid,
+                    linetype: axis_ticks.linetype,
                 },
             )?;
         }
@@ -145,7 +145,7 @@ pub fn draw_y_axis(
                 color: axis_line.color,
                 width: axis_line.width,
                 alpha: 1.0,
-                linetype: Linetype::Solid,
+                linetype: axis_line.linetype,
             },
         )?;
     }
@@ -161,7 +161,7 @@ pub fn draw_y_axis(
                     color: axis_ticks.color,
                     width: axis_ticks.width,
                     alpha: 1.0,
-                    linetype: Linetype::Solid,
+                    linetype: axis_ticks.linetype,
                 },
             )?;
         }
@@ -239,7 +239,7 @@ pub fn draw_sec_y_axis(
                 color: axis_line.color,
                 width: axis_line.width,
                 alpha: 1.0,
-                linetype: Linetype::Solid,
+                linetype: axis_line.linetype,
             },
         )?;
     }
@@ -255,7 +255,7 @@ pub fn draw_sec_y_axis(
                     color: axis_ticks.color,
                     width: axis_ticks.width,
                     alpha: 1.0,
-                    linetype: Linetype::Solid,
+                    linetype: axis_ticks.linetype,
                 },
             )?;
         }
@@ -352,7 +352,7 @@ pub fn draw_gridlines(
                     color: minor_x.color,
                     width: minor_x.width,
                     alpha: 1.0,
-                    linetype: Linetype::Solid,
+                    linetype: minor_x.linetype,
                 },
             )?;
         }
@@ -368,7 +368,7 @@ pub fn draw_gridlines(
                     color: minor_y.color,
                     width: minor_y.width,
                     alpha: 1.0,
-                    linetype: Linetype::Solid,
+                    linetype: minor_y.linetype,
                 },
             )?;
         }
@@ -384,7 +384,7 @@ pub fn draw_gridlines(
                     color: major_x.color,
                     width: major_x.width,
                     alpha: 1.0,
-                    linetype: Linetype::Solid,
+                    linetype: major_x.linetype,
                 },
             )?;
         }
@@ -400,7 +400,7 @@ pub fn draw_gridlines(
                     color: major_y.color,
                     width: major_y.width,
                     alpha: 1.0,
-                    linetype: Linetype::Solid,
+                    linetype: major_y.linetype,
                 },
             )?;
         }
