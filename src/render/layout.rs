@@ -133,8 +133,25 @@ impl PlotLayout {
             - legend_top
             - legend_bottom;
 
-        let plot_width = plot_width.max(50.0);
-        let plot_height = plot_height.max(50.0);
+        let mut plot_width = plot_width.max(50.0);
+        let mut plot_height = plot_height.max(50.0);
+        let mut plot_x = plot_x;
+        let mut plot_y = plot_y;
+
+        // Fix the panel aspect ratio (R's `aspect.ratio` = height/width),
+        // shrinking the larger dimension and centering within the available box.
+        if let Some(r) = theme.aspect_ratio {
+            if r > 0.0 {
+                let (avail_w, avail_h) = (plot_width, plot_height);
+                if avail_w * r <= avail_h {
+                    plot_height = avail_w * r;
+                    plot_y += (avail_h - plot_height) / 2.0;
+                } else {
+                    plot_width = avail_h / r;
+                    plot_x += (avail_w - plot_width) / 2.0;
+                }
+            }
+        }
 
         PlotLayout {
             total: Rect {

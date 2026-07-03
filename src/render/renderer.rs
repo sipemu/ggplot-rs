@@ -92,7 +92,8 @@ impl PlotRenderer {
         };
 
         if let (Some(hs), Some(vs)) = (h_scale, v_scale) {
-            if built.coord.gridlines() {
+            // Gridlines under the data, unless panel.ontop draws them over it.
+            if built.coord.gridlines() && !theme.panel_ontop {
                 axis::draw_gridlines(hs, vs, built.coord.as_ref(), theme, &plot_area, backend)?;
             }
 
@@ -115,6 +116,13 @@ impl PlotRenderer {
                 theme,
                 backend,
             )?;
+        }
+
+        // 5b. Gridlines on top of the data (R's panel.ontop).
+        if theme.panel_ontop && built.coord.gridlines() {
+            if let (Some(hs), Some(vs)) = (h_scale, v_scale) {
+                axis::draw_gridlines(hs, vs, built.coord.as_ref(), theme, &plot_area, backend)?;
+            }
         }
 
         // 6. Draw annotations

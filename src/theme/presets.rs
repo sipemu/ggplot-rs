@@ -176,6 +176,9 @@ pub fn theme_gray_base(base_size: f64) -> Theme {
         panel_spacing_x: None,
         panel_spacing_y: None,
         primary: None,
+        aspect_ratio: None,
+        panel_ontop: false,
+        axis_minor_ticks: false,
     }
 }
 
@@ -551,5 +554,8 @@ pub fn theme_void_base(base_size: f64) -> Theme {
         panel_spacing_x: None,
         panel_spacing_y: None,
         primary: None,
+        aspect_ratio: None,
+        panel_ontop: false,
+        axis_minor_ticks: false,
     }
 }

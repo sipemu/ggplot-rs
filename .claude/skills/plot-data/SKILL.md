@@ -79,7 +79,7 @@ cargo run --features cli --bin ggplot-rs -- <args>
   x = 0.9
   y = 0.9
   ```
-  Sections: `text` (root — cascades `family`/`color` to all text elements), `title subtitle caption axis_title_x/y axis_text_x/y legend_title legend_text strip_text` (`size`/`color`/`family`/`face` ("bold"/"italic")/`angle`/`hjust`/`vjust`/`visible`); `axis_line axis_ticks panel_grid_major panel_grid_minor panel_border` (`color`/`width`/`linetype`/`visible`); `panel_background plot_background legend_background strip_background` (`fill`/`color`/`width`/`visible`). Colors are `[r, g, b]`.
+  Sections: `text` (root — cascades `family`/`color` to all text elements), `title subtitle caption axis_title_x/y axis_text_x/y legend_title legend_text strip_text` (`size`/`color`/`family`/`face` ("bold"/"italic")/`angle`/`hjust`/`vjust`/`visible`); `axis_line axis_ticks panel_grid_major panel_grid_minor panel_border` (`color`/`width`/`linetype`/`visible`); `panel_background plot_background legend_background strip_background` (`fill`/`color`/`width`/`visible`). Colors are `[r, g, b]`. Top-level keys: `aspect_ratio` (panel h:w ratio), `panel_ontop` (grid over data), `axis_minor_ticks` (minor tick marks), `primary`, `palette`, `base`.
 
 ## Examples
 
