@@ -84,4 +84,8 @@ impl Coord for CoordPolar {
     fn is_flipped(&self) -> bool {
         false
     }
+
+    fn is_polar(&self) -> bool {
+        true
+    }
 }

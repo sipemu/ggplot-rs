@@ -33,6 +33,12 @@ pub trait Coord: Send + Sync {
         false
     }
 
+    /// Whether this is a non-linear polar system (bars become radial sectors,
+    /// so geoms that draw rectangles must tessellate their edges into an arc).
+    fn is_polar(&self) -> bool {
+        false
+    }
+
     /// Zoom limits for x-axis (data coordinates). Clips viewport without filtering data.
     fn zoom_x(&self) -> Option<(f64, f64)> {
         None

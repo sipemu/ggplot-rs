@@ -78,9 +78,6 @@ impl Geom for GeomBar {
                 0.02 // Thin bars for continuous
             };
 
-            let (left_px, top_px) = coord.transform((nx - half_width, ny), &plot_area);
-            let (right_px, bottom_px) = coord.transform((nx + half_width, ny_base), &plot_area);
-
             let (fr, fg, fb) = if let Some(fc) = fill_col {
                 scales
                     .map_color(&Aesthetic::Fill, &fc[i])
@@ -88,18 +85,33 @@ impl Geom for GeomBar {
             } else {
                 self.fill
             };
+            let style = RectStyle {
+                fill: Some((fr, fg, fb)),
+                stroke: Some(self.color),
+                stroke_width: 0.5,
+                alpha: self.alpha,
+                clip: !coord.is_polar(),
+            };
 
-            backend.draw_rect(
-                (left_px, top_px.min(bottom_px)),
-                (right_px, top_px.max(bottom_px)),
-                &RectStyle {
-                    fill: Some((fr, fg, fb)),
-                    stroke: Some(self.color),
-                    stroke_width: 0.5,
-                    alpha: self.alpha,
-                    clip: true,
-                },
-            )?;
+            if coord.is_polar() {
+                let points = super::col::polar_sector(
+                    coord,
+                    &plot_area,
+                    nx - half_width,
+                    nx + half_width,
+                    ny_base,
+                    ny,
+                );
+                backend.draw_polygon(&points, &style)?;
+            } else {
+                let (left_px, top_px) = coord.transform((nx - half_width, ny), &plot_area);
+                let (right_px, bottom_px) = coord.transform((nx + half_width, ny_base), &plot_area);
+                backend.draw_rect(
+                    (left_px, top_px.min(bottom_px)),
+                    (right_px, top_px.max(bottom_px)),
+                    &style,
+                )?;
+            }
         }
 
         Ok(())
