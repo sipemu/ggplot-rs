@@ -4,6 +4,17 @@ use crate::scale::ScaleSet;
 
 use super::Stat;
 
+/// ggplot2 bin alignment: place bins so a boundary sits at `width/2` (i.e. a
+/// bin is centered on 0), then return the left edge of the first bin (`origin`,
+/// which is ≤ `min`) and the number of bins needed to cover `[min, max]`.
+fn aligned_bins(min: f64, max: f64, width: f64) -> (f64, usize) {
+    let boundary = width / 2.0;
+    let shift = ((min - boundary) / width).floor();
+    let origin = boundary + shift * width;
+    let n = (((max - origin) / width).ceil() as usize).max(1);
+    (origin, n)
+}
+
 /// Bins continuous x values into histogram bins.
 pub struct StatBin {
     pub bins: usize,
@@ -56,20 +67,28 @@ impl Stat for StatBin {
             (min, max)
         };
 
-        // Determine bin width and count
-        let (bin_width, n_bins) = if let Some(bw) = self.binwidth {
-            let n = ((max - min) / bw).ceil() as usize;
-            (bw, n.max(1))
+        // Match ggplot2's bin_breaks: for a bin count, width spans the range in
+        // `bins - 1` steps; bins are then aligned to `boundary = width/2` so a
+        // bin is centered on 0 (the origin is shifted left of the data min),
+        // rather than starting exactly at the data minimum.
+        let (bin_width, origin, n_bins) = if let Some(bw) = self.binwidth {
+            let (o, n) = aligned_bins(min, max, bw);
+            (bw, o, n)
+        } else if self.bins <= 1 {
+            (max - min, min, 1)
         } else {
-            let bw = (max - min) / self.bins as f64;
-            (bw, self.bins)
+            let bw = (max - min) / (self.bins - 1) as f64;
+            let (o, n) = aligned_bins(min, max, bw);
+            (bw, o, n)
         };
 
         let mut counts = vec![0usize; n_bins];
 
         for &v in &values {
-            let bin = ((v - min) / bin_width).floor() as usize;
-            let bin = bin.min(n_bins - 1); // Clamp last value
+            // ggplot2's default bins are right-closed: (a, b]. A point on a
+            // boundary falls in the lower bin.
+            let raw = ((v - origin) / bin_width).ceil() as i64 - 1;
+            let bin = raw.clamp(0, n_bins as i64 - 1) as usize;
             counts[bin] += 1;
         }
 
@@ -81,7 +100,7 @@ impl Stat for StatBin {
         let mut xmax_vals = Vec::with_capacity(n_bins);
 
         for (i, &count) in counts.iter().enumerate() {
-            let bin_min = min + i as f64 * bin_width;
+            let bin_min = origin + i as f64 * bin_width;
             let bin_max = bin_min + bin_width;
             let center = (bin_min + bin_max) / 2.0;
 
