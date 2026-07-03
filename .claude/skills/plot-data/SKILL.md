@@ -79,7 +79,7 @@ cargo run --features cli --bin ggplot-rs -- <args>
   x = 0.9
   y = 0.9
   ```
-  Sections: `title subtitle caption axis_title_x/y axis_text_x/y legend_title legend_text strip_text` (`size`/`color`/`family`/`angle`/`visible`); `axis_line axis_ticks panel_grid_major panel_grid_minor panel_border` (`color`/`width`/`visible`); `panel_background plot_background legend_background strip_background` (`fill`/`color`/`width`/`visible`). Colors are `[r, g, b]`.
+  Sections: `title subtitle caption axis_title_x/y axis_text_x/y legend_title legend_text strip_text` (`size`/`color`/`family`/`angle`/`hjust`/`vjust`/`visible`); `axis_line axis_ticks panel_grid_major panel_grid_minor panel_border` (`color`/`width`/`visible`); `panel_background plot_background legend_background strip_background` (`fill`/`color`/`width`/`visible`). Colors are `[r, g, b]`.
 
 ## Examples
 

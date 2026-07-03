@@ -128,7 +128,7 @@ impl PlotRenderer {
 
         // 7. Draw title
         if let Some(ref title) = built.labels.title {
-            let center_x = plot_area.x + plot_area.width / 2.0;
+            let (tx, anchor) = Self::hjust_pos(&theme.title, &plot_area);
             // A top x-axis occupies the space just above the panel — lift the
             // title above it so they don't overlap.
             let x_axis_top = built
@@ -149,11 +149,11 @@ impl PlotRenderer {
             };
             backend.draw_text(
                 title,
-                (center_x, title_y.max(theme.title.size)),
+                (tx, title_y.max(theme.title.size)),
                 &TextStyle {
                     color: theme.title.color,
                     size: theme.title.size,
-                    anchor: TextAnchor::Middle,
+                    anchor,
                     angle: 0.0,
                     family,
                 },
@@ -162,7 +162,7 @@ impl PlotRenderer {
 
         // 8. Draw subtitle
         if let Some(ref subtitle) = built.labels.subtitle {
-            let center_x = plot_area.x + plot_area.width / 2.0;
+            let (sx, anchor) = Self::hjust_pos(&theme.subtitle, &plot_area);
             let subtitle_y = plot_area.y - 2.0;
             let family = if theme.subtitle.family.is_empty() {
                 None
@@ -171,14 +171,11 @@ impl PlotRenderer {
             };
             backend.draw_text(
                 subtitle,
-                (
-                    center_x,
-                    subtitle_y.max(theme.title.size + theme.subtitle.size),
-                ),
+                (sx, subtitle_y.max(theme.title.size + theme.subtitle.size)),
                 &TextStyle {
                     color: theme.subtitle.color,
                     size: theme.subtitle.size,
-                    anchor: TextAnchor::Middle,
+                    anchor,
                     angle: 0.0,
                     family,
                 },
@@ -197,7 +194,7 @@ impl PlotRenderer {
 
         // 10. Draw caption
         if let Some(ref caption) = built.labels.caption {
-            let right_x = plot_area.x + plot_area.width;
+            let (cx, anchor) = Self::hjust_pos(&theme.caption, &plot_area);
             let caption_y = total_area.y + total_area.height - theme.caption.size * 0.5;
             let family = if theme.caption.family.is_empty() {
                 None
@@ -206,11 +203,11 @@ impl PlotRenderer {
             };
             backend.draw_text(
                 caption,
-                (right_x, caption_y),
+                (cx, caption_y),
                 &TextStyle {
                     color: theme.caption.color,
                     size: theme.caption.size,
-                    anchor: TextAnchor::End,
+                    anchor,
                     angle: 0.0,
                     family,
                 },
@@ -221,6 +218,23 @@ impl PlotRenderer {
         Self::draw_tag(&built.labels, theme, &total_area, backend)?;
 
         Ok(())
+    }
+
+    /// Horizontal position + anchor for a theme text element, from its `hjust`
+    /// (0 = left, 0.5 = center, 1 = right), relative to `area`.
+    fn hjust_pos(
+        el: &crate::theme::elements::ElementText,
+        area: &crate::render::Rect,
+    ) -> (f64, TextAnchor) {
+        let x = area.x + el.hjust.clamp(0.0, 1.0) * area.width;
+        let anchor = if el.hjust <= 0.02 {
+            TextAnchor::Start
+        } else if el.hjust >= 0.98 {
+            TextAnchor::End
+        } else {
+            TextAnchor::Middle
+        };
+        (x, anchor)
     }
 
     /// Draw the corner tag label at the top-left of the plot area.
@@ -508,7 +522,7 @@ impl PlotRenderer {
 
         // Draw title
         if let Some(ref title) = built.labels.title {
-            let center_x = plot_area.x + plot_area.width / 2.0;
+            let (tx, anchor) = Self::hjust_pos(&theme.title, &plot_area);
             let title_y = plot_area.y - theme.title.size * 0.9;
             let family = if theme.title.family.is_empty() {
                 None
@@ -517,11 +531,11 @@ impl PlotRenderer {
             };
             backend.draw_text(
                 title,
-                (center_x, title_y.max(theme.title.size)),
+                (tx, title_y.max(theme.title.size)),
                 &TextStyle {
                     color: theme.title.color,
                     size: theme.title.size,
-                    anchor: TextAnchor::Middle,
+                    anchor,
                     angle: 0.0,
                     family,
                 },
@@ -530,7 +544,7 @@ impl PlotRenderer {
 
         // Draw subtitle
         if let Some(ref subtitle) = built.labels.subtitle {
-            let center_x = plot_area.x + plot_area.width / 2.0;
+            let (sx, anchor) = Self::hjust_pos(&theme.subtitle, &plot_area);
             let subtitle_y = plot_area.y - 2.0;
             let family = if theme.subtitle.family.is_empty() {
                 None
@@ -539,14 +553,11 @@ impl PlotRenderer {
             };
             backend.draw_text(
                 subtitle,
-                (
-                    center_x,
-                    subtitle_y.max(theme.title.size + theme.subtitle.size),
-                ),
+                (sx, subtitle_y.max(theme.title.size + theme.subtitle.size)),
                 &TextStyle {
                     color: theme.subtitle.color,
                     size: theme.subtitle.size,
-                    anchor: TextAnchor::Middle,
+                    anchor,
                     angle: 0.0,
                     family,
                 },
@@ -555,7 +566,7 @@ impl PlotRenderer {
 
         // Draw caption
         if let Some(ref caption) = built.labels.caption {
-            let right_x = plot_area.x + plot_area.width;
+            let (cx, anchor) = Self::hjust_pos(&theme.caption, &plot_area);
             let caption_y = total_area.y + total_area.height - theme.caption.size * 0.5;
             let family = if theme.caption.family.is_empty() {
                 None
@@ -564,11 +575,11 @@ impl PlotRenderer {
             };
             backend.draw_text(
                 caption,
-                (right_x, caption_y),
+                (cx, caption_y),
                 &TextStyle {
                     color: theme.caption.color,
                     size: theme.caption.size,
-                    anchor: TextAnchor::End,
+                    anchor,
                     angle: 0.0,
                     family,
                 },

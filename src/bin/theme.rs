@@ -48,6 +48,9 @@ pub struct TextCfg {
     pub size: Option<f64>,
     pub color: Option<[u8; 3]>,
     pub angle: Option<f64>,
+    /// Horizontal justification: 0 = left, 0.5 = center, 1 = right.
+    pub hjust: Option<f64>,
+    pub vjust: Option<f64>,
     pub visible: Option<bool>,
 }
 
@@ -151,6 +154,12 @@ fn text(cfg: &Option<TextCfg>, el: &mut ElementText) {
         }
         if let Some(v) = c.angle {
             el.angle = v;
+        }
+        if let Some(v) = c.hjust {
+            el.hjust = v;
+        }
+        if let Some(v) = c.vjust {
+            el.vjust = v;
         }
         if let Some(v) = c.visible {
             el.visible = v;
