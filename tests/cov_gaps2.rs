@@ -1014,10 +1014,12 @@ fn stat_qq_ecdf_edge_cases() {
 
     // StatEcdf normal path + carryover + accessors.
     let ecdf = StatEcdf.compute_group(&df, &scales);
-    assert_eq!(ecdf.nrows(), 20);
+    assert_eq!(ecdf.nrows(), 22); // 20 data points + ±Inf padding (ggplot2 pad=TRUE)
     assert!(ecdf.has_column("color"));
     let y = ecdf.column("y").unwrap();
-    assert_eq!(y[19].as_f64(), Some(1.0));
+    // Row 0 is the -Inf pad; the 20 data points follow, so the last data point
+    // (y = 1.0) is at index 20, and index 21 is the +Inf pad (also 1.0).
+    assert_eq!(y[20].as_f64(), Some(1.0));
     assert_eq!(StatEcdf.required_aes().len(), 1);
     assert_eq!(StatEcdf.name(), "ecdf");
     let mut nox2 = DataFrame::new();

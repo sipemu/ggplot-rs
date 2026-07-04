@@ -93,7 +93,27 @@ impl Geom for GeomStep {
 
         let points: Vec<(f64, f64)> = step_points
             .iter()
-            .map(|&(nx, ny)| coord.transform((nx, ny), &plot_area))
+            .map(|&(nx, ny)| {
+                let (px, py) = coord.transform((nx, ny), &plot_area);
+                // Clamp non-finite coords (e.g. stat_ecdf's ±Inf padding, which
+                // extends the step to the panel edge) to the panel border so the
+                // flat segments draw to the edge instead of off-canvas.
+                let px = if px.is_finite() {
+                    px
+                } else if nx < 0.0 {
+                    plot_area.x
+                } else {
+                    plot_area.x + plot_area.width
+                };
+                let py = if py.is_finite() {
+                    py
+                } else if ny < 0.0 {
+                    plot_area.y + plot_area.height
+                } else {
+                    plot_area.y
+                };
+                (px, py)
+            })
             .collect();
 
         let line_color = color_col
