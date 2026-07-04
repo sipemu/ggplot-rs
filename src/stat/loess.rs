@@ -107,7 +107,8 @@ impl Stat for StatLoess {
     }
 }
 
-/// Perform local weighted linear regression at point x0.
+/// Fit a tricube-weighted local quadratic (degree 2, like R's loess) over the
+/// `k` nearest neighbors and return the prediction at `x0`.
 fn local_regression(pairs: &[(f64, f64)], x0: f64, k: usize) -> f64 {
     // Sort by distance to x0 and take k nearest
     let mut dists: Vec<(usize, f64)> = pairs
@@ -135,26 +136,42 @@ fn local_regression(pairs: &[(f64, f64)], x0: f64, k: usize) -> f64 {
         })
         .collect();
 
-    // Weighted linear regression: y = a + b*x
     let sum_w: f64 = weights.iter().map(|(_, _, w)| w).sum();
     if sum_w < f64::EPSILON {
         return pairs.iter().map(|(_, y)| y).sum::<f64>() / pairs.len() as f64;
     }
+    let mean_y = weights.iter().map(|(_, y, w)| w * y).sum::<f64>() / sum_w;
 
-    let sum_wx: f64 = weights.iter().map(|(x, _, w)| w * x).sum();
-    let sum_wy: f64 = weights.iter().map(|(_, y, w)| w * y).sum();
-    let sum_wxx: f64 = weights.iter().map(|(x, _, w)| w * x * x).sum();
-    let sum_wxy: f64 = weights.iter().map(|(x, y, w)| w * x * y).sum();
-
-    let mean_x = sum_wx / sum_w;
-    let mean_y = sum_wy / sum_w;
-
-    let denom = sum_wxx - sum_wx * sum_wx / sum_w;
-    if denom.abs() < f64::EPSILON {
-        mean_y
-    } else {
-        let b = (sum_wxy - sum_wx * sum_wy / sum_w) / denom;
-        let a = mean_y - b * mean_x;
-        a + b * x0
+    // Weighted local quadratic regression (R's loess default degree = 2),
+    // centered at x0 so the prediction is just the intercept. Solve the 3×3
+    // normal equations for [a, b, c] with t = x - x0; the fit at t=0 is `a`.
+    let (mut s1, mut s2, mut s3, mut s4) = (0.0, 0.0, 0.0, 0.0);
+    let (mut ty0, mut ty1, mut ty2) = (0.0, 0.0, 0.0);
+    for &(x, y, w) in &weights {
+        let t = x - x0;
+        let (t2, t3, t4) = (t * t, t * t * t, t * t * t * t);
+        s1 += w * t;
+        s2 += w * t2;
+        s3 += w * t3;
+        s4 += w * t4;
+        ty0 += w * y;
+        ty1 += w * t * y;
+        ty2 += w * t2 * y;
     }
+    // Matrix M = [[s0,s1,s2],[s1,s2,s3],[s2,s3,s4]], RHS = [ty0,ty1,ty2].
+    let s0 = sum_w;
+    let det = s0 * (s2 * s4 - s3 * s3) - s1 * (s1 * s4 - s3 * s2) + s2 * (s1 * s3 - s2 * s2);
+    if det.abs() < 1e-12 {
+        // Singular (e.g. too few distinct x): fall back to weighted linear.
+        let denom = s0 * s2 - s1 * s1;
+        if denom.abs() < 1e-12 {
+            return mean_y;
+        }
+        let b = (s0 * ty1 - s1 * ty0) / denom;
+        let a = (ty0 - b * s1) / s0;
+        return a;
+    }
+    // Cramer's rule for a (column 0 replaced by RHS).
+    let det_a = ty0 * (s2 * s4 - s3 * s3) - s1 * (ty1 * s4 - s3 * ty2) + s2 * (ty1 * s3 - s2 * ty2);
+    det_a / det
 }
