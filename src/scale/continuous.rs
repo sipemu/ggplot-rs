@@ -4,7 +4,7 @@ use crate::data::Value;
 use super::format::LabelFormatter;
 use super::sec_axis::SecAxis;
 use super::transform::ScaleTransform;
-use super::util::{format_number, nice_step};
+use super::util::{extended_breaks, format_number};
 use super::Scale;
 
 /// Continuous linear scale.
@@ -221,23 +221,20 @@ impl Scale for ScaleContinuous {
             return vec![(0.5, label)];
         }
 
-        // Generate nice breaks across the expanded (visible) range
+        // Extended-Wilkinson breaks over the data range (matching ggplot2's
+        // scales::extended_breaks), keeping those within the expanded (visible)
+        // range. Labels show the original (inverse-transformed) value.
         let (emin, emax) = self.expanded_range();
-        let n_breaks = 5;
-        let raw_step = range / n_breaks as f64;
-        let step = nice_step(raw_step);
-
-        let start = (emin / step).ceil() * step;
-        let mut breaks = Vec::new();
-        let mut v = start;
-        while v <= emax + step * 0.001 {
-            let pos = self.map(&Value::Float(v));
-            // Labels show the original (inverse-transformed) value
-            let label = self.format_label(self.scale_transform.inverse(v));
-            breaks.push((pos, label));
-            v += step;
-        }
-        breaks
+        let tol = (emax - emin).abs() * 1e-9;
+        extended_breaks(self.min, self.max, 5)
+            .into_iter()
+            .filter(|&v| v >= emin - tol && v <= emax + tol)
+            .map(|v| {
+                let pos = self.map(&Value::Float(v));
+                let label = self.format_label(self.scale_transform.inverse(v));
+                (pos, label)
+            })
+            .collect()
     }
 
     fn name(&self) -> &str {
