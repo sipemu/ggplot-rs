@@ -107,8 +107,27 @@ fn test_stat_ecdf_vs_r() {
     let scales = ScaleSet::new();
     let result = stat.compute_group(&input, &scales);
 
-    assert_row_count_eq(&result, &expected, "stat_ecdf");
-    assert_df_approx_eq(&result, &expected, &["x", "y"], 1e-10);
+    // ggplot2 pads the ECDF with ±Inf endpoints (y = 0 / 1). Verify the padding,
+    // then compare the finite steps against the R fixture.
+    let xs = result.column("x").unwrap().to_vec();
+    let ys = result.column("y").unwrap().to_vec();
+    assert_eq!(xs.first().unwrap().as_f64(), Some(f64::NEG_INFINITY));
+    assert_eq!(ys.first().unwrap().as_f64(), Some(0.0));
+    assert_eq!(xs.last().unwrap().as_f64(), Some(f64::INFINITY));
+    assert_eq!(ys.last().unwrap().as_f64(), Some(1.0));
+
+    let mut finite = DataFrame::new();
+    let (fx, fy): (Vec<Value>, Vec<Value>) = xs
+        .iter()
+        .zip(ys.iter())
+        .filter(|(x, _)| x.as_f64().is_some_and(|v| v.is_finite()))
+        .map(|(x, y)| (x.clone(), y.clone()))
+        .unzip();
+    finite.add_column("x".to_string(), fx);
+    finite.add_column("y".to_string(), fy);
+
+    assert_row_count_eq(&finite, &expected, "stat_ecdf");
+    assert_df_approx_eq(&finite, &expected, &["x", "y"], 1e-10);
 }
 
 #[test]
