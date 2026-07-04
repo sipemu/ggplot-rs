@@ -335,7 +335,7 @@ fn stat_ydensity_compute() {
         floats(&[1.0, 2.0, 2.0, 3.0, 3.0, 3.0, 4.0, 5.0]),
     );
     let out = stat.compute_group(&d, &scales);
-    assert_eq!(out.nrows(), 128);
+    assert_eq!(out.nrows(), 512); // ggplot2's default density resolution
     assert!(out.has_column("violinwidth"));
     // < 2 rows returns empty.
     assert_eq!(stat.compute_group(&df_y(&[1.0]), &scales).nrows(), 0);

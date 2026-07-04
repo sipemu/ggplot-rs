@@ -433,11 +433,64 @@ fn test_stat_ydensity_vs_r() {
     let scales = ScaleSet::new();
     let result = stat.compute_group(&input, &scales);
 
-    // Should have 128 evaluation points
-    assert_row_count_eq(&result, &expected, "stat_ydensity");
+    // ggplot2 defaults to trim = TRUE: the violin spans the data range exactly.
+    // (R pads its density grid to a slightly different point count, so we compare
+    // the normalized profile by interpolation rather than row-by-row.)
+    let ry: Vec<f64> = result
+        .column("y")
+        .unwrap()
+        .iter()
+        .filter_map(|v| v.as_f64())
+        .collect();
+    let rw: Vec<f64> = result
+        .column("violinwidth")
+        .unwrap()
+        .iter()
+        .filter_map(|v| v.as_f64())
+        .collect();
+    let rmin = ry.iter().cloned().fold(f64::INFINITY, f64::min);
+    let rmax = ry.iter().cloned().fold(f64::NEG_INFINITY, f64::max);
+    assert!(
+        (rmin - 10.0).abs() < 1e-6 && (rmax - 19.5).abs() < 1e-6,
+        "violin should be trimmed to the data range [10, 19.5], got [{rmin}, {rmax}]"
+    );
 
-    // Compare y evaluation points (the density grid)
-    assert_df_approx_eq(&result, &expected, &["y"], 0.01);
+    // R's raw density, normalized to [0, 1] like ggplot-rs's violinwidth.
+    let ey: Vec<f64> = expected
+        .column("y")
+        .unwrap()
+        .iter()
+        .filter_map(|v| v.as_f64())
+        .collect();
+    let ed_raw: Vec<f64> = expected
+        .column("density")
+        .unwrap()
+        .iter()
+        .filter_map(|v| v.as_f64())
+        .collect();
+    let emax = ed_raw.iter().cloned().fold(0.0, f64::max);
+    let ed: Vec<f64> = ed_raw.iter().map(|d| d / emax).collect();
+
+    // Linear interpolation of (xs, ys) at q (xs ascending).
+    let interp = |xs: &[f64], ys: &[f64], q: f64| -> f64 {
+        match xs.iter().position(|&x| x >= q) {
+            Some(0) => ys[0],
+            Some(i) => {
+                let t = (q - xs[i - 1]) / (xs[i] - xs[i - 1]);
+                ys[i - 1] + t * (ys[i] - ys[i - 1])
+            }
+            None => *ys.last().unwrap(),
+        }
+    };
+
+    for q in [11.0, 13.0, 15.0, 17.0, 19.0] {
+        let a = interp(&ry, &rw, q);
+        let b = interp(&ey, &ed, q);
+        assert!(
+            (a - b).abs() < 0.05,
+            "violin normalized density at y={q}: ggplot-rs {a:.4} vs R {b:.4}"
+        );
+    }
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════

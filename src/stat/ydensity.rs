@@ -13,7 +13,7 @@ pub struct StatYDensity {
 
 impl Default for StatYDensity {
     fn default() -> Self {
-        StatYDensity { n_points: 128 }
+        StatYDensity { n_points: 512 }
     }
 }
 
@@ -48,8 +48,10 @@ impl Stat for StatYDensity {
         let bandwidth = 0.9 * sd.min(iqr_val / 1.34) * n.powf(-0.2);
         let bandwidth = if bandwidth > 0.0 { bandwidth } else { sd * 0.5 };
 
-        let y_min = values.iter().cloned().fold(f64::INFINITY, f64::min) - 3.0 * bandwidth;
-        let y_max = values.iter().cloned().fold(f64::NEG_INFINITY, f64::max) + 3.0 * bandwidth;
+        // ggplot2's geom_violin defaults to trim = TRUE: evaluate the density
+        // over the observed data range, not extended by ±3 bandwidths.
+        let y_min = values.iter().cloned().fold(f64::INFINITY, f64::min);
+        let y_max = values.iter().cloned().fold(f64::NEG_INFINITY, f64::max);
         let step = (y_max - y_min) / (self.n_points - 1) as f64;
 
         let mut x_vals = Vec::with_capacity(self.n_points);
