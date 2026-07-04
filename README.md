@@ -9,6 +9,12 @@
 A Rust implementation of ggplot2's Grammar of Graphics, rendering through the
 [plotters](https://github.com/plotters-rs/plotters) backend.
 
+**Validated against R.** Computed layers — binning, density, stacking, QQ/ECDF,
+LOESS, and axis-tick placement (extended-Wilkinson) — are checked against
+[R ggplot2](https://ggplot2.tidyverse.org/) 4.0.3's `ggplot_build()` output, so a
+histogram or a stacked bar comes out where ggplot2 puts it. See
+[`validation/`](validation/).
+
 **No polars required.** [polars](https://pola.rs/) is a convenient — and fully
 optional — input adapter. The core pipeline runs on its own internal DataFrame,
 so you can plot straight from plain Rust vectors, or from
@@ -90,6 +96,20 @@ regenerate them all with `cargo run --example gallery`.
     <td align="center">
       <img src="assets/gallery/facet.png" width="260" alt="Facet wrap"><br>
       <sub>Small multiples · <code>facet_wrap</code></sub>
+    </td>
+  </tr>
+  <tr>
+    <td align="center">
+      <img src="assets/gallery/polar.png" width="260" alt="Polar rose chart"><br>
+      <sub>Rose chart · <code>coord_polar</code></sub>
+    </td>
+    <td align="center">
+      <img src="assets/gallery/ecdf.png" width="260" alt="Empirical CDF"><br>
+      <sub>Empirical CDF · <code>stat_ecdf</code></sub>
+    </td>
+    <td align="center">
+      <img src="assets/gallery/qq.png" width="260" alt="Q-Q plot"><br>
+      <sub>Q-Q plot · <code>geom_qq</code></sub>
     </td>
   </tr>
 </table>
@@ -297,7 +317,7 @@ result, with polars switched off:
 
 ```toml
 # Cargo.toml — no polars in the dependency tree
-ggplot-rs = { version = "0.6", default-features = false, features = ["arrow"] }
+ggplot-rs = { version = "0.9", default-features = false, features = ["arrow"] }
 ```
 
 ```rust
@@ -388,7 +408,7 @@ GGPlot::new(data)
 To skip the heavy polars dependency (e.g. an Arrow-only service), disable defaults:
 
 ```toml
-ggplot-rs = { version = "0.6", default-features = false, features = ["arrow"] }
+ggplot-rs = { version = "0.9", default-features = false, features = ["arrow"] }
 ```
 
 ## Examples
