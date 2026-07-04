@@ -35,6 +35,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     jitter()?;
     ribbon()?;
     area_stack()?;
+    polar()?;
+    ecdf()?;
+    qq()?;
     themes()?;
 
     println!("Gallery written to assets/gallery/");
@@ -412,6 +415,73 @@ fn area_stack() -> Result<(), Box<dyn std::error::Error>> {
         .title("Stacked Area")
         .theme_minimal()
         .save_with_size(&out("area"), W, H)?;
+    Ok(())
+}
+
+/// Radial "rose" chart — bars in polar coordinates (`coord_polar`).
+fn polar() -> Result<(), Box<dyn std::error::Error>> {
+    let day = vec!["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+    let value = vec![18.0, 23.0, 20.0, 28.0, 33.0, 45.0, 39.0];
+    let df = df! { "day" => day, "value" => value }?;
+    // Hide the angular axis text (it overlaps at the base of a rose chart);
+    // the legend already maps day → colour.
+    let mut theme = theme_minimal();
+    theme.axis_text_x.visible = false;
+    GGPlot::new(df)
+        .aes(Aes::new().x("day").y("value").fill("day"))
+        .geom_col()
+        .coord_polar()
+        .scale_fill_brewer(PaletteName::Set3)
+        .title("Polar Bars (rose chart)")
+        .theme(theme)
+        .save_with_size(&out("polar"), W, H)?;
+    Ok(())
+}
+
+/// Empirical cumulative distribution, drawn as a step padded to the panel edges.
+fn ecdf() -> Result<(), Box<dyn std::error::Error>> {
+    let n = 300;
+    let x: Vec<f64> = (0..n)
+        .map(|i| {
+            let t = i as f64 * 0.05;
+            (t.sin() + (t * 1.7).cos()) * 1.5 + ((i * 3319 % 100) as f64 / 100.0 - 0.5) * 2.0
+        })
+        .collect();
+    let df = df! { "x" => x }?;
+    GGPlot::new(df)
+        .aes(Aes::new().x("x"))
+        .geom_step()
+        .stat(ggplot_rs::stat::ecdf::StatEcdf)
+        .primary_color((49, 130, 189))
+        .title("Empirical CDF (stat_ecdf)")
+        .xlab("Value")
+        .ylab("F(x)")
+        .theme_minimal()
+        .save_with_size(&out("ecdf"), W, H)?;
+    Ok(())
+}
+
+/// Normal quantile-quantile plot with a reference line (`geom_qq`).
+fn qq() -> Result<(), Box<dyn std::error::Error>> {
+    let n = 200;
+    // A heavy-tailed sample so the points bow away from the reference line.
+    let y: Vec<f64> = (0..n)
+        .map(|i| {
+            let u = ((i * 2749 + 13) % 1000) as f64 / 1000.0 - 0.5;
+            u * u * u * 30.0 + u * 4.0
+        })
+        .collect();
+    let df = df! { "y" => y }?;
+    GGPlot::new(df)
+        .aes(Aes::new().y("y"))
+        .geom_qq()
+        .geom_qq_line()
+        .primary_color((197, 90, 17))
+        .title("Q-Q Plot (stat_qq)")
+        .xlab("Theoretical")
+        .ylab("Sample")
+        .theme_bw()
+        .save_with_size(&out("qq"), W, H)?;
     Ok(())
 }
 
