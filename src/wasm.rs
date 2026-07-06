@@ -217,27 +217,43 @@ impl Scatter {
 /// backend, returning the pixels **and** the pixel↔data mapping so JS can do
 /// nearest-point hover. Points are coloured by `group_idx` (a compact per-point
 /// index, `0..group_names.len()`) — pass an empty `group_names` for no colour.
+///
+/// `selected` (length `x.len()` or empty) dims the plot: points with a non-zero
+/// flag keep full opacity, the rest fade — for highlighting a brushed subset.
 #[cfg(feature = "canvas")]
 #[wasm_bindgen]
+#[allow(clippy::too_many_arguments)]
 pub fn render_scatter_xy(
     x: &[f64],
     y: &[f64],
     group_idx: &[u32],
     group_names: Vec<String>,
+    selected: &[u8],
     width: u32,
     height: u32,
     title: String,
 ) -> Result<Scatter, JsValue> {
-    render_scatter_xy_impl(x, y, group_idx, group_names, width, height, &title)
-        .map_err(|e| JsValue::from_str(&e))
+    render_scatter_xy_impl(
+        x,
+        y,
+        group_idx,
+        group_names,
+        selected,
+        width,
+        height,
+        &title,
+    )
+    .map_err(|e| JsValue::from_str(&e))
 }
 
 #[cfg(feature = "canvas")]
+#[allow(clippy::too_many_arguments)]
 fn render_scatter_xy_impl(
     x: &[f64],
     y: &[f64],
     group_idx: &[u32],
     group_names: Vec<String>,
+    selected: &[u8],
     width: u32,
     height: u32,
     title: &str,
@@ -280,6 +296,14 @@ fn render_scatter_xy_impl(
             .collect();
         cols.push(("g".to_string(), col));
         aes = aes.color("g");
+    }
+    // An unmapped `alpha` column is read per-point by geom_point (raw value),
+    // so a brushed subset stays opaque while the rest fades.
+    if selected.len() >= n {
+        let alpha = (0..n)
+            .map(|i| Value::Float(if selected[i] != 0 { 1.0 } else { 0.10 }))
+            .collect();
+        cols.push(("alpha".to_string(), alpha));
     }
     let mut plot = GGPlot::new(cols)
         .aes(aes)
