@@ -50,11 +50,14 @@ jobs:
       - name: Tests (regression)
         run: cargo test --features regression
 
+      # sf tests use the core DataFrame (no polars), so run without default
+      # features — a lighter link that avoids the polars-heavy OOM; the coverage
+      # job still exercises `sf` together with polars.
       - name: Clippy (sf)
-        run: cargo clippy --all-targets --features sf -- -D warnings
+        run: cargo clippy --all-targets --no-default-features --features sf -- -D warnings
 
       - name: Tests (sf)
-        run: cargo test --features sf
+        run: cargo test --no-default-features --features sf
 
       - name: Build examples
         run: cargo build --examples
