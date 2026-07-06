@@ -38,6 +38,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     polar()?;
     ecdf()?;
     qq()?;
+    #[cfg(feature = "sf")]
+    spatial()?;
     themes()?;
 
     println!("Gallery written to assets/gallery/");
@@ -482,6 +484,36 @@ fn qq() -> Result<(), Box<dyn std::error::Error>> {
         .ylab("Sample")
         .theme_bw()
         .save_with_size(&out("qq"), W, H)?;
+    Ok(())
+}
+
+/// A simple-features choropleth (`geom_sf`) — provinces filled by a value.
+#[cfg(feature = "sf")]
+fn spatial() -> Result<(), Box<dyn std::error::Error>> {
+    let geometry = vec![
+        "POLYGON ((0 0, 3 0, 3 2, 1 2.5, 0 2, 0 0))",
+        "POLYGON ((3 0, 6 0, 6 3, 3 2, 3 0))",
+        "POLYGON ((0 2, 1 2.5, 3 2, 3 5, 0 5, 0 2))",
+        "POLYGON ((3 2, 6 3, 6 5, 3 5, 3 2))",
+        "POLYGON ((6 0, 9 1, 8 4, 6 3, 6 0))",
+        "POLYGON ((6 3, 8 4, 9 6, 6 5, 6 3))",
+        "POLYGON ((0 5, 3 5, 4 7, 1 8, 0 7, 0 5))",
+        "POLYGON ((3 5, 6 5, 6 7, 4 7, 3 5))",
+    ];
+    let population = vec![4.2, 7.8, 3.1, 9.5, 5.4, 2.7, 6.6, 8.9];
+    let df = df! { "geometry" => geometry, "population" => population }?;
+
+    // Clean map look: drop the axis text (coordinates aren't meaningful here).
+    let mut theme = theme_minimal();
+    theme.axis_text_x.visible = false;
+    theme.axis_text_y.visible = false;
+    GGPlot::new(df)
+        .aes(Aes::new().fill("population"))
+        .geom_sf()
+        .scale_fill_viridis_c()
+        .title("Choropleth")
+        .theme(theme)
+        .save_with_size(&out("spatial"), W, H)?;
     Ok(())
 }
 
