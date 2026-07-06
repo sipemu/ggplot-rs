@@ -15,5 +15,7 @@ pub mod scale;
 pub mod spatial;
 pub mod stat;
 pub mod theme;
+#[cfg(feature = "wasm")]
+pub mod wasm;
 
 pub use plot::{GGError, GGPlot};

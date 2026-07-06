@@ -190,6 +190,11 @@ pub trait DrawBackend {
     fn plot_area(&self) -> Rect;
     fn total_area(&self) -> Rect;
 
+    /// Attach a tooltip to subsequently-drawn marks until cleared with `None`.
+    /// Backends that produce interactive output (SVG) emit it as a `<title>`
+    /// for a native hover tooltip; others ignore it. Default: no-op.
+    fn set_tooltip(&mut self, _tooltip: Option<String>) {}
+
     /// Draw a point with a specific shape. Default delegates to draw_circle for Circle.
     fn draw_shape(
         &mut self,

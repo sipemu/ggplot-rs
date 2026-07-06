@@ -67,6 +67,12 @@ jobs:
       - name: Tests (geojson)
         run: cargo test --no-default-features --features geojson --lib spatial::geojson
 
+      - name: Add wasm target
+        run: rustup target add wasm32-unknown-unknown
+
+      - name: Build (wasm)
+        run: cargo build --target wasm32-unknown-unknown --no-default-features --features wasm
+
       - name: Build examples
         run: cargo build --examples
 

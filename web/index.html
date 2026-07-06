@@ -1,0 +1,29 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>ggplot-rs + DuckDB-Wasm — spatial in the browser</title>
+  <style>
+    body { font-family: system-ui, sans-serif; margin: 2rem; color: #222; }
+    h1 { font-size: 1.2rem; }
+    #status { color: #666; font-size: 0.9rem; }
+    #plot { margin-top: 1rem; }
+    /* Hover: every mark is a real SVG element, so CSS + the built-in <title>
+       tooltip work with zero extra JS. */
+    #plot svg polygon:hover,
+    #plot svg circle:hover { stroke: #111; stroke-width: 2; cursor: pointer; }
+  </style>
+</head>
+<body>
+  <h1>ggplot-rs (WASM) + DuckDB-Wasm spatial</h1>
+  <p id="status">loading…</p>
+  <div id="plot"></div>
+  <p style="color:#888;font-size:0.85rem">
+    DuckDB-Wasm (with the <code>spatial</code> extension) reads the geometry and
+    <code>ST_AsText</code>s it to WKT; ggplot-rs (compiled to WASM) renders the SVG.
+    Hover a province for its name + value.
+  </p>
+  <script type="module" src="./main.js"></script>
+</body>
+</html>

@@ -19,6 +19,20 @@ use crate::theme::Theme;
 
 use super::{Geom, GeomParams};
 
+/// Render a `Value` compactly for a hover tooltip.
+fn value_str(v: &Value) -> String {
+    match v {
+        Value::Str(s) => s.clone(),
+        Value::Float(f) => {
+            let r = (f * 1000.0).round() / 1000.0;
+            format!("{r}")
+        }
+        Value::Integer(i) => format!("{i}"),
+        Value::Bool(b) => format!("{b}"),
+        _ => String::new(),
+    }
+}
+
 /// Bounding box of a geometry after applying `proj` to every coordinate.
 fn projected_bounds(g: &Geometry, proj: SfProjection) -> Option<(f64, f64, f64, f64)> {
     let mut b: Option<(f64, f64, f64, f64)> = None;
@@ -251,6 +265,8 @@ impl Geom for GeomSf {
             .ok_or(RenderError::MissingAesthetic("geometry".into()))?;
         let fill_col = data.column("fill");
         let color_col = data.column("color");
+        // A `label` mapping (and/or the fill value) becomes a hover tooltip.
+        let label_col = data.column("label");
 
         let plot_area = backend.plot_area();
         let x_scale = scales.get(&Aesthetic::X);
@@ -276,8 +292,20 @@ impl Geom for GeomSf {
             let color = color_col
                 .and_then(|cc| scales.map_color(&Aesthetic::Color, &cc[i]))
                 .unwrap_or(self.color);
+
+            let label = label_col
+                .map(|c| value_str(&c[i]))
+                .filter(|s| !s.is_empty());
+            let fill_val = fill_col.map(|c| value_str(&c[i])).filter(|s| !s.is_empty());
+            backend.set_tooltip(match (label, fill_val) {
+                (Some(l), Some(f)) => Some(format!("{l}: {f}")),
+                (Some(l), None) => Some(l),
+                (None, Some(f)) => Some(f),
+                (None, None) => None,
+            });
             self.draw_geometry(&g, &project, fill, color, backend)?;
         }
+        backend.set_tooltip(None);
         Ok(())
     }
 

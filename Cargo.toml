@@ -14,6 +14,11 @@ readme = "README.md"
 keywords = ["ggplot2", "plotting", "dataviz", "charts", "grammar"]
 categories = ["visualization", "science"]
 
+# `rlib` for normal crate use; `cdylib` so `wasm-pack build --features wasm`
+# can emit a browser module.
+[lib]
+crate-type = ["cdylib", "rlib"]
+
 [dependencies]
 # Use plotters' `ab_glyph` text backend instead of the default `ttf` (font-kit),
 # so rendering needs no system fonts / fontconfig — we register a bundled font at
@@ -55,6 +60,13 @@ duckdb = { version = "1", features = ["bundled"], optional = true }
 serde = { version = "1", features = ["derive"], optional = true }
 toml = { version = "0.8", optional = true }
 serde_json = { version = "1", optional = true }
+# Browser bindings (`wasm` feature): expose plotting to JavaScript.
+wasm-bindgen = { version = "0.2", optional = true }
+
+# On wasm, rand's RNG seeding needs the browser crypto API (getrandom `js`).
+# Enables browser builds; ignored on every other target.
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+getrandom = { version = "0.2", features = ["js"] }
 
 [features]
 # `polars` is on by default to preserve existing behaviour (prelude re-export +
@@ -73,6 +85,9 @@ serde = ["dep:serde"]
 sf = []
 # Read GeoJSON into a plot-ready frame (geometry + properties). Adds serde_json.
 geojson = ["sf", "dep:serde_json"]
+# Browser (WASM) bindings: `crate::wasm::render_geo(spec) -> SVG`, driving the
+# plotters-free SvgBackend. Pair with DuckDB-Wasm for spatial data in the browser.
+wasm = ["sf", "dep:wasm-bindgen", "dep:serde_json"]
 # `ggplot-rs` command-line tool: plot parquet files and DuckDB SQL from the shell.
 # Includes `sf` so `--geom sf` can plot geometry from the DuckDB spatial extension.
 cli = ["dep:clap", "dep:duckdb", "serde", "dep:toml", "dep:serde_json", "sf"]
