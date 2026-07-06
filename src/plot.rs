@@ -1096,6 +1096,15 @@ impl GGPlot {
         self
     }
 
+    /// Spatial coordinate system (feature `sf`): equal aspect derived from the
+    /// data extent, so projected geometry keeps its shape. Pair with a `geom_sf`
+    /// projection (e.g. Mercator) for a conformal map.
+    #[cfg(feature = "sf")]
+    pub fn coord_sf(mut self) -> Self {
+        self.coord = Box::new(crate::coord::sf::CoordSf::new());
+        self
+    }
+
     /// Transform the coordinate space at draw time (R's `coord_trans`) — stats are
     /// computed on raw data but drawn on non-linear axes. Pass a per-axis
     /// [`ScaleTransform`] (e.g. `Some(ScaleTransform::Log10)`), `None` to leave an

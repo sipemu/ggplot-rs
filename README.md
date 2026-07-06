@@ -222,9 +222,23 @@ GGPlot::new(df)
     .scale_fill_viridis_c();
 ```
 
+**Projections & aspect.** Pass a projection to `geom_sf` and pair it with
+`coord_sf()` (equal-aspect, derived from the data extent) for a shape-correct
+map — e.g. a conformal Web Mercator:
+
+```rust
+use ggplot_rs::spatial::SfProjection;
+use ggplot_rs::geom::sf::GeomSf;
+
+GGPlot::new(df)                        // lon/lat WKT in `geometry`
+    .aes(Aes::new().fill("value"))
+    .geom_sf_with(GeomSf::default().project(SfProjection::Mercator))
+    .coord_sf();
+```
+
 See [`examples/spatial.rs`](examples/spatial.rs) (`cargo run --features sf --example spatial`).
-CRS-aware projections (`coord_sf`) and geometry file readers are not yet
-implemented.
+Remaining for the epic: additional projections and geometry file readers
+(GeoJSON/shapefile).
 
 ### Faceting
 

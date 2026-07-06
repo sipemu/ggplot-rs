@@ -49,6 +49,32 @@ impl Geometry {
     }
 }
 
+/// A map projection applied to longitude/latitude before scaling.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum SfProjection {
+    /// Longitude/latitude used directly (equirectangular / plate carrée).
+    #[default]
+    PlateCarree,
+    /// Spherical Web Mercator (conformal; latitude clamped to ±85.05°).
+    Mercator,
+}
+
+impl SfProjection {
+    /// Project a `[lon, lat]` (degrees) coordinate into map units.
+    pub fn project(&self, [lon, lat]: Coord) -> Coord {
+        match self {
+            SfProjection::PlateCarree => [lon, lat],
+            SfProjection::Mercator => {
+                let lat = lat.clamp(-85.051_129, 85.051_129);
+                let y = (std::f64::consts::FRAC_PI_4 + lat.to_radians() / 2.0)
+                    .tan()
+                    .ln();
+                [lon.to_radians(), y]
+            }
+        }
+    }
+}
+
 /// Parse a WKT string (case-insensitive, optional `Z`/`M`, `EMPTY`) into a
 /// [`Geometry`]. Returns `None` on malformed input.
 pub fn parse_wkt(input: &str) -> Option<Geometry> {
@@ -309,6 +335,25 @@ mod tests {
     fn bounds_over_polygon() {
         let g = parse_wkt("POLYGON ((0 0, 10 0, 10 5, 0 5, 0 0))").unwrap();
         assert_eq!(g.bounds(), Some((0.0, 0.0, 10.0, 5.0)));
+    }
+
+    #[test]
+    fn projection_math() {
+        // PlateCarree is the identity.
+        assert_eq!(
+            SfProjection::PlateCarree.project([10.0, 45.0]),
+            [10.0, 45.0]
+        );
+        // Mercator: x = lon in radians; y = ln(tan(pi/4 + lat/2)).
+        let [x, y] = SfProjection::Mercator.project([0.0, 45.0]);
+        assert!((x - 0.0).abs() < 1e-12);
+        assert!((y - 0.881_373).abs() < 1e-5, "mercator y at 45° = {y}");
+        // The equator maps to ~0; higher latitudes stretch more than lower ones.
+        assert!(SfProjection::Mercator.project([5.0, 0.0])[1].abs() < 1e-12);
+        let y20 = SfProjection::Mercator.project([0.0, 20.0])[1];
+        let y60_80 = SfProjection::Mercator.project([0.0, 80.0])[1]
+            - SfProjection::Mercator.project([0.0, 60.0])[1];
+        assert!(y60_80 > y20, "poleward bands stretch more");
     }
 
     #[test]

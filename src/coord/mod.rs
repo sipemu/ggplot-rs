@@ -2,6 +2,8 @@ pub mod cartesian;
 pub mod fixed;
 pub mod flip;
 pub mod polar;
+#[cfg(feature = "sf")]
+pub mod sf;
 pub mod trans;
 
 use crate::render::Rect;

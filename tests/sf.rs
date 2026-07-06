@@ -2,9 +2,10 @@
 #![cfg(feature = "sf")]
 
 use ggplot_rs::data::{DataFrame, Value};
-use ggplot_rs::geom::sf::StatSf;
+use ggplot_rs::geom::sf::{GeomSf, StatSf};
 use ggplot_rs::prelude::*;
 use ggplot_rs::scale::scale_set::ScaleSet;
+use ggplot_rs::spatial::SfProjection;
 use ggplot_rs::stat::Stat;
 
 fn strs(v: &[&str]) -> Vec<Value> {
@@ -18,7 +19,7 @@ fn stat_sf_adds_bounds_from_geometry() {
         "geometry".into(),
         strs(&["POLYGON ((0 0, 4 0, 4 3, 0 3, 0 0))", "POINT (10 8)"]),
     );
-    let out = StatSf.compute_group(&df, &ScaleSet::new());
+    let out = StatSf::default().compute_group(&df, &ScaleSet::new());
     // Original column preserved + extent columns added.
     assert!(out.has_column("geometry"));
     for c in ["xmin", "xmax", "ymin", "ymax"] {
@@ -85,4 +86,45 @@ fn scales_train_over_geometry_extent() {
     let d = &built.layers[0].data;
     assert_eq!(d.column("xmin").unwrap()[0].as_f64(), Some(10.0));
     assert_eq!(d.column("ymax").unwrap()[0].as_f64(), Some(12.0));
+}
+
+#[test]
+fn mercator_projection_reshapes_extent() {
+    // A polygon at latitude [60, 80]: under Mercator the y extent is the
+    // projected value, not the raw degrees, and x is longitude in radians.
+    let mut df = DataFrame::new();
+    df.add_column(
+        "geometry".into(),
+        strs(&["POLYGON ((0 60, 20 60, 20 80, 0 80, 0 60))"]),
+    );
+    let out = StatSf {
+        projection: SfProjection::Mercator,
+    }
+    .compute_group(&df, &ScaleSet::new());
+    let ymax = out.column("ymax").unwrap()[0].as_f64().unwrap();
+    let xmax = out.column("xmax").unwrap()[0].as_f64().unwrap();
+    // 80° -> ln(tan(pi/4 + 40°)) ≈ 2.4362; 20° lon -> 0.349 rad.
+    assert!((ymax - 2.4362).abs() < 1e-3, "mercator ymax = {ymax}");
+    assert!((xmax - 20f64.to_radians()).abs() < 1e-9, "lon in radians");
+}
+
+#[test]
+fn coord_sf_renders_projected_map() {
+    let mut df = DataFrame::new();
+    df.add_column(
+        "geometry".into(),
+        strs(&[
+            "POLYGON ((0 0, 30 0, 30 40, 0 40, 0 0))",
+            "POLYGON ((30 0, 60 0, 60 50, 30 40, 30 0))",
+        ]),
+    );
+    df.add_column("v".into(), vec![Value::Float(1.0), Value::Float(2.0)]);
+    let svg = GGPlot::new(df)
+        .aes(Aes::new().fill("v"))
+        .geom_sf_with(GeomSf::default().project(SfProjection::Mercator))
+        .coord_sf()
+        .scale_fill_viridis_c()
+        .render_svg()
+        .expect("mercator + coord_sf render");
+    assert!(svg.contains("<polygon") || svg.contains("<path"));
 }
