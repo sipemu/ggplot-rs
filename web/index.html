@@ -3,37 +3,98 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>ggplot-rs + DuckDB-Wasm — spatial in the browser</title>
+  <title>ggplot-rs · WASM + DuckDB-Wasm spatial</title>
   <style>
-    body { font-family: system-ui, sans-serif; margin: 2rem; color: #222; }
-    h1 { font-size: 1.2rem; }
-    #status { color: #666; font-size: 0.9rem; }
-    #plot { margin-top: 1rem; }
-    /* Hover: every mark is a real SVG element, so CSS + the built-in <title>
-       tooltip work with zero extra JS. */
-    #plot svg polygon:hover,
-    #plot svg circle:hover { stroke: #111; stroke-width: 2; cursor: pointer; }
+    :root {
+      --bg: #f7f8fa; --card: #ffffff; --ink: #1f2430; --muted: #6b7280;
+      --accent: #2b7a4b; --line: #e6e8ec; --shadow: 0 1px 3px rgba(16,24,40,.06), 0 8px 24px rgba(16,24,40,.05);
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0; background: var(--bg); color: var(--ink);
+      font: 15px/1.55 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    }
+    .wrap { max-width: 1040px; margin: 0 auto; padding: 2.5rem 1.25rem 4rem; }
+    header h1 { font-size: 1.6rem; margin: 0 0 .35rem; letter-spacing: -.01em; }
+    header p { color: var(--muted); margin: 0 0 1rem; max-width: 60ch; }
+    .links a {
+      display: inline-block; text-decoration: none; color: var(--ink);
+      border: 1px solid var(--line); background: var(--card); border-radius: 999px;
+      padding: .25rem .7rem; font-size: .82rem; margin: 0 .4rem .4rem 0;
+    }
+    .links a:hover { border-color: var(--accent); color: var(--accent); }
+    .card {
+      background: var(--card); border: 1px solid var(--line); border-radius: 14px;
+      box-shadow: var(--shadow); padding: 1.25rem 1.35rem; margin-top: 1.5rem;
+    }
+    .card h2 { font-size: 1.05rem; margin: 0 0 .15rem; }
+    .card .sub { color: var(--muted); font-size: .88rem; margin: 0 0 1rem; }
+    .status { color: var(--muted); font-size: .82rem; margin: .6rem 0 0; min-height: 1.1em; }
+    .status.busy::before {
+      content: ""; display: inline-block; width: .7em; height: .7em; margin-right: .45em;
+      border: 2px solid var(--line); border-top-color: var(--accent); border-radius: 50%;
+      vertical-align: -1px; animation: spin .7s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .viz { position: relative; }
+    #plot svg, #scatter { max-width: 100%; height: auto; display: block; }
+    #plot svg polygon { transition: stroke-width .06s; }
+    #plot svg polygon:hover { stroke: #111; stroke-width: 1.4; cursor: crosshair; }
+    #scatter { border: 1px solid var(--line); border-radius: 8px; cursor: crosshair; }
+    /* Floating tooltip shared by both charts. */
+    .tip {
+      position: fixed; z-index: 10; pointer-events: none; opacity: 0;
+      transform: translate(-50%, -125%); transition: opacity .08s;
+      background: #111827; color: #fff; font-size: .8rem; line-height: 1.3;
+      padding: .3rem .5rem; border-radius: 6px; box-shadow: 0 4px 14px rgba(0,0,0,.25);
+      white-space: nowrap;
+    }
+    .tip.on { opacity: 1; }
+    footer { color: var(--muted); font-size: .8rem; margin-top: 2.5rem; text-align: center; }
+    code { background: #eef0f3; padding: .05em .35em; border-radius: 4px; font-size: .9em; }
   </style>
 </head>
 <body>
-  <h1>ggplot-rs (WASM) + DuckDB-Wasm spatial</h1>
-  <p id="status">loading…</p>
-  <div id="plot"></div>
-  <p style="color:#888;font-size:0.85rem">
-    DuckDB-Wasm (with the <code>spatial</code> extension) reads Natural Earth
-    countries from a CDN and <code>ST_AsText</code>s the geometry to WKT; ggplot-rs
-    (compiled to WASM) renders the SVG. Hover a country for its name + value.
-  </p>
+  <div class="wrap">
+    <header>
+      <h1>ggplot-rs in the browser</h1>
+      <p>
+        A Rust reimplementation of ggplot2's grammar of graphics, compiled to
+        WebAssembly. Data comes from <strong>DuckDB-Wasm</strong> (with the
+        <code>spatial</code> extension) — everything below runs client-side.
+      </p>
+      <div class="links">
+        <a href="https://github.com/sipemu/ggplot-rs">GitHub</a>
+        <a href="https://crates.io/crates/ggplot-rs">crates.io</a>
+        <a href="https://docs.rs/ggplot-rs">docs.rs</a>
+      </div>
+    </header>
 
-  <h2 style="font-size:1rem;margin-top:2rem">Large-N scatter (raster canvas backend)</h2>
-  <p id="status2" style="color:#666;font-size:0.9rem">…</p>
-  <canvas id="scatter" width="720" height="480" style="max-width:100%;border:1px solid #eee"></canvas>
-  <p style="color:#888;font-size:0.85rem">
-    100k points rendered to an RGBA buffer by the pure-Rust <code>PixelBackend</code>
-    (no DOM node per point) and blitted with <code>putImageData</code> — where SVG
-    would grind to a halt.
-  </p>
+    <section class="card">
+      <h2>World choropleth · <code>geom_sf</code></h2>
+      <p class="sub">
+        DuckDB reads Natural Earth countries and <code>ST_AsText</code>s the
+        geometry to WKT; ggplot-rs renders an SVG. Hover a country.
+      </p>
+      <p id="status" class="status busy">loading…</p>
+      <div id="plot" class="viz"></div>
+    </section>
 
+    <section class="card">
+      <h2>Large-N scatter · raster canvas backend</h2>
+      <p class="sub">
+        100k points rasterised to a pixel buffer in pure Rust (no DOM node per
+        point) and blitted with <code>putImageData</code> — with nearest-point
+        hover. Where an SVG of 100k marks would grind to a halt.
+      </p>
+      <p id="status2" class="status busy">…</p>
+      <div class="viz"><canvas id="scatter" width="960" height="560"></canvas></div>
+    </section>
+
+    <footer>Built with ggplot-rs · SVG (hover) + raster (large-N) backends, no server.</footer>
+  </div>
+
+  <div id="tip" class="tip"></div>
   <script type="module" src="./main.js"></script>
 </body>
 </html>

@@ -41,3 +41,19 @@ fn raster_png_has_magic() {
         .unwrap();
     assert_eq!(&png[..4], &[0x89, 0x50, 0x4E, 0x47]); // ‰PNG
 }
+
+#[test]
+fn raster_area_panel_within_canvas() {
+    let (rgba, area) = GGPlot::new(scatter())
+        .aes(Aes::new().x("x").y("y"))
+        .geom_point()
+        .render_rgba_area_with_size(300, 200)
+        .unwrap();
+    assert_eq!(rgba.len(), 300 * 200 * 4);
+    let [px, py, pw, ph] = area;
+    assert!(pw > 0.0 && ph > 0.0, "panel has size");
+    assert!(
+        px >= 0.0 && py >= 0.0 && px + pw <= 300.0 && py + ph <= 200.0,
+        "panel within canvas: {area:?}"
+    );
+}
