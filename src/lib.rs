@@ -11,6 +11,8 @@ pub mod position;
 pub mod prelude;
 pub mod render;
 pub mod scale;
+#[cfg(feature = "sf")]
+pub mod spatial;
 pub mod stat;
 pub mod theme;
 

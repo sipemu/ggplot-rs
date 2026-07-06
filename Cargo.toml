@@ -68,6 +68,9 @@ arrow = ["dep:arrow"]
 regression = ["dep:anofox-regression", "dep:faer"]
 # Serde-deserialisable theme config (theme::config::ThemeConfig).
 serde = ["dep:serde"]
+# Spatial layer: geom_sf over simple-features geometry (self-contained WKT
+# parser — no extra dependencies).
+sf = []
 # `ggplot-rs` command-line tool: plot parquet files and DuckDB SQL from the shell.
 cli = ["dep:clap", "dep:duckdb", "serde", "dep:toml", "dep:serde_json"]
 
@@ -91,6 +94,11 @@ harness = false
 [[example]]
 name = "gallery"
 required-features = ["polars"]
+
+# Spatial choropleth — needs the `sf` feature.
+[[example]]
+name = "spatial"
+required-features = ["sf", "polars"]
 
 # Polars-free: builds and runs with --no-default-features too.
 [[example]]

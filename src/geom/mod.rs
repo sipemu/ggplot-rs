@@ -29,6 +29,8 @@ pub mod refline;
 pub mod ribbon;
 pub mod rug;
 pub mod segment;
+#[cfg(feature = "sf")]
+pub mod sf;
 pub mod smooth;
 pub mod spoke;
 pub mod step;
