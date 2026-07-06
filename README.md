@@ -25,7 +25,8 @@ so you can plot straight from plain Rust vectors, or from
 ## Gallery
 
 Every image below is produced by [`examples/gallery.rs`](examples/gallery.rs) —
-regenerate them all with `cargo run --example gallery`.
+regenerate them all with `cargo run --features sf --example gallery` (the
+choropleth needs the `sf` feature; drop it for the rest).
 
 <table>
   <tr>
@@ -111,6 +112,14 @@ regenerate them all with `cargo run --example gallery`.
       <img src="assets/gallery/qq.png" width="260" alt="Q-Q plot"><br>
       <sub>Q-Q plot · <code>geom_qq</code></sub>
     </td>
+  </tr>
+  <tr>
+    <td align="center">
+      <img src="assets/gallery/spatial.png" width="260" alt="Choropleth"><br>
+      <sub>Choropleth · <code>geom_sf</code> <sub>(feature <code>sf</code>)</sub></sub>
+    </td>
+    <td align="center"></td>
+    <td align="center"></td>
   </tr>
 </table>
 
