@@ -134,3 +134,119 @@ fn render_scatter_impl(spec_json: &str) -> Result<Vec<u8>, String> {
         .map_err(|e| format!("render failed: {e:?}"))?;
     Ok(rgba)
 }
+
+/// A rendered scatter plus the pixel↔data mapping needed for interactive hover.
+#[cfg(feature = "canvas")]
+#[wasm_bindgen]
+pub struct Scatter {
+    rgba: Vec<u8>,
+    plot: Vec<f64>,
+    xdom: Vec<f64>,
+    ydom: Vec<f64>,
+}
+
+#[cfg(feature = "canvas")]
+#[wasm_bindgen]
+impl Scatter {
+    /// The RGBA buffer for `ctx.putImageData`.
+    #[wasm_bindgen(getter)]
+    pub fn rgba(&self) -> Vec<u8> {
+        self.rgba.clone()
+    }
+    /// Panel rect in pixels: `[x, y, width, height]`.
+    #[wasm_bindgen(getter)]
+    pub fn plot(&self) -> Vec<f64> {
+        self.plot.clone()
+    }
+    /// Expanded x data range `[min, max]` (maps to the panel's left/right edge).
+    #[wasm_bindgen(getter)]
+    pub fn xdom(&self) -> Vec<f64> {
+        self.xdom.clone()
+    }
+    /// Expanded y data range `[min, max]` (maps to the panel's bottom/top edge).
+    #[wasm_bindgen(getter)]
+    pub fn ydom(&self) -> Vec<f64> {
+        self.ydom.clone()
+    }
+}
+
+/// Render a large scatter from typed arrays (no JSON round-trip) to the raster
+/// backend, returning the pixels **and** the pixel↔data mapping so JS can do
+/// nearest-point hover. `group` (length `x.len()` or empty) colours the points.
+#[cfg(feature = "canvas")]
+#[wasm_bindgen]
+pub fn render_scatter_xy(
+    x: &[f64],
+    y: &[f64],
+    group: Vec<String>,
+    width: u32,
+    height: u32,
+    title: String,
+) -> Result<Scatter, JsValue> {
+    render_scatter_xy_impl(x, y, group, width, height, &title).map_err(|e| JsValue::from_str(&e))
+}
+
+#[cfg(feature = "canvas")]
+fn render_scatter_xy_impl(
+    x: &[f64],
+    y: &[f64],
+    group: Vec<String>,
+    width: u32,
+    height: u32,
+    title: &str,
+) -> Result<Scatter, String> {
+    let n = x.len().min(y.len());
+    if n == 0 {
+        return Err("empty x/y arrays".into());
+    }
+    // Default ggplot continuous expansion (5% each side) → the data value at the
+    // panel edges, for inverting pixels back to data in JS.
+    let expand = |v: &[f64]| {
+        let mn = v.iter().copied().fold(f64::INFINITY, f64::min);
+        let mx = v.iter().copied().fold(f64::NEG_INFINITY, f64::max);
+        let pad = if (mx - mn).abs() < 1e-12 {
+            1.0
+        } else {
+            (mx - mn) * 0.05
+        };
+        (mn - pad, mx + pad)
+    };
+    let (xe0, xe1) = expand(&x[..n]);
+    let (ye0, ye1) = expand(&y[..n]);
+
+    let mut cols: Vec<(String, Vec<Value>)> = vec![
+        (
+            "x".to_string(),
+            x[..n].iter().map(|v| Value::Float(*v)).collect(),
+        ),
+        (
+            "y".to_string(),
+            y[..n].iter().map(|v| Value::Float(*v)).collect(),
+        ),
+    ];
+    let mut aes = Aes::new().x("x").y("y");
+    let has_group = group.len() == n;
+    if has_group {
+        cols.push(("g".to_string(), group.into_iter().map(Value::Str).collect()));
+        aes = aes.color("g");
+    }
+    let mut plot = GGPlot::new(cols)
+        .aes(aes)
+        .geom_point()
+        .theme(theme_minimal());
+    if has_group {
+        plot = plot.scale_color_brewer(crate::scale::palettes::PaletteName::Set1);
+    }
+    if !title.is_empty() {
+        plot = plot.title(title);
+    }
+    let (rgba, plot_area) = plot
+        .render_rgba_area_with_size(width, height)
+        .map_err(|e| format!("render failed: {e:?}"))?;
+    Ok(Scatter {
+        rgba,
+        plot: plot_area.to_vec(),
+        xdom: vec![xe0, xe1],
+        ydom: vec![ye0, ye1],
+    })
+}

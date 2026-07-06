@@ -1467,6 +1467,22 @@ impl GGPlot {
         Ok((ow, oh, backend.into_rgba()))
     }
 
+    /// Like [`render_rgba_with_size`](Self::render_rgba_with_size), but also
+    /// returns the panel rect in pixels `[x, y, w, h]` — enough to map a canvas
+    /// pixel back to data coordinates for interactive hover.
+    #[cfg(feature = "canvas")]
+    pub fn render_rgba_area_with_size(
+        self,
+        w: u32,
+        h: u32,
+    ) -> Result<(Vec<u8>, [f64; 4]), GGError> {
+        let (built, layout) = self.prepare(w, h)?;
+        let pa = layout.plot_area.clone();
+        let mut backend = crate::render::pixel_backend::PixelBackend::new(w, h, pa.clone());
+        PlotRenderer::render(&built, &mut backend).map_err(GGError::Render)?;
+        Ok((backend.into_rgba(), [pa.x, pa.y, pa.width, pa.height]))
+    }
+
     /// Render to PNG bytes via the raster [`PixelBackend`](crate::render::pixel_backend::PixelBackend)
     /// (feature `canvas`). Unlike [`render_png`](Self::render_png) this needs no
     /// plotters bitmap backend, so it also works on wasm.
