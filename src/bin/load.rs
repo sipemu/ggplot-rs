@@ -32,13 +32,24 @@ pub fn resolve_query(
 }
 
 /// Run `query` against DuckDB (in-memory unless `db` is given) and return the
-/// result as named columns of `Value`s.
-pub fn load(db: &Option<String>, query: &str) -> Result<Vec<(String, Vec<Value>)>, String> {
+/// result as named columns of `Value`s. When `spatial` is set, the DuckDB
+/// `spatial` extension is installed/loaded first, so `ST_Read(...)` (shapefiles,
+/// GeoJSON, GeoPackage, …) and `ST_AsText(geom)` are available.
+pub fn load(
+    db: &Option<String>,
+    query: &str,
+    spatial: bool,
+) -> Result<Vec<(String, Vec<Value>)>, String> {
     let conn = match db {
         Some(path) => Connection::open(path),
         None => Connection::open_in_memory(),
     }
     .map_err(|e| format!("opening DuckDB: {e}"))?;
+
+    if spatial {
+        conn.execute_batch("INSTALL spatial; LOAD spatial;")
+            .map_err(|e| format!("loading DuckDB spatial extension: {e}"))?;
+    }
 
     let mut stmt = conn
         .prepare(query)

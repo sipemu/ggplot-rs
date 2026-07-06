@@ -74,7 +74,8 @@ sf = []
 # Read GeoJSON into a plot-ready frame (geometry + properties). Adds serde_json.
 geojson = ["sf", "dep:serde_json"]
 # `ggplot-rs` command-line tool: plot parquet files and DuckDB SQL from the shell.
-cli = ["dep:clap", "dep:duckdb", "serde", "dep:toml", "dep:serde_json"]
+# Includes `sf` so `--geom sf` can plot geometry from the DuckDB spatial extension.
+cli = ["dep:clap", "dep:duckdb", "serde", "dep:toml", "dep:serde_json", "sf"]
 
 # The CLI binary (built only with `--features cli`).
 [[bin]]
