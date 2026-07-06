@@ -18,9 +18,15 @@ async function main() {
   status("starting DuckDB-Wasm…");
   const bundles = duckdb.getJsDelivrBundles();
   const bundle = await duckdb.selectBundle(bundles);
-  const worker = new Worker(bundle.mainWorker);
+  // A cross-origin `new Worker(cdnUrl)` is blocked; wrap the CDN worker in a
+  // same-origin Blob that `importScripts` it (which *is* allowed cross-origin).
+  const workerUrl = URL.createObjectURL(
+    new Blob([`importScripts("${bundle.mainWorker}");`], { type: "text/javascript" }),
+  );
+  const worker = new Worker(workerUrl);
   const db = new duckdb.AsyncDuckDB(new duckdb.ConsoleLogger(), worker);
   await db.instantiate(bundle.mainModule, bundle.pthreadWorker);
+  URL.revokeObjectURL(workerUrl);
   const conn = await db.connect();
 
   status("loading the spatial extension…");
