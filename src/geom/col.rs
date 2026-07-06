@@ -78,6 +78,8 @@ impl Geom for GeomCol {
         let x_is_discrete = x_scale.map(|s| s.is_discrete()).unwrap_or(false);
 
         let ymin_col = data.column("ymin");
+        // A `label` mapping (and the value) becomes a hover tooltip on each bar.
+        let label_col = data.column("label");
 
         for i in 0..data.nrows() {
             let nx = x_scale.map(|s| s.map(&x_col[i])).unwrap_or(0.0);
@@ -116,6 +118,22 @@ impl Geom for GeomCol {
                 clip: !coord.is_polar(),
             };
 
+            let label = label_col.and_then(|c| match &c[i] {
+                crate::data::Value::Str(s) if !s.is_empty() => Some(s.clone()),
+                v => v
+                    .as_f64()
+                    .map(|f| format!("{}", (f * 1000.0).round() / 1000.0)),
+            });
+            let yval = y_col[i]
+                .as_f64()
+                .map(|f| format!("{}", (f * 1000.0).round() / 1000.0));
+            backend.set_tooltip(match (label, yval) {
+                (Some(l), Some(y)) => Some(format!("{l}: {y}")),
+                (Some(l), None) => Some(l),
+                (None, Some(y)) => Some(y),
+                (None, None) => None,
+            });
+
             if coord.is_polar() {
                 // A bar becomes a radial sector: tessellate the outer arc
                 // (radius = value) and the inner arc (radius = base) so the
@@ -139,6 +157,7 @@ impl Geom for GeomCol {
                 )?;
             }
         }
+        backend.set_tooltip(None);
 
         Ok(())
     }

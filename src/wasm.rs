@@ -81,6 +81,49 @@ fn render_geo_impl(spec_json: &str) -> Result<String, String> {
         .map_err(|e| format!("render failed: {e:?}"))
 }
 
+/// Render a bar chart (SVG, hover tooltips) from `{ category: [String],
+/// value: [Number], width?, height?, title? }`. Bars are coloured by category
+/// with the Set1 palette — matching the scatter's groups for linked views.
+#[wasm_bindgen]
+pub fn render_bar(spec_json: &str) -> Result<String, JsValue> {
+    render_bar_impl(spec_json).map_err(|e| JsValue::from_str(&e))
+}
+
+fn render_bar_impl(spec_json: &str) -> Result<String, String> {
+    let v: J = serde_json::from_str(spec_json).map_err(|e| format!("bad spec JSON: {e}"))?;
+    let cat = v["category"]
+        .as_array()
+        .ok_or("spec.category must be an array")?;
+    let val = v["value"].as_array().ok_or("spec.value must be an array")?;
+    let cats: Vec<Value> = cat
+        .iter()
+        .map(|s| Value::Str(s.as_str().unwrap_or_default().to_string()))
+        .collect();
+    let vals: Vec<Value> = val
+        .iter()
+        .map(|x| x.as_f64().map(Value::Float).unwrap_or(Value::Na))
+        .collect();
+    let cols = vec![
+        ("x".to_string(), cats.clone()),
+        ("y".to_string(), vals),
+        ("fill".to_string(), cats.clone()),
+        ("label".to_string(), cats),
+    ];
+    let num = |k: &str, d: u32| v.get(k).and_then(|x| x.as_u64()).unwrap_or(d as u64) as u32;
+    let (width, height) = (num("width", 480), num("height", 300));
+
+    let mut plot = GGPlot::new(cols)
+        .aes(Aes::new().x("x").y("y").fill("fill").label("label"))
+        .geom_col()
+        .scale_fill_brewer(crate::scale::palettes::PaletteName::Set1)
+        .theme_minimal();
+    if let Some(t) = v.get("title").and_then(|x| x.as_str()) {
+        plot = plot.title(t);
+    }
+    plot.render_svg_native_with_size(width, height)
+        .map_err(|e| format!("render failed: {e:?}"))
+}
+
 /// Render a large scatter to a raw RGBA buffer via the raster backend — for
 /// point counts where SVG's one-node-per-mark would choke. Wrap the result in
 /// `new ImageData(new Uint8ClampedArray(buf), width, height)` and `putImageData`
