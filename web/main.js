@@ -5,7 +5,7 @@
 // Build:  wasm-pack build --target web --out-dir web/pkg --no-default-features --features wasm,canvas
 
 import * as duckdb from "https://cdn.jsdelivr.net/npm/@duckdb/duckdb-wasm@1.29.0/+esm";
-import init, { render_geo, render_bar, render_scatter_xy } from "./pkg/ggplot_rs.js";
+import init, { render_geo, render_bar, render_scatter_xy, geo_bounds } from "./pkg/ggplot_rs.js";
 
 const set = (id, msg, busy = false) => {
   const el = document.getElementById(id);
@@ -38,6 +38,52 @@ const hoverTips = (el) => {
   });
   el.addEventListener("mouseleave", hideTip);
 };
+
+// Pan/zoom (roam) for an SVG map: scroll to zoom around the cursor, drag to
+// pan, double-click to reset. `rerender(spec)` redraws `el` for a given spec;
+// we feed it xlim/ylim windows that render_geo clips to (axes update).
+function enableRoam(el, baseSpec, rerender) {
+  const aspect = baseSpec.width / baseSpec.height;
+  let view = null; // {x0,y0,x1,y1}; null = auto-fit (initial equal-aspect view)
+  let raf = 0;
+  const fit = () => {
+    const b = geo_bounds(JSON.stringify(baseSpec)); // [minx,miny,maxx,maxy]
+    let [x0, y0, x1, y1] = b;
+    const w = x1 - x0, h = y1 - y0;
+    if (w / h < aspect) { const nw = h * aspect, c = (x0 + x1) / 2; x0 = c - nw / 2; x1 = c + nw / 2; }
+    else { const nh = w / aspect, c = (y0 + y1) / 2; y0 = c - nh / 2; y1 = c + nh / 2; }
+    return { x0, y0, x1, y1 };
+  };
+  const draw = () => {
+    if (raf) return;
+    raf = requestAnimationFrame(() => {
+      raf = 0;
+      rerender(view ? { ...baseSpec, xlim: [view.x0, view.x1], ylim: [view.y0, view.y1] } : baseSpec);
+    });
+  };
+  el.addEventListener("wheel", (e) => {
+    e.preventDefault();
+    if (!view) view = fit();
+    const r = el.getBoundingClientRect();
+    const px = view.x0 + ((e.clientX - r.left) / r.width) * (view.x1 - view.x0);
+    const py = view.y1 - ((e.clientY - r.top) / r.height) * (view.y1 - view.y0);
+    const k = e.deltaY < 0 ? 0.85 : 1 / 0.85;
+    view = { x0: px + (view.x0 - px) * k, x1: px + (view.x1 - px) * k, y0: py + (view.y0 - py) * k, y1: py + (view.y1 - py) * k };
+    draw();
+  }, { passive: false });
+  let drag = null;
+  el.addEventListener("mousedown", (e) => { if (!view) view = fit(); drag = { x: e.clientX, y: e.clientY, v: { ...view } }; });
+  window.addEventListener("mousemove", (e) => {
+    if (!drag) return;
+    const r = el.getBoundingClientRect();
+    const dx = ((e.clientX - drag.x) / r.width) * (drag.v.x1 - drag.v.x0);
+    const dy = ((e.clientY - drag.y) / r.height) * (drag.v.y1 - drag.v.y0);
+    view = { x0: drag.v.x0 - dx, x1: drag.v.x1 - dx, y0: drag.v.y0 + dy, y1: drag.v.y1 + dy };
+    draw();
+  });
+  window.addEventListener("mouseup", () => { drag = null; });
+  el.addEventListener("dblclick", () => { view = null; draw(); });
+}
 
 async function main() {
   set("status", "initialising ggplot-rs (wasm)…", true);
@@ -148,17 +194,19 @@ async function quakeDemo({ db, conn }) {
   )).toArray().map((r) => r.toJSON());
 
   const eq = document.getElementById("eqplot");
-  eq.innerHTML = render_geo(JSON.stringify({
+  const baseSpec = {
     geometry: rows.map((r) => r.geometry),
     base: allRows.length ? allRows.map((r) => r.geometry) : undefined, // country basemap
     fill: rows.map((r) => Number(r.mag)),
     label: rows.map((r) => r.place),
     width: 960, height: 480,
     title: `${rows.length} earthquakes (M≥2.5), past 30 days — colour = magnitude`,
-  }));
-  detitle(eq);
+  };
+  const rerender = (spec) => { eq.innerHTML = render_geo(JSON.stringify(spec)); detitle(eq); };
+  rerender(baseSpec);
   hoverTips(eq);
-  set("status3", `${rows.length} earthquakes — hover for the location + magnitude.`);
+  enableRoam(eq, baseSpec, rerender); // scroll to zoom, drag to pan, dbl-click resets
+  set("status3", `${rows.length} earthquakes — hover, scroll to zoom, drag to pan.`);
 }
 
 // ── Linked views: raster scatter (brush highlights) → ggplot-rs bar ───────

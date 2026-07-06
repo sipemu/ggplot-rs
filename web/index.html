@@ -41,6 +41,9 @@
     #plot svg polygon { transition: stroke-width .06s; }
     #plot svg polygon:hover { stroke: #111; stroke-width: 1.4; cursor: crosshair; }
     #scatter { border: 1px solid var(--line); border-radius: 8px; cursor: crosshair; }
+    #eqplot { cursor: grab; user-select: none; }
+    #eqplot:active { cursor: grabbing; }
+    #eqplot svg { max-width: 100%; height: auto; display: block; }
     /* Floating tooltip shared by both charts. */
     .tip {
       position: fixed; z-index: 10; pointer-events: none; opacity: 0;
@@ -103,8 +106,9 @@
       <p class="sub">
         DuckDB reads the <a href="https://earthquake.usgs.gov/earthquakes/feed/">USGS
         GeoJSON feed</a> and <code>ST_AsText</code>s each quake to WKT; ggplot-rs
-        colours the points by magnitude. The pattern traces the tectonic plate
-        boundaries. Hover for the location + magnitude.
+        colours the points by magnitude over a country basemap. Hover for the
+        location; <strong>scroll to zoom, drag to pan, double-click to reset</strong>
+        (ggplot-rs re-renders with the new window — the axes update too).
       </p>
       <p id="status3" class="status busy">…</p>
       <div id="eqplot" class="viz"></div>
