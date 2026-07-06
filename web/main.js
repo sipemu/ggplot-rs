@@ -25,38 +25,37 @@ async function main() {
   status("loading the spatial extension…");
   await conn.query("INSTALL spatial; LOAD spatial;");
 
-  // Self-contained demo data. In a real app this is a file read:
-  //   FROM ST_Read('countries.shp')            -- shapefile / GeoJSON / GeoPackage
-  //   FROM ST_Read('https://…/countries.geojson')
-  // For huge datasets, aggregate here (GROUP BY / hexbin / sample) so the SVG
-  // stays light — DuckDB crunches millions of rows, ggplot-rs draws the summary.
-  status("querying geometry…");
+  // Real data: Natural Earth 110m countries (~820 KB GeoJSON), read straight
+  // from the CDN by DuckDB-Wasm. Swap the URL for a shapefile / GeoPackage /
+  // your own export — ST_Read handles them all. For huge datasets, aggregate
+  // here (GROUP BY / hexbin / sample) so the SVG stays light.
+  const url =
+    "https://cdn.jsdelivr.net/gh/nvkelso/natural-earth-vector@master/geojson/ne_110m_admin_0_countries.geojson";
+  await db.registerFileURL("countries.geojson", url, duckdb.DuckDBDataProtocol.HTTP, false);
+
+  status("querying geometry (Natural Earth countries)…");
   const sql = `
-    SELECT ST_AsText(geom) AS geometry, name, pop
-    FROM (VALUES
-      (ST_GeomFromText('POLYGON ((0 0, 3 0, 3 2, 1 2.5, 0 2, 0 0))'), 'North',  4.2),
-      (ST_GeomFromText('POLYGON ((3 0, 6 0, 6 3, 3 2, 3 0))'),        'East',   7.8),
-      (ST_GeomFromText('POLYGON ((0 2, 1 2.5, 3 2, 3 5, 0 5, 0 2))'), 'West',   3.1),
-      (ST_GeomFromText('POLYGON ((3 2, 6 3, 6 5, 3 5, 3 2))'),        'Center', 9.5),
-      (ST_GeomFromText('POLYGON ((6 0, 9 1, 8 4, 6 3, 6 0))'),        'Coast',  5.4),
-      (ST_GeomFromText('POLYGON ((6 3, 8 4, 9 6, 6 5, 6 3))'),        'Cape',   2.7)
-    ) t(geom, name, pop)`;
+    SELECT ST_AsText(geom) AS geometry,
+           NAME             AS name,
+           ln(POP_EST + 1)  AS pop_log
+    FROM ST_Read('countries.geojson')
+    WHERE NAME <> 'Antarctica'`;
   const rows = (await conn.query(sql)).toArray().map((r) => r.toJSON());
 
   // Reshape rows → columnar spec for the WASM renderer.
   const spec = {
     geometry: rows.map((r) => r.geometry),
-    fill: rows.map((r) => Number(r.pop)),
+    fill: rows.map((r) => Number(r.pop_log)),
     label: rows.map((r) => r.name),
-    title: "Population by province (DuckDB spatial → geom_sf)",
-    width: 640,
-    height: 480,
-    // projection: "mercator",   // for lon/lat data
+    title: "World population (log) — Natural Earth via DuckDB spatial",
+    width: 1000,
+    height: 560,
+    // projection: "mercator",   // web-map look (clamps the poles)
   };
 
-  status("rendering…");
+  status(`rendering ${rows.length} countries…`);
   document.getElementById("plot").innerHTML = render_geo(JSON.stringify(spec));
-  status("done — hover a province.");
+  status(`done — ${rows.length} countries. Hover one for its name + value.`);
 }
 
 main().catch((e) => {

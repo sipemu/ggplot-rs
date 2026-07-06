@@ -390,7 +390,18 @@ Pair it with **[DuckDB-Wasm](https://github.com/duckdb/duckdb-wasm)** (which loa
 the same `spatial` extension) to read shapefiles/GeoJSON and `ST_AsText` them to
 WKT entirely client-side. For large data, aggregate in DuckDB (`GROUP BY`,
 hex-bins, sampling) and render the summary — SVG stays light. See
-[`web/`](web/) for a runnable demo.
+[`web/`](web/) for a runnable demo that fetches Natural Earth countries:
+
+<p align="center"><img src="assets/gallery/world.png" width="640" alt="World population choropleth from Natural Earth via DuckDB spatial"></p>
+
+The same render is one CLI command (native, identical `render_svg_native` path):
+
+```sh
+ggplot-rs --spatial \
+  --sql "SELECT ST_AsText(geom) AS geometry, NAME AS label, ln(POP_EST+1) AS pop
+         FROM ST_Read('ne_110m_admin_0_countries.geojson') WHERE NAME <> 'Antarctica'" \
+  --geom sf --fill pop --label label --theme void -o world.png
+```
 
 ## Data Input
 
