@@ -394,6 +394,17 @@ impl GGPlot {
         self.add_geom(geom)
     }
 
+    /// Render simple-features geometry from a WKT `geometry` column (feature `sf`).
+    #[cfg(feature = "sf")]
+    pub fn geom_sf(self) -> Self {
+        self.add_geom(crate::geom::sf::GeomSf::default())
+    }
+
+    #[cfg(feature = "sf")]
+    pub fn geom_sf_with(self, geom: crate::geom::sf::GeomSf) -> Self {
+        self.add_geom(geom)
+    }
+
     pub fn geom_curve(self) -> Self {
         self.add_geom(GeomCurve::default())
     }

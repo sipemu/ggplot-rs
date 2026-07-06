@@ -203,6 +203,29 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
 `coord_cartesian`, `coord_flip`, `coord_fixed`, `coord_polar`, `coord_trans`
 
+### Spatial (`geom_sf`)
+
+Behind the optional `sf` feature, `geom_sf` renders simple-features geometry —
+points, lines, and (multi)polygons with holes — from a `geometry` column of
+**WKT** strings. It uses a self-contained WKT parser, so the spatial layer pulls
+in **no** extra dependencies. The `fill` aesthetic drives a choropleth, and
+axes/legends/facets come from the rest of the grammar as usual:
+
+```rust
+let df = df! {
+    "geometry"   => ["POLYGON ((0 0, 3 0, 3 2, 0 2, 0 0))", "POLYGON ((3 0, 6 0, 6 3, 3 2, 3 0))"],
+    "population" => [4.2, 9.5],
+}?;
+GGPlot::new(df)
+    .aes(Aes::new().fill("population"))
+    .geom_sf()
+    .scale_fill_viridis_c();
+```
+
+See [`examples/spatial.rs`](examples/spatial.rs) (`cargo run --features sf --example spatial`).
+CRS-aware projections (`coord_sf`) and geometry file readers are not yet
+implemented.
+
 ### Faceting
 
 `facet_wrap` and `facet_grid` with free/fixed scales, proportional panel sizing
@@ -403,6 +426,7 @@ GGPlot::new(data)
 | `arrow`      |   no    | `impl GGData for arrow::RecordBatch` (Arrow/DuckDB input)    |
 | `regression` |   no    | `stat_quantile`/`geom_quantile` + `geom_smooth` glm/rlm via anofox-regression |
 | `serde`      |   no    | `theme::config::ThemeConfig` — a serde-deserialisable partial theme overlay (TOML/JSON) |
+| `sf`         |   no    | `geom_sf` — render simple-features (WKT) geometry; self-contained parser, no extra deps |
 | `cli`        |   no    | the `ggplot-rs` command-line tool (parquet/CSV/DuckDB → SVG/PNG), via clap + bundled DuckDB |
 
 To skip the heavy polars dependency (e.g. an Arrow-only service), disable defaults:
