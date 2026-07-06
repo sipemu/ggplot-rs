@@ -61,6 +61,12 @@ jobs:
       - name: Tests (sf)
         run: cargo test --no-default-features --features sf --lib --test sf
 
+      - name: Clippy (geojson)
+        run: cargo clippy --no-default-features --features geojson --lib -- -D warnings
+
+      - name: Tests (geojson)
+        run: cargo test --no-default-features --features geojson --lib spatial::geojson
+
       - name: Build examples
         run: cargo build --examples
 
@@ -84,7 +90,7 @@ jobs:
       - name: Generate coverage
         # Explicit features (not --all-features) to skip the `cli` feature, whose
         # bundled DuckDB is a slow C++ build and is exercised outside CI.
-        run: cargo llvm-cov --features polars,arrow,regression,serde,sf --workspace --lcov --output-path lcov.info
+        run: cargo llvm-cov --features polars,arrow,regression,serde,sf,geojson --workspace --lcov --output-path lcov.info
 
       - name: Upload coverage to Codecov
         uses: codecov/codecov-action@v4

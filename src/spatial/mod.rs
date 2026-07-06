@@ -2,6 +2,9 @@
 //! backing `geom_sf` (feature `sf`). Kept dependency-free so the spatial layer
 //! adds no heavy `geo`/`proj`/`gdal` tree to the core.
 
+#[cfg(feature = "geojson")]
+pub mod geojson;
+
 /// A 2-D coordinate `[x, y]` (longitude/easting, latitude/northing). Any Z/M
 /// ordinates in the WKT are parsed and discarded.
 pub type Coord = [f64; 2];

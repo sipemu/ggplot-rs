@@ -236,9 +236,17 @@ GGPlot::new(df)                        // lon/lat WKT in `geometry`
     .coord_sf();
 ```
 
+**Load GeoJSON.** The `geojson` feature reads a `FeatureCollection` into a
+plot-ready frame — geometry → WKT, properties → columns:
+
+```rust
+use ggplot_rs::spatial::geojson::read_geojson_file;
+
+let cols = read_geojson_file("countries.geojson")?;   // Vec<(String, Vec<Value>)>
+GGPlot::new(cols).aes(Aes::new().fill("gdp")).geom_sf();
+```
+
 See [`examples/spatial.rs`](examples/spatial.rs) (`cargo run --features sf --example spatial`).
-Remaining for the epic: additional projections and geometry file readers
-(GeoJSON/shapefile).
 
 ### Faceting
 
@@ -440,7 +448,8 @@ GGPlot::new(data)
 | `arrow`      |   no    | `impl GGData for arrow::RecordBatch` (Arrow/DuckDB input)    |
 | `regression` |   no    | `stat_quantile`/`geom_quantile` + `geom_smooth` glm/rlm via anofox-regression |
 | `serde`      |   no    | `theme::config::ThemeConfig` — a serde-deserialisable partial theme overlay (TOML/JSON) |
-| `sf`         |   no    | `geom_sf` — render simple-features (WKT) geometry; self-contained parser, no extra deps |
+| `sf`         |   no    | `geom_sf` / `coord_sf` — render simple-features (WKT) geometry with projections; no extra deps |
+| `geojson`    |   no    | read GeoJSON into a plot-ready frame (`spatial::geojson`); adds `serde_json` |
 | `cli`        |   no    | the `ggplot-rs` command-line tool (parquet/CSV/DuckDB → SVG/PNG), via clap + bundled DuckDB |
 
 To skip the heavy polars dependency (e.g. an Arrow-only service), disable defaults:
