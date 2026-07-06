@@ -64,6 +64,15 @@ fn render_geo_impl(spec_json: &str) -> Result<String, String> {
         Some("mercator") => SfProjection::Mercator,
         _ => SfProjection::PlateCarree,
     };
+    // Optional zoom window `[lo, hi]` — for pan/zoom (roam). When present the
+    // map clips to that window (updating axes) instead of the equal-aspect fit.
+    let lim = |k: &str| -> Option<(f64, f64)> {
+        match v.get(k)?.as_array()?.as_slice() {
+            [lo, hi] => Some((lo.as_f64()?, hi.as_f64()?)),
+            _ => None,
+        }
+    };
+    let (xlim, ylim) = (lim("xlim"), lim("ylim"));
 
     let mut builder = GGPlot::new(cols).aes(aes);
     // Optional gray basemap (e.g. country outlines) drawn behind the geometry
@@ -81,10 +90,12 @@ fn render_geo_impl(spec_json: &str) -> Result<String, String> {
             .layer_data(vec![("geometry".to_string(), base_geo)])
             .layer_aes(Aes::new());
     }
-    let mut plot = builder
-        .geom_sf_with(GeomSf::default().project(projection))
-        .coord_sf()
-        .theme(theme_minimal());
+    let mut plot = builder.geom_sf_with(GeomSf::default().project(projection));
+    plot = match (xlim, ylim) {
+        (Some(xl), Some(yl)) => plot.coord_cartesian_zoom(Some(xl), Some(yl)),
+        _ => plot.coord_sf(),
+    };
+    plot = plot.theme(theme_minimal());
     if has_fill {
         plot = plot.scale_fill_viridis_c();
     }
@@ -94,6 +105,38 @@ fn render_geo_impl(spec_json: &str) -> Result<String, String> {
 
     plot.render_svg_native_with_size(width, height)
         .map_err(|e| format!("render failed: {e:?}"))
+}
+
+/// Bounding box `[minx, miny, maxx, maxy]` of a spec's `geometry` (WKT array) —
+/// so JS can initialise a pan/zoom (roam) window and zoom around the cursor.
+#[wasm_bindgen]
+pub fn geo_bounds(spec_json: &str) -> Result<Vec<f64>, JsValue> {
+    let v: J = serde_json::from_str(spec_json).map_err(|e| JsValue::from_str(&format!("{e}")))?;
+    let geom = v["geometry"]
+        .as_array()
+        .ok_or_else(|| JsValue::from_str("spec.geometry must be an array of WKT strings"))?;
+    let (mut x0, mut y0, mut x1, mut y1) = (
+        f64::INFINITY,
+        f64::INFINITY,
+        f64::NEG_INFINITY,
+        f64::NEG_INFINITY,
+    );
+    for g in geom {
+        if let Some(b) = g
+            .as_str()
+            .and_then(crate::spatial::parse_wkt)
+            .and_then(|g| g.bounds())
+        {
+            x0 = x0.min(b.0);
+            y0 = y0.min(b.1);
+            x1 = x1.max(b.2);
+            y1 = y1.max(b.3);
+        }
+    }
+    if !x0.is_finite() {
+        return Err(JsValue::from_str("no valid geometry"));
+    }
+    Ok(vec![x0, y0, x1, y1])
 }
 
 /// Render a bar chart (SVG, hover tooltips) from `{ category: [String],
