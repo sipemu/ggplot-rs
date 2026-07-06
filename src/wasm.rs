@@ -215,25 +215,29 @@ impl Scatter {
 
 /// Render a large scatter from typed arrays (no JSON round-trip) to the raster
 /// backend, returning the pixels **and** the pixel↔data mapping so JS can do
-/// nearest-point hover. `group` (length `x.len()` or empty) colours the points.
+/// nearest-point hover. Points are coloured by `group_idx` (a compact per-point
+/// index, `0..group_names.len()`) — pass an empty `group_names` for no colour.
 #[cfg(feature = "canvas")]
 #[wasm_bindgen]
 pub fn render_scatter_xy(
     x: &[f64],
     y: &[f64],
-    group: Vec<String>,
+    group_idx: &[u32],
+    group_names: Vec<String>,
     width: u32,
     height: u32,
     title: String,
 ) -> Result<Scatter, JsValue> {
-    render_scatter_xy_impl(x, y, group, width, height, &title).map_err(|e| JsValue::from_str(&e))
+    render_scatter_xy_impl(x, y, group_idx, group_names, width, height, &title)
+        .map_err(|e| JsValue::from_str(&e))
 }
 
 #[cfg(feature = "canvas")]
 fn render_scatter_xy_impl(
     x: &[f64],
     y: &[f64],
-    group: Vec<String>,
+    group_idx: &[u32],
+    group_names: Vec<String>,
     width: u32,
     height: u32,
     title: &str,
@@ -268,9 +272,13 @@ fn render_scatter_xy_impl(
         ),
     ];
     let mut aes = Aes::new().x("x").y("y");
-    let has_group = group.len() == n;
+    let has_group = !group_names.is_empty() && group_idx.len() >= n;
     if has_group {
-        cols.push(("g".to_string(), group.into_iter().map(Value::Str).collect()));
+        let col = group_idx[..n]
+            .iter()
+            .map(|&i| Value::Str(group_names.get(i as usize).cloned().unwrap_or_default()))
+            .collect();
+        cols.push(("g".to_string(), col));
         aes = aes.color("g");
     }
     let mut plot = GGPlot::new(cols)
