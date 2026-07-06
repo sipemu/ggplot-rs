@@ -13,16 +13,33 @@ use crate::position::Position;
 use crate::render::backend::{DrawBackend, LineStyle, Linetype, PointShape, PointStyle, RectStyle};
 use crate::render::RenderError;
 use crate::scale::ScaleSet;
-use crate::spatial::{parse_wkt, Geometry};
+use crate::spatial::{parse_wkt, Geometry, SfProjection};
 use crate::stat::Stat;
 use crate::theme::Theme;
 
 use super::{Geom, GeomParams};
 
+/// Bounding box of a geometry after applying `proj` to every coordinate.
+fn projected_bounds(g: &Geometry, proj: SfProjection) -> Option<(f64, f64, f64, f64)> {
+    let mut b: Option<(f64, f64, f64, f64)> = None;
+    g.for_each_coord(&mut |c| {
+        let [x, y] = proj.project(c);
+        b = Some(match b {
+            None => (x, y, x, y),
+            Some((mnx, mny, mxx, mxy)) => (mnx.min(x), mny.min(y), mxx.max(x), mxy.max(y)),
+        });
+    });
+    b
+}
+
 /// Stat for `geom_sf`: parse the WKT `geometry` column and append per-feature
-/// bounding-box columns (`xmin`/`xmax`/`ymin`/`ymax`) so the X/Y scales train
-/// over the geometry extent, keeping every original column for drawing.
-pub struct StatSf;
+/// bounding-box columns (`xmin`/`xmax`/`ymin`/`ymax`) — in projected map units —
+/// so the X/Y scales train over the extent, keeping every original column for
+/// drawing.
+#[derive(Default)]
+pub struct StatSf {
+    pub projection: SfProjection,
+}
 
 impl Stat for StatSf {
     fn compute_group(&self, data: &DataFrame, _scales: &ScaleSet) -> DataFrame {
@@ -35,7 +52,7 @@ impl Stat for StatSf {
         let (mut ymin, mut ymax) = (Vec::with_capacity(n), Vec::with_capacity(n));
         for v in geom.iter() {
             let bounds = match v {
-                Value::Str(s) => parse_wkt(s).and_then(|g| g.bounds()),
+                Value::Str(s) => parse_wkt(s).and_then(|g| projected_bounds(&g, self.projection)),
                 _ => None,
             };
             match bounds {
@@ -80,6 +97,8 @@ pub struct GeomSf {
     pub alpha: f64,
     pub line_width: f64,
     pub point_size: f64,
+    /// Map projection applied to lon/lat before scaling (default: none).
+    pub projection: SfProjection,
 }
 
 impl Default for GeomSf {
@@ -90,11 +109,18 @@ impl Default for GeomSf {
             alpha: 0.85,
             line_width: 0.5,
             point_size: 3.0,
+            projection: SfProjection::default(),
         }
     }
 }
 
 impl GeomSf {
+    /// Set the map projection applied to lon/lat coordinates.
+    pub fn project(mut self, projection: SfProjection) -> Self {
+        self.projection = projection;
+        self
+    }
+
     fn draw_geometry(
         &self,
         g: &Geometry,
@@ -229,7 +255,8 @@ impl Geom for GeomSf {
         let plot_area = backend.plot_area();
         let x_scale = scales.get(&Aesthetic::X);
         let y_scale = scales.get(&Aesthetic::Y);
-        let project = |[x, y]: [f64; 2]| {
+        let project = |c: [f64; 2]| {
+            let [x, y] = self.projection.project(c);
             let vx = Value::Float(x);
             let vy = Value::Float(y);
             let nx = x_scale.map(|s| s.map(&vx)).unwrap_or(0.0);
@@ -259,7 +286,9 @@ impl Geom for GeomSf {
     }
 
     fn default_stat(&self) -> Box<dyn Stat> {
-        Box::new(StatSf)
+        Box::new(StatSf {
+            projection: self.projection,
+        })
     }
 
     fn default_position(&self) -> Box<dyn Position> {
