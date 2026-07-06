@@ -150,6 +150,7 @@ async function quakeDemo({ db, conn }) {
   const eq = document.getElementById("eqplot");
   eq.innerHTML = render_geo(JSON.stringify({
     geometry: rows.map((r) => r.geometry),
+    base: allRows.length ? allRows.map((r) => r.geometry) : undefined, // country basemap
     fill: rows.map((r) => Number(r.mag)),
     label: rows.map((r) => r.place),
     width: 960, height: 480,

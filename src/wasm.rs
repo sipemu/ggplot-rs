@@ -65,8 +65,23 @@ fn render_geo_impl(spec_json: &str) -> Result<String, String> {
         _ => SfProjection::PlateCarree,
     };
 
-    let mut plot = GGPlot::new(cols)
-        .aes(aes)
+    let mut builder = GGPlot::new(cols).aes(aes);
+    // Optional gray basemap (e.g. country outlines) drawn behind the geometry
+    // for geographic context — a separate no-fill layer sharing the scales.
+    if let Some(base) = v.get("base").and_then(|b| b.as_array()) {
+        let base_geo: Vec<Value> = base
+            .iter()
+            .map(|g| Value::Str(g.as_str().unwrap_or_default().to_string()))
+            .collect();
+        let mut base_geom = GeomSf::default().project(projection);
+        base_geom.fill = (228, 230, 233);
+        base_geom.color = (198, 201, 206);
+        builder = builder
+            .geom_sf_with(base_geom)
+            .layer_data(vec![("geometry".to_string(), base_geo)])
+            .layer_aes(Aes::new());
+    }
+    let mut plot = builder
         .geom_sf_with(GeomSf::default().project(projection))
         .coord_sf()
         .theme(theme_minimal());
@@ -277,31 +292,50 @@ fn render_scatter_xy_impl(
     let (xe0, xe1) = expand(&x[..n]);
     let (ye0, ye1) = expand(&y[..n]);
 
+    // Draw the unselected points first and the brushed subset last, so the
+    // selection sits crisp on top of the faded rest.
+    let has_sel = selected.len() >= n;
+    let order: Vec<usize> = if has_sel {
+        let mut o: Vec<usize> = (0..n).filter(|&i| selected[i] == 0).collect();
+        o.extend((0..n).filter(|&i| selected[i] != 0));
+        o
+    } else {
+        (0..n).collect()
+    };
+
     let mut cols: Vec<(String, Vec<Value>)> = vec![
         (
             "x".to_string(),
-            x[..n].iter().map(|v| Value::Float(*v)).collect(),
+            order.iter().map(|&i| Value::Float(x[i])).collect(),
         ),
         (
             "y".to_string(),
-            y[..n].iter().map(|v| Value::Float(*v)).collect(),
+            order.iter().map(|&i| Value::Float(y[i])).collect(),
         ),
     ];
     let mut aes = Aes::new().x("x").y("y");
     let has_group = !group_names.is_empty() && group_idx.len() >= n;
     if has_group {
-        let col = group_idx[..n]
+        let col = order
             .iter()
-            .map(|&i| Value::Str(group_names.get(i as usize).cloned().unwrap_or_default()))
+            .map(|&i| {
+                Value::Str(
+                    group_names
+                        .get(group_idx[i] as usize)
+                        .cloned()
+                        .unwrap_or_default(),
+                )
+            })
             .collect();
         cols.push(("g".to_string(), col));
         aes = aes.color("g");
     }
-    // An unmapped `alpha` column is read per-point by geom_point (raw value),
-    // so a brushed subset stays opaque while the rest fades.
-    if selected.len() >= n {
-        let alpha = (0..n)
-            .map(|i| Value::Float(if selected[i] != 0 { 1.0 } else { 0.10 }))
+    // Per-point alpha (geom_point reads a raw `alpha` column): the brushed
+    // subset stays fully opaque, the rest fade to a faint fog.
+    if has_sel {
+        let alpha = order
+            .iter()
+            .map(|&i| Value::Float(if selected[i] != 0 { 1.0 } else { 0.05 }))
             .collect();
         cols.push(("alpha".to_string(), alpha));
     }
