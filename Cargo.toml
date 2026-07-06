@@ -62,6 +62,8 @@ toml = { version = "0.8", optional = true }
 serde_json = { version = "1", optional = true }
 # Browser bindings (`wasm` feature): expose plotting to JavaScript.
 wasm-bindgen = { version = "0.2", optional = true }
+# Pure-Rust glyph rasterisation for the `canvas` (raster) backend.
+ab_glyph = { version = "0.2", optional = true }
 
 # On wasm, rand's RNG seeding needs the browser crypto API (getrandom `js`).
 # Enables browser builds; ignored on every other target.
@@ -80,6 +82,9 @@ arrow = ["dep:arrow"]
 regression = ["dep:anofox-regression", "dep:faer"]
 # Serde-deserialisable theme config (theme::config::ThemeConfig).
 serde = ["dep:serde"]
+# Raster (canvas) backend: a self-contained RGBA rasteriser for large-N — fast,
+# wasm-compatible, no DOM. Renders to a pixel buffer / PNG.
+canvas = ["dep:ab_glyph"]
 # Spatial layer: geom_sf over simple-features geometry (self-contained WKT
 # parser — no extra dependencies).
 sf = []

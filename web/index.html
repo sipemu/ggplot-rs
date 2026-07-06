@@ -24,6 +24,16 @@
     countries from a CDN and <code>ST_AsText</code>s the geometry to WKT; ggplot-rs
     (compiled to WASM) renders the SVG. Hover a country for its name + value.
   </p>
+
+  <h2 style="font-size:1rem;margin-top:2rem">Large-N scatter (raster canvas backend)</h2>
+  <p id="status2" style="color:#666;font-size:0.9rem">…</p>
+  <canvas id="scatter" width="720" height="480" style="max-width:100%;border:1px solid #eee"></canvas>
+  <p style="color:#888;font-size:0.85rem">
+    100k points rendered to an RGBA buffer by the pure-Rust <code>PixelBackend</code>
+    (no DOM node per point) and blitted with <code>putImageData</code> — where SVG
+    would grind to a halt.
+  </p>
+
   <script type="module" src="./main.js"></script>
 </body>
 </html>
