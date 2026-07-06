@@ -56,8 +56,10 @@ jobs:
       - name: Clippy (sf)
         run: cargo clippy --all-targets --no-default-features --features sf -- -D warnings
 
+      # Target the lib (spatial unit tests) + the sf integration test only:
+      # skips the polars-using doctests and trims the link footprint.
       - name: Tests (sf)
-        run: cargo test --no-default-features --features sf
+        run: cargo test --no-default-features --features sf --lib --test sf
 
       - name: Build examples
         run: cargo build --examples
