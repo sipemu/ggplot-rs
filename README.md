@@ -306,6 +306,24 @@ Flags: `--x/--y/--color/--fill/--size/--shape/--group`, `--geom`, `--facet-wrap/
 `--log-x/--log-y/--flip`, `--title/--subtitle/--xlab/--ylab/--caption`, `-o FILE`/`--stdout`,
 `--width/--height`. Run `--describe` to list a source's columns and types.
 
+**Maps from the CLI (`--spatial`, `--geom sf`).** DuckDB's
+[`spatial`](https://duckdb.org/docs/extensions/spatial) extension reads
+**shapefiles**, GeoJSON, GeoPackage, FlatGeobuf and more (via GDAL). Pass
+`--spatial` to load it, then `ST_AsText(geom)` any geometry into a `geometry`
+column and plot it with `--geom sf`:
+
+```sh
+ggplot-rs --spatial \
+  --sql "SELECT ST_AsText(geom) AS geometry, name, pop_est
+         FROM ST_Read('ne_110m_admin_0_countries.shp')" \
+  --geom sf --fill pop_est --projection mercator --theme void -o world.png
+```
+
+`ST_Read` handles the file format; `ST_AsText` produces WKT that `geom_sf`
+consumes; `--projection mercator` and an equal-aspect `coord_sf` are applied
+automatically. Any SQL works, so you can join, filter, or aggregate spatial and
+tabular data in the same query before plotting.
+
 **Theming from the CLI:** `--theme <preset>` (gray/bw/minimal/…), `--palette <name>`
 (Set1/Dark2/viridis/RdBu/…), `--primary "r,g,b"` (brand color), and `--theme-config <file>`
 — a TOML/JSON file of element overrides for full custom theming:

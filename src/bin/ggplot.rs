@@ -32,6 +32,10 @@ struct Args {
     /// DuckDB database file to attach (default: in-memory).
     #[arg(long, value_name = "PATH")]
     db: Option<String>,
+    /// Load the DuckDB `spatial` extension, enabling `ST_Read(...)` (shapefiles,
+    /// GeoJSON, GeoPackage, …) and `ST_AsText(geom)` in `--sql`.
+    #[arg(long)]
+    spatial: bool,
 
     // ─── discovery ────────────────────────────────────────────────
     /// Print the input's columns, inferred types, and row count, then exit.
@@ -58,9 +62,12 @@ struct Args {
     label: Option<String>,
 
     /// Geometry: point, line, bar, col, histogram, boxplot, violin, density,
-    /// area, smooth, step, path, tile, jitter, freqpoly.
+    /// area, smooth, step, path, tile, jitter, freqpoly, sf.
     #[arg(long, default_value = "point")]
     geom: String,
+    /// Map projection for `--geom sf`: `mercator` or `platecarree` (default).
+    #[arg(long, value_name = "NAME")]
+    projection: Option<String>,
 
     // ─── facets ───────────────────────────────────────────────────
     /// Facet into small multiples by this column (facet_wrap).
@@ -131,7 +138,7 @@ fn run() -> Result<(), String> {
     // 1. Load data via DuckDB.
     let query = load::resolve_query(&args.sql, &args.parquet, &args.csv)
         .ok_or("provide one of --sql, --parquet, or --csv")?;
-    let columns = load::load(&args.db, &query)?;
+    let columns = load::load(&args.db, &query, args.spatial)?;
 
     // 2. Discovery mode: describe the schema and exit.
     if args.describe {
@@ -221,8 +228,23 @@ fn build_plot(args: &Args, columns: Vec<(String, Vec<Value>)>) -> Result<GGPlot,
         "tile" => plot.geom_tile(),
         "jitter" => plot.geom_jitter(),
         "freqpoly" => plot.geom_freqpoly(),
+        "sf" => {
+            let projection = match args.projection.as_deref() {
+                Some("mercator") => ggplot_rs::spatial::SfProjection::Mercator,
+                None | Some("platecarree") | Some("plate") => {
+                    ggplot_rs::spatial::SfProjection::PlateCarree
+                }
+                Some(other) => return Err(format!("unknown --projection '{other}'")),
+            };
+            plot.geom_sf_with(ggplot_rs::geom::sf::GeomSf::default().project(projection))
+        }
         other => return Err(format!("unknown --geom '{other}'")),
     };
+
+    // A map keeps its shape under an equal-aspect spatial coord.
+    if args.geom == "sf" && !args.flip {
+        plot = plot.coord_sf();
+    }
 
     // Facets.
     if let Some(col) = &args.facet_wrap {
