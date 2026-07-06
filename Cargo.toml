@@ -71,6 +71,8 @@ serde = ["dep:serde"]
 # Spatial layer: geom_sf over simple-features geometry (self-contained WKT
 # parser — no extra dependencies).
 sf = []
+# Read GeoJSON into a plot-ready frame (geometry + properties). Adds serde_json.
+geojson = ["sf", "dep:serde_json"]
 # `ggplot-rs` command-line tool: plot parquet files and DuckDB SQL from the shell.
 cli = ["dep:clap", "dep:duckdb", "serde", "dep:toml", "dep:serde_json"]
 
