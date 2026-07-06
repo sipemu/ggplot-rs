@@ -364,6 +364,34 @@ y = 0.9
 teaches an agent the describe-then-map-then-render workflow, so "plot this parquet"
 just works.
 
+## In the browser (WASM)
+
+The `wasm` feature exposes a plotters-free renderer to JavaScript. It compiles to
+`wasm32` and uses the self-contained [`SvgBackend`](#rendering), so the bundle is
+small (~310 KB `.wasm`, no polars, no fonts — text is `<text>` the browser draws):
+
+```sh
+wasm-pack build --target web --out-dir web/pkg --no-default-features --features wasm
+```
+
+```js
+import init, { render_geo } from "./pkg/ggplot_rs.js";
+await init();
+document.getElementById("plot").innerHTML = render_geo(JSON.stringify({
+  geometry: [...wkt], fill: [...nums], label: [...names], projection: "mercator",
+}));
+```
+
+Every mark is a real DOM element, so **hover works out of the box** — each feature
+carries a `<title>` tooltip (from a `label` mapping + the fill value), plus CSS
+`:hover` for highlight.
+
+Pair it with **[DuckDB-Wasm](https://github.com/duckdb/duckdb-wasm)** (which loads
+the same `spatial` extension) to read shapefiles/GeoJSON and `ST_AsText` them to
+WKT entirely client-side. For large data, aggregate in DuckDB (`GROUP BY`,
+hex-bins, sampling) and render the summary — SVG stays light. See
+[`web/`](web/) for a runnable demo.
+
 ## Data Input
 
 `GGPlot::new` accepts anything implementing the `GGData` trait. Nothing here
@@ -477,6 +505,7 @@ GGPlot::new(data)
 | `serde`      |   no    | `theme::config::ThemeConfig` — a serde-deserialisable partial theme overlay (TOML/JSON) |
 | `sf`         |   no    | `geom_sf` / `coord_sf` — render simple-features (WKT) geometry with projections; no extra deps |
 | `geojson`    |   no    | read GeoJSON into a plot-ready frame (`spatial::geojson`); adds `serde_json` |
+| `wasm`       |   no    | browser bindings (`wasm::render_geo` → SVG w/ hover) via the plotters-free SVG backend |
 | `cli`        |   no    | the `ggplot-rs` command-line tool (parquet/CSV/DuckDB → SVG/PNG), via clap + bundled DuckDB |
 
 To skip the heavy polars dependency (e.g. an Arrow-only service), disable defaults:

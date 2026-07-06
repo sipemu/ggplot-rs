@@ -128,3 +128,24 @@ fn coord_sf_renders_projected_map() {
         .expect("mercator + coord_sf render");
     assert!(svg.contains("<polygon") || svg.contains("<path"));
 }
+
+#[test]
+fn hover_tooltip_emitted_as_title() {
+    let mut df = DataFrame::new();
+    df.add_column(
+        "geometry".into(),
+        strs(&["POLYGON ((0 0, 2 0, 2 2, 0 2, 0 0))"]),
+    );
+    df.add_column("name".into(), strs(&["Region A"]));
+    df.add_column("pop".into(), vec![Value::Float(12.0)]);
+    let svg = GGPlot::new(df)
+        .aes(Aes::new().fill("pop").label("name"))
+        .geom_sf()
+        .scale_fill_viridis_c()
+        .render_svg_native()
+        .unwrap();
+    assert!(
+        svg.contains("<title>Region A: 12</title>"),
+        "tooltip in: {svg}"
+    );
+}

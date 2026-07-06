@@ -14,6 +14,7 @@ pub struct SvgBackend {
     plot_area: Rect,
     total_area: Rect,
     body: String,
+    tooltip: Option<String>,
 }
 
 impl SvgBackend {
@@ -27,7 +28,18 @@ impl SvgBackend {
                 height: height as f64,
             },
             body: String::new(),
+            tooltip: None,
         }
+    }
+
+    /// Emit `<tag attrs/>`, or `<tag attrs><title>tip</title></tag>` when a
+    /// tooltip is set (native SVG hover).
+    fn push_mark(&mut self, tag: &str, attrs: &str) {
+        let mark = match &self.tooltip {
+            Some(t) => format!("<{tag} {attrs}><title>{}</title></{tag}>", escape(t)),
+            None => format!("<{tag} {attrs}/>"),
+        };
+        self.body.push_str(&mark);
     }
 
     /// Wrap the accumulated elements in a complete `<svg>` document.
@@ -65,16 +77,22 @@ impl DrawBackend for SvgBackend {
         self.total_area.clone()
     }
 
+    fn set_tooltip(&mut self, tooltip: Option<String>) {
+        self.tooltip = tooltip;
+    }
+
     fn draw_circle(
         &mut self,
         (cx, cy): (f64, f64),
         radius: f64,
         style: &PointStyle,
     ) -> Result<(), RenderError> {
-        self.body.push_str(&format!(
-            "<circle cx=\"{cx:.2}\" cy=\"{cy:.2}\" r=\"{radius:.2}\" fill=\"{}\" fill-opacity=\"{:.3}\"/>",
-            rgb(style.color), style.alpha
-        ));
+        let attrs = format!(
+            "cx=\"{cx:.2}\" cy=\"{cy:.2}\" r=\"{radius:.2}\" fill=\"{}\" fill-opacity=\"{:.3}\"",
+            rgb(style.color),
+            style.alpha
+        );
+        self.push_mark("circle", &attrs);
         Ok(())
     }
 
@@ -91,10 +109,11 @@ impl DrawBackend for SvgBackend {
             s if s.is_empty() => String::new(),
             s => format!(" stroke-dasharray=\"{s}\""),
         };
-        self.body.push_str(&format!(
-            "<polyline points=\"{}\" fill=\"none\" stroke=\"{}\" stroke-width=\"{:.2}\" stroke-opacity=\"{:.3}\"{}/>",
+        let attrs = format!(
+            "points=\"{}\" fill=\"none\" stroke=\"{}\" stroke-width=\"{:.2}\" stroke-opacity=\"{:.3}\"{}",
             points(pts), rgb(style.color), style.width, style.alpha, dash
-        ));
+        );
+        self.push_mark("polyline", &attrs);
         Ok(())
     }
 
@@ -108,21 +127,23 @@ impl DrawBackend for SvgBackend {
         let (w, h) = ((x1 - x0).abs(), (y1 - y0).abs());
         let fill = style.fill.map(rgb).unwrap_or_else(|| "none".into());
         let stroke = style.stroke.map(rgb).unwrap_or_else(|| "none".into());
-        self.body.push_str(&format!(
-            "<rect x=\"{x:.2}\" y=\"{y:.2}\" width=\"{w:.2}\" height=\"{h:.2}\" fill=\"{fill}\" \
-             fill-opacity=\"{:.3}\" stroke=\"{stroke}\" stroke-width=\"{:.2}\"/>",
+        let attrs = format!(
+            "x=\"{x:.2}\" y=\"{y:.2}\" width=\"{w:.2}\" height=\"{h:.2}\" fill=\"{fill}\" \
+             fill-opacity=\"{:.3}\" stroke=\"{stroke}\" stroke-width=\"{:.2}\"",
             style.alpha, style.stroke_width
-        ));
+        );
+        self.push_mark("rect", &attrs);
         Ok(())
     }
 
     fn draw_polygon(&mut self, pts: &[(f64, f64)], style: &RectStyle) -> Result<(), RenderError> {
         let fill = style.fill.map(rgb).unwrap_or_else(|| "none".into());
         let stroke = style.stroke.map(rgb).unwrap_or_else(|| "none".into());
-        self.body.push_str(&format!(
-            "<polygon points=\"{}\" fill=\"{fill}\" fill-opacity=\"{:.3}\" stroke=\"{stroke}\" stroke-width=\"{:.2}\"/>",
+        let attrs = format!(
+            "points=\"{}\" fill=\"{fill}\" fill-opacity=\"{:.3}\" stroke=\"{stroke}\" stroke-width=\"{:.2}\"",
             points(pts), style.alpha, style.stroke_width
-        ));
+        );
+        self.push_mark("polygon", &attrs);
         Ok(())
     }
 
