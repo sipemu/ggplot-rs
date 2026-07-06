@@ -50,6 +50,21 @@
       white-space: nowrap;
     }
     .tip.on { opacity: 1; }
+    .btn {
+      font: inherit; font-size: .8rem; color: var(--ink); background: var(--card);
+      border: 1px solid var(--line); border-radius: 8px; padding: .15rem .55rem;
+      cursor: pointer; vertical-align: 2px; margin-left: .5rem;
+    }
+    .btn:hover { border-color: var(--accent); color: var(--accent); }
+    .linked { display: flex; gap: 1rem; flex-wrap: wrap; align-items: flex-start; }
+    .linked .viz:first-child { flex: 1 1 460px; }
+    #scatterbar { flex: 0 0 300px; }
+    #scatterbar svg { max-width: 100%; height: auto; }
+    /* Brush rectangle overlaid on the scatter canvas. */
+    #brush {
+      position: absolute; border: 1px solid var(--accent);
+      background: rgba(43,122,75,.12); pointer-events: none; display: none;
+    }
     footer { color: var(--muted); font-size: .8rem; margin-top: 2.5rem; text-align: center; }
     code { background: #eef0f3; padding: .05em .35em; border-radius: 4px; font-size: .9em; }
   </style>
@@ -71,24 +86,31 @@
     </header>
 
     <section class="card">
-      <h2>World choropleth · <code>geom_sf</code></h2>
+      <h2>World choropleth · <code>geom_sf</code>
+        <button id="reset" class="btn" style="display:none">⟳ World</button></h2>
       <p class="sub">
         DuckDB reads Natural Earth countries and <code>ST_AsText</code>s the
-        geometry to WKT; ggplot-rs renders an SVG. Hover a country.
+        geometry to WKT; ggplot-rs renders an SVG. Hover a country — or
+        <strong>click one to zoom to its continent</strong> (DuckDB re-queries,
+        ggplot-rs re-renders).
       </p>
       <p id="status" class="status busy">loading…</p>
       <div id="plot" class="viz"></div>
     </section>
 
     <section class="card">
-      <h2>Large-N scatter · raster canvas backend</h2>
+      <h2>Linked views · brush ↔ bar</h2>
       <p class="sub">
-        100k points rasterised to a pixel buffer in pure Rust (no DOM node per
-        point) and blitted with <code>putImageData</code> — with nearest-point
-        hover. Where an SVG of 100k marks would grind to a halt.
+        A 100k-point scatter drawn by the raster backend (no DOM node per point)
+        with nearest-point hover. <strong>Drag a box</strong> to brush — the
+        ggplot-rs bar chart on the right updates with the per-group counts inside
+        your selection. Two ggplot-rs plots, linked.
       </p>
       <p id="status2" class="status busy">…</p>
-      <div class="viz"><canvas id="scatter" width="960" height="560"></canvas></div>
+      <div class="linked">
+        <div class="viz"><canvas id="scatter" width="720" height="520"></canvas><div id="brush"></div></div>
+        <div id="scatterbar" class="viz"></div>
+      </div>
     </section>
 
     <footer>Built with ggplot-rs · SVG (hover) + raster (large-N) backends, no server.</footer>
