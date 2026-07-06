@@ -99,12 +99,24 @@
     </section>
 
     <section class="card">
+      <h2>Earthquakes, past 30 days · live USGS feed</h2>
+      <p class="sub">
+        DuckDB reads the <a href="https://earthquake.usgs.gov/earthquakes/feed/">USGS
+        GeoJSON feed</a> and <code>ST_AsText</code>s each quake to WKT; ggplot-rs
+        colours the points by magnitude. The pattern traces the tectonic plate
+        boundaries. Hover for the location + magnitude.
+      </p>
+      <p id="status3" class="status busy">…</p>
+      <div id="eqplot" class="viz"></div>
+    </section>
+
+    <section class="card">
       <h2>Linked views · brush ↔ bar</h2>
       <p class="sub">
         A 100k-point scatter drawn by the raster backend (no DOM node per point)
         with nearest-point hover. <strong>Drag a box</strong> to brush — the
-        ggplot-rs bar chart on the right updates with the per-group counts inside
-        your selection. Two ggplot-rs plots, linked.
+        selected points stay bright while the rest fade, and the ggplot-rs bar
+        chart on the right updates with the per-group counts in your selection.
       </p>
       <p id="status2" class="status busy">…</p>
       <div class="linked">

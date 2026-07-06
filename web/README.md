@@ -9,9 +9,13 @@ extension + ggplot-rs compiled to WebAssembly):
    `ST_AsText`s the geometry to WKT; ggplot-rs renders an SVG. Hover for a
    country's population; **click a country to re-query DuckDB and zoom to its
    continent** (⟳ World resets).
-2. **Linked views** — a 100k-point scatter drawn by the raster (`canvas`)
-   backend; **drag to brush** and a ggplot-rs bar chart updates live with the
-   per-group counts inside your selection. Two ggplot-rs plots, linked in JS.
+2. **Live earthquakes** — DuckDB reads the USGS *past-30-days* GeoJSON feed and
+   ggplot-rs colours the quakes by magnitude; the points trace the tectonic
+   plate boundaries.
+3. **Linked views** — a 100k-point scatter drawn by the raster (`canvas`)
+   backend; **drag to brush** — the selected points stay bright while the rest
+   fade, and a ggplot-rs bar chart updates with the per-group counts in your
+   selection. Two ggplot-rs plots, linked in JS.
 
 ![World choropleth](../assets/gallery/world.png)
 

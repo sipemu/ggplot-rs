@@ -1,7 +1,6 @@
-// DuckDB-Wasm (spatial) → WKT → ggplot-rs (WASM). Two interactive dashboards.
-// The scatter needs no DuckDB, so it runs first and proves the wasm renderer;
-// the map (which needs DuckDB) runs independently, so a failure in one is
-// isolated and reported in place.
+// DuckDB-Wasm (spatial) → WKT → ggplot-rs (WASM). Each panel is fail-isolated
+// (the scatter needs no DuckDB and runs first), so one failure is reported in
+// place rather than blanking the page.
 //
 // Build:  wasm-pack build --target web --out-dir web/pkg --no-default-features --features wasm,canvas
 
@@ -45,7 +44,6 @@ async function main() {
   set("status2", "initialising…", true);
   await init();
 
-  // 1. Scatter first — pure ggplot-rs, no data source.
   try {
     scatterDemo();
   } catch (e) {
@@ -53,20 +51,21 @@ async function main() {
     set("status2", "scatter error: " + (e.message || e));
   }
 
-  // 2. Map — needs DuckDB-Wasm + the spatial extension.
+  let duck = null;
   try {
-    await mapDemo();
+    duck = await setupDuck();
   } catch (e) {
-    console.error("map:", e);
-    set("status", "map error: " + (e.message || e));
+    console.error("duckdb:", e);
+    set("status", "DuckDB error: " + (e.message || e));
+    set("status3", "DuckDB unavailable");
+  }
+  if (duck) {
+    try { await mapDemo(duck); } catch (e) { console.error("map:", e); set("status", "map error: " + (e.message || e)); }
+    try { await quakeDemo(duck); } catch (e) { console.error("quakes:", e); set("status3", "earthquakes error: " + (e.message || e)); }
   }
 }
 
-// ── Map: DuckDB spatial → choropleth, click a country to drill into continent ─
-let allRows = [];
-const nameToContinent = {};
-
-async function mapDemo() {
+async function setupDuck() {
   set("status", "starting DuckDB-Wasm…", true);
   const bundle = await duckdb.selectBundle(duckdb.getJsDelivrBundles());
   const workerUrl = URL.createObjectURL(
@@ -77,17 +76,24 @@ async function mapDemo() {
   await db.instantiate(bundle.mainModule, bundle.pthreadWorker);
   URL.revokeObjectURL(workerUrl);
   const conn = await db.connect();
-
   set("status", "loading the spatial extension…", true);
   await conn.query("INSTALL spatial; LOAD spatial;");
+  return { db, conn };
+}
 
-  // Fetch the GeoJSON bytes and hand them to DuckDB (more robust for ST_Read
-  // than a lazy HTTP file).
-  set("status", "downloading Natural Earth countries…", true);
-  const url =
-    "https://cdn.jsdelivr.net/gh/nvkelso/natural-earth-vector@master/geojson/ne_110m_admin_0_countries.geojson";
+const registerUrl = async (db, name, url) => {
   const bytes = new Uint8Array(await (await fetch(url)).arrayBuffer());
-  await db.registerFileBuffer("countries.geojson", bytes);
+  await db.registerFileBuffer(name, bytes);
+};
+
+// ── Choropleth with continent drill-down ──────────────────────────────────
+let allRows = [];
+const nameToContinent = {};
+
+async function mapDemo({ db, conn }) {
+  set("status", "downloading Natural Earth countries…", true);
+  await registerUrl(db, "countries.geojson",
+    "https://cdn.jsdelivr.net/gh/nvkelso/natural-earth-vector@master/geojson/ne_110m_admin_0_countries.geojson");
 
   set("status", "reading geometry…", true);
   const sql = `
@@ -119,18 +125,42 @@ async function mapDemo() {
 }
 
 function renderMap(rows, title) {
-  const svg = render_geo(JSON.stringify({
+  const plot = document.getElementById("plot");
+  plot.innerHTML = render_geo(JSON.stringify({
     geometry: rows.map((r) => r.geometry),
     fill: rows.map((r) => Number(r.pop_log)),
     label: rows.map((r) => r.name),
     width: 960, height: 520, title,
   }));
-  const plot = document.getElementById("plot");
-  plot.innerHTML = svg;
   detitle(plot);
 }
 
-// ── Linked views: raster scatter (brush) → ggplot-rs bar (counts) ──────────
+// ── Live USGS earthquakes, coloured by magnitude ──────────────────────────
+async function quakeDemo({ db, conn }) {
+  set("status3", "downloading USGS earthquakes…", true);
+  await registerUrl(db, "quakes.geojson",
+    "https://earthquake.usgs.gov/earthquakes/feed/v1.0/summary/2.5_month.geojson");
+
+  set("status3", "reading geometry…", true);
+  const rows = (await conn.query(
+    `SELECT ST_AsText(geom) AS geometry, mag, place
+     FROM ST_Read('quakes.geojson') WHERE mag IS NOT NULL`,
+  )).toArray().map((r) => r.toJSON());
+
+  const eq = document.getElementById("eqplot");
+  eq.innerHTML = render_geo(JSON.stringify({
+    geometry: rows.map((r) => r.geometry),
+    fill: rows.map((r) => Number(r.mag)),
+    label: rows.map((r) => r.place),
+    width: 960, height: 480,
+    title: `${rows.length} earthquakes (M≥2.5), past 30 days — colour = magnitude`,
+  }));
+  detitle(eq);
+  hoverTips(eq);
+  set("status3", `${rows.length} earthquakes — hover for the location + magnitude.`);
+}
+
+// ── Linked views: raster scatter (brush highlights) → ggplot-rs bar ───────
 function scatterDemo() {
   const n = 100_000;
   const x = new Float64Array(n), y = new Float64Array(n), gidx = new Uint32Array(n);
@@ -146,31 +176,26 @@ function scatterDemo() {
   }
 
   const canvas = document.getElementById("scatter");
-  const t0 = performance.now();
-  const res = render_scatter_xy(x, y, gidx, names, canvas.width, canvas.height, `${n.toLocaleString()} points`);
-  const ms = Math.round(performance.now() - t0);
-  canvas.getContext("2d").putImageData(
-    new ImageData(new Uint8ClampedArray(res.rgba), canvas.width, canvas.height), 0, 0);
-  set("status2", `rendered ${n.toLocaleString()} points in ${ms} ms — hover, or drag to brush.`);
+  const empty = new Uint8Array(0);
+  const blit = (r) => canvas.getContext("2d").putImageData(
+    new ImageData(new Uint8ClampedArray(r.rgba), canvas.width, canvas.height), 0, 0);
+  const draw = (sel) => blit(render_scatter_xy(x, y, gidx, names, sel, canvas.width, canvas.height, `${n} points`));
 
-  const plot = res.plot, xdom = res.xdom, ydom = res.ydom;
-  const px = plot[0], py = plot[1], pw = plot[2], ph = plot[3];
-  const xe0 = xdom[0], xe1 = xdom[1], ye0 = ydom[0], ye1 = ydom[1];
+  const t0 = performance.now();
+  const res = render_scatter_xy(x, y, gidx, names, empty, canvas.width, canvas.height, `${n} points`);
+  blit(res);
+  set("status2", `rendered ${n.toLocaleString()} points in ${Math.round(performance.now() - t0)} ms — hover, or drag to brush.`);
+
+  const [px, py, pw, ph] = res.plot, [xe0, xe1] = res.xdom, [ye0, ye1] = res.ydom;
   const sx = pw / (xe1 - xe0), sy = ph / (ye1 - ye0);
 
-  const counts = (pred) => {
-    const c = { a: 0, b: 0, c: 0 };
-    for (let i = 0; i < n; i++) if (pred(i)) c[names[gidx[i]]]++;
-    return c;
-  };
+  const countAll = () => { const c = { a: 0, b: 0, c: 0 }; for (let i = 0; i < n; i++) c[names[gidx[i]]]++; return c; };
   const renderBar = (c, title) => {
     const el = document.getElementById("scatterbar");
-    el.innerHTML = render_bar(JSON.stringify({
-      category: names, value: names.map((g) => c[g]), width: 300, height: 300, title,
-    }));
+    el.innerHTML = render_bar(JSON.stringify({ category: names, value: names.map((g) => c[g]), width: 300, height: 300, title }));
     detitle(el);
   };
-  renderBar(counts(() => true), `all ${n.toLocaleString()} points`);
+  renderBar(countAll(), `all ${n.toLocaleString()} points`);
   hoverTips(document.getElementById("scatterbar"));
 
   const px2 = (e) => {
@@ -221,13 +246,21 @@ function scatterDemo() {
     const p = px2(e), s = brushing;
     brushing = null;
     brush.style.display = "none";
-    if (Math.abs(p.cx - s.cx) < 5 || Math.abs(p.cy - s.cy) < 5)
-      return renderBar(counts(() => true), `all ${n.toLocaleString()} points`);
+    if (Math.abs(p.cx - s.cx) < 5 || Math.abs(p.cy - s.cy) < 5) {
+      draw(empty);
+      return renderBar(countAll(), `all ${n.toLocaleString()} points`);
+    }
     const toData = (mx, my) => [xe0 + ((mx - px) / pw) * (xe1 - xe0), ye0 + (1 - (my - py) / ph) * (ye1 - ye0)];
     const [ax, ay] = toData(Math.min(s.cx, p.cx), Math.max(s.cy, p.cy));
     const [bx, by] = toData(Math.max(s.cx, p.cx), Math.min(s.cy, p.cy));
-    const c = counts((i) => x[i] >= ax && x[i] <= bx && y[i] >= ay && y[i] <= by);
-    renderBar(c, `${(c.a + c.b + c.c).toLocaleString()} selected`);
+    const sel = new Uint8Array(n);
+    const c = { a: 0, b: 0, c: 0 };
+    let total = 0;
+    for (let i = 0; i < n; i++) {
+      if (x[i] >= ax && x[i] <= bx && y[i] >= ay && y[i] <= by) { sel[i] = 1; c[names[gidx[i]]]++; total++; }
+    }
+    draw(sel); // selected stay bright, the rest fade
+    renderBar(c, `${total.toLocaleString()} selected`);
   });
 }
 
