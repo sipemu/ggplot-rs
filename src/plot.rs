@@ -1453,6 +1453,32 @@ impl GGPlot {
         Ok(backend.finish())
     }
 
+    /// Render to a raw RGBA pixel buffer via the self-contained raster
+    /// [`PixelBackend`](crate::render::pixel_backend::PixelBackend) (feature
+    /// `canvas`) — fast for large-N and wasm-compatible. Returns `(w, h, rgba)`,
+    /// ready for a `<canvas>` `putImageData`.
+    #[cfg(feature = "canvas")]
+    pub fn render_rgba_with_size(self, w: u32, h: u32) -> Result<(u32, u32, Vec<u8>), GGError> {
+        let (built, layout) = self.prepare(w, h)?;
+        let mut backend =
+            crate::render::pixel_backend::PixelBackend::new(w, h, layout.plot_area.clone());
+        PlotRenderer::render(&built, &mut backend).map_err(GGError::Render)?;
+        let (ow, oh) = backend.dimensions();
+        Ok((ow, oh, backend.into_rgba()))
+    }
+
+    /// Render to PNG bytes via the raster [`PixelBackend`](crate::render::pixel_backend::PixelBackend)
+    /// (feature `canvas`). Unlike [`render_png`](Self::render_png) this needs no
+    /// plotters bitmap backend, so it also works on wasm.
+    #[cfg(feature = "canvas")]
+    pub fn render_png_raster_with_size(self, w: u32, h: u32) -> Result<Vec<u8>, GGError> {
+        let (built, layout) = self.prepare(w, h)?;
+        let mut backend =
+            crate::render::pixel_backend::PixelBackend::new(w, h, layout.plot_area.clone());
+        PlotRenderer::render(&built, &mut backend).map_err(GGError::Render)?;
+        backend.into_png().map_err(GGError::Render)
+    }
+
     /// Render the plot to in-memory PNG bytes (default 800x600).
     ///
     /// Returns a fully-encoded PNG, ready to write to an HTTP response or

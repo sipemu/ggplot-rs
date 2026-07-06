@@ -1,9 +1,12 @@
 # ggplot-rs in the browser (WASM) + DuckDB-Wasm spatial
 
+**▶ Live: <https://sipemu.github.io/ggplot-rs/>** (auto-deployed from `main`).
+
 A demo of plotting **spatial data in the browser**: DuckDB-Wasm (with the
 `spatial` extension) reads **Natural Earth** world countries from a CDN and
 `ST_AsText`s the geometry to WKT; ggplot-rs — compiled to WebAssembly — renders
-an interactive world choropleth with **hover tooltips**.
+an interactive world choropleth with **hover tooltips**, plus a **100k-point
+scatter** drawn by the raster (`canvas`) backend via `putImageData`.
 
 ![World choropleth](../assets/gallery/world.png)
 

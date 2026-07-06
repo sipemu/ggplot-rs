@@ -6,9 +6,10 @@
 //   python3 -m http.server -d web 8080   # open http://localhost:8080
 
 import * as duckdb from "https://cdn.jsdelivr.net/npm/@duckdb/duckdb-wasm@1.29.0/+esm";
-import init, { render_geo } from "./pkg/ggplot_rs.js";
+import init, { render_geo, render_scatter_rgba } from "./pkg/ggplot_rs.js";
 
 const status = (msg) => (document.getElementById("status").textContent = msg);
+const status2 = (msg) => (document.getElementById("status2").textContent = msg);
 
 async function main() {
   status("initialising ggplot-rs (wasm)…");
@@ -56,6 +57,36 @@ async function main() {
   status(`rendering ${rows.length} countries…`);
   document.getElementById("plot").innerHTML = render_geo(JSON.stringify(spec));
   status(`done — ${rows.length} countries. Hover one for its name + value.`);
+
+  await scatterDemo();
+}
+
+// Large-N: 100k points → raster backend → putImageData onto a <canvas>.
+async function scatterDemo() {
+  const n = 100_000;
+  const x = new Array(n), y = new Array(n), color = new Array(n);
+  const cx = [-2, 0, 2.5], cy = [0, 2, -1], names = ["a", "b", "c"];
+  status2(`generating ${n.toLocaleString()} points…`);
+  for (let i = 0; i < n; i++) {
+    const k = i % 3;
+    // Box–Muller gaussian
+    const r = Math.sqrt(-2 * Math.log(Math.random() + 1e-9));
+    const t = 2 * Math.PI * Math.random();
+    x[i] = cx[k] + r * Math.cos(t);
+    y[i] = cy[k] + r * Math.sin(t);
+    color[i] = names[k];
+  }
+  const canvas = document.getElementById("scatter");
+  const spec = { x, y, color, width: canvas.width, height: canvas.height,
+                 title: `${n.toLocaleString()} points · raster` };
+
+  const t0 = performance.now();
+  const rgba = render_scatter_rgba(JSON.stringify(spec));
+  const ms = Math.round(performance.now() - t0);
+
+  const img = new ImageData(new Uint8ClampedArray(rgba), canvas.width, canvas.height);
+  canvas.getContext("2d").putImageData(img, 0, 0);
+  status2(`rendered ${n.toLocaleString()} points in ${ms} ms.`);
 }
 
 main().catch((e) => {

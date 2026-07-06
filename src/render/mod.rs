@@ -1,5 +1,8 @@
 pub mod backend;
 pub mod layout;
+// Self-contained RGBA raster backend for large-N (feature `canvas`); wasm-ok.
+#[cfg(feature = "canvas")]
+pub mod pixel_backend;
 // The plotters backend (PNG/bitmap + SVG via plotters) isn't available on wasm
 // (no bitmap/font-registration API there); the browser uses `svg_backend`.
 #[cfg(not(target_arch = "wasm32"))]

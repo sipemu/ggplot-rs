@@ -366,6 +366,10 @@ just works.
 
 ## In the browser (WASM)
 
+**▶ Live demo: <https://sipemu.github.io/ggplot-rs/>** — DuckDB-Wasm reads Natural
+Earth countries into a hover-able choropleth, plus a **100k-point scatter** via the
+raster backend.
+
 The `wasm` feature exposes a plotters-free renderer to JavaScript. It compiles to
 `wasm32` and uses the self-contained [`SvgBackend`](#rendering), so the bundle is
 small (~310 KB `.wasm`, no polars, no fonts — text is `<text>` the browser draws):
@@ -388,9 +392,15 @@ carries a `<title>` tooltip (from a `label` mapping + the fill value), plus CSS
 
 Pair it with **[DuckDB-Wasm](https://github.com/duckdb/duckdb-wasm)** (which loads
 the same `spatial` extension) to read shapefiles/GeoJSON and `ST_AsText` them to
-WKT entirely client-side. For large data, aggregate in DuckDB (`GROUP BY`,
-hex-bins, sampling) and render the summary — SVG stays light. See
-[`web/`](web/) for a runnable demo that fetches Natural Earth countries:
+WKT entirely client-side.
+
+**Large N.** SVG is one DOM node per mark (great to ~10k–50k). For more, the
+`canvas` feature adds a self-contained **RGBA raster backend** (`render_rgba` /
+`render_png_raster`, or `wasm::render_scatter_rgba`) — it rasterises everything in
+pure Rust (text via `ab_glyph`), so it's fast and wasm-compatible: 500k points
+render in a fraction of a second to a bitmap you blit with `putImageData`. (Or
+aggregate in DuckDB — `GROUP BY`, hex-bins, sampling — and render the summary.)
+See [`web/`](web/) for a runnable demo that fetches Natural Earth countries:
 
 <p align="center"><img src="assets/gallery/world.png" width="640" alt="World population choropleth from Natural Earth via DuckDB spatial"></p>
 
@@ -516,6 +526,7 @@ GGPlot::new(data)
 | `serde`      |   no    | `theme::config::ThemeConfig` — a serde-deserialisable partial theme overlay (TOML/JSON) |
 | `sf`         |   no    | `geom_sf` / `coord_sf` — render simple-features (WKT) geometry with projections; no extra deps |
 | `geojson`    |   no    | read GeoJSON into a plot-ready frame (`spatial::geojson`); adds `serde_json` |
+| `canvas`     |   no    | self-contained RGBA raster backend for large-N (`render_rgba`/`render_png_raster`); wasm-ok |
 | `wasm`       |   no    | browser bindings (`wasm::render_geo` → SVG w/ hover) via the plotters-free SVG backend |
 | `cli`        |   no    | the `ggplot-rs` command-line tool (parquet/CSV/DuckDB → SVG/PNG), via clap + bundled DuckDB |
 

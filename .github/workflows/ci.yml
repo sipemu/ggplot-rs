@@ -67,11 +67,17 @@ jobs:
       - name: Tests (geojson)
         run: cargo test --no-default-features --features geojson --lib spatial::geojson
 
+      - name: Clippy (canvas)
+        run: cargo clippy --all-targets --no-default-features --features canvas -- -D warnings
+
+      - name: Tests (canvas)
+        run: cargo test --no-default-features --features canvas --lib --test canvas
+
       - name: Add wasm target
         run: rustup target add wasm32-unknown-unknown
 
-      - name: Build (wasm)
-        run: cargo build --target wasm32-unknown-unknown --no-default-features --features wasm
+      - name: Build (wasm + canvas)
+        run: cargo build --target wasm32-unknown-unknown --no-default-features --features wasm,canvas
 
       - name: Build examples
         run: cargo build --examples
