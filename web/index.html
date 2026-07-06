@@ -20,9 +20,9 @@
   <p id="status">loading…</p>
   <div id="plot"></div>
   <p style="color:#888;font-size:0.85rem">
-    DuckDB-Wasm (with the <code>spatial</code> extension) reads the geometry and
-    <code>ST_AsText</code>s it to WKT; ggplot-rs (compiled to WASM) renders the SVG.
-    Hover a province for its name + value.
+    DuckDB-Wasm (with the <code>spatial</code> extension) reads Natural Earth
+    countries from a CDN and <code>ST_AsText</code>s the geometry to WKT; ggplot-rs
+    (compiled to WASM) renders the SVG. Hover a country for its name + value.
   </p>
   <script type="module" src="./main.js"></script>
 </body>

@@ -1,8 +1,15 @@
 # ggplot-rs in the browser (WASM) + DuckDB-Wasm spatial
 
 A demo of plotting **spatial data in the browser**: DuckDB-Wasm (with the
-`spatial` extension) reads geometry and `ST_AsText`s it to WKT; ggplot-rs —
-compiled to WebAssembly — renders an interactive SVG with **hover tooltips**.
+`spatial` extension) reads **Natural Earth** world countries from a CDN and
+`ST_AsText`s the geometry to WKT; ggplot-rs — compiled to WebAssembly — renders
+an interactive world choropleth with **hover tooltips**.
+
+![World choropleth](../assets/gallery/world.png)
+
+*(The screenshot above is the exact same render, produced natively by the CLI
+from the identical DuckDB query — the browser path is byte-for-byte the same
+`render_svg_native`.)*
 
 ## Build & run
 
