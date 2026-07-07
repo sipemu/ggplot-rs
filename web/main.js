@@ -165,11 +165,11 @@ function galleryDemo() {
   const dayCount = days.map((k) => perDay[k]);
 
   const charts = [
-    ["Magnitude by type · boxplot", { geom: "boxplot", data: { type: tType, mag: tMag }, aes: { x: "type", y: "mag", fill: "type" } }],
+    ["Magnitude by type · boxplot", { geom: "boxplot", data: { type: tType, mag: tMag }, aes: { x: "type", y: "mag", fill: "type" }, legend: false }],
     ["Depth vs magnitude · loess fit", { geom: "point", smooth: 1, method: "loess", data: { depth: dDepth, mag: dMag }, aes: { x: "depth", y: "mag" } }],
     ["Depth vs magnitude · hexbin", { geom: "hex", data: { depth: dDepth, mag: dMag }, aes: { x: "depth", y: "mag" } }],
     ["Magnitude · density", { geom: "density", data: { mag }, aes: { x: "mag" } }],
-    ["Magnitude by type · violin", { geom: "violin", data: { type: tType, mag: tMag }, aes: { x: "type", y: "mag", fill: "type" } }],
+    ["Magnitude by type · violin", { geom: "violin", data: { type: tType, mag: tMag }, aes: { x: "type", y: "mag", fill: "type" }, legend: false }],
     ["Earthquakes per day · area", { geom: "area", data: { day: dayIdx, n: dayCount }, aes: { x: "day", y: "n" } }],
   ];
   // M3 — interactive legend: click a chip to toggle a series (stable colours via
