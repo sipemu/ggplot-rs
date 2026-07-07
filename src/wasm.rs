@@ -418,6 +418,104 @@ fn render_plot_impl(spec_json: &str) -> Result<String, String> {
         .map_err(|e| format!("render failed: {e:?}"))
 }
 
+/// Axes/gridlines frame for a WebGL scatter overlay: the SVG (no marks) plus the
+/// panel rect in pixels and the expanded data domain that maps to the panel edges.
+#[wasm_bindgen]
+pub struct Frame {
+    svg: String,
+    plot: Vec<f64>,
+    xdom: Vec<f64>,
+    ydom: Vec<f64>,
+}
+
+#[wasm_bindgen]
+impl Frame {
+    #[wasm_bindgen(getter)]
+    pub fn svg(&self) -> String {
+        self.svg.clone()
+    }
+    /// Panel rect `[x, y, width, height]` in pixels.
+    #[wasm_bindgen(getter)]
+    pub fn plot(&self) -> Vec<f64> {
+        self.plot.clone()
+    }
+    /// Expanded x range `[min, max]` mapping to the panel's left/right edge.
+    #[wasm_bindgen(getter)]
+    pub fn xdom(&self) -> Vec<f64> {
+        self.xdom.clone()
+    }
+    #[wasm_bindgen(getter)]
+    pub fn ydom(&self) -> Vec<f64> {
+        self.ydom.clone()
+    }
+}
+
+/// Render just the axes/gridlines (no marks, via `geom_blank`) for the given
+/// data ranges, returning the SVG plus the panel rect and expanded domain — the
+/// frame a WebGL/canvas layer draws points onto.
+#[wasm_bindgen]
+#[allow(clippy::too_many_arguments)]
+pub fn scatter_frame(
+    xmin: f64,
+    xmax: f64,
+    ymin: f64,
+    ymax: f64,
+    width: u32,
+    height: u32,
+    title: String,
+) -> Result<Frame, JsValue> {
+    scatter_frame_impl(xmin, xmax, ymin, ymax, width, height, &title)
+        .map_err(|e| JsValue::from_str(&e))
+}
+
+#[allow(clippy::too_many_arguments)]
+fn scatter_frame_impl(
+    xmin: f64,
+    xmax: f64,
+    ymin: f64,
+    ymax: f64,
+    width: u32,
+    height: u32,
+    title: &str,
+) -> Result<Frame, String> {
+    let cols = vec![
+        (
+            "x".to_string(),
+            vec![Value::Float(xmin), Value::Float(xmax)],
+        ),
+        (
+            "y".to_string(),
+            vec![Value::Float(ymin), Value::Float(ymax)],
+        ),
+    ];
+    let mut plot = GGPlot::new(cols)
+        .aes(Aes::new().x("x").y("y"))
+        .geom_blank()
+        .theme_minimal();
+    if !title.is_empty() {
+        plot = plot.title(title);
+    }
+    let (svg, pa) = plot
+        .render_svg_area_with_size(width, height)
+        .map_err(|e| format!("frame render failed: {e:?}"))?;
+    let ex = if (xmax - xmin).abs() < 1e-12 {
+        1.0
+    } else {
+        (xmax - xmin) * 0.05
+    };
+    let ey = if (ymax - ymin).abs() < 1e-12 {
+        1.0
+    } else {
+        (ymax - ymin) * 0.05
+    };
+    Ok(Frame {
+        svg,
+        plot: pa.to_vec(),
+        xdom: vec![xmin - ex, xmax + ex],
+        ydom: vec![ymin - ey, ymax + ey],
+    })
+}
+
 /// Render a large scatter to a raw RGBA buffer via the raster backend — for
 /// point counts where SVG's one-node-per-mark would choke. Wrap the result in
 /// `new ImageData(new Uint8ClampedArray(buf), width, height)` and `putImageData`

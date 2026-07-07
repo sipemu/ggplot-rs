@@ -29,7 +29,7 @@ highlight *generically* instead of via bespoke per-demo code.
 | Legend toggle | ✅ | ✅ | clickable chips; stable colours via `color_levels` |
 | Responsive resize | ✅ | ✅ (maps) | `ResizeObserver` → re-render at container width |
 | Animation / transitions | ✅ | ❌ | hardest for a re-render model |
-| Large-N (WebGL) | ✅ (echarts-gl) | ⚠️ raster | canvas raster covers ~1M; WebGL later |
+| Large-N (WebGL) | ✅ (echarts-gl) | ✅ | 1M points on the GPU; Rust axes frame + JS shader |
 | Toolbox (export/reset) | ✅ | ⚠️ | save-as-SVG/PNG on gallery charts; reset via dbl-click |
 | Declarative `setOption` | ✅ | ⚠️ | per-function JSON specs; unify later |
 

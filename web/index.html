@@ -50,6 +50,8 @@
     #plot svg polygon { transition: stroke-width .06s; }
     #plot svg polygon:hover { stroke: #111; stroke-width: 1.4; cursor: crosshair; }
     #scatter { border: 1px solid var(--line); border-radius: 8px; cursor: crosshair; }
+    #glframe svg { max-width: 100%; height: auto; display: block; }
+    #glcanvas { position: absolute; left: 0; top: 0; cursor: crosshair; }
     #eqplot { cursor: grab; user-select: none; }
     #eqplot:active { cursor: grabbing; }
     #eqplot svg { max-width: 100%; height: auto; display: block; }
@@ -130,6 +132,7 @@
       <button class="tab" data-tab="linked" role="tab">Linked views</button>
       <button class="tab" data-tab="table" role="tab">Data table</button>
       <button class="tab" data-tab="gallery" role="tab">Gallery</button>
+      <button class="tab" data-tab="webgl" role="tab">WebGL · 1M</button>
     </div>
 
     <section class="card tabpanel" id="tab-map" role="tabpanel">
@@ -206,6 +209,21 @@
       <div id="legendchips" class="chips"></div>
       <div id="legendchart" class="viz" style="margin-bottom:1.25rem"></div>
       <div id="gallery" class="gallery"></div>
+    </section>
+
+    <section class="card tabpanel" id="tab-webgl" role="tabpanel" hidden>
+      <h2>A million points · WebGL</h2>
+      <p class="sub">
+        1,000,000 points drawn on the GPU. ggplot-rs renders the axes frame and
+        hands JS the data↔pixel mapping (<code>scatter_frame</code>); a WebGL
+        shader projects and draws every point on a transparent overlay canvas.
+        Hover for the nearest point.
+      </p>
+      <p id="glstatus" class="status busy">…</p>
+      <div id="glwrap" class="viz">
+        <div id="glframe"></div>
+        <canvas id="glcanvas"></canvas>
+      </div>
     </section>
 
     <footer>Built with ggplot-rs · SVG (hover) + raster (large-N) backends, no server.</footer>

@@ -1453,6 +1453,17 @@ impl GGPlot {
         Ok(backend.finish())
     }
 
+    /// Like [`render_svg_native_with_size`](Self::render_svg_native_with_size),
+    /// but also returns the panel rect in pixels `[x, y, w, h]` — enough to
+    /// overlay a WebGL/canvas layer that draws marks in data coordinates.
+    pub fn render_svg_area_with_size(self, w: u32, h: u32) -> Result<(String, [f64; 4]), GGError> {
+        let (built, layout) = self.prepare(w, h)?;
+        let pa = layout.plot_area.clone();
+        let mut backend = crate::render::svg_backend::SvgBackend::new(w, h, pa.clone());
+        PlotRenderer::render(&built, &mut backend).map_err(GGError::Render)?;
+        Ok((backend.finish(), [pa.x, pa.y, pa.width, pa.height]))
+    }
+
     /// Render to a raw RGBA pixel buffer via the self-contained raster
     /// [`PixelBackend`](crate::render::pixel_backend::PixelBackend) (feature
     /// `canvas`) — fast for large-N and wasm-compatible. Returns `(w, h, rgba)`,
