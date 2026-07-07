@@ -354,6 +354,9 @@ fn render_plot_impl(spec_json: &str) -> Result<String, String> {
         "bin2d" => plot.geom_bin2d(),
         "hex" => plot.geom_hex(),
         "tile" => plot.geom_tile(),
+        "density2d" => plot.geom_density2d(),
+        "count" => plot.geom_count(),
+        "rug" => plot.geom_rug(),
         "smooth" => plot.geom_smooth_with(smooth_geom(&v)),
         _ => plot.geom_point(),
     };
@@ -363,6 +366,9 @@ fn render_plot_impl(spec_json: &str) -> Result<String, String> {
 
     if v.get("flip").and_then(|x| x.as_bool()).unwrap_or(false) {
         plot = plot.coord_flip();
+    }
+    if v.get("coord").and_then(|x| x.as_str()) == Some("polar") {
+        plot = plot.coord_polar();
     }
     if v.get("log_y").and_then(|x| x.as_bool()).unwrap_or(false) {
         plot = plot.scale_y_log10();

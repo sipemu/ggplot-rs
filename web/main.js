@@ -212,6 +212,22 @@ function galleryDemo() {
   const dayIdx = days.map((_, i) => i);
   const dayCount = days.map((k) => perDay[k]);
 
+  // hour-of-day (polar rose) + depth×magnitude bands (categorical heatmap)
+  const hourC = new Array(24).fill(0);
+  q.forEach((r) => { hourC[new Date(Number(r.time)).getUTCHours()]++; });
+  const hours = hourC.map((_, i) => String(i));
+  const depthBand = (d) => (d < 70 ? "shallow" : d < 300 ? "intermediate" : "deep");
+  const magBand = (m) => (m < 3 ? "2.5–3" : m < 4 ? "3–4" : m < 5 ? "4–5" : "5+");
+  const cellC = {};
+  withDepth.forEach((r) => {
+    const k = depthBand(Number(r.depth)) + "|" + magBand(Number(r.mag));
+    cellC[k] = (cellC[k] || 0) + 1;
+  });
+  const hmX = [], hmY = [], hmN = [];
+  for (const db of ["shallow", "intermediate", "deep"]) {
+    for (const mb of ["2.5–3", "3–4", "4–5", "5+"]) { hmX.push(db); hmY.push(mb); hmN.push(cellC[db + "|" + mb] || 0); }
+  }
+
   const charts = [
     ["Magnitude by type · boxplot", { geom: "boxplot", data: { type: tType, mag: tMag }, aes: { x: "type", y: "mag", fill: "type" }, legend: false }],
     ["Depth vs magnitude · loess fit", { geom: "point", smooth: 1, method: "loess", data: { depth: dDepth, mag: dMag }, aes: { x: "depth", y: "mag" } }],
@@ -219,6 +235,9 @@ function galleryDemo() {
     ["Magnitude · density", { geom: "density", data: { mag }, aes: { x: "mag" } }],
     ["Magnitude by type · violin", { geom: "violin", data: { type: tType, mag: tMag }, aes: { x: "type", y: "mag", fill: "type" }, legend: false }],
     ["Earthquakes per day · area", { geom: "area", data: { day: dayIdx, n: dayCount }, aes: { x: "day", y: "n" } }],
+    ["Earthquakes per hour (UTC) · polar rose", { geom: "col", coord: "polar", data: { hour: hours, n: hourC }, aes: { x: "hour", y: "n", fill: "hour" }, legend: false }],
+    ["Depth × magnitude bands · heatmap", { geom: "tile", data: { depth: hmX, mag: hmY, n: hmN }, aes: { x: "depth", y: "mag", fill: "n" } }],
+    ["Depth vs magnitude · density contours", { geom: "density2d", data: { depth: dDepth, mag: dMag }, aes: { x: "depth", y: "mag" } }],
   ];
   // M3 — interactive legend: click a chip to toggle a series (stable colours via
   // color_levels; the chart re-renders filtered).
