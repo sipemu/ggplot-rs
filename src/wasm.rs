@@ -313,6 +313,29 @@ fn render_plot_impl(spec_json: &str) -> Result<String, String> {
     let geom = v.get("geom").and_then(|x| x.as_str()).unwrap_or("point");
     let bins = v.get("bins").and_then(|x| x.as_u64()).unwrap_or(30) as usize;
 
+    // Informative hover labels for point-like geoms: "<xname>: <xval>, …" (+group),
+    // read by geom_point as its tooltip.
+    if matches!(geom, "point" | "jitter") && get("label").is_none() {
+        if let (Some(xn), Some(yn)) = (get("x"), get("y")) {
+            let find = |n: &str| cols.iter().find(|(k, _)| k == n).map(|(_, v)| v.clone());
+            if let (Some(xc), Some(yc)) = (find(xn), find(yn)) {
+                let cn = get("color");
+                let cc = cn.and_then(find);
+                let f = crate::geom::tip_value;
+                let label: Vec<Value> = (0..xc.len().min(yc.len()))
+                    .map(|i| {
+                        let base = format!("{xn}: {}, {yn}: {}", f(&xc[i]), f(&yc[i]));
+                        match (cn, &cc) {
+                            (Some(_), Some(cc)) => Value::Str(format!("{} — {base}", f(&cc[i]))),
+                            _ => Value::Str(base),
+                        }
+                    })
+                    .collect();
+                cols.push(("label".to_string(), label));
+            }
+        }
+    }
+
     let mut plot = GGPlot::new(cols).aes(aes);
     plot = match geom {
         "jitter" => plot.geom_jitter(),

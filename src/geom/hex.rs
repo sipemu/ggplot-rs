@@ -79,6 +79,7 @@ impl Geom for GeomHex {
                 .and_then(|fc| scales.map_color(&Aesthetic::Fill, &fc[i]))
                 .unwrap_or((97, 156, 255));
 
+            backend.set_tooltip(fill_col.map(|c| format!("n = {}", super::tip_value(&c[i]))));
             let vertices = Self::hex_vertices(px, py, hex_rx, hex_ry);
 
             backend.draw_polygon(
@@ -92,6 +93,7 @@ impl Geom for GeomHex {
                 },
             )?;
         }
+        backend.set_tooltip(None);
 
         Ok(())
     }

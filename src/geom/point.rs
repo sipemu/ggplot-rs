@@ -48,6 +48,7 @@ impl Geom for GeomPoint {
         let size_col = data.column("size");
         let alpha_col = data.column("alpha");
         let shape_col = data.column("shape");
+        let label_col = data.column("label");
 
         let plot_area = backend.plot_area();
         let x_scale = scales.get(&Aesthetic::X);
@@ -57,6 +58,26 @@ impl Geom for GeomPoint {
             let nx = x_scale.map(|s| s.map(&x_col[i])).unwrap_or(0.0);
             let ny = y_scale.map(|s| s.map(&y_col[i])).unwrap_or(0.0);
             let (px, py) = coord.transform((nx, ny), &plot_area);
+
+            // Hover tooltip: an explicit `label`, else "(x, y)" prefixed by group.
+            let tip = label_col
+                .map(|c| super::tip_value(&c[i]))
+                .filter(|s| !s.is_empty())
+                .or_else(|| {
+                    let xy = format!(
+                        "({}, {})",
+                        super::tip_value(&x_col[i]),
+                        super::tip_value(&y_col[i])
+                    );
+                    match color_col
+                        .map(|c| super::tip_value(&c[i]))
+                        .filter(|s| !s.is_empty())
+                    {
+                        Some(gr) => Some(format!("{gr}: {xy}")),
+                        None => Some(xy),
+                    }
+                });
+            backend.set_tooltip(tip);
 
             let (r, g, b) = if let Some(cc) = color_col {
                 scales
@@ -91,6 +112,7 @@ impl Geom for GeomPoint {
                 },
             )?;
         }
+        backend.set_tooltip(None);
 
         Ok(())
     }

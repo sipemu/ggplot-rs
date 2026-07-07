@@ -99,3 +99,18 @@ pub trait Geom: Send + Sync {
         false
     }
 }
+
+/// Format a value for a hover tooltip — strings verbatim, numbers rounded short,
+/// `Na` empty.
+pub(crate) fn tip_value(v: &crate::data::Value) -> String {
+    use crate::data::Value;
+    match v {
+        Value::Str(s) => s.clone(),
+        Value::Bool(b) => b.to_string(),
+        Value::Na => String::new(),
+        _ => v
+            .as_f64()
+            .map(|f| format!("{}", (f * 1000.0).round() / 1000.0))
+            .unwrap_or_default(),
+    }
+}
