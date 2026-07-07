@@ -6,7 +6,8 @@
 
 import * as duckdb from "https://cdn.jsdelivr.net/npm/@duckdb/duckdb-wasm@1.29.0/+esm";
 import { Grid } from "https://cdn.jsdelivr.net/npm/gridjs/+esm";
-import init, { render_geo, render_bar, render_hist, render_plot, render_scatter_xy, geo_bounds } from "./pkg/ggplot_rs.js";
+import init, { render_geo, render_bar, render_hist, render_plot, render_scatter_xy, geo_bounds, scatter_frame } from "./pkg/ggplot_rs.js";
+import { createGL } from "./gl.js";
 
 const set = (id, msg, busy = false) => {
   const el = document.getElementById(id);
@@ -172,6 +173,13 @@ async function main() {
   } catch (e) {
     console.error("scatter:", e);
     set("status2", "scatter error: " + (e.message || e));
+  }
+
+  try {
+    glDemo();
+  } catch (e) {
+    console.error("webgl:", e);
+    set("glstatus", "WebGL error: " + (e.message || e));
   }
 
   let duck = null;
@@ -546,6 +554,77 @@ function scatterDemo() {
     draw(sel); // selected stay bright, the rest fade
     renderBar(c, `${total.toLocaleString()} selected`);
   });
+}
+
+// ── WebGL: a million-point scatter (GPU). Rust draws the axes frame + gives the
+//    data↔pixel mapping; WebGL projects and draws the points on a transparent
+//    overlay canvas. ────────────────────────────────────────────────────────
+function glDemo() {
+  const N = 1_000_000;
+  const cx = [-3, 0, 3, -1.5, 2], cy = [0, 2.6, 0, -2.6, -1.2];
+  const K = cx.length;
+  const names = ["a", "b", "c", "d", "e"];
+  set("glstatus", `generating ${N.toLocaleString()} points…`, true);
+  const x = new Float32Array(N), y = new Float32Array(N), g = new Float32Array(N);
+  const xy = new Float32Array(N * 2);
+  let x0 = Infinity, x1 = -Infinity, y0 = Infinity, y1 = -Infinity;
+  for (let i = 0; i < N; i++) {
+    const k = i % K;
+    const r = Math.sqrt(-2 * Math.log(Math.random() + 1e-12));
+    const t = 2 * Math.PI * Math.random();
+    const px = cx[k] + r * Math.cos(t), py = cy[k] + r * Math.sin(t);
+    x[i] = px; y[i] = py; g[i] = k;
+    xy[2 * i] = px; xy[2 * i + 1] = py;
+    if (px < x0) x0 = px; if (px > x1) x1 = px;
+    if (py < y0) y0 = py; if (py > y1) y1 = py;
+  }
+
+  const wrap = document.getElementById("glwrap");
+  const holder = document.getElementById("glframe");
+  const canvas = document.getElementById("glcanvas");
+  const glr = createGL(canvas);
+  glr.setData(xy, g);
+
+  let frame = null, drewMs = 0;
+  const render = (W) => {
+    W = Math.max(360, Math.round(W));
+    const H = Math.round(W * 0.6);
+    frame = scatter_frame(x0, x1, y0, y1, W, H, `${N.toLocaleString()} points · WebGL (GPU)`);
+    holder.innerHTML = frame.svg;
+    const dpr = Math.min(window.devicePixelRatio || 1, 2);
+    canvas.style.width = W + "px"; canvas.style.height = H + "px";
+    canvas.width = Math.round(W * dpr); canvas.height = Math.round(H * dpr);
+    const t0 = performance.now();
+    glr.draw({ plot: frame.plot, xdom: frame.xdom, ydom: frame.ydom }, dpr, 2.0);
+    drewMs = performance.now() - t0;
+  };
+  render(wrap.clientWidth || 900);
+  responsive(wrap, render);
+  set("glstatus", `${N.toLocaleString()} points drawn by WebGL in ${Math.max(1, Math.round(drewMs))} ms — hover for the nearest point.`);
+
+  // Hover: invert the cursor pixel → data (current frame) and nearest point.
+  let raf = 0, ev = null;
+  const hover = () => {
+    raf = 0;
+    const e = ev; if (!e || !frame) return;
+    const r = canvas.getBoundingClientRect();
+    const mx = e.clientX - r.left, my = e.clientY - r.top;
+    const [px, py, pw, ph] = frame.plot, [xe0, xe1] = frame.xdom, [ye0, ye1] = frame.ydom;
+    if (mx < px || mx > px + pw || my < py || my > py + ph) return hideTip();
+    const dx = xe0 + ((mx - px) / pw) * (xe1 - xe0);
+    const dy = ye0 + (1 - (my - py) / ph) * (ye1 - ye0);
+    const sx = pw / (xe1 - xe0), sy = ph / (ye1 - ye0);
+    let best = -1, bd = Infinity;
+    for (let i = 0; i < N; i++) {
+      const ex = (x[i] - dx) * sx, ey = (y[i] - dy) * sy, d = ex * ex + ey * ey;
+      if (d < bd) { bd = d; best = i; }
+    }
+    if (best >= 0 && bd < 16 * 16)
+      showTip(`group ${names[g[best]]} · (${x[best].toFixed(2)}, ${y[best].toFixed(2)})`, e.clientX, e.clientY);
+    else hideTip();
+  };
+  canvas.addEventListener("mousemove", (e) => { ev = e; if (!raf) raf = requestAnimationFrame(hover); });
+  canvas.addEventListener("mouseleave", hideTip);
 }
 
 main().catch((e) => {
