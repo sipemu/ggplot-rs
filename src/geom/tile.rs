@@ -58,23 +58,44 @@ impl Geom for GeomTile {
 
         let half_w = self.width / 2.0;
         let half_h = self.height / 2.0;
+        // Discrete axes (categorical heatmap): centre the tile on the category
+        // and size it to the break spacing; continuous axes use data ± half.
+        let x_disc = x_scale.map(|s| s.is_discrete()).unwrap_or(false);
+        let y_disc = y_scale.map(|s| s.is_discrete()).unwrap_or(false);
+        let nbx = x_scale.map(|s| s.breaks().len()).unwrap_or(1).max(1) as f64;
+        let nby = y_scale.map(|s| s.breaks().len()).unwrap_or(1).max(1) as f64;
 
         for i in 0..data.nrows() {
-            let cx = x_col[i].as_f64().unwrap_or(0.0);
-            let cy = y_col[i].as_f64().unwrap_or(0.0);
-
-            let nxmin = x_scale
-                .map(|s| s.map(&crate::data::Value::Float(cx - half_w)))
-                .unwrap_or(0.0);
-            let nxmax = x_scale
-                .map(|s| s.map(&crate::data::Value::Float(cx + half_w)))
-                .unwrap_or(0.0);
-            let nymin = y_scale
-                .map(|s| s.map(&crate::data::Value::Float(cy - half_h)))
-                .unwrap_or(0.0);
-            let nymax = y_scale
-                .map(|s| s.map(&crate::data::Value::Float(cy + half_h)))
-                .unwrap_or(0.0);
+            let (nxmin, nxmax) = if x_disc {
+                let nc = x_scale.map(|s| s.map(&x_col[i])).unwrap_or(0.0);
+                let hw = self.width / (nbx * 2.0);
+                (nc - hw, nc + hw)
+            } else {
+                let cx = x_col[i].as_f64().unwrap_or(0.0);
+                (
+                    x_scale
+                        .map(|s| s.map(&crate::data::Value::Float(cx - half_w)))
+                        .unwrap_or(0.0),
+                    x_scale
+                        .map(|s| s.map(&crate::data::Value::Float(cx + half_w)))
+                        .unwrap_or(0.0),
+                )
+            };
+            let (nymin, nymax) = if y_disc {
+                let nc = y_scale.map(|s| s.map(&y_col[i])).unwrap_or(0.0);
+                let hh = self.height / (nby * 2.0);
+                (nc - hh, nc + hh)
+            } else {
+                let cy = y_col[i].as_f64().unwrap_or(0.0);
+                (
+                    y_scale
+                        .map(|s| s.map(&crate::data::Value::Float(cy - half_h)))
+                        .unwrap_or(0.0),
+                    y_scale
+                        .map(|s| s.map(&crate::data::Value::Float(cy + half_h)))
+                        .unwrap_or(0.0),
+                )
+            };
 
             let (left, top) = coord.transform((nxmin, nymax), &plot_area);
             let (right, bottom) = coord.transform((nxmax, nymin), &plot_area);
