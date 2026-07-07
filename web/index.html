@@ -4,6 +4,7 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>ggplot-rs · WASM + DuckDB-Wasm spatial</title>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/gridjs/dist/theme/mermaid.min.css" />
   <style>
     :root {
       --bg: #f7f8fa; --card: #ffffff; --ink: #1f2430; --muted: #6b7280;
@@ -76,6 +77,13 @@
       position: absolute; border: 1px solid var(--accent);
       background: rgba(43,122,75,.12); pointer-events: none; display: none;
     }
+    .controls { display: flex; gap: 1.5rem; align-items: center; flex-wrap: wrap; margin-bottom: 1rem; font-size: .85rem; color: var(--muted); }
+    .controls label { display: inline-flex; align-items: center; gap: .4rem; }
+    .controls input[type=range] { vertical-align: middle; accent-color: var(--accent); }
+    .controls b { color: var(--ink); min-width: 1.8em; display: inline-block; }
+    #eqhist { flex: 1 1 360px; }
+    #eqtable { flex: 2 1 540px; min-width: 0; }
+    #eqtable .gridjs-wrapper { box-shadow: none; }
     footer { color: var(--muted); font-size: .8rem; margin-top: 2.5rem; text-align: center; }
     code { background: #eef0f3; padding: .05em .35em; border-radius: 4px; font-size: .9em; }
   </style>
@@ -100,6 +108,7 @@
       <button class="tab active" data-tab="map" role="tab">World map</button>
       <button class="tab" data-tab="quakes" role="tab">Earthquakes</button>
       <button class="tab" data-tab="linked" role="tab">Linked views</button>
+      <button class="tab" data-tab="table" role="tab">Data table</button>
     </div>
 
     <section class="card tabpanel" id="tab-map" role="tabpanel">
@@ -140,6 +149,26 @@
       <div class="linked">
         <div class="viz"><canvas id="scatter" width="720" height="520"></canvas><div id="brush"></div></div>
         <div id="scatterbar" class="viz"></div>
+      </div>
+    </section>
+
+    <section class="card tabpanel" id="tab-table" role="tabpanel" hidden>
+      <h2>Data table + chart · crossfilter</h2>
+      <p class="sub">
+        The USGS earthquakes in an interactive table (sort, search, paginate via
+        <a href="https://gridjs.io">Grid.js</a>) beside a live ggplot-rs magnitude
+        histogram. Drag the sliders to <strong>crossfilter both at once</strong>.
+      </p>
+      <div class="controls">
+        <label>Min magnitude <b id="minmagval">2.5</b>
+          <input id="minmag" type="range" min="2.5" max="7" step="0.1" value="2.5"></label>
+        <label>Bins <b id="binsval">18</b>
+          <input id="bins" type="range" min="6" max="30" step="1" value="18"></label>
+        <span id="tablecount" class="status busy" style="margin:0">loading…</span>
+      </div>
+      <div class="linked">
+        <div id="eqhist" class="viz"></div>
+        <div id="eqtable" class="viz"></div>
       </div>
     </section>
 
