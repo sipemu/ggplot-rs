@@ -27,7 +27,10 @@ try {
   await page.goto(TARGET, { waitUntil: "load", timeout: TIMEOUT });
 
   // Panels live in tabs (hidden ≠ removed), so wait for "attached", not "visible".
-  const panels = { choropleth: "#plot svg", earthquakes: "#eqplot svg", linkedBar: "#scatterbar svg" };
+  const panels = {
+    choropleth: "#plot svg", earthquakes: "#eqplot svg", linkedBar: "#scatterbar svg",
+    histogram: "#eqhist svg", dataTable: "#eqtable table",
+  };
   for (const [name, sel] of Object.entries(panels)) {
     try { await page.waitForSelector(sel, { state: "attached", timeout: TIMEOUT }); results[name] = "ok"; }
     catch { results[name] = "MISSING"; failed.push(name); }
@@ -35,7 +38,7 @@ try {
 
   // Tab switching: each tab reveals its panel and hides the others.
   results.tabs = {};
-  for (const [tab, panel] of [["quakes", "#tab-quakes"], ["linked", "#tab-linked"], ["map", "#tab-map"]]) {
+  for (const [tab, panel] of [["quakes", "#tab-quakes"], ["linked", "#tab-linked"], ["table", "#tab-table"], ["map", "#tab-map"]]) {
     await page.click(`.tab[data-tab="${tab}"]`);
     const shown = await page.isVisible(panel);
     results.tabs[tab] = shown ? "ok" : "HIDDEN";

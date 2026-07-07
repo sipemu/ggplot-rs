@@ -182,6 +182,45 @@ fn render_bar_impl(spec_json: &str) -> Result<String, String> {
         .map_err(|e| format!("render failed: {e:?}"))
 }
 
+/// Render a histogram (SVG) from a numeric array; `bins` sets the bin count —
+/// drive it from a slider for an interactive histogram. Feature `wasm`.
+#[wasm_bindgen]
+pub fn render_hist(
+    values: &[f64],
+    bins: u32,
+    width: u32,
+    height: u32,
+    title: String,
+) -> Result<String, JsValue> {
+    render_hist_impl(values, bins, width, height, &title).map_err(|e| JsValue::from_str(&e))
+}
+
+fn render_hist_impl(
+    values: &[f64],
+    bins: u32,
+    width: u32,
+    height: u32,
+    title: &str,
+) -> Result<String, String> {
+    if values.is_empty() {
+        return Err("no values to histogram".into());
+    }
+    let cols = vec![(
+        "x".to_string(),
+        values.iter().map(|&v| Value::Float(v)).collect(),
+    )];
+    let geom = crate::geom::histogram::GeomHistogram::default().with_bins(bins.max(1) as usize);
+    let mut plot = GGPlot::new(cols)
+        .aes(Aes::new().x("x"))
+        .geom_histogram_with(geom)
+        .theme_minimal();
+    if !title.is_empty() {
+        plot = plot.title(title);
+    }
+    plot.render_svg_native_with_size(width, height)
+        .map_err(|e| format!("render failed: {e:?}"))
+}
+
 /// Render a large scatter to a raw RGBA buffer via the raster backend — for
 /// point counts where SVG's one-node-per-mark would choke. Wrap the result in
 /// `new ImageData(new Uint8ClampedArray(buf), width, height)` and `putImageData`

@@ -5,7 +5,8 @@
 // Build:  wasm-pack build --target web --out-dir web/pkg --no-default-features --features wasm,canvas
 
 import * as duckdb from "https://cdn.jsdelivr.net/npm/@duckdb/duckdb-wasm@1.29.0/+esm";
-import init, { render_geo, render_bar, render_scatter_xy, geo_bounds } from "./pkg/ggplot_rs.js";
+import { Grid } from "https://cdn.jsdelivr.net/npm/gridjs/+esm";
+import init, { render_geo, render_bar, render_hist, render_scatter_xy, geo_bounds } from "./pkg/ggplot_rs.js";
 
 const set = (id, msg, busy = false) => {
   const el = document.getElementById(id);
@@ -126,6 +127,7 @@ async function main() {
   if (duck) {
     try { await mapDemo(duck); } catch (e) { console.error("map:", e); set("status", "map error: " + (e.message || e)); }
     try { await quakeDemo(duck); } catch (e) { console.error("quakes:", e); set("status3", "earthquakes error: " + (e.message || e)); }
+    try { tableDemo(); } catch (e) { console.error("table:", e); set("tablecount", "table error: " + (e.message || e)); }
   }
 }
 
@@ -152,6 +154,7 @@ const registerUrl = async (db, name, url) => {
 
 // ── Choropleth with continent drill-down ──────────────────────────────────
 let allRows = [];
+let quakeRows = [];
 const nameToContinent = {};
 
 async function mapDemo({ db, conn }) {
@@ -209,9 +212,11 @@ async function quakeDemo({ db, conn }) {
 
   set("status3", "reading geometry…", true);
   const rows = (await conn.query(
-    `SELECT ST_AsText(geom) AS geometry, mag, place
+    `SELECT ST_AsText(geom) AS geometry, mag, place, round(ST_Z(geom), 1) AS depth,
+            magType, time
      FROM ST_Read('quakes.geojson') WHERE mag IS NOT NULL`,
   )).toArray().map((r) => r.toJSON());
+  quakeRows = rows; // shared with the crossfilter table tab
 
   const eq = document.getElementById("eqplot");
   const baseSpec = {
@@ -227,6 +232,56 @@ async function quakeDemo({ db, conn }) {
   hoverTips(eq);
   enableRoam(eq, () => baseSpec, rerender); // scroll to zoom, drag to pan, dbl-click resets
   set("status3", `${rows.length} earthquakes — hover, scroll to zoom, drag to pan.`);
+}
+
+// ── Combined graph + table (crossfilter): a Grid.js table beside a ggplot-rs
+//    magnitude histogram, both driven by the min-magnitude and bin sliders. ──
+function tableDemo() {
+  if (!quakeRows.length) { set("tablecount", "no earthquake data"); return; }
+  const hist = document.getElementById("eqhist");
+  const minEl = document.getElementById("minmag");
+  const binsEl = document.getElementById("bins");
+
+  const grid = new Grid({
+    columns: ["Place", "Mag", "Depth (km)", "Type", "Time (UTC)"],
+    data: [],
+    search: true,
+    sort: true,
+    pagination: { limit: 8 },
+    style: { table: { "font-size": "13px" } },
+  });
+  grid.render(document.getElementById("eqtable"));
+
+  const fmtTime = (ms) => {
+    const d = new Date(Number(ms));
+    return isNaN(d.getTime()) ? "" : d.toISOString().slice(0, 16).replace("T", " ");
+  };
+
+  let raf = 0;
+  const update = () => {
+    raf = 0;
+    const minMag = parseFloat(minEl.value);
+    const bins = parseInt(binsEl.value, 10);
+    document.getElementById("minmagval").textContent = minMag.toFixed(1);
+    document.getElementById("binsval").textContent = bins;
+    const rows = quakeRows.filter((r) => Number(r.mag) >= minMag);
+    const mags = Float64Array.from(rows, (r) => Number(r.mag));
+    hist.innerHTML = mags.length
+      ? render_hist(mags, bins, 460, 300, `Magnitude distribution (${rows.length})`)
+      : "<p class='sub'>no earthquakes in range</p>";
+    grid.updateConfig({
+      data: rows.map((r) => [
+        r.place, Number(r.mag).toFixed(1),
+        r.depth == null ? "" : Number(r.depth).toFixed(1),
+        r.magType || "", fmtTime(r.time),
+      ]),
+    }).forceRender();
+    set("tablecount", `${rows.length} of ${quakeRows.length} earthquakes (M ≥ ${minMag.toFixed(1)}) — sort/search the table`);
+  };
+  const schedule = () => { if (!raf) raf = requestAnimationFrame(update); };
+  minEl.addEventListener("input", schedule);
+  binsEl.addEventListener("input", schedule);
+  update();
 }
 
 // ── Linked views: raster scatter (brush highlights) → ggplot-rs bar ───────
