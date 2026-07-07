@@ -348,22 +348,37 @@ fn render_plot_impl(spec_json: &str) -> Result<String, String> {
         plot = plot.scale_x_log10();
     }
 
-    let pal = v.get("palette").and_then(|x| x.as_str());
+    let pal = brewer(v.get("palette").and_then(|x| x.as_str()).unwrap_or("Set1"));
+    // Fixed factor order (optional) → stable series colors under legend toggling.
+    let color_levels: Option<Vec<String>> =
+        v.get("color_levels").and_then(|a| a.as_array()).map(|a| {
+            a.iter()
+                .filter_map(|x| x.as_str().map(String::from))
+                .collect()
+        });
     if let Some(cc) = &color_col {
         plot = if *is_str.get(cc).unwrap_or(&false) {
-            plot.scale_color_brewer(brewer(pal.unwrap_or("Set1")))
+            let mut s = crate::scale::color::ScaleColorDiscrete::new(Aesthetic::Color)
+                .with_named_palette(&pal);
+            if let Some(lv) = color_levels.clone() {
+                s = s.with_levels(lv);
+            }
+            plot.scale_color(s)
         } else {
             plot.scale_color_viridis_c()
         };
     }
     if let Some(fc) = &fill_col {
         plot = if *is_str.get(fc).unwrap_or(&false) {
-            plot.scale_fill_brewer(brewer(pal.unwrap_or("Set1")))
+            plot.scale_fill_brewer(pal)
         } else {
             plot.scale_fill_viridis_c()
         };
     } else if matches!(geom, "bin2d" | "hex") {
         plot = plot.scale_fill_viridis_c();
+    }
+    if !v.get("legend").and_then(|x| x.as_bool()).unwrap_or(true) {
+        plot = plot.show_legend(false);
     }
 
     plot = plot.theme_minimal();

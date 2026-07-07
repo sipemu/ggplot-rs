@@ -116,6 +116,14 @@ impl ScaleColorDiscrete {
         self
     }
 
+    /// Pre-seed the factor levels (order), so each level keeps a fixed palette
+    /// color regardless of which levels are present in the data — e.g. for a
+    /// legend whose series can be toggled without the colors reshuffling.
+    pub fn with_levels(mut self, levels: Vec<String>) -> Self {
+        self.levels = levels;
+        self
+    }
+
     /// Get color for a given level index.
     pub fn color_for_index(&self, idx: usize) -> RGBAColor {
         self.palette[idx % self.palette.len()]

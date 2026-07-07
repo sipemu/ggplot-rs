@@ -26,8 +26,8 @@ highlight *generically* instead of via bespoke per-demo code.
 | Zoom / pan (roam) | ✅ | ✅ (maps) | re-render with `xlim`/`ylim`; axes update |
 | Brush select | ✅ | ✅ (scatter) | rectangular brush → selection alpha |
 | Linked views | ✅ | ✅ | brush → linked bar; map click → drill-down |
-| Legend toggle | ✅ | ❌ | planned |
-| Responsive resize | ✅ | ❌ | planned |
+| Legend toggle | ✅ | ✅ | clickable chips; stable colours via `color_levels` |
+| Responsive resize | ✅ | ✅ (maps) | `ResizeObserver` → re-render at container width |
 | Animation / transitions | ✅ | ❌ | hardest for a re-render model |
 | Large-N (WebGL) | ✅ (echarts-gl) | ⚠️ raster | canvas raster covers ~1M; WebGL later |
 | Toolbox (export/reset) | ✅ | ❌ | planned |
@@ -44,10 +44,13 @@ highlight *generically* instead of via bespoke per-demo code.
   double-click reset; `render_geo` clips to an `xlim`/`ylim` window and axes
   update. Next: roam on the cartesian charts (scatter) and cursor-accurate zoom
   using the panel rect from M0.
-- **M2 — Responsive resize.** `ResizeObserver` → debounced re-render at the new
-  size; charts fill their container.
-- **M3 — Legend interactivity + toolbox.** Click a legend key to toggle/isolate a
-  series (re-render filtered); a toolbox for reset-view and save-PNG/SVG.
+- **M2 — Responsive resize. _Done for maps._** `ResizeObserver` re-renders the
+  maps at their container width (and when a tab becomes visible). Next: the
+  raster scatter (re-raster on resize, rebinding the brush mapping).
+- **M3 — Legend interactivity. _Done._** Clickable legend chips toggle series
+  (re-render filtered); the new `render_plot` `color_levels` option keeps each
+  series' colour stable as others are toggled. `ScaleColorDiscrete::with_levels`
+  backs it. Next: a toolbox (reset-view, save-PNG/SVG).
 - **M4 — Unified interaction runtime (`GGView`).** One JS wrapper standardizing
   tooltip, highlight, brush, roam, and `on(event)` across all charts, driven by
   the M0 scene model — so new charts get interactions for free.

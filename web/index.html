@@ -84,6 +84,15 @@
     #eqhist { flex: 1 1 360px; }
     #eqtable { flex: 2 1 540px; min-width: 0; }
     #eqtable .gridjs-wrapper { box-shadow: none; }
+    .chips { display: flex; gap: .5rem; flex-wrap: wrap; margin-bottom: .75rem; }
+    .chip {
+      font: inherit; font-size: .82rem; color: var(--ink); background: var(--card);
+      border: 1px solid var(--line); border-radius: 999px; padding: .2rem .7rem;
+      cursor: pointer; display: inline-flex; align-items: center; gap: .4rem;
+    }
+    .chip .dot { width: .7em; height: .7em; border-radius: 50%; display: inline-block; }
+    .chip:not(.on) { opacity: .45; text-decoration: line-through; }
+    #legendchart svg { max-width: 100%; height: auto; display: block; }
     .gallery { display: grid; grid-template-columns: repeat(auto-fit, minmax(340px, 1fr)); gap: 1rem; }
     .gcell { margin: 0; border: 1px solid var(--line); border-radius: 10px; padding: .5rem; }
     .gcell svg { max-width: 100%; height: auto; display: block; }
@@ -186,6 +195,8 @@
         ggplot-rs.
       </p>
       <p id="gallerystatus" class="status busy">…</p>
+      <div id="legendchips" class="chips"></div>
+      <div id="legendchart" class="viz" style="margin-bottom:1.25rem"></div>
       <div id="gallery" class="gallery"></div>
     </section>
 
