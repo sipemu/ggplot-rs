@@ -91,4 +91,11 @@ pub trait Geom: Send + Sync {
     /// no color/fill aesthetic mapped, so an explicit mapping always wins. The
     /// default is a no-op; series geoms override it.
     fn set_series_color(&mut self, _color: (u8, u8, u8)) {}
+
+    /// Whether this geom draws from a 0 baseline, so the Y scale should include
+    /// 0 even when `y` is explicitly mapped (bars/columns/area/histograms — as
+    /// in ggplot2). Default false.
+    fn include_zero_baseline(&self) -> bool {
+        false
+    }
 }

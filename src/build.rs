@@ -503,9 +503,11 @@ impl PlotBuilder {
             }
         }
 
-        // Step 6c: For stat-computed Y (bars, histograms), ensure Y scale includes zero baseline
+        // Step 6c: bars/histograms/area draw from a 0 baseline, so the Y scale
+        // must include 0 — for stat-computed Y (count/bin) and for an explicitly
+        // mapped Y alike (e.g. geom_col), matching ggplot2.
         let y_is_user_mapped = merged_mapping.get_mapping(&Aesthetic::Y).is_some();
-        if !y_is_user_mapped && working_data.has_column("y") {
+        if (!y_is_user_mapped || geom.include_zero_baseline()) && working_data.has_column("y") {
             if let Some(y_scale) = scale_set.get_mut(&Aesthetic::Y) {
                 y_scale.train(&[crate::data::Value::Float(0.0)]);
             }
