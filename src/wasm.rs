@@ -221,6 +221,159 @@ fn render_hist_impl(
         .map_err(|e| format!("render failed: {e:?}"))
 }
 
+fn jval(x: &J) -> Value {
+    match x {
+        J::Number(n) => n.as_f64().map(Value::Float).unwrap_or(Value::Na),
+        J::String(s) => Value::Str(s.clone()),
+        J::Bool(b) => Value::Bool(*b),
+        _ => Value::Na,
+    }
+}
+
+fn brewer(name: &str) -> crate::scale::palettes::PaletteName {
+    use crate::scale::palettes::PaletteName as P;
+    match name {
+        "Set2" => P::Set2,
+        "Set3" => P::Set3,
+        "Dark2" => P::Dark2,
+        "Paired" => P::Paired,
+        "Accent" => P::Accent,
+        "Pastel1" => P::Pastel1,
+        "Spectral" => P::Spectral,
+        _ => P::Set1,
+    }
+}
+
+fn smooth_geom(v: &J) -> crate::geom::smooth::GeomSmooth {
+    let g = crate::geom::smooth::GeomSmooth::default();
+    match v.get("method").and_then(|x| x.as_str()) {
+        Some("loess") => g.loess(v.get("span").and_then(|x| x.as_f64()).unwrap_or(0.75)),
+        _ => g,
+    }
+}
+
+/// General grammar-of-graphics renderer — expose most geoms to JS via a spec:
+/// `{ data: {col:[...]}, geom, aes:{x,y,color,fill,group,size}, title, width,
+/// height, flip, log_x, log_y, palette, bins, smooth:"lm"|"loess" }`. Returns an
+/// SVG document (with hover tooltips where the geom emits them).
+#[wasm_bindgen]
+pub fn render_plot(spec_json: &str) -> Result<String, JsValue> {
+    render_plot_impl(spec_json).map_err(|e| JsValue::from_str(&e))
+}
+
+fn render_plot_impl(spec_json: &str) -> Result<String, String> {
+    let v: J = serde_json::from_str(spec_json).map_err(|e| format!("bad spec JSON: {e}"))?;
+    let data = v
+        .get("data")
+        .and_then(|d| d.as_object())
+        .ok_or("spec.data must be an object of columns")?;
+    let mut cols: Vec<(String, Vec<Value>)> = Vec::new();
+    let mut is_str: std::collections::HashMap<String, bool> = std::collections::HashMap::new();
+    for (k, arr) in data {
+        let vals: Vec<Value> = arr
+            .as_array()
+            .map(|a| a.iter().map(jval).collect())
+            .unwrap_or_default();
+        let s = vals
+            .iter()
+            .find(|x| !matches!(x, Value::Na))
+            .map(|x| matches!(x, Value::Str(_)))
+            .unwrap_or(false);
+        is_str.insert(k.clone(), s);
+        cols.push((k.clone(), vals));
+    }
+
+    let aes_o = v.get("aes").and_then(|a| a.as_object());
+    let get = |n: &str| aes_o.and_then(|o| o.get(n)).and_then(|x| x.as_str());
+    let mut aes = Aes::new();
+    for (name, set) in [
+        ("x", 0),
+        ("y", 1),
+        ("color", 2),
+        ("fill", 3),
+        ("group", 4),
+        ("size", 5),
+    ] {
+        if let Some(c) = get(name) {
+            aes = match set {
+                0 => aes.x(c),
+                1 => aes.y(c),
+                2 => aes.color(c),
+                3 => aes.fill(c),
+                4 => aes.group(c),
+                _ => aes.size(c),
+            };
+        }
+    }
+    let color_col = get("color").map(String::from);
+    let fill_col = get("fill").map(String::from);
+
+    let num = |k: &str, d: u32| v.get(k).and_then(|x| x.as_u64()).unwrap_or(d as u64) as u32;
+    let (width, height) = (num("width", 640), num("height", 400));
+    let geom = v.get("geom").and_then(|x| x.as_str()).unwrap_or("point");
+    let bins = v.get("bins").and_then(|x| x.as_u64()).unwrap_or(30) as usize;
+
+    let mut plot = GGPlot::new(cols).aes(aes);
+    plot = match geom {
+        "jitter" => plot.geom_jitter(),
+        "line" => plot.geom_line(),
+        "path" => plot.geom_path(),
+        "step" => plot.geom_step(),
+        "area" => plot.geom_area(),
+        "col" => plot.geom_col(),
+        "bar" => plot.geom_bar(),
+        "boxplot" => plot.geom_boxplot(),
+        "violin" => plot.geom_violin(),
+        "density" => plot.geom_density(),
+        "freqpoly" => plot.geom_freqpoly(),
+        "histogram" => plot
+            .geom_histogram_with(crate::geom::histogram::GeomHistogram::default().with_bins(bins)),
+        "bin2d" => plot.geom_bin2d(),
+        "hex" => plot.geom_hex(),
+        "tile" => plot.geom_tile(),
+        "smooth" => plot.geom_smooth_with(smooth_geom(&v)),
+        _ => plot.geom_point(),
+    };
+    if geom != "smooth" && v.get("smooth").is_some() {
+        plot = plot.geom_smooth_with(smooth_geom(&v));
+    }
+
+    if v.get("flip").and_then(|x| x.as_bool()).unwrap_or(false) {
+        plot = plot.coord_flip();
+    }
+    if v.get("log_y").and_then(|x| x.as_bool()).unwrap_or(false) {
+        plot = plot.scale_y_log10();
+    }
+    if v.get("log_x").and_then(|x| x.as_bool()).unwrap_or(false) {
+        plot = plot.scale_x_log10();
+    }
+
+    let pal = v.get("palette").and_then(|x| x.as_str());
+    if let Some(cc) = &color_col {
+        plot = if *is_str.get(cc).unwrap_or(&false) {
+            plot.scale_color_brewer(brewer(pal.unwrap_or("Set1")))
+        } else {
+            plot.scale_color_viridis_c()
+        };
+    }
+    if let Some(fc) = &fill_col {
+        plot = if *is_str.get(fc).unwrap_or(&false) {
+            plot.scale_fill_brewer(brewer(pal.unwrap_or("Set1")))
+        } else {
+            plot.scale_fill_viridis_c()
+        };
+    } else if matches!(geom, "bin2d" | "hex") {
+        plot = plot.scale_fill_viridis_c();
+    }
+
+    plot = plot.theme_minimal();
+    if let Some(t) = v.get("title").and_then(|x| x.as_str()) {
+        plot = plot.title(t);
+    }
+    plot.render_svg_native_with_size(width, height)
+        .map_err(|e| format!("render failed: {e:?}"))
+}
+
 /// Render a large scatter to a raw RGBA buffer via the raster backend — for
 /// point counts where SVG's one-node-per-mark would choke. Wrap the result in
 /// `new ImageData(new Uint8ClampedArray(buf), width, height)` and `putImageData`

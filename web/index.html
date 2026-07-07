@@ -84,6 +84,10 @@
     #eqhist { flex: 1 1 360px; }
     #eqtable { flex: 2 1 540px; min-width: 0; }
     #eqtable .gridjs-wrapper { box-shadow: none; }
+    .gallery { display: grid; grid-template-columns: repeat(auto-fit, minmax(340px, 1fr)); gap: 1rem; }
+    .gcell { margin: 0; border: 1px solid var(--line); border-radius: 10px; padding: .5rem; }
+    .gcell svg { max-width: 100%; height: auto; display: block; }
+    .gcell figcaption { color: var(--muted); font-size: .8rem; text-align: center; padding-top: .3rem; }
     footer { color: var(--muted); font-size: .8rem; margin-top: 2.5rem; text-align: center; }
     code { background: #eef0f3; padding: .05em .35em; border-radius: 4px; font-size: .9em; }
   </style>
@@ -109,6 +113,7 @@
       <button class="tab" data-tab="quakes" role="tab">Earthquakes</button>
       <button class="tab" data-tab="linked" role="tab">Linked views</button>
       <button class="tab" data-tab="table" role="tab">Data table</button>
+      <button class="tab" data-tab="gallery" role="tab">Gallery</button>
     </div>
 
     <section class="card tabpanel" id="tab-map" role="tabpanel">
@@ -170,6 +175,18 @@
         <div id="eqhist" class="viz"></div>
         <div id="eqtable" class="viz"></div>
       </div>
+    </section>
+
+    <section class="card tabpanel" id="tab-gallery" role="tabpanel" hidden>
+      <h2>Gallery · grammar of graphics</h2>
+      <p class="sub">
+        The same live earthquake data through many geoms — boxplots, violins, a
+        loess fit, a kernel density, a hex-binned 2-D density, and a time series.
+        Every chart is one <code>render_plot({ geom, aes, … })</code> call into
+        ggplot-rs.
+      </p>
+      <p id="gallerystatus" class="status busy">…</p>
+      <div id="gallery" class="gallery"></div>
     </section>
 
     <footer>Built with ggplot-rs · SVG (hover) + raster (large-N) backends, no server.</footer>
