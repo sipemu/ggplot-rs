@@ -40,6 +40,54 @@ const hoverTips = (el) => {
   el.addEventListener("mouseleave", hideTip);
 };
 
+// Toolbox: download a chart (M4). Works for SVG (serialize / rasterise) and the
+// raster canvas. `addSaveTools` adds a hover-revealed SVG/PNG toolbar to `el`.
+const download = (blob, name) => {
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = name;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(a.href);
+};
+const svgToPng = (svg, scale, cb) => {
+  const xml = new XMLSerializer().serializeToString(svg);
+  const img = new Image();
+  img.onload = () => {
+    const w = +svg.getAttribute("width") || svg.clientWidth;
+    const h = +svg.getAttribute("height") || svg.clientHeight;
+    const c = document.createElement("canvas");
+    c.width = w * scale; c.height = h * scale;
+    const ctx = c.getContext("2d");
+    ctx.fillStyle = "#fff"; ctx.fillRect(0, 0, c.width, c.height);
+    ctx.drawImage(img, 0, 0, c.width, c.height);
+    c.toBlob(cb, "image/png");
+  };
+  img.src = "data:image/svg+xml;charset=utf-8," + encodeURIComponent(xml);
+};
+function addSaveTools(el, name) {
+  el.querySelector(":scope > .savebar")?.remove(); // avoid dupes on re-render
+  const bar = document.createElement("div");
+  bar.className = "savebar";
+  const mk = (label, fn) => {
+    const btn = document.createElement("button");
+    btn.type = "button"; btn.textContent = label; btn.title = `Download ${label}`;
+    btn.onclick = fn; bar.appendChild(btn);
+  };
+  mk("SVG", () => {
+    const s = el.querySelector("svg");
+    if (s) download(new Blob([new XMLSerializer().serializeToString(s)], { type: "image/svg+xml;charset=utf-8" }), name + ".svg");
+  });
+  mk("PNG", () => {
+    const canvas = el.querySelector("canvas");
+    if (canvas) return canvas.toBlob((b) => download(b, name + ".png"));
+    const s = el.querySelector("svg");
+    if (s) svgToPng(s, 2, (b) => download(b, name + ".png"));
+  });
+  el.appendChild(bar);
+}
+
 // Pan/zoom (roam) for an SVG map: scroll to zoom around the cursor, drag to
 // pan, double-click to reset. `getSpec()` returns the current base spec (no
 // xlim/ylim) — a getter so it tracks state changes (e.g. continent drill-down);
@@ -187,6 +235,7 @@ function galleryDemo() {
       aes: { x: "mag", color: "type" }, color_levels: topTypes, palette: "Set1", legend: false,
       title: "Magnitude density by type — click a chip to toggle",
     }));
+    addSaveTools(lchart, "magnitude-density-by-type");
   };
   chipsEl.innerHTML = "";
   topTypes.forEach((t, i) => {
@@ -214,6 +263,7 @@ function galleryDemo() {
     cap.textContent = title;
     fig.appendChild(cap);
     grid.appendChild(fig);
+    addSaveTools(fig, "ggplot-" + title.replace(/[^\w]+/g, "-").toLowerCase());
   }
   hoverTips(grid);
   set("gallerystatus", `${q.length.toLocaleString()} earthquakes · ${charts.length} chart types, all drawn by ggplot-rs`);

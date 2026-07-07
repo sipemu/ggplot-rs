@@ -97,6 +97,13 @@
     .gcell { margin: 0; border: 1px solid var(--line); border-radius: 10px; padding: .5rem; }
     .gcell svg { max-width: 100%; height: auto; display: block; }
     .gcell figcaption { color: var(--muted); font-size: .8rem; text-align: center; padding-top: .3rem; }
+    .savebar { position: absolute; top: 8px; right: 8px; display: flex; gap: 4px; opacity: 0; transition: opacity .15s; z-index: 2; }
+    .gcell:hover .savebar, #legendchart:hover .savebar { opacity: 1; }
+    .savebar button {
+      font: inherit; font-size: .7rem; color: var(--muted); background: rgba(255,255,255,.92);
+      border: 1px solid var(--line); border-radius: 6px; padding: .1rem .45rem; cursor: pointer;
+    }
+    .savebar button:hover { color: var(--accent); border-color: var(--accent); }
     footer { color: var(--muted); font-size: .8rem; margin-top: 2.5rem; text-align: center; }
     code { background: #eef0f3; padding: .05em .35em; border-radius: 4px; font-size: .9em; }
   </style>
