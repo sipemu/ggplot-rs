@@ -23,9 +23,17 @@
       padding: .25rem .7rem; font-size: .82rem; margin: 0 .4rem .4rem 0;
     }
     .links a:hover { border-color: var(--accent); color: var(--accent); }
+    .tabs { display: flex; gap: .4rem; margin-top: 1.5rem; border-bottom: 1px solid var(--line); }
+    .tab {
+      font: inherit; font-size: .9rem; color: var(--muted); background: none; border: 0;
+      border-bottom: 2px solid transparent; padding: .55rem .9rem; cursor: pointer; margin-bottom: -1px;
+    }
+    .tab:hover { color: var(--ink); }
+    .tab.active { color: var(--accent); border-bottom-color: var(--accent); font-weight: 600; }
+    .tabpanel[hidden] { display: none; }
     .card {
       background: var(--card); border: 1px solid var(--line); border-radius: 14px;
-      box-shadow: var(--shadow); padding: 1.25rem 1.35rem; margin-top: 1.5rem;
+      box-shadow: var(--shadow); padding: 1.25rem 1.35rem; margin-top: 1rem;
     }
     .card h2 { font-size: 1.05rem; margin: 0 0 .15rem; }
     .card .sub { color: var(--muted); font-size: .88rem; margin: 0 0 1rem; }
@@ -88,20 +96,26 @@
       </div>
     </header>
 
-    <section class="card">
+    <div class="tabs" role="tablist">
+      <button class="tab active" data-tab="map" role="tab">World map</button>
+      <button class="tab" data-tab="quakes" role="tab">Earthquakes</button>
+      <button class="tab" data-tab="linked" role="tab">Linked views</button>
+    </div>
+
+    <section class="card tabpanel" id="tab-map" role="tabpanel">
       <h2>World choropleth · <code>geom_sf</code>
         <button id="reset" class="btn" style="display:none">⟳ World</button></h2>
       <p class="sub">
         DuckDB reads Natural Earth countries and <code>ST_AsText</code>s the
-        geometry to WKT; ggplot-rs renders an SVG. Hover a country — or
-        <strong>click one to zoom to its continent</strong> (DuckDB re-queries,
-        ggplot-rs re-renders).
+        geometry to WKT; ggplot-rs renders an SVG. Hover a country,
+        <strong>click one to zoom to its continent</strong>, or
+        <strong>scroll to zoom and drag to pan</strong> (double-click resets).
       </p>
       <p id="status" class="status busy">loading…</p>
       <div id="plot" class="viz"></div>
     </section>
 
-    <section class="card">
+    <section class="card tabpanel" id="tab-quakes" role="tabpanel" hidden>
       <h2>Earthquakes, past 30 days · live USGS feed</h2>
       <p class="sub">
         DuckDB reads the <a href="https://earthquake.usgs.gov/earthquakes/feed/">USGS
@@ -114,7 +128,7 @@
       <div id="eqplot" class="viz"></div>
     </section>
 
-    <section class="card">
+    <section class="card tabpanel" id="tab-linked" role="tabpanel" hidden>
       <h2>Linked views · brush ↔ bar</h2>
       <p class="sub">
         A 100k-point scatter drawn by the raster backend (no DOM node per point)
