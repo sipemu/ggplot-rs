@@ -49,6 +49,7 @@ impl Geom for GeomBoxplot {
         let ymin_col = data.column("ymin");
         let ymax_col = data.column("ymax");
         let outliers_col = data.column("outliers");
+        let fill_col = data.column("fill");
 
         let plot_area = backend.plot_area();
         let x_scale = scales.get(&Aesthetic::X);
@@ -84,7 +85,10 @@ impl Geom for GeomBoxplot {
                 format!("{group}: median {} ({}–{})", r(middle), r(lower), r(upper))
             }));
 
-            // Box (IQR)
+            // Box (IQR) — honour a mapped `fill` (e.g. by group), else the default.
+            let box_fill = fill_col
+                .and_then(|fc| scales.map_color(&Aesthetic::Fill, &fc[i]))
+                .unwrap_or(self.fill);
             let (box_left, box_top) = coord.transform((nx - half_width, map_y(upper)), &plot_area);
             let (box_right, box_bottom) =
                 coord.transform((nx + half_width, map_y(lower)), &plot_area);
@@ -92,7 +96,7 @@ impl Geom for GeomBoxplot {
                 (box_left, box_top),
                 (box_right, box_bottom),
                 &RectStyle {
-                    fill: Some(self.fill),
+                    fill: Some(box_fill),
                     stroke: Some(self.color),
                     stroke_width: 1.0,
                     alpha: self.alpha,
