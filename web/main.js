@@ -6,7 +6,7 @@
 
 import * as duckdb from "https://cdn.jsdelivr.net/npm/@duckdb/duckdb-wasm@1.29.0/+esm";
 import { Grid } from "https://cdn.jsdelivr.net/npm/gridjs/+esm";
-import init, { render_geo, render_bar, render_hist, render_scatter_xy, geo_bounds } from "./pkg/ggplot_rs.js";
+import init, { render_geo, render_bar, render_hist, render_plot, render_scatter_xy, geo_bounds } from "./pkg/ggplot_rs.js";
 
 const set = (id, msg, busy = false) => {
   const el = document.getElementById(id);
@@ -128,7 +128,54 @@ async function main() {
     try { await mapDemo(duck); } catch (e) { console.error("map:", e); set("status", "map error: " + (e.message || e)); }
     try { await quakeDemo(duck); } catch (e) { console.error("quakes:", e); set("status3", "earthquakes error: " + (e.message || e)); }
     try { tableDemo(); } catch (e) { console.error("table:", e); set("tablecount", "table error: " + (e.message || e)); }
+    try { galleryDemo(); } catch (e) { console.error("gallery:", e); set("gallerystatus", "gallery error: " + (e.message || e)); }
   }
+}
+
+// ── Gallery: many geoms (grammar of graphics) over the real earthquake data ──
+function galleryDemo() {
+  if (!quakeRows.length) { set("gallerystatus", "no earthquake data"); return; }
+  const q = quakeRows;
+  const mag = q.map((r) => Number(r.mag));
+  const withDepth = q.filter((r) => r.depth != null && isFinite(Number(r.depth)));
+  const dDepth = withDepth.map((r) => Number(r.depth));
+  const dMag = withDepth.map((r) => Number(r.mag));
+
+  const counts = {};
+  q.forEach((r) => { const t = r.magType || "?"; counts[t] = (counts[t] || 0) + 1; });
+  const topTypes = Object.entries(counts).sort((a, b) => b[1] - a[1]).slice(0, 4).map((e) => e[0]);
+  const byType = q.filter((r) => topTypes.includes(r.magType));
+  const tType = byType.map((r) => r.magType);
+  const tMag = byType.map((r) => Number(r.mag));
+
+  const perDay = {};
+  q.forEach((r) => { const k = new Date(Number(r.time)).toISOString().slice(0, 10); perDay[k] = (perDay[k] || 0) + 1; });
+  const days = Object.keys(perDay).sort();
+  const dayIdx = days.map((_, i) => i);
+  const dayCount = days.map((k) => perDay[k]);
+
+  const charts = [
+    ["Magnitude by type · boxplot", { geom: "boxplot", data: { type: tType, mag: tMag }, aes: { x: "type", y: "mag", fill: "type" } }],
+    ["Depth vs magnitude · loess fit", { geom: "point", smooth: 1, method: "loess", data: { depth: dDepth, mag: dMag }, aes: { x: "depth", y: "mag" } }],
+    ["Depth vs magnitude · hexbin", { geom: "hex", data: { depth: dDepth, mag: dMag }, aes: { x: "depth", y: "mag" } }],
+    ["Magnitude · density", { geom: "density", data: { mag }, aes: { x: "mag" } }],
+    ["Magnitude by type · violin", { geom: "violin", data: { type: tType, mag: tMag }, aes: { x: "type", y: "mag", fill: "type" } }],
+    ["Earthquakes per day · area", { geom: "area", data: { day: dayIdx, n: dayCount }, aes: { x: "day", y: "n" } }],
+  ];
+  const grid = document.getElementById("gallery");
+  grid.innerHTML = "";
+  for (const [title, spec] of charts) {
+    const fig = document.createElement("figure");
+    fig.className = "gcell viz";
+    try { fig.innerHTML = render_plot(JSON.stringify({ width: 430, height: 280, ...spec })); detitle(fig); }
+    catch (e) { fig.innerHTML = `<p class="sub">${title}: ${e.message || e}</p>`; }
+    const cap = document.createElement("figcaption");
+    cap.textContent = title;
+    fig.appendChild(cap);
+    grid.appendChild(fig);
+  }
+  hoverTips(grid);
+  set("gallerystatus", `${q.length.toLocaleString()} earthquakes · ${charts.length} chart types, all drawn by ggplot-rs`);
 }
 
 async function setupDuck() {
