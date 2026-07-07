@@ -69,6 +69,7 @@ impl Geom for GeomBin2d {
                 .and_then(|fc| scales.map_color(&Aesthetic::Fill, &fc[i]))
                 .unwrap_or((97, 156, 255));
 
+            backend.set_tooltip(fill_col.map(|c| format!("n = {}", super::tip_value(&c[i]))));
             backend.draw_rect(
                 (left, top.min(bottom)),
                 (right, top.max(bottom)),
@@ -81,6 +82,7 @@ impl Geom for GeomBin2d {
                 },
             )?;
         }
+        backend.set_tooltip(None);
 
         Ok(())
     }

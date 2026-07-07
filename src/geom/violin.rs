@@ -88,6 +88,7 @@ impl Geom for GeomViolin {
             let fill_color = fill_col
                 .and_then(|fc| scales.map_color(&Aesthetic::Fill, &fc[first]))
                 .unwrap_or(self.fill);
+            backend.set_tooltip(Some(super::tip_value(&x_col[first])).filter(|s| !s.is_empty()));
 
             // Right side (top→bottom) then left side reversed to close the polygon.
             let mut right_side: Vec<(f64, f64)> = Vec::with_capacity(idxs.len());
@@ -116,6 +117,7 @@ impl Geom for GeomViolin {
                 )?;
             }
         }
+        backend.set_tooltip(None);
 
         Ok(())
     }

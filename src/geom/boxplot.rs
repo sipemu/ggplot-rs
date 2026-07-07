@@ -75,6 +75,15 @@ impl Geom for GeomBoxplot {
 
             let map_y = |v: f64| y_scale.map(|s| s.map(&Value::Float(v))).unwrap_or(0.0);
 
+            // Hover tooltip for the whole box: group + median (IQR).
+            let group = super::tip_value(&x_col[i]);
+            let r = |v: f64| (v * 100.0).round() / 100.0;
+            backend.set_tooltip(Some(if group.is_empty() {
+                format!("median {} ({}–{})", r(middle), r(lower), r(upper))
+            } else {
+                format!("{group}: median {} ({}–{})", r(middle), r(lower), r(upper))
+            }));
+
             // Box (IQR)
             let (box_left, box_top) = coord.transform((nx - half_width, map_y(upper)), &plot_area);
             let (box_right, box_bottom) =
@@ -175,6 +184,7 @@ impl Geom for GeomBoxplot {
                 }
             }
         }
+        backend.set_tooltip(None);
 
         Ok(())
     }
