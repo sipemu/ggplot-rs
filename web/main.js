@@ -89,7 +89,17 @@ function enableRoam(el, getSpec, rerender) {
   });
   window.addEventListener("mouseup", () => { if (drag && drag.moved) el._panned = true; drag = null; });
   el.addEventListener("dblclick", () => { view = null; draw(); });
-  return { reset: () => { view = null; draw(); } };
+  return { reset: () => { view = null; draw(); }, redraw: draw };
+}
+
+// Re-render `el` at its container width when it changes (M2 responsive). Skips
+// zero width (hidden tabs) and small jitters; fires when a tab becomes visible.
+function responsive(el, atWidth) {
+  let w = 0;
+  new ResizeObserver(() => {
+    const nw = Math.round(el.clientWidth);
+    if (nw > 0 && Math.abs(nw - w) >= 12) { w = nw; atWidth(w); }
+  }).observe(el);
 }
 
 // Tab bar: show one panel at a time. All demos still initialise on load (the
@@ -162,6 +172,37 @@ function galleryDemo() {
     ["Magnitude by type · violin", { geom: "violin", data: { type: tType, mag: tMag }, aes: { x: "type", y: "mag", fill: "type" } }],
     ["Earthquakes per day · area", { geom: "area", data: { day: dayIdx, n: dayCount }, aes: { x: "day", y: "n" } }],
   ];
+  // M3 — interactive legend: click a chip to toggle a series (stable colours via
+  // color_levels; the chart re-renders filtered).
+  const SET1 = ["#e41a1c", "#377eb8", "#4daf4a", "#984ea3", "#ff7f00", "#ffff33", "#a65628", "#f781bf", "#999999"];
+  const active = new Set(topTypes);
+  const lchart = document.getElementById("legendchart");
+  const chipsEl = document.getElementById("legendchips");
+  const drawLegendChart = () => {
+    const sel = q.filter((r) => active.has(r.magType));
+    if (!sel.length) { lchart.innerHTML = "<p class='sub'>all series hidden — re-enable a type</p>"; return; }
+    lchart.innerHTML = render_plot(JSON.stringify({
+      geom: "density", width: Math.max(340, lchart.clientWidth || 720), height: 300,
+      data: { mag: sel.map((r) => Number(r.mag)), type: sel.map((r) => r.magType) },
+      aes: { x: "mag", color: "type" }, color_levels: topTypes, palette: "Set1", legend: false,
+      title: "Magnitude density by type — click a chip to toggle",
+    }));
+  };
+  chipsEl.innerHTML = "";
+  topTypes.forEach((t, i) => {
+    const chip = document.createElement("button");
+    chip.className = "chip on";
+    chip.innerHTML = `<span class="dot" style="background:${SET1[i]}"></span>${t}`;
+    chip.onclick = () => {
+      if (active.has(t)) active.delete(t); else active.add(t);
+      chip.classList.toggle("on", active.has(t));
+      drawLegendChart();
+    };
+    chipsEl.appendChild(chip);
+  });
+  drawLegendChart();
+  responsive(lchart, drawLegendChart);
+
   const grid = document.getElementById("gallery");
   grid.innerHTML = "";
   for (const [title, spec] of charts) {
@@ -221,11 +262,12 @@ async function mapDemo({ db, conn }) {
   const plot = document.getElementById("plot");
   const WORLD = "World — hover/click a country, scroll to zoom, drag to pan";
   let curRows = allRows, curTitle = WORLD;
+  let mapW = plot.clientWidth || 960, mapH = Math.round(mapW * 0.54);
   const specFor = () => ({
     geometry: curRows.map((r) => r.geometry),
     fill: curRows.map((r) => Number(r.pop_log)),
     label: curRows.map((r) => r.name),
-    width: 960, height: 520, title: curTitle,
+    width: mapW, height: mapH, title: curTitle,
   });
   const rerender = (spec) => { plot.innerHTML = render_geo(JSON.stringify(spec)); detitle(plot); };
   rerender(specFor());
@@ -233,6 +275,7 @@ async function mapDemo({ db, conn }) {
 
   hoverTips(plot);
   const roam = enableRoam(plot, specFor, rerender);
+  responsive(plot, (w) => { mapW = w; mapH = Math.round(w * 0.54); roam.redraw(); });
   plot.addEventListener("click", (e) => {
     if (plot._panned) { plot._panned = false; return; } // this click ended a drag-pan
     const m = e.target.closest("[data-tip]");
@@ -271,13 +314,14 @@ async function quakeDemo({ db, conn }) {
     base: allRows.length ? allRows.map((r) => r.geometry) : undefined, // country basemap
     fill: rows.map((r) => Number(r.mag)),
     label: rows.map((r) => r.place),
-    width: 960, height: 480,
+    width: eq.clientWidth || 960, height: Math.round((eq.clientWidth || 960) * 0.5),
     title: `${rows.length} earthquakes (M≥2.5), past 30 days — colour = magnitude`,
   };
   const rerender = (spec) => { eq.innerHTML = render_geo(JSON.stringify(spec)); detitle(eq); };
   rerender(baseSpec);
   hoverTips(eq);
-  enableRoam(eq, () => baseSpec, rerender); // scroll to zoom, drag to pan, dbl-click resets
+  const roam = enableRoam(eq, () => baseSpec, rerender); // scroll to zoom, drag to pan, dbl-click resets
+  responsive(eq, (w) => { baseSpec.width = w; baseSpec.height = Math.round(w * 0.5); roam.redraw(); });
   set("status3", `${rows.length} earthquakes — hover, scroll to zoom, drag to pan.`);
 }
 
