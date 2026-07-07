@@ -40,15 +40,18 @@ const hoverTips = (el) => {
 };
 
 // Pan/zoom (roam) for an SVG map: scroll to zoom around the cursor, drag to
-// pan, double-click to reset. `rerender(spec)` redraws `el` for a given spec;
-// we feed it xlim/ylim windows that render_geo clips to (axes update).
-function enableRoam(el, baseSpec, rerender) {
-  const aspect = baseSpec.width / baseSpec.height;
+// pan, double-click to reset. `getSpec()` returns the current base spec (no
+// xlim/ylim) — a getter so it tracks state changes (e.g. continent drill-down);
+// `rerender(spec)` redraws `el`. We feed xlim/ylim windows that render_geo clips
+// to (axes update). Returns { reset }. After a real pan we set `el._panned` so a
+// coexisting click handler (drill-down) can ignore the click that ends the drag.
+function enableRoam(el, getSpec, rerender) {
   let view = null; // {x0,y0,x1,y1}; null = auto-fit (initial equal-aspect view)
   let raf = 0;
   const fit = () => {
-    const b = geo_bounds(JSON.stringify(baseSpec)); // [minx,miny,maxx,maxy]
-    let [x0, y0, x1, y1] = b;
+    const s = getSpec();
+    const aspect = s.width / s.height;
+    let [x0, y0, x1, y1] = geo_bounds(JSON.stringify(s));
     const w = x1 - x0, h = y1 - y0;
     if (w / h < aspect) { const nw = h * aspect, c = (x0 + x1) / 2; x0 = c - nw / 2; x1 = c + nw / 2; }
     else { const nh = w / aspect, c = (y0 + y1) / 2; y0 = c - nh / 2; y1 = c + nh / 2; }
@@ -58,7 +61,8 @@ function enableRoam(el, baseSpec, rerender) {
     if (raf) return;
     raf = requestAnimationFrame(() => {
       raf = 0;
-      rerender(view ? { ...baseSpec, xlim: [view.x0, view.x1], ylim: [view.y0, view.y1] } : baseSpec);
+      const s = getSpec();
+      rerender(view ? { ...s, xlim: [view.x0, view.x1], ylim: [view.y0, view.y1] } : s);
     });
   };
   el.addEventListener("wheel", (e) => {
@@ -72,18 +76,32 @@ function enableRoam(el, baseSpec, rerender) {
     draw();
   }, { passive: false });
   let drag = null;
-  el.addEventListener("mousedown", (e) => { if (!view) view = fit(); drag = { x: e.clientX, y: e.clientY, v: { ...view } }; });
+  el.addEventListener("mousedown", (e) => { if (!view) view = fit(); drag = { x: e.clientX, y: e.clientY, v: { ...view }, moved: false }; });
   window.addEventListener("mousemove", (e) => {
     if (!drag) return;
+    if (Math.abs(e.clientX - drag.x) + Math.abs(e.clientY - drag.y) > 4) drag.moved = true;
     const r = el.getBoundingClientRect();
     const dx = ((e.clientX - drag.x) / r.width) * (drag.v.x1 - drag.v.x0);
     const dy = ((e.clientY - drag.y) / r.height) * (drag.v.y1 - drag.v.y0);
     view = { x0: drag.v.x0 - dx, x1: drag.v.x1 - dx, y0: drag.v.y0 + dy, y1: drag.v.y1 + dy };
     draw();
   });
-  window.addEventListener("mouseup", () => { drag = null; });
+  window.addEventListener("mouseup", () => { if (drag && drag.moved) el._panned = true; drag = null; });
   el.addEventListener("dblclick", () => { view = null; draw(); });
+  return { reset: () => { view = null; draw(); } };
 }
+
+// Tab bar: show one panel at a time. All demos still initialise on load (the
+// panels are hidden, not un-rendered), so switching tabs is instant.
+function setupTabs() {
+  const tabs = [...document.querySelectorAll(".tab")];
+  const panels = [...document.querySelectorAll(".tabpanel")];
+  tabs.forEach((t) => t.addEventListener("click", () => {
+    tabs.forEach((x) => x.classList.toggle("active", x === t));
+    panels.forEach((p) => { p.hidden = p.id !== "tab-" + t.dataset.tab; });
+  }));
+}
+setupTabs();
 
 async function main() {
   set("status", "initialising ggplot-rs (wasm)…", true);
@@ -150,35 +168,37 @@ async function mapDemo({ db, conn }) {
   allRows = (await conn.query(sql)).toArray().map((r) => r.toJSON());
   for (const r of allRows) nameToContinent[r.name] = r.continent;
 
-  renderMap(allRows, "World — hover a country, or click to zoom to its continent");
+  const plot = document.getElementById("plot");
+  const WORLD = "World — hover/click a country, scroll to zoom, drag to pan";
+  let curRows = allRows, curTitle = WORLD;
+  const specFor = () => ({
+    geometry: curRows.map((r) => r.geometry),
+    fill: curRows.map((r) => Number(r.pop_log)),
+    label: curRows.map((r) => r.name),
+    width: 960, height: 520, title: curTitle,
+  });
+  const rerender = (spec) => { plot.innerHTML = render_geo(JSON.stringify(spec)); detitle(plot); };
+  rerender(specFor());
   set("status", `${allRows.length} countries loaded.`);
 
-  const plot = document.getElementById("plot");
   hoverTips(plot);
+  const roam = enableRoam(plot, specFor, rerender);
   plot.addEventListener("click", (e) => {
+    if (plot._panned) { plot._panned = false; return; } // this click ended a drag-pan
     const m = e.target.closest("[data-tip]");
     if (!m) return;
-    const name = m.getAttribute("data-tip").replace(/: [^:]*$/, "");
-    const cont = nameToContinent[name];
+    const cont = nameToContinent[m.getAttribute("data-tip").replace(/: [^:]*$/, "")];
     if (!cont) return;
-    renderMap(allRows.filter((r) => r.continent === cont), `${cont} — click ⟳ World to reset`);
+    curRows = allRows.filter((r) => r.continent === cont);
+    curTitle = `${cont} — click ⟳ World to reset`;
+    roam.reset();
     document.getElementById("reset").style.display = "";
   });
   document.getElementById("reset").onclick = () => {
-    renderMap(allRows, "World — hover a country, or click to zoom to its continent");
+    curRows = allRows; curTitle = WORLD;
+    roam.reset();
     document.getElementById("reset").style.display = "none";
   };
-}
-
-function renderMap(rows, title) {
-  const plot = document.getElementById("plot");
-  plot.innerHTML = render_geo(JSON.stringify({
-    geometry: rows.map((r) => r.geometry),
-    fill: rows.map((r) => Number(r.pop_log)),
-    label: rows.map((r) => r.name),
-    width: 960, height: 520, title,
-  }));
-  detitle(plot);
 }
 
 // ── Live USGS earthquakes, coloured by magnitude ──────────────────────────
@@ -205,7 +225,7 @@ async function quakeDemo({ db, conn }) {
   const rerender = (spec) => { eq.innerHTML = render_geo(JSON.stringify(spec)); detitle(eq); };
   rerender(baseSpec);
   hoverTips(eq);
-  enableRoam(eq, baseSpec, rerender); // scroll to zoom, drag to pan, dbl-click resets
+  enableRoam(eq, () => baseSpec, rerender); // scroll to zoom, drag to pan, dbl-click resets
   set("status3", `${rows.length} earthquakes — hover, scroll to zoom, drag to pan.`);
 }
 

@@ -26,10 +26,20 @@ const results = {};
 try {
   await page.goto(TARGET, { waitUntil: "load", timeout: TIMEOUT });
 
+  // Panels live in tabs (hidden ≠ removed), so wait for "attached", not "visible".
   const panels = { choropleth: "#plot svg", earthquakes: "#eqplot svg", linkedBar: "#scatterbar svg" };
   for (const [name, sel] of Object.entries(panels)) {
-    try { await page.waitForSelector(sel, { timeout: TIMEOUT }); results[name] = "ok"; }
+    try { await page.waitForSelector(sel, { state: "attached", timeout: TIMEOUT }); results[name] = "ok"; }
     catch { results[name] = "MISSING"; failed.push(name); }
+  }
+
+  // Tab switching: each tab reveals its panel and hides the others.
+  results.tabs = {};
+  for (const [tab, panel] of [["quakes", "#tab-quakes"], ["linked", "#tab-linked"], ["map", "#tab-map"]]) {
+    await page.click(`.tab[data-tab="${tab}"]`);
+    const shown = await page.isVisible(panel);
+    results.tabs[tab] = shown ? "ok" : "HIDDEN";
+    if (!shown) failed.push("tab:" + tab);
   }
 
   // The scatter is a raster canvas — assert it has non-white pixels.
@@ -48,9 +58,9 @@ try {
   for (const s of results.statuses) if (/error|fatal|unavailable/i.test(s)) failed.push("status: " + s);
 
   // Exercise the earthquake-map roam (scroll-to-zoom) — must not throw.
-  const eq = await page.$("#eqplot");
-  if (eq) {
-    const b = await eq.boundingBox();
+  await page.click('.tab[data-tab="quakes"]');
+  const b = await (await page.$("#eqplot")).boundingBox();
+  if (b) {
     await page.mouse.move(b.x + b.width / 2, b.y + b.height / 2);
     await page.mouse.wheel(0, -500);
     await page.waitForTimeout(400);
