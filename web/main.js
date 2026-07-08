@@ -482,13 +482,40 @@ function scatterDemo() {
   const sx = pw / (xe1 - xe0), sy = ph / (ye1 - ye0);
 
   const countAll = () => { const c = { a: 0, b: 0, c: 0 }; for (let i = 0; i < n; i++) c[names[gidx[i]]]++; return c; };
+  const barEl = document.getElementById("scatterbar");
+  const histEl = document.getElementById("scatterhist");
   const renderBar = (c, title) => {
-    const el = document.getElementById("scatterbar");
-    el.innerHTML = render_bar(JSON.stringify({ category: names, value: names.map((g) => c[g]), width: 300, height: 300, title }));
-    detitle(el);
+    barEl.innerHTML = render_bar(JSON.stringify({ category: names, value: names.map((g) => c[g]), width: 320, height: 230, title }));
+    detitle(barEl);
   };
-  renderBar(countAll(), `all ${n.toLocaleString()} points`);
-  hoverTips(document.getElementById("scatterbar"));
+  const renderSelHist = (xsF64, title) => {
+    histEl.innerHTML = xsF64.length ? render_hist(xsF64, 16, 320, 230, title) : "";
+  };
+  // Apply a selection across all three linked views at once: highlight it in the
+  // scatter, the per-group counts bar, and the x-marginal histogram. Driven by
+  // the brush OR by clicking a group's bar (reverse link).
+  const showSelection = (pred, title) => {
+    const sel = new Uint8Array(n), c = { a: 0, b: 0, c: 0 }, xs = [];
+    let total = 0;
+    for (let i = 0; i < n; i++) if (pred(i)) { sel[i] = 1; c[names[gidx[i]]]++; xs.push(x[i]); total++; }
+    draw(sel);
+    renderBar(c, `${total.toLocaleString()} ${title}`);
+    renderSelHist(Float64Array.from(xs), `x of selection (${total.toLocaleString()})`);
+  };
+  const resetSelection = () => {
+    draw(empty);
+    renderBar(countAll(), `all ${n.toLocaleString()} points`);
+    renderSelHist(x, `x of all ${n.toLocaleString()} points`);
+  };
+  resetSelection();
+  hoverTips(barEl);
+  hoverTips(histEl);
+  barEl.addEventListener("click", (e) => {
+    const m = e.target.closest("[data-tip]");
+    if (!m) return;
+    const grp = m.getAttribute("data-tip").split(":")[0].trim();
+    if (names.includes(grp)) showSelection((i) => names[gidx[i]] === grp, `in group ${grp}`);
+  });
 
   const px2 = (e) => {
     const r = canvas.getBoundingClientRect();
@@ -538,21 +565,11 @@ function scatterDemo() {
     const p = px2(e), s = brushing;
     brushing = null;
     brush.style.display = "none";
-    if (Math.abs(p.cx - s.cx) < 5 || Math.abs(p.cy - s.cy) < 5) {
-      draw(empty);
-      return renderBar(countAll(), `all ${n.toLocaleString()} points`);
-    }
+    if (Math.abs(p.cx - s.cx) < 5 || Math.abs(p.cy - s.cy) < 5) return resetSelection();
     const toData = (mx, my) => [xe0 + ((mx - px) / pw) * (xe1 - xe0), ye0 + (1 - (my - py) / ph) * (ye1 - ye0)];
     const [ax, ay] = toData(Math.min(s.cx, p.cx), Math.max(s.cy, p.cy));
     const [bx, by] = toData(Math.max(s.cx, p.cx), Math.min(s.cy, p.cy));
-    const sel = new Uint8Array(n);
-    const c = { a: 0, b: 0, c: 0 };
-    let total = 0;
-    for (let i = 0; i < n; i++) {
-      if (x[i] >= ax && x[i] <= bx && y[i] >= ay && y[i] <= by) { sel[i] = 1; c[names[gidx[i]]]++; total++; }
-    }
-    draw(sel); // selected stay bright, the rest fade
-    renderBar(c, `${total.toLocaleString()} selected`);
+    showSelection((i) => x[i] >= ax && x[i] <= bx && y[i] >= ay && y[i] <= by, "selected"); // brush → all views
   });
 }
 

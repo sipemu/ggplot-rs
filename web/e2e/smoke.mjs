@@ -28,7 +28,7 @@ try {
 
   // Panels live in tabs (hidden ≠ removed), so wait for "attached", not "visible".
   const panels = {
-    choropleth: "#plot svg", earthquakes: "#eqplot svg", linkedBar: "#scatterbar svg",
+    choropleth: "#plot svg", earthquakes: "#eqplot svg", linkedBar: "#scatterbar svg", linkedHist: "#scatterhist svg",
     histogram: "#eqhist svg", dataTable: "#eqtable table", gallery: "#gallery svg", webglFrame: "#glframe svg",
   };
   for (const [name, sel] of Object.entries(panels)) {

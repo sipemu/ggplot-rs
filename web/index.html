@@ -72,8 +72,9 @@
     .btn:hover { border-color: var(--accent); color: var(--accent); }
     .linked { display: flex; gap: 1rem; flex-wrap: wrap; align-items: flex-start; }
     .linked .viz:first-child { flex: 1 1 460px; }
-    #scatterbar { flex: 0 0 300px; }
-    #scatterbar svg { max-width: 100%; height: auto; }
+    .linkedright { flex: 1 1 320px; display: flex; flex-direction: column; gap: 1rem; }
+    #scatterbar { cursor: pointer; }
+    #scatterbar svg, #scatterhist svg { max-width: 100%; height: auto; }
     /* Brush rectangle overlaid on the scatter canvas. */
     #brush {
       position: absolute; border: 1px solid var(--accent);
@@ -162,17 +163,21 @@
     </section>
 
     <section class="card tabpanel" id="tab-linked" role="tabpanel" hidden>
-      <h2>Linked views · brush ↔ bar</h2>
+      <h2>Linked views · brush &amp; drill-down</h2>
       <p class="sub">
-        A 100k-point scatter drawn by the raster backend (no DOM node per point)
-        with nearest-point hover. <strong>Drag a box</strong> to brush — the
-        selected points stay bright while the rest fade, and the ggplot-rs bar
-        chart on the right updates with the per-group counts in your selection.
+        A 100k-point scatter (raster backend, nearest-point hover) linked to two
+        ggplot-rs charts. <strong>Drag a box</strong> to brush — the selection
+        highlights in the scatter, and both the per-group <strong>counts bar</strong>
+        and the <strong>x-marginal histogram</strong> update. Or <strong>click a
+        bar</strong> to isolate that group across all three views.
       </p>
       <p id="status2" class="status busy">…</p>
       <div class="linked">
         <div class="viz"><canvas id="scatter" width="720" height="520"></canvas><div id="brush"></div></div>
-        <div id="scatterbar" class="viz"></div>
+        <div class="linkedright">
+          <div id="scatterbar" class="viz"></div>
+          <div id="scatterhist" class="viz"></div>
+        </div>
       </div>
     </section>
 
