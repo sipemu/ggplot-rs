@@ -70,11 +70,12 @@
       cursor: pointer; vertical-align: 2px; margin-left: .5rem;
     }
     .btn:hover { border-color: var(--accent); color: var(--accent); }
-    .linked { display: flex; gap: 1rem; flex-wrap: wrap; align-items: flex-start; }
-    .linked .viz:first-child { flex: 1 1 460px; }
-    .linkedright { flex: 1 1 320px; display: flex; flex-direction: column; gap: 1rem; }
+    .linked { display: grid; grid-template-columns: minmax(0, 1.7fr) minmax(0, 1fr); gap: 1rem; align-items: start; }
+    .linkedright { display: grid; gap: 1rem; align-content: start; }
+    #scatter { width: 100%; height: auto; }
     #scatterbar { cursor: pointer; }
-    #scatterbar svg, #scatterhist svg { max-width: 100%; height: auto; }
+    #scatterbar svg, #scatterhist svg { width: 100%; height: auto; display: block; }
+    @media (max-width: 760px) { .linked { grid-template-columns: 1fr; } }
     /* Brush rectangle overlaid on the scatter canvas. */
     #brush {
       position: absolute; border: 1px solid var(--accent);

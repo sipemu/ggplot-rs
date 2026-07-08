@@ -175,6 +175,10 @@ fn render_bar_impl(spec_json: &str) -> Result<String, String> {
         .geom_col()
         .scale_fill_brewer(crate::scale::palettes::PaletteName::Set1)
         .theme_minimal();
+    // The x-axis already labels the categories, so the fill legend is redundant.
+    if !v.get("legend").and_then(|x| x.as_bool()).unwrap_or(true) {
+        plot = plot.show_legend(false);
+    }
     if let Some(t) = v.get("title").and_then(|x| x.as_str()) {
         plot = plot.title(t);
     }
