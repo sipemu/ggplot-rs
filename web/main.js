@@ -485,11 +485,11 @@ function scatterDemo() {
   const barEl = document.getElementById("scatterbar");
   const histEl = document.getElementById("scatterhist");
   const renderBar = (c, title) => {
-    barEl.innerHTML = render_bar(JSON.stringify({ category: names, value: names.map((g) => c[g]), width: 320, height: 230, title }));
+    barEl.innerHTML = render_bar(JSON.stringify({ category: names, value: names.map((g) => c[g]), width: 380, height: 240, legend: false, title }));
     detitle(barEl);
   };
   const renderSelHist = (xsF64, title) => {
-    histEl.innerHTML = xsF64.length ? render_hist(xsF64, 16, 320, 230, title) : "";
+    histEl.innerHTML = xsF64.length ? render_hist(xsF64, 16, 380, 240, title) : "";
   };
   // Apply a selection across all three linked views at once: highlight it in the
   // scatter, the per-group counts bar, and the x-marginal histogram. Driven by
