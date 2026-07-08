@@ -721,7 +721,13 @@ fn render_scatter_xy_impl(
         .geom_point()
         .theme(theme_minimal());
     if has_group {
-        plot = plot.scale_color_brewer(crate::scale::palettes::PaletteName::Set1);
+        // Fixed factor order so the group→colour mapping is stable regardless of
+        // the draw-order reshuffle above (else selection colours don't match the
+        // linked bar, which always uses the canonical order).
+        let s = crate::scale::color::ScaleColorDiscrete::new(Aesthetic::Color)
+            .with_named_palette(&crate::scale::palettes::PaletteName::Set1)
+            .with_levels(group_names.clone());
+        plot = plot.scale_color(s);
     }
     if !title.is_empty() {
         plot = plot.title(title);
