@@ -41,6 +41,13 @@ pub trait Coord: Send + Sync {
         false
     }
 
+    /// For a polar system, whether the *x* aesthetic maps to angle (`theta="x"`).
+    /// When false (`theta="y"`, pies), the *y* aesthetic is the angle, so sector
+    /// tessellation must sweep the y edge instead of the x edge.
+    fn polar_theta_is_x(&self) -> bool {
+        true
+    }
+
     /// Zoom limits for x-axis (data coordinates). Clips viewport without filtering data.
     fn zoom_x(&self) -> Option<(f64, f64)> {
         None

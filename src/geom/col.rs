@@ -23,15 +23,28 @@ pub(crate) fn polar_sector(
     r0: f64,
     r1: f64,
 ) -> Vec<(f64, f64)> {
-    const N: usize = 24;
+    const N: usize = 48;
     let mut pts = Vec::with_capacity(2 * (N + 1));
-    for k in 0..=N {
-        let t = t0 + (t1 - t0) * k as f64 / N as f64;
-        pts.push(coord.transform((t, r1), area));
-    }
-    for k in 0..=N {
-        let t = t1 + (t0 - t1) * k as f64 / N as f64;
-        pts.push(coord.transform((t, r0), area));
+    if coord.polar_theta_is_x() {
+        // angle = x: sweep x along the outer radius (r1), back along the inner (r0)
+        for k in 0..=N {
+            let t = t0 + (t1 - t0) * k as f64 / N as f64;
+            pts.push(coord.transform((t, r1), area));
+        }
+        for k in 0..=N {
+            let t = t1 + (t0 - t1) * k as f64 / N as f64;
+            pts.push(coord.transform((t, r0), area));
+        }
+    } else {
+        // angle = y (pie): sweep y along the outer radius (t1), back along t0
+        for k in 0..=N {
+            let r = r0 + (r1 - r0) * k as f64 / N as f64;
+            pts.push(coord.transform((t1, r), area));
+        }
+        for k in 0..=N {
+            let r = r1 + (r0 - r1) * k as f64 / N as f64;
+            pts.push(coord.transform((t0, r), area));
+        }
     }
     pts
 }

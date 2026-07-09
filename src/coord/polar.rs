@@ -88,4 +88,8 @@ impl Coord for CoordPolar {
     fn is_polar(&self) -> bool {
         true
     }
+
+    fn polar_theta_is_x(&self) -> bool {
+        self.theta == "x"
+    }
 }
