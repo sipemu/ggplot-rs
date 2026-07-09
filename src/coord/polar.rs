@@ -14,6 +14,8 @@ pub struct CoordPolar {
     pub start: f64,
     /// Direction: 1 = clockwise, -1 = counterclockwise.
     pub direction: f64,
+    /// Inner radius as a fraction of the outer radius (0 = pie, 0.5 = donut).
+    pub inner_radius: f64,
 }
 
 impl CoordPolar {
@@ -22,7 +24,14 @@ impl CoordPolar {
             theta: "x".to_string(),
             start: 0.0,
             direction: 1.0,
+            inner_radius: 0.0,
         }
+    }
+
+    /// Set the inner radius (fraction of outer, `0.0`..`1.0`) to punch a donut hole.
+    pub fn inner_radius(mut self, frac: f64) -> Self {
+        self.inner_radius = frac.clamp(0.0, 0.95);
+        self
     }
 
     pub fn theta(mut self, theta: &str) -> Self {
@@ -63,7 +72,8 @@ impl Coord for CoordPolar {
 
         // Radius: fraction of the available radius (half the smaller dimension)
         let max_radius = plot_area.width.min(plot_area.height) / 2.0;
-        let radius = radius_norm * max_radius;
+        // Map [0,1] into [inner_radius, 1] so a donut leaves a centre hole.
+        let radius = (self.inner_radius + radius_norm * (1.0 - self.inner_radius)) * max_radius;
 
         // Center of the polar plot
         let cx = plot_area.x + plot_area.width / 2.0;
