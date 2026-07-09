@@ -100,13 +100,20 @@ impl PlotLayout {
             0.0
         };
 
+        // A horizontal (top/bottom) legend only needs ONE row of height, not the
+        // width-based `legend_size` — otherwise a big gap opens above the plot.
+        let legend_band = if has_legend {
+            theme.legend_margin.top + theme.legend_key_height + theme.legend_spacing + theme.legend_margin.bottom
+        } else {
+            0.0
+        };
         // Determine legend space allocation per position
         let (legend_right, legend_left, legend_top, legend_bottom) = if has_legend {
             match theme.legend_position {
                 LegendPosition::Right => (legend_size, 0.0, 0.0, 0.0),
                 LegendPosition::Left => (0.0, legend_size, 0.0, 0.0),
-                LegendPosition::Top => (0.0, 0.0, legend_size, 0.0),
-                LegendPosition::Bottom => (0.0, 0.0, 0.0, legend_size),
+                LegendPosition::Top => (0.0, 0.0, legend_band, 0.0),
+                LegendPosition::Bottom => (0.0, 0.0, 0.0, legend_band),
                 // Inside/None overlay the panel, reserving no external space.
                 LegendPosition::None | LegendPosition::Inside(..) => (0.0, 0.0, 0.0, 0.0),
             }

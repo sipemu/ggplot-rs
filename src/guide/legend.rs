@@ -337,8 +337,8 @@ fn draw_discrete_legend_at(
             cur_x = x
                 + swatch_size
                 + theme.legend_spacing
-                + (label.chars().count() as f64) * theme.legend_text.size * 0.55
-                + theme.legend_spacing * 2.0;
+                + (label.chars().count() as f64) * theme.legend_text.size * 0.62
+                + theme.legend_spacing * 3.0;
         }
     }
 
