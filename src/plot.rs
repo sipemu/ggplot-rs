@@ -1230,6 +1230,12 @@ impl GGPlot {
         self
     }
 
+    /// Set the legend position (R's `legend.position`, e.g. `Top`/`Bottom`).
+    pub fn legend_position(mut self, pos: crate::theme::LegendPosition) -> Self {
+        self.theme.legend_position = pos;
+        self
+    }
+
     pub fn primary_color(mut self, color: (u8, u8, u8)) -> Self {
         self.theme.primary = Some(color);
         self

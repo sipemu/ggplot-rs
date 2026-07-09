@@ -69,12 +69,12 @@ pub fn draw_legend(
         if scale.is_discrete() {
             if is_horizontal {
                 let width = draw_discrete_legend_at(
-                    scales, aes, scale, theme, offset_x, offset_y, backend, guide,
+                    scales, aes, scale, theme, offset_x, offset_y, backend, guide, true,
                 )?;
                 offset_x += width + theme.legend_spacing * 2.0;
             } else {
                 let height = draw_discrete_legend_at(
-                    scales, aes, scale, theme, offset_x, offset_y, backend, guide,
+                    scales, aes, scale, theme, offset_x, offset_y, backend, guide, false,
                 )?;
                 offset_y += height + theme.legend_spacing * 2.0;
             }
@@ -93,7 +93,7 @@ pub fn draw_legend(
             } else {
                 // Continuous size/alpha — draw as discrete-like with sampled breaks
                 let height = draw_discrete_legend_at(
-                    scales, aes, scale, theme, offset_x, offset_y, backend, guide,
+                    scales, aes, scale, theme, offset_x, offset_y, backend, guide, is_horizontal,
                 )?;
                 if is_horizontal {
                     offset_x += theme.legend_key_width
@@ -153,6 +153,7 @@ fn draw_discrete_legend_at(
     legend_y: f64,
     backend: &mut dyn DrawBackend,
     guide: &GuideLegend,
+    is_horizontal: bool,
 ) -> Result<f64, RenderError> {
     let mut breaks = scale.breaks();
     if breaks.is_empty() {
@@ -213,17 +214,20 @@ fn draw_discrete_legend_at(
         }
     }
 
+    // Horizontal legends lay keys left-to-right; vertical ones stack downward.
+    let mut cur_x = legend_x;
     for (i, (_, label)) in breaks.iter().enumerate() {
-        let y = items_y + i as f64 * item_height;
-        let center_x = legend_x + swatch_size / 2.0;
+        let x = if is_horizontal { cur_x } else { legend_x };
+        let y = if is_horizontal { items_y } else { items_y + i as f64 * item_height };
+        let center_x = x + swatch_size / 2.0;
         let center_y = y + swatch_size / 2.0;
 
         // Draw legend key background
         if theme.legend_key.visible {
             if let Some(fill) = theme.legend_key.fill {
                 backend.draw_rect(
-                    (legend_x, y),
-                    (legend_x + swatch_size, y + swatch_size),
+                    (x, y),
+                    (x + swatch_size, y + swatch_size),
                     &RectStyle {
                         fill: Some(fill),
                         stroke: theme.legend_key.color,
@@ -241,8 +245,8 @@ fn draw_discrete_legend_at(
             Aesthetic::Color | Aesthetic::Fill => {
                 let color = scales.map_color(aes, &value).unwrap_or((127, 127, 127));
                 backend.draw_rect(
-                    (legend_x, y),
-                    (legend_x + swatch_size, y + swatch_size),
+                    (x, y),
+                    (x + swatch_size, y + swatch_size),
                     &RectStyle {
                         fill: Some(color),
                         stroke: None,
@@ -270,10 +274,7 @@ fn draw_discrete_legend_at(
             Aesthetic::Linetype => {
                 let lt = scales.map_linetype(&value).unwrap_or(Linetype::Solid);
                 backend.draw_line(
-                    &[
-                        (legend_x + 2.0, center_y),
-                        (legend_x + swatch_size - 2.0, center_y),
-                    ],
+                    &[(x + 2.0, center_y), (x + swatch_size - 2.0, center_y)],
                     &LineStyle {
                         color: (50, 50, 50),
                         width: 1.5,
@@ -299,8 +300,8 @@ fn draw_discrete_legend_at(
             Aesthetic::Alpha => {
                 let alpha = scales.map_alpha(&value).unwrap_or(1.0);
                 backend.draw_rect(
-                    (legend_x, y),
-                    (legend_x + swatch_size, y + swatch_size),
+                    (x, y),
+                    (x + swatch_size, y + swatch_size),
                     &RectStyle {
                         fill: Some((50, 50, 50)),
                         stroke: None,
@@ -321,7 +322,7 @@ fn draw_discrete_legend_at(
         };
         backend.draw_text(
             label,
-            (legend_x + swatch_size + theme.legend_spacing, center_y),
+            (x + swatch_size + theme.legend_spacing, center_y),
             &TextStyle {
                 color: theme.legend_text.color,
                 size: theme.legend_text.size,
@@ -331,9 +332,21 @@ fn draw_discrete_legend_at(
                 face: theme.legend_text.face,
             },
         )?;
+        if is_horizontal {
+            // advance past swatch + spacing + estimated label width + gap
+            cur_x = x
+                + swatch_size
+                + theme.legend_spacing
+                + (label.chars().count() as f64) * theme.legend_text.size * 0.55
+                + theme.legend_spacing * 2.0;
+        }
     }
 
-    Ok(title_offset + breaks.len() as f64 * item_height)
+    if is_horizontal {
+        Ok(cur_x - legend_x) // width used
+    } else {
+        Ok(title_offset + breaks.len() as f64 * item_height)
+    }
 }
 
 /// Draw a continuous colorbar legend at a given position. Returns the height used.
