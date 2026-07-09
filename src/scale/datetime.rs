@@ -350,10 +350,56 @@ impl Scale for ScaleDateTime {
             return breaks;
         }
 
+        let explicit_secs = matches!(self.date_breaks, Some(DateBreak::Secs(s)) if s > 0.0);
         let step = match self.date_breaks {
             Some(DateBreak::Secs(s)) if s > 0.0 => s,
             _ => Self::nice_datetime_step(range),
         };
+
+        // For month-or-larger auto steps, snap breaks to calendar boundaries with
+        // clean year / year-month labels (ggplot2-style) instead of fixed-second
+        // timestamps that drift off midnight (e.g. "2012-01-01 12:00:00").
+        const DAY: f64 = 86_400.0;
+        const MONTH: f64 = 30.0 * DAY;
+        const YEAR: f64 = 365.25 * DAY;
+        if !explicit_secs && step >= 0.9 * YEAR {
+            let n = ((step / YEAR).round() as i64).max(1);
+            let mut y = civil_from_secs(emin.ceil() as i64).year.div_euclid(n) * n;
+            while (secs_from_civil(y, 1, 1) as f64) < emin {
+                y += n;
+            }
+            let mut breaks = Vec::new();
+            while (secs_from_civil(y, 1, 1) as f64) <= emax + 1.0 {
+                let secs = secs_from_civil(y, 1, 1) as f64;
+                breaks.push((self.map(&Value::Float(secs)), format!("{y}")));
+                y += n;
+            }
+            return breaks;
+        }
+        if !explicit_secs && step >= 0.9 * MONTH {
+            let n = ((step / MONTH).round() as i64).max(1);
+            let start = civil_from_secs(emin.ceil() as i64);
+            let mut tm = start.year * 12 + (start.month as i64 - 1); // months since year 0
+            while (secs_from_civil(tm.div_euclid(12), tm.rem_euclid(12) as u32 + 1, 1) as f64)
+                < emin
+            {
+                tm += 1;
+            }
+            let mut breaks = Vec::new();
+            let mut guard = 0;
+            loop {
+                let (y, m) = (tm.div_euclid(12), tm.rem_euclid(12) as u32 + 1);
+                let secs = secs_from_civil(y, m, 1) as f64;
+                if secs > emax + 1.0 || guard > 10_000 {
+                    break;
+                }
+                breaks.push((self.map(&Value::Float(secs)), format!("{y:04}-{m:02}")));
+                tm += n;
+                guard += 1;
+            }
+            return breaks;
+        }
+
         let start = (emin / step).ceil() * step;
         let mut breaks = Vec::new();
         let mut v = start;
@@ -400,6 +446,26 @@ mod tests {
         assert_eq!((p.year, p.month, p.day), (2021, 3, 15));
         assert_eq!((p.hour, p.minute, p.second), (12, 30, 45));
         assert_eq!(secs_from_civil(2021, 3, 15), 1_615_766_400); // midnight
+    }
+
+    #[test]
+    fn multiyear_default_breaks_are_clean_years() {
+        // A multi-year range with no explicit date_breaks should snap to calendar
+        // year boundaries and label with plain years (not drifting timestamps).
+        let mut s = ScaleDateTime::new();
+        s.train(&[
+            Value::DateTime(secs_from_civil(2011, 2, 1)),
+            Value::DateTime(secs_from_civil(2016, 4, 1)),
+        ]);
+        let labels: Vec<String> = s.breaks().into_iter().map(|(_, l)| l).collect();
+        assert!(!labels.is_empty());
+        for l in &labels {
+            assert!(
+                l.len() == 4 && l.chars().all(|c| c.is_ascii_digit()),
+                "expected a bare year label, got {l:?}"
+            );
+        }
+        assert!(labels.contains(&"2014".to_string()));
     }
 
     #[test]
