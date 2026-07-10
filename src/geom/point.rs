@@ -59,11 +59,14 @@ impl Geom for GeomPoint {
             let ny = y_scale.map(|s| s.map(&y_col[i])).unwrap_or(0.0);
             let (px, py) = coord.transform((nx, ny), &plot_area);
 
-            // Hover tooltip: an explicit `label`, else "(x, y)" prefixed by group.
-            let tip = label_col
+            // Hover tooltip: an explicit `label` with its y value ("series: 22"),
+            // else "(x, y)" prefixed by group.
+            let tip = match label_col
                 .map(|c| super::tip_value(&c[i]))
                 .filter(|s| !s.is_empty())
-                .or_else(|| {
+            {
+                Some(l) => Some(format!("{l}: {}", super::tip_value(&y_col[i]))),
+                None => {
                     let xy = format!(
                         "({}, {})",
                         super::tip_value(&x_col[i]),
@@ -76,7 +79,8 @@ impl Geom for GeomPoint {
                         Some(gr) => Some(format!("{gr}: {xy}")),
                         None => Some(xy),
                     }
-                });
+                }
+            };
             backend.set_tooltip(tip);
 
             let (r, g, b) = if let Some(cc) = color_col {
