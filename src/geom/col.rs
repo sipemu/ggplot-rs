@@ -146,6 +146,7 @@ impl Geom for GeomCol {
                 (None, Some(y)) => Some(y),
                 (None, None) => None,
             });
+            backend.set_mark_axis(Some(super::tip_value(&x_col[i])));
 
             if coord.is_polar() {
                 // A bar becomes a radial sector: tessellate the outer arc
@@ -171,6 +172,7 @@ impl Geom for GeomCol {
             }
         }
         backend.set_tooltip(None);
+        backend.set_mark_axis(None);
 
         Ok(())
     }

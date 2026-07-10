@@ -15,6 +15,7 @@ pub struct SvgBackend {
     total_area: Rect,
     body: String,
     tooltip: Option<String>,
+    axis_key: Option<String>,
 }
 
 impl SvgBackend {
@@ -29,14 +30,20 @@ impl SvgBackend {
             },
             body: String::new(),
             tooltip: None,
+            axis_key: None,
         }
     }
 
-    /// Emit `<tag attrs/>`, or `<tag attrs><title>tip</title></tag>` when a
-    /// tooltip is set (native SVG hover).
+    /// Emit `<tag attrs/>`, or `<tag attrs data-x=…><title>tip</title></tag>`
+    /// when a tooltip / axis key is set (native SVG hover + host grouping).
     fn push_mark(&mut self, tag: &str, attrs: &str) {
+        let dx = match &self.axis_key {
+            Some(k) => format!(" data-x=\"{}\"", escape(k)),
+            None => String::new(),
+        };
         let mark = match &self.tooltip {
-            Some(t) => format!("<{tag} {attrs}><title>{}</title></{tag}>", escape(t)),
+            Some(t) => format!("<{tag} {attrs}{dx}><title>{}</title></{tag}>", escape(t)),
+            None if !dx.is_empty() => format!("<{tag} {attrs}{dx}/>"),
             None => format!("<{tag} {attrs}/>"),
         };
         self.body.push_str(&mark);
@@ -88,6 +95,10 @@ impl DrawBackend for SvgBackend {
 
     fn set_tooltip(&mut self, tooltip: Option<String>) {
         self.tooltip = tooltip;
+    }
+
+    fn set_mark_axis(&mut self, key: Option<String>) {
+        self.axis_key = key;
     }
 
     fn draw_circle(

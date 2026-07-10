@@ -195,6 +195,11 @@ pub trait DrawBackend {
     /// for a native hover tooltip; others ignore it. Default: no-op.
     fn set_tooltip(&mut self, _tooltip: Option<String>) {}
 
+    /// Attach an axis (x) key to subsequently-drawn marks — SVG emits it as a
+    /// `data-x` attribute so a host can group marks by x (axis-pointer tooltip).
+    /// Default: no-op.
+    fn set_mark_axis(&mut self, _key: Option<String>) {}
+
     /// Draw a point with a specific shape. Default delegates to draw_circle for Circle.
     fn draw_shape(
         &mut self,
