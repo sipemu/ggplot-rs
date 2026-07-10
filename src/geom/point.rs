@@ -55,6 +55,13 @@ impl Geom for GeomPoint {
         let y_scale = scales.get(&Aesthetic::Y);
 
         for i in 0..data.nrows() {
+            // Drop missing values (ggplot2 removes rows with NA x/y). Without this
+            // an NA maps to 0.0 and paints a spurious point at the panel baseline.
+            if matches!(x_col[i], crate::data::Value::Na)
+                || matches!(y_col[i], crate::data::Value::Na)
+            {
+                continue;
+            }
             let nx = x_scale.map(|s| s.map(&x_col[i])).unwrap_or(0.0);
             let ny = y_scale.map(|s| s.map(&y_col[i])).unwrap_or(0.0);
             let (px, py) = coord.transform((nx, ny), &plot_area);
