@@ -42,12 +42,21 @@ impl SvgBackend {
         self.body.push_str(&mark);
     }
 
-    /// Wrap the accumulated elements in a complete `<svg>` document.
+    /// Wrap the accumulated elements in a complete `<svg>` document. The
+    /// `data-plot` attribute records the panel (data) area in viewBox units so a
+    /// host can map screen coordinates back to data (e.g. for zoom/crosshair).
     pub fn finish(self) -> String {
+        let p = &self.plot_area;
         format!(
             "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"{}\" height=\"{}\" \
-             viewBox=\"0 0 {0} {1}\">{}</svg>",
-            self.total_area.width as i64, self.total_area.height as i64, self.body
+             viewBox=\"0 0 {0} {1}\" data-plot=\"{:.2} {:.2} {:.2} {:.2}\">{}</svg>",
+            self.total_area.width as i64,
+            self.total_area.height as i64,
+            p.x,
+            p.y,
+            p.width,
+            p.height,
+            self.body
         )
     }
 }
