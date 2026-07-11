@@ -47,51 +47,95 @@ impl Geom for GeomArea {
             .column("y")
             .ok_or(RenderError::MissingAesthetic("y".into()))?;
 
+        // A fill/color aesthetic (or an explicit group) splits the data into one
+        // filled band per series — as in a grouped or stacked area chart.
+        let group_col = data
+            .column("fill")
+            .or_else(|| data.column("color"))
+            .or_else(|| data.column("group"));
+        // `ymin` is set by position="stack"/"fill" (the bottom of each segment);
+        // without it the band runs from the y=0 baseline.
+        let ymin_col = data.column("ymin");
+
         let plot_area = backend.plot_area();
         let x_scale = scales.get(&Aesthetic::X);
         let y_scale = scales.get(&Aesthetic::Y);
-
         let base_ny = y_scale.map(|s| s.map(&Value::Float(0.0))).unwrap_or(0.0);
 
-        let mut upper: Vec<(f64, f64)> = Vec::new();
-        let mut lower: Vec<(f64, f64)> = Vec::new();
-
-        for i in 0..data.nrows() {
-            let nx = x_scale.map(|s| s.map(&x_col[i])).unwrap_or(0.0);
-            let ny = y_scale.map(|s| s.map(&y_col[i])).unwrap_or(0.0);
-            upper.push(coord.transform((nx, ny), &plot_area));
-            lower.push(coord.transform((nx, base_ny), &plot_area));
+        // Group row indices by the series key, preserving first-seen order (which
+        // is the stacking order the position adjustment produced).
+        let mut groups: Vec<(String, Vec<usize>)> = Vec::new();
+        match group_col {
+            Some(gc) => {
+                for (i, v) in gc.iter().enumerate() {
+                    let key = v.to_group_key();
+                    match groups.iter_mut().find(|(k, _)| k == &key) {
+                        Some((_, idx)) => idx.push(i),
+                        None => groups.push((key, vec![i])),
+                    }
+                }
+            }
+            None => groups.push((String::new(), (0..data.nrows()).collect())),
         }
 
-        // Build polygon: upper left-to-right, then lower right-to-left
-        let mut polygon = upper.clone();
-        lower.reverse();
-        polygon.extend(lower);
+        for (_, indices) in &groups {
+            // Order this series left-to-right so the band is a clean polygon.
+            let mut idx = indices.clone();
+            idx.sort_by(|&a, &b| {
+                let xa = x_scale.map(|s| s.map(&x_col[a])).unwrap_or(0.0);
+                let xb = x_scale.map(|s| s.map(&x_col[b])).unwrap_or(0.0);
+                xa.partial_cmp(&xb).unwrap_or(std::cmp::Ordering::Equal)
+            });
 
-        if polygon.len() >= 3 {
-            backend.draw_polygon(
-                &polygon,
-                &RectStyle {
-                    fill: Some(self.fill),
-                    stroke: None,
-                    stroke_width: 0.0,
-                    alpha: self.alpha,
-                    clip: true,
-                },
-            )?;
-        }
+            let fill = group_col
+                .and_then(|gc| scales.map_color(&Aesthetic::Fill, &gc[idx[0]]))
+                .or_else(|| {
+                    group_col.and_then(|gc| scales.map_color(&Aesthetic::Color, &gc[idx[0]]))
+                })
+                .unwrap_or(self.fill);
 
-        // Draw the top line
-        if upper.len() >= 2 {
-            backend.draw_line(
-                &upper,
-                &LineStyle {
-                    color: self.color,
-                    alpha: 1.0,
-                    width: self.line_width,
-                    linetype: Linetype::Solid,
-                },
-            )?;
+            let mut upper: Vec<(f64, f64)> = Vec::with_capacity(idx.len());
+            let mut lower: Vec<(f64, f64)> = Vec::with_capacity(idx.len());
+            for &i in &idx {
+                let nx = x_scale.map(|s| s.map(&x_col[i])).unwrap_or(0.0);
+                let ny = y_scale.map(|s| s.map(&y_col[i])).unwrap_or(0.0);
+                let nb = ymin_col
+                    .and_then(|c| c[i].as_f64())
+                    .and_then(|v| y_scale.map(|s| s.map(&Value::Float(v))))
+                    .unwrap_or(base_ny);
+                upper.push(coord.transform((nx, ny), &plot_area));
+                lower.push(coord.transform((nx, nb), &plot_area));
+            }
+
+            let mut polygon = upper.clone();
+            lower.reverse();
+            polygon.extend(lower);
+            if polygon.len() >= 3 {
+                backend.draw_polygon(
+                    &polygon,
+                    &RectStyle {
+                        fill: Some(fill),
+                        stroke: None,
+                        stroke_width: 0.0,
+                        alpha: self.alpha,
+                        clip: true,
+                    },
+                )?;
+            }
+            if upper.len() >= 2 {
+                // A single-series area keeps its dark outline; multi-series bands
+                // outline in their own fill so stacked bands stay legible.
+                let line_color = if groups.len() > 1 { fill } else { self.color };
+                backend.draw_line(
+                    &upper,
+                    &LineStyle {
+                        color: line_color,
+                        alpha: 1.0,
+                        width: self.line_width,
+                        linetype: Linetype::Solid,
+                    },
+                )?;
+            }
         }
 
         Ok(())
