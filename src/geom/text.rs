@@ -92,6 +92,10 @@ impl Geom for GeomText {
             let nx = x_scale.map(|s| s.map(&x_col[i])).unwrap_or(0.0);
             let ny = y_scale.map(|s| s.map(&y_col[i])).unwrap_or(0.0);
             let (px, py) = coord.transform((nx, ny), &plot_area);
+            // The backend centres text vertically (dominant-baseline=middle), so
+            // apply vjust as a baseline shift: 0 = bottom-anchored (text above the
+            // point), 0.5 = centred, 1 = top-anchored (text below). y grows down.
+            let py = py + (self.vjust - 0.5) * self.size;
 
             let text = label_col[i].to_group_key();
 
@@ -225,6 +229,10 @@ impl Geom for GeomLabel {
             let nx = x_scale.map(|s| s.map(&x_col[i])).unwrap_or(0.0);
             let ny = y_scale.map(|s| s.map(&y_col[i])).unwrap_or(0.0);
             let (px, py) = coord.transform((nx, ny), &plot_area);
+            // The backend centres text vertically (dominant-baseline=middle), so
+            // apply vjust as a baseline shift: 0 = bottom-anchored (text above the
+            // point), 0.5 = centred, 1 = top-anchored (text below). y grows down.
+            let py = py + (self.vjust - 0.5) * self.size;
 
             let text = label_col[i].to_group_key();
             let approx_width = text.len() as f64 * self.size * 0.6;
