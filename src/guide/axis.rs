@@ -4,6 +4,28 @@ use crate::render::{Rect, RenderError};
 use crate::scale::Scale;
 use crate::theme::Theme;
 
+/// Horizontal pixel for a break at normalized `pos` along the *horizontal* axis.
+/// `coord_flip` swaps which normalized component drives horizontal position, so
+/// route through the coord with the component that lands on x either way.
+fn along_x(coord: &dyn Coord, pos: f64, area: &Rect) -> f64 {
+    let p = if coord.is_flipped() {
+        (0.0, pos)
+    } else {
+        (pos, 0.0)
+    };
+    coord.transform(p, area).0
+}
+
+/// Vertical pixel for a break at normalized `pos` along the *vertical* axis.
+fn along_y(coord: &dyn Coord, pos: f64, area: &Rect) -> f64 {
+    let p = if coord.is_flipped() {
+        (pos, 0.0)
+    } else {
+        (0.0, pos)
+    };
+    coord.transform(p, area).1
+}
+
 /// Draw the X axis: ticks, labels, and title.
 pub fn draw_x_axis(
     scale: &dyn Scale,
@@ -45,7 +67,7 @@ pub fn draw_x_axis(
     // Ticks and labels
     let dodge = theme.axis_text_x_dodge.max(1);
     for (i, (pos, label)) in breaks.iter().enumerate() {
-        let (px, _py) = coord.transform((*pos, 0.0), plot_area);
+        let px = along_x(coord, *pos, plot_area);
 
         if axis_ticks.visible {
             backend.draw_line(
@@ -99,7 +121,7 @@ pub fn draw_x_axis(
     // Minor ticks between majors.
     if theme.axis_minor_ticks && axis_ticks.visible {
         for pos in minor_breaks(&breaks) {
-            let (px, _) = coord.transform((pos, 0.0), plot_area);
+            let px = along_x(coord, pos, plot_area);
             backend.draw_line(
                 &[(px, edge_y), (px, edge_y + dir * tick_len * 0.5)],
                 &LineStyle {
@@ -178,7 +200,7 @@ pub fn draw_y_axis(
 
     // Ticks and labels
     for (pos, label) in &breaks {
-        let (_, py) = coord.transform((0.0, *pos), plot_area);
+        let py = along_y(coord, *pos, plot_area);
 
         if axis_ticks.visible {
             backend.draw_line(
@@ -216,7 +238,7 @@ pub fn draw_y_axis(
     // Minor ticks between majors.
     if theme.axis_minor_ticks && axis_ticks.visible {
         for pos in minor_breaks(&breaks) {
-            let (_, py) = coord.transform((0.0, pos), plot_area);
+            let py = along_y(coord, pos, plot_area);
             backend.draw_line(
                 &[(plot_area.x - tick_len * 0.5, py), (plot_area.x, py)],
                 &LineStyle {
@@ -290,7 +312,7 @@ pub fn draw_sec_y_axis(
 
     // Ticks and labels at primary break positions, but with transformed labels
     for (pos, label) in &breaks {
-        let (_, py) = coord.transform((0.0, *pos), plot_area);
+        let py = along_y(coord, *pos, plot_area);
 
         if axis_ticks.visible {
             backend.draw_line(
@@ -391,7 +413,7 @@ pub fn draw_gridlines(
     // Minor X gridlines (vertical) — drawn first so majors paint over them
     if minor_x.visible {
         for pos in minor_breaks(&x_breaks) {
-            let (px, _) = coord.transform((pos, 0.0), plot_area);
+            let px = along_x(coord, pos, plot_area);
             backend.draw_line(
                 &[(px, plot_area.y), (px, plot_area.y + plot_area.height)],
                 &LineStyle {
@@ -407,7 +429,7 @@ pub fn draw_gridlines(
     // Minor Y gridlines (horizontal)
     if minor_y.visible {
         for pos in minor_breaks(&y_breaks) {
-            let (_, py) = coord.transform((0.0, pos), plot_area);
+            let py = along_y(coord, pos, plot_area);
             backend.draw_line(
                 &[(plot_area.x, py), (plot_area.x + plot_area.width, py)],
                 &LineStyle {
@@ -423,7 +445,7 @@ pub fn draw_gridlines(
     // Major X gridlines (vertical)
     if major_x.visible {
         for (pos, _) in &x_breaks {
-            let (px, _) = coord.transform((*pos, 0.0), plot_area);
+            let px = along_x(coord, *pos, plot_area);
             backend.draw_line(
                 &[(px, plot_area.y), (px, plot_area.y + plot_area.height)],
                 &LineStyle {
@@ -439,7 +461,7 @@ pub fn draw_gridlines(
     // Major Y gridlines (horizontal)
     if major_y.visible {
         for (pos, _) in &y_breaks {
-            let (_, py) = coord.transform((0.0, *pos), plot_area);
+            let py = along_y(coord, *pos, plot_area);
             backend.draw_line(
                 &[(plot_area.x, py), (plot_area.x + plot_area.width, py)],
                 &LineStyle {
