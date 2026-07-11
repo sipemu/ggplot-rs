@@ -92,6 +92,18 @@ impl Geom for GeomHistogram {
             let (left_px, top_px) = coord.transform((left_n, ny), &plot_area);
             let (right_px, bottom_px) = coord.transform((right_n, ny_base), &plot_area);
 
+            // Hover tooltip: the bin range and its count.
+            let cnt = super::tip_value(&y_col[i]);
+            let tip = match (xmin_col, xmax_col) {
+                (Some(lo), Some(hi)) => format!(
+                    "[{}, {}): {cnt}",
+                    super::tip_value(&lo[i]),
+                    super::tip_value(&hi[i])
+                ),
+                _ => format!("count: {cnt}"),
+            };
+            backend.set_tooltip(Some(tip));
+
             backend.draw_rect(
                 (left_px, top_px.min(bottom_px)),
                 (right_px, top_px.max(bottom_px)),
@@ -104,6 +116,7 @@ impl Geom for GeomHistogram {
                 },
             )?;
         }
+        backend.set_tooltip(None);
 
         Ok(())
     }

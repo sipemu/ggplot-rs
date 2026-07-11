@@ -3,7 +3,7 @@ use crate::coord::Coord;
 use crate::data::{DataFrame, Value};
 use crate::position::identity::PositionIdentity;
 use crate::position::Position;
-use crate::render::backend::{DrawBackend, LineStyle, Linetype, RectStyle};
+use crate::render::backend::{DrawBackend, LineStyle, Linetype, PointShape, PointStyle, RectStyle};
 use crate::render::RenderError;
 use crate::scale::ScaleSet;
 use crate::stat::density::StatDensity;
@@ -73,7 +73,7 @@ impl Geom for GeomDensity {
             vec![("".to_string(), (0..data.nrows()).collect())]
         };
 
-        for (_, indices) in &groups {
+        for (group_label, indices) in &groups {
             if indices.is_empty() {
                 continue;
             }
@@ -135,6 +135,39 @@ impl Geom for GeomDensity {
                     },
                 )?;
             }
+
+            // Sparse invisible hover points: the curve carries no marks, so emit a
+            // handful of transparent points along it (tagged with the x value and
+            // density) for the axis-pointer to read on hover.
+            let step = (indices.len() / 48).max(1);
+            for (k, &i) in indices.iter().enumerate() {
+                if k % step != 0 {
+                    continue;
+                }
+                let dens = y_col[i]
+                    .as_f64()
+                    .map(|f| format!("{f:.4}"))
+                    .unwrap_or_default();
+                let tip = if group_label.is_empty() {
+                    format!("density: {dens}")
+                } else {
+                    format!("{group_label}: {dens}")
+                };
+                backend.set_tooltip(Some(tip));
+                backend.set_mark_axis(Some(super::tip_value(&x_col[i])));
+                backend.draw_shape(
+                    upper[k],
+                    0.6,
+                    &PointStyle {
+                        color: line_color,
+                        alpha: 0.0,
+                        filled: true,
+                        shape: PointShape::Circle,
+                    },
+                )?;
+            }
+            backend.set_tooltip(None);
+            backend.set_mark_axis(None);
         }
 
         Ok(())
