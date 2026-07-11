@@ -51,6 +51,8 @@ impl Geom for GeomTile {
             .column("y")
             .ok_or(RenderError::MissingAesthetic("y".into()))?;
         let fill_col = data.column("fill");
+        // A `label` (or the fill value) becomes each tile's hover tooltip.
+        let label_col = data.column("label").or(fill_col);
 
         let plot_area = backend.plot_area();
         let x_scale = scales.get(&Aesthetic::X);
@@ -104,6 +106,18 @@ impl Geom for GeomTile {
                 .and_then(|fc| scales.map_color(&Aesthetic::Fill, &fc[i]))
                 .unwrap_or(self.fill);
 
+            // Hover tooltip: "x, y: value".
+            let xs = super::tip_value(&x_col[i]);
+            let ys = super::tip_value(&y_col[i]);
+            let tip = match label_col
+                .map(|c| super::tip_value(&c[i]))
+                .filter(|s| !s.is_empty())
+            {
+                Some(v) => format!("{xs}, {ys}: {v}"),
+                None => format!("{xs}, {ys}"),
+            };
+            backend.set_tooltip(Some(tip));
+
             backend.draw_rect(
                 (left, top.min(bottom)),
                 (right, top.max(bottom)),
@@ -116,6 +130,7 @@ impl Geom for GeomTile {
                 },
             )?;
         }
+        backend.set_tooltip(None);
 
         Ok(())
     }
