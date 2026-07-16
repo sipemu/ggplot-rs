@@ -86,7 +86,7 @@ pub use crate::stat::quantile::StatQuantile;
 pub use crate::stat::smooth::SmoothFamily;
 pub use crate::stat::smooth::SmoothMethod;
 pub use crate::stat::sum::StatSum;
-pub use crate::stat::summary::{StatSummary, SummaryFun};
+pub use crate::stat::summary::{StatSummary, SummaryData, SummaryFun};
 pub use crate::stat::summary2d::StatSummary2d;
 pub use crate::stat::summary_bin::StatSummaryBin;
 pub use crate::theme::elements::{ElementLine, ElementRect, ElementText};

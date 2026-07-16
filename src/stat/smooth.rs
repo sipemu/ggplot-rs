@@ -155,8 +155,9 @@ impl StatSmooth {
                 let se_pred = (mse
                     * (1.0 / n + (x - mean_x).powi(2) / (sum_xx - n * mean_x * mean_x)))
                     .sqrt();
-                // ~95% CI: t ≈ 1.96 for large n
-                let t_val = 1.96;
+                // 95% confidence interval for the mean response: R's
+                // qt(0.975, n − 2), not the large-sample normal 1.96.
+                let t_val = crate::stat::dist::qt(0.975, (n - 2.0).max(1.0));
                 ymin_vals.push(Value::Float(y - t_val * se_pred));
                 ymax_vals.push(Value::Float(y + t_val * se_pred));
             }

@@ -82,7 +82,9 @@ impl Stat for StatLoess {
             if let Some(var) = residual_var {
                 // Approximate SE using residual variance and effective degrees of freedom
                 let se = var.sqrt() * (1.0 / k as f64 + 1.0 / n as f64).sqrt() * 1.5;
-                let t_val = 1.96;
+                // Finite-sample t multiplier (df ≈ n − 2); the SE itself is still
+                // approximate (exact loess SE needs the smoother matrix).
+                let t_val = crate::stat::dist::qt(0.975, (n as f64 - 2.0).max(1.0));
                 ymin_vals.push(Value::Float(y - t_val * se));
                 ymax_vals.push(Value::Float(y + t_val * se));
             }
