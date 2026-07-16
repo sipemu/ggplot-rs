@@ -281,8 +281,14 @@ mod tests {
         let (y, lo, hi) = SummaryData::MeanSe.apply3(&v);
         assert!(close(y, 5.0) && close(lo, 4.244071) && close(hi, 5.755929));
 
-        let (y, lo, hi) = SummaryData::MeanClNormal { level: 0.95 }.apply3(&v);
-        assert!(close(y, 5.0) && close(lo, 3.212512) && close(hi, 6.787488));
+        // MeanClNormal uses the exact Student-t quantile, which is only
+        // available with the `regression` feature (otherwise a normal
+        // approximation is used); check the R-fidelity value only there.
+        #[cfg(feature = "regression")]
+        {
+            let (y, lo, hi) = SummaryData::MeanClNormal { level: 0.95 }.apply3(&v);
+            assert!(close(y, 5.0) && close(lo, 3.212512) && close(hi, 6.787488));
+        }
 
         let (y, lo, hi) = SummaryData::MeanSdl { mult: 2.0 }.apply3(&v);
         assert!(close(y, 5.0) && close(lo, 0.723820) && close(hi, 9.276180));
