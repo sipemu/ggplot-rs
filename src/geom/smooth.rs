@@ -43,6 +43,14 @@ impl GeomSmooth {
         self.method = SmoothMethod::Loess { span };
         self
     }
+
+    /// Use penalized B-spline (P-spline) GAM smoothing — ggplot2's
+    /// `method = "gam"`, backed by anofox-regression with GCV-selected λ.
+    #[cfg(feature = "regression")]
+    pub fn gam(mut self) -> Self {
+        self.method = SmoothMethod::Gam;
+        self
+    }
 }
 
 impl Geom for GeomSmooth {
