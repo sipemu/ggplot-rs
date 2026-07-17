@@ -73,6 +73,8 @@ pub use crate::scale::steps::ScaleColorSteps;
 pub use crate::scale::transform::ScaleTransform;
 pub use crate::stat::bin::StatBin;
 pub use crate::stat::contour_filled::StatContourFilled;
+#[cfg(feature = "ggpubr")]
+pub use crate::stat::cor::{CorMethod, StatCor};
 pub use crate::stat::count::StatCount;
 pub use crate::stat::density2d::StatDensity2d;
 pub use crate::stat::ecdf::StatEcdf;

@@ -5,6 +5,8 @@ pub mod binhex;
 pub mod boxplot;
 pub mod contour;
 pub mod contour_filled;
+#[cfg(feature = "ggpubr")]
+pub mod cor;
 pub mod count;
 pub mod density;
 pub mod density2d;

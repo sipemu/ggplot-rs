@@ -213,6 +213,22 @@ impl GGPlot {
         self.add_geom(geom)
     }
 
+    /// Annotate with a correlation coefficient + p-value (`ggpubr::stat_cor()`).
+    /// Adds a text layer whose statistic computes Pearson correlation via
+    /// anofox-statistics; use [`GGPlot::stat_cor_with`] to pick Spearman or set
+    /// the label position.
+    #[cfg(feature = "ggpubr")]
+    pub fn stat_cor(self) -> Self {
+        self.geom_text().stat(crate::stat::cor::StatCor::default())
+    }
+
+    /// [`GGPlot::stat_cor`] with an explicit [`StatCor`](crate::stat::cor::StatCor)
+    /// (method / label position).
+    #[cfg(feature = "ggpubr")]
+    pub fn stat_cor_with(self, stat: crate::stat::cor::StatCor) -> Self {
+        self.geom_text().stat(stat)
+    }
+
     pub fn geom_label(self) -> Self {
         self.add_geom(GeomLabel::default())
     }
