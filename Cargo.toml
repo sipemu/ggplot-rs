@@ -175,3 +175,9 @@ required-features = ["polars"]
 [[example]]
 name = "log_scale"
 required-features = ["polars"]
+
+# Polars-free (uses the internal DataFrame) so it builds without polars:
+# `cargo run --no-default-features --features regression,ggpubr --example ggpubr_gallery`
+[[example]]
+name = "ggpubr_gallery"
+required-features = ["regression", "ggpubr"]
