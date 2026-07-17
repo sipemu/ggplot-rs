@@ -121,8 +121,8 @@ impl Stat for StatCor {
 }
 
 /// Format a p-value the way ggpubr does: a `< 2.2e-16` floor, scientific for
-/// very small values, fixed-point otherwise.
-fn format_p_value(p: f64) -> String {
+/// very small values, fixed-point otherwise. Shared with `stat_compare_means`.
+pub(crate) fn format_p_value(p: f64) -> String {
     if p < 2.2e-16 {
         "p < 2.2e-16".to_string()
     } else if p < 1e-4 {

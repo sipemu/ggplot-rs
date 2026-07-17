@@ -72,6 +72,8 @@ pub use crate::scale::size::ScaleSizeContinuous;
 pub use crate::scale::steps::ScaleColorSteps;
 pub use crate::scale::transform::ScaleTransform;
 pub use crate::stat::bin::StatBin;
+#[cfg(feature = "ggpubr")]
+pub use crate::stat::compare_means::{CompareMethod, StatCompareMeans};
 pub use crate::stat::contour_filled::StatContourFilled;
 #[cfg(feature = "ggpubr")]
 pub use crate::stat::cor::{CorMethod, StatCor};

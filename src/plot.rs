@@ -229,6 +229,26 @@ impl GGPlot {
         self.geom_text().stat(stat)
     }
 
+    /// Annotate grouped data with a group-comparison p-value
+    /// (`ggpubr::stat_compare_means()`). Adds a text layer whose statistic
+    /// compares y across the discrete x groups (Wilcoxon for two groups,
+    /// Kruskal-Wallis for more) via anofox-statistics.
+    #[cfg(feature = "ggpubr")]
+    pub fn stat_compare_means(self) -> Self {
+        self.geom_text()
+            .stat(crate::stat::compare_means::StatCompareMeans::default())
+    }
+
+    /// [`GGPlot::stat_compare_means`] with an explicit
+    /// [`StatCompareMeans`](crate::stat::compare_means::StatCompareMeans).
+    #[cfg(feature = "ggpubr")]
+    pub fn stat_compare_means_with(
+        self,
+        stat: crate::stat::compare_means::StatCompareMeans,
+    ) -> Self {
+        self.geom_text().stat(stat)
+    }
+
     pub fn geom_label(self) -> Self {
         self.add_geom(GeomLabel::default())
     }
