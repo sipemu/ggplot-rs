@@ -158,6 +158,12 @@ the last two need the `regression` / `ggpubr` features. Regenerate with
       <sub>Significance brackets · <code>geom_bracket</code></sub>
     </td>
   </tr>
+  <tr>
+    <td align="center" colspan="3">
+      <img src="assets/gallery/arrange.png" width="540" alt="ggarrange"><br>
+      <sub>Multi-plot composition · <code>ggarrange</code> + one-call constructors (<code>ggscatter</code>/<code>ggboxplot</code>/<code>ggdensity</code>)</sub>
+    </td>
+  </tr>
 </table>
 
 ### Themes

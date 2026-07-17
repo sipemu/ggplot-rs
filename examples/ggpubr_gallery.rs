@@ -34,6 +34,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     stat_cor_demo()?;
     compare_means_demo()?;
     brackets_demo()?;
+    arrange_demo()?;
     println!("ggpubr gallery written to assets/gallery/");
     Ok(())
 }
@@ -141,6 +142,43 @@ fn compare_means_demo() -> Result<(), Box<dyn std::error::Error>> {
         .ylab("response")
         .theme_pubr()
         .save_with_size(&out("compare_means"), W, H)?;
+    Ok(())
+}
+
+/// Four plots composed into a 2×2 grid with `ggarrange` (written as SVG).
+fn arrange_demo() -> Result<(), Box<dyn std::error::Error>> {
+    let n = 60;
+    let x: Vec<f64> = (0..n).map(|i| i as f64 * 0.12).collect();
+    let y: Vec<f64> = (0..n)
+        .map(|i| (i as f64 * 0.12).sin() * 2.0 + ((i * 37 % 20) as f64 / 10.0))
+        .collect();
+    let xy = || {
+        vec![
+            ("x".to_string(), col_f(x.clone())),
+            ("y".to_string(), col_f(y.clone())),
+        ]
+    };
+    let (gx, gy) = grouped_samples(&[("a", 5.0), ("b", 7.5), ("c", 6.0)]);
+
+    let plots = vec![
+        ggscatter(xy(), "x", "y", None).title("scatter"),
+        GGPlot::new(xy())
+            .aes(Aes::new().x("x").y("y"))
+            .geom_point()
+            .geom_smooth_with(GeomSmooth::default().gam())
+            .title("gam")
+            .theme_pubr(),
+        ggboxplot(
+            vec![("g".to_string(), gx), ("val".to_string(), gy)],
+            "g",
+            "val",
+            Some("g"),
+        )
+        .scale_fill_brewer(PaletteName::Npg)
+        .title("boxplot"),
+        ggdensity(xy(), "y", None).title("density"),
+    ];
+    ggarrange_save(plots, 2, 340, 250, &out("arrange").replace(".png", ".svg"))?;
     Ok(())
 }
 
