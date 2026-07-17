@@ -123,6 +123,49 @@ choropleth needs the `sf` feature; drop it for the rest).
   </tr>
 </table>
 
+### Publication-ready (ggpubr-style)
+
+Journal palettes, `theme_pubr()`, GAM smoothing, and statistical annotations —
+the last two need the `regression` / `ggpubr` features. Regenerate with
+`cargo run --no-default-features --features regression,ggpubr --example ggpubr_gallery`.
+
+<table>
+  <tr>
+    <td align="center" width="33%">
+      <img src="assets/gallery/palettes_ggsci.png" width="260" alt="ggsci palette"><br>
+      <sub>Journal palettes · <code>scale_color_brewer(Npg)</code></sub>
+    </td>
+    <td align="center" width="33%">
+      <img src="assets/gallery/theme_pubr.png" width="260" alt="theme_pubr"><br>
+      <sub>Publication theme · <code>theme_pubr</code></sub>
+    </td>
+    <td align="center" width="33%">
+      <img src="assets/gallery/smooth_gam.png" width="260" alt="GAM smoothing"><br>
+      <sub>GAM smoother · <code>geom_smooth</code> gam <sub>(feature <code>regression</code>)</sub></sub>
+    </td>
+  </tr>
+  <tr>
+    <td align="center">
+      <img src="assets/gallery/stat_cor.png" width="260" alt="stat_cor"><br>
+      <sub>Correlation label · <code>stat_cor</code> <sub>(feature <code>ggpubr</code>)</sub></sub>
+    </td>
+    <td align="center">
+      <img src="assets/gallery/compare_means.png" width="260" alt="stat_compare_means"><br>
+      <sub>Group p-value · <code>stat_compare_means</code> <sub>(feature <code>ggpubr</code>)</sub></sub>
+    </td>
+    <td align="center">
+      <img src="assets/gallery/brackets.png" width="260" alt="pairwise brackets"><br>
+      <sub>Pairwise brackets · <code>stat_compare_means(comparisons)</code> / <code>geom_bracket</code></sub>
+    </td>
+  </tr>
+  <tr>
+    <td align="center" colspan="3">
+      <img src="assets/gallery/arrange.png" width="540" alt="ggarrange"><br>
+      <sub>Multi-plot composition · <code>ggarrange</code> + one-call constructors (<code>ggscatter</code>/<code>ggboxplot</code>/<code>ggdensity</code>)</sub>
+    </td>
+  </tr>
+</table>
+
 ### Themes
 
 The same plot under each built-in theme — swap with a single `.theme(theme_*())` call.

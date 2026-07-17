@@ -18,6 +18,10 @@ pub enum SmoothMethod {
     /// Robust linear regression (Huber M-estimator) via anofox-regression.
     #[cfg(feature = "regression")]
     Rlm,
+    /// Penalized B-spline (P-spline) GAM smoother via anofox-regression —
+    /// ggplot2's `method = "gam"`. λ is chosen by GCV.
+    #[cfg(feature = "regression")]
+    Gam,
 }
 
 /// GLM family for regression-backed smoothing (`SmoothMethod::Glm`).
@@ -67,6 +71,8 @@ impl Stat for StatSmooth {
             SmoothMethod::Glm { family } => self.compute_glm(data, Some(*family)),
             #[cfg(feature = "regression")]
             SmoothMethod::Rlm => self.compute_glm(data, None),
+            #[cfg(feature = "regression")]
+            SmoothMethod::Gam => self.compute_gam(data),
         }
     }
 
@@ -155,8 +161,9 @@ impl StatSmooth {
                 let se_pred = (mse
                     * (1.0 / n + (x - mean_x).powi(2) / (sum_xx - n * mean_x * mean_x)))
                     .sqrt();
-                // ~95% CI: t ≈ 1.96 for large n
-                let t_val = 1.96;
+                // 95% confidence interval for the mean response: R's
+                // qt(0.975, n − 2), not the large-sample normal 1.96.
+                let t_val = crate::stat::dist::qt(0.975, (n - 2.0).max(1.0));
                 ymin_vals.push(Value::Float(y - t_val * se_pred));
                 ymax_vals.push(Value::Float(y + t_val * se_pred));
             }
@@ -231,6 +238,81 @@ impl StatSmooth {
                     Err(_) => return DataFrame::new(),
                 }
             }
+        };
+
+        let mut x_vals = Vec::with_capacity(steps);
+        let mut y_vals = Vec::with_capacity(steps);
+        let mut ymin_vals = Vec::with_capacity(steps);
+        let mut ymax_vals = Vec::with_capacity(steps);
+        for k in 0..steps {
+            x_vals.push(Value::Float(grid[(k, 0)]));
+            y_vals.push(Value::Float(pred.fit[k]));
+            if self.se {
+                ymin_vals.push(Value::Float(pred.lower[k]));
+                ymax_vals.push(Value::Float(pred.upper[k]));
+            }
+        }
+
+        let mut result = DataFrame::new();
+        result.add_column("x".to_string(), x_vals);
+        result.add_column("y".to_string(), y_vals);
+        if self.se {
+            result.add_column("ymin".to_string(), ymin_vals);
+            result.add_column("ymax".to_string(), ymax_vals);
+        }
+        for col_name in &["color", "fill", "group"] {
+            if let Some(col) = data.column(col_name) {
+                if let Some(first) = col.first() {
+                    result.add_column(col_name.to_string(), vec![first.clone(); steps]);
+                }
+            }
+        }
+        result
+    }
+
+    /// GAM smoothing via anofox-regression's penalized B-spline (P-spline) with
+    /// GCV-selected smoothing — ggplot2's `method = "gam"`. Emits a t-based
+    /// confidence ribbon (ymin/ymax) when `self.se` is set.
+    #[cfg(feature = "regression")]
+    fn compute_gam(&self, data: &DataFrame) -> DataFrame {
+        use anofox_regression::solvers::{FittedRegressor, PSplineRegressor, Regressor};
+        use anofox_regression::IntervalType;
+        use faer::{Col, Mat};
+
+        let (x_col, y_col) = match (data.column("x"), data.column("y")) {
+            (Some(x), Some(y)) => (x, y),
+            _ => return DataFrame::new(),
+        };
+        let pairs: Vec<(f64, f64)> = x_col
+            .iter()
+            .zip(y_col.iter())
+            .filter_map(|(x, y)| Some((x.as_f64()?, y.as_f64()?)))
+            .collect();
+        // The P-spline needs enough distinct support to build a basis; fall back
+        // to a straight line for tiny groups.
+        if pairs.len() < 6 {
+            return self.compute_lm(data);
+        }
+
+        let n = pairs.len();
+        let x = Mat::from_fn(n, 1, |i, _| pairs[i].0);
+        let y = Col::from_fn(n, |i| pairs[i].1);
+        let x_min = pairs.iter().map(|p| p.0).fold(f64::INFINITY, f64::min);
+        let x_max = pairs.iter().map(|p| p.0).fold(f64::NEG_INFINITY, f64::max);
+        let steps = self.n_points.max(2);
+        let grid = Mat::from_fn(steps, 1, |k, _| {
+            x_min + (x_max - x_min) * k as f64 / (steps - 1) as f64
+        });
+        let interval = if self.se {
+            Some(IntervalType::Confidence)
+        } else {
+            None
+        };
+
+        let pred = match PSplineRegressor::new().fit(&x, &y) {
+            Ok(f) => f.predict_with_interval(&grid, interval, 0.95),
+            // Degenerate input (e.g. collinear x) — fall back to a line.
+            Err(_) => return self.compute_lm(data),
         };
 
         let mut x_vals = Vec::with_capacity(steps);

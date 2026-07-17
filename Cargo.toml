@@ -44,7 +44,9 @@ rand = "0.8"
 polars = { version = "0.46", features = ["lazy"], optional = true }
 arrow = { version = "53", default-features = false, optional = true }
 # Regression backend for stat_quantile / geom_smooth glm (issues #10, #11).
-anofox-regression = { version = "0.5", optional = true }
+anofox-regression = { version = "0.5.11", optional = true }
+# Hypothesis tests behind ggpubr-style annotations (stat_cor / stat_compare_means).
+anofox-statistics = { version = "0.4", optional = true }
 faer = { version = "0.23", default-features = false, features = [
     "std",
     "linalg",
@@ -80,6 +82,9 @@ polars = ["dep:polars"]
 arrow = ["dep:arrow"]
 # Regression-backed stats (stat_quantile, glm smooth) via anofox-regression.
 regression = ["dep:anofox-regression", "dep:faer"]
+# ggpubr-style statistical annotations (stat_cor, stat_compare_means) backed by
+# the anofox-statistics hypothesis-test crate.
+ggpubr = ["dep:anofox-statistics"]
 # Serde-deserialisable theme config (theme::config::ThemeConfig).
 serde = ["dep:serde"]
 # Raster (canvas) backend: a self-contained RGBA rasteriser for large-N — fast,
@@ -170,3 +175,9 @@ required-features = ["polars"]
 [[example]]
 name = "log_scale"
 required-features = ["polars"]
+
+# Polars-free (uses the internal DataFrame) so it builds without polars:
+# `cargo run --no-default-features --features regression,ggpubr --example ggpubr_gallery`
+[[example]]
+name = "ggpubr_gallery"
+required-features = ["regression", "ggpubr"]

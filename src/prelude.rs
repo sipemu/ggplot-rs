@@ -8,6 +8,7 @@ pub use crate::geom::bar::GeomBar;
 pub use crate::geom::bin2d::GeomBin2d;
 pub use crate::geom::blank::GeomBlank;
 pub use crate::geom::boxplot::GeomBoxplot;
+pub use crate::geom::bracket::GeomBracket;
 pub use crate::geom::col::GeomCol;
 pub use crate::geom::contour::GeomContour;
 pub use crate::geom::count::GeomCount;
@@ -40,6 +41,11 @@ pub use crate::geom::step::{GeomStep, StepDirection};
 pub use crate::geom::text::{GeomLabel, GeomText};
 pub use crate::geom::tile::GeomTile;
 pub use crate::geom::violin::GeomViolin;
+pub use crate::ggpubr::{
+    ggarrange, ggarrange_save, ggboxplot, ggdensity, gghistogram, ggline, ggscatter, ggviolin,
+};
+#[cfg(not(target_arch = "wasm32"))]
+pub use crate::ggpubr::{ggarrange_png, ggarrange_save_png};
 pub use crate::guide::config::GuideLegend;
 pub use crate::plot::{GGError, GGPlot, Labels};
 pub use crate::position::dodge::PositionDodge;
@@ -72,7 +78,11 @@ pub use crate::scale::size::ScaleSizeContinuous;
 pub use crate::scale::steps::ScaleColorSteps;
 pub use crate::scale::transform::ScaleTransform;
 pub use crate::stat::bin::StatBin;
+#[cfg(feature = "ggpubr")]
+pub use crate::stat::compare_means::{CompareMethod, StatCompareMeans};
 pub use crate::stat::contour_filled::StatContourFilled;
+#[cfg(feature = "ggpubr")]
+pub use crate::stat::cor::{CorMethod, StatCor};
 pub use crate::stat::count::StatCount;
 pub use crate::stat::density2d::StatDensity2d;
 pub use crate::stat::ecdf::StatEcdf;
@@ -86,14 +96,15 @@ pub use crate::stat::quantile::StatQuantile;
 pub use crate::stat::smooth::SmoothFamily;
 pub use crate::stat::smooth::SmoothMethod;
 pub use crate::stat::sum::StatSum;
-pub use crate::stat::summary::{StatSummary, SummaryFun};
+pub use crate::stat::summary::{StatSummary, SummaryData, SummaryFun};
 pub use crate::stat::summary2d::StatSummary2d;
 pub use crate::stat::summary_bin::StatSummaryBin;
 pub use crate::theme::elements::{ElementLine, ElementRect, ElementText};
 pub use crate::theme::presets::{
     theme_bw, theme_bw_base, theme_classic, theme_classic_base, theme_dark, theme_dark_base,
     theme_gray, theme_gray_base, theme_light, theme_light_base, theme_linedraw,
-    theme_linedraw_base, theme_minimal, theme_minimal_base, theme_void, theme_void_base,
+    theme_linedraw_base, theme_minimal, theme_minimal_base, theme_pubr, theme_pubr_base,
+    theme_void, theme_void_base,
 };
 pub use crate::theme::{
     LegendDirection, LegendPosition, Margin, TagPosition, Theme, ThemeUpdate, TitlePosition,

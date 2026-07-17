@@ -3,11 +3,16 @@ pub mod bin2d;
 pub mod bindot;
 pub mod binhex;
 pub mod boxplot;
+#[cfg(feature = "ggpubr")]
+pub mod compare_means;
 pub mod contour;
 pub mod contour_filled;
+#[cfg(feature = "ggpubr")]
+pub mod cor;
 pub mod count;
 pub mod density;
 pub mod density2d;
+pub mod dist;
 pub mod ecdf;
 pub mod ellipse;
 pub mod function;
@@ -39,6 +44,14 @@ pub trait Stat: Send + Sync {
     /// Default aesthetic mappings this stat produces.
     fn default_aes(&self) -> Aes {
         Aes::default()
+    }
+
+    /// If true, the stat receives every row of a panel at once (grouped only by
+    /// facet variables) instead of once per aesthetic group. Needed for
+    /// cross-group comparisons such as `stat_compare_means`, which must see all
+    /// groups together. Defaults to per-group behaviour.
+    fn panelwise(&self) -> bool {
+        false
     }
 
     /// Name for debug/display.

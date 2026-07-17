@@ -73,6 +73,12 @@ jobs:
       - name: Tests (canvas)
         run: cargo test --no-default-features --features canvas --lib --test canvas
 
+      - name: Clippy (ggpubr)
+        run: cargo clippy --all-targets --no-default-features --features ggpubr -- -D warnings
+
+      - name: Tests (ggpubr)
+        run: cargo test --no-default-features --features ggpubr --lib --test ggpubr_basics --test ggpubr_stat_cor --test ggpubr_compare_means
+
       - name: Add wasm target
         run: rustup target add wasm32-unknown-unknown
 
@@ -102,7 +108,7 @@ jobs:
       - name: Generate coverage
         # Explicit features (not --all-features) to skip the `cli` feature, whose
         # bundled DuckDB is a slow C++ build and is exercised outside CI.
-        run: cargo llvm-cov --features polars,arrow,regression,serde,sf,geojson --workspace --lcov --output-path lcov.info
+        run: cargo llvm-cov --features polars,arrow,regression,serde,sf,geojson,ggpubr --workspace --lcov --output-path lcov.info
 
       - name: Upload coverage to Codecov
         uses: codecov/codecov-action@v4

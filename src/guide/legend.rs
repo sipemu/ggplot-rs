@@ -93,7 +93,15 @@ pub fn draw_legend(
             } else {
                 // Continuous size/alpha — draw as discrete-like with sampled breaks
                 let height = draw_discrete_legend_at(
-                    scales, aes, scale, theme, offset_x, offset_y, backend, guide, is_horizontal,
+                    scales,
+                    aes,
+                    scale,
+                    theme,
+                    offset_x,
+                    offset_y,
+                    backend,
+                    guide,
+                    is_horizontal,
                 )?;
                 if is_horizontal {
                     offset_x += theme.legend_key_width
@@ -218,7 +226,11 @@ fn draw_discrete_legend_at(
     let mut cur_x = legend_x;
     for (i, (_, label)) in breaks.iter().enumerate() {
         let x = if is_horizontal { cur_x } else { legend_x };
-        let y = if is_horizontal { items_y } else { items_y + i as f64 * item_height };
+        let y = if is_horizontal {
+            items_y
+        } else {
+            items_y + i as f64 * item_height
+        };
         let center_x = x + swatch_size / 2.0;
         let center_y = y + swatch_size / 2.0;
 

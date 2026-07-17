@@ -9,7 +9,7 @@ use crate::coord::fixed::CoordFixed;
 use crate::coord::flip::CoordFlip;
 use crate::coord::polar::CoordPolar;
 use crate::coord::Coord;
-use crate::data::{DataFrame, GGData};
+use crate::data::{DataFrame, GGData, Value};
 use crate::facet::{Facet, FacetLabeller, FacetScales, FacetSpace};
 use crate::geom::area::GeomArea;
 use crate::geom::bar::GeomBar;
@@ -211,6 +211,192 @@ impl GGPlot {
 
     pub fn geom_text_with(self, geom: GeomText) -> Self {
         self.add_geom(geom)
+    }
+
+    /// Annotate with a correlation coefficient + p-value (`ggpubr::stat_cor()`).
+    /// Adds a text layer whose statistic computes Pearson correlation via
+    /// anofox-statistics; use [`GGPlot::stat_cor_with`] to pick Spearman or set
+    /// the label position.
+    #[cfg(feature = "ggpubr")]
+    pub fn stat_cor(self) -> Self {
+        self.geom_text().stat(crate::stat::cor::StatCor::default())
+    }
+
+    /// [`GGPlot::stat_cor`] with an explicit [`StatCor`](crate::stat::cor::StatCor)
+    /// (method / label position).
+    #[cfg(feature = "ggpubr")]
+    pub fn stat_cor_with(self, stat: crate::stat::cor::StatCor) -> Self {
+        self.geom_text().stat(stat)
+    }
+
+    /// Annotate grouped data with a group-comparison p-value
+    /// (`ggpubr::stat_compare_means()`). Adds a text layer whose statistic
+    /// compares y across the discrete x groups (Wilcoxon for two groups,
+    /// Kruskal-Wallis for more) via anofox-statistics.
+    #[cfg(feature = "ggpubr")]
+    pub fn stat_compare_means(self) -> Self {
+        self.geom_text()
+            .stat(crate::stat::compare_means::StatCompareMeans::default())
+    }
+
+    /// [`GGPlot::stat_compare_means`] with an explicit
+    /// [`StatCompareMeans`](crate::stat::compare_means::StatCompareMeans).
+    #[cfg(feature = "ggpubr")]
+    pub fn stat_compare_means_with(
+        self,
+        stat: crate::stat::compare_means::StatCompareMeans,
+    ) -> Self {
+        self.geom_text().stat(stat)
+    }
+
+    /// Auto-draw pairwise significance brackets (`ggpubr::stat_compare_means`
+    /// with `comparisons`). For each `(group_a, group_b)` pair it runs a
+    /// two-sample test (Wilcoxon by default) on the plot's y-values, formats the
+    /// p-value, and stacks a labelled [`geom_bracket`](GGPlot::geom_bracket)
+    /// above the data. Uses the plot's x/y mapping and data.
+    #[cfg(feature = "ggpubr")]
+    pub fn stat_compare_means_pairwise(self, comparisons: &[(&str, &str)]) -> Self {
+        self.stat_compare_means_pairwise_with(
+            crate::stat::compare_means::CompareMethod::Auto,
+            comparisons,
+        )
+    }
+
+    /// [`stat_compare_means_pairwise`](GGPlot::stat_compare_means_pairwise) with
+    /// an explicit test method.
+    #[cfg(feature = "ggpubr")]
+    pub fn stat_compare_means_pairwise_with(
+        self,
+        method: crate::stat::compare_means::CompareMethod,
+        comparisons: &[(&str, &str)],
+    ) -> Self {
+        // Resolve the x/y source columns from the plot mapping + data.
+        let col_for = |a: crate::aes::Aesthetic| {
+            self.mapping
+                .mappings
+                .iter()
+                .find(|m| m.aesthetic == a)
+                .map(|m| m.column.clone())
+        };
+        let (xcol, ycol) = match (
+            col_for(crate::aes::Aesthetic::X),
+            col_for(crate::aes::Aesthetic::Y),
+        ) {
+            (Some(x), Some(y)) => (x, y),
+            _ => return self,
+        };
+        let (xc, yc) = match (self.data.column(&xcol), self.data.column(&ycol)) {
+            (Some(x), Some(y)) => (x, y),
+            _ => return self,
+        };
+
+        // Bucket y by x category (first-seen order) and find the data range.
+        let mut groups: Vec<(String, Vec<f64>)> = Vec::new();
+        let mut ymax = f64::NEG_INFINITY;
+        let mut ymin = f64::INFINITY;
+        for (xv, yv) in xc.iter().zip(yc.iter()) {
+            let y = match yv.as_f64() {
+                Some(y) if y.is_finite() => y,
+                _ => continue,
+            };
+            ymax = ymax.max(y);
+            ymin = ymin.min(y);
+            let key = xv.to_group_key();
+            if let Some(g) = groups.iter_mut().find(|(k, _)| *k == key) {
+                g.1.push(y);
+            } else {
+                groups.push((key, vec![y]));
+            }
+        }
+        if groups.len() < 2 {
+            return self;
+        }
+        let step = if ymax > ymin {
+            (ymax - ymin) * 0.12
+        } else {
+            1.0
+        };
+
+        // One stacked bracket per resolvable comparison.
+        let (mut xmin_v, mut xmax_v, mut y_v, mut label_v) =
+            (Vec::new(), Vec::new(), Vec::new(), Vec::new());
+        let mut placed = 0usize;
+        for (a, b) in comparisons {
+            let ga = groups.iter().find(|(k, _)| k == a).map(|g| &g.1);
+            let gb = groups.iter().find(|(k, _)| k == b).map(|g| &g.1);
+            let (ga, gb) = match (ga, gb) {
+                (Some(x), Some(y)) if x.len() >= 2 && y.len() >= 2 => (x, y),
+                _ => continue,
+            };
+            let p = match crate::stat::compare_means::pairwise_p(method, ga, gb) {
+                Some(p) => p,
+                None => continue,
+            };
+            xmin_v.push(Value::Str((*a).to_string()));
+            xmax_v.push(Value::Str((*b).to_string()));
+            y_v.push(Value::Float(ymax + step * (placed as f64 + 1.0)));
+            label_v.push(Value::Str(crate::stat::cor::format_p_value(p)));
+            placed += 1;
+        }
+        if xmin_v.is_empty() {
+            return self;
+        }
+
+        let data = vec![
+            ("xmin".to_string(), xmin_v),
+            ("xmax".to_string(), xmax_v),
+            ("y".to_string(), y_v),
+            ("label".to_string(), label_v),
+        ];
+        self.add_geom(crate::geom::bracket::GeomBracket::default())
+            .layer_data(data)
+            .layer_aes(Aes::new().xmin("xmin").xmax("xmax").y("y").label("label"))
+    }
+
+    /// Draw a significance bracket over the plot (`ggpubr::geom_bracket`): a bar
+    /// spanning the categorical positions `xmin`..`xmax` at height `y`, captioned
+    /// with `label` (e.g. a p-value or significance stars). Pairs with a boxplot
+    /// and [`stat_compare_means`](GGPlot::stat_compare_means).
+    pub fn geom_bracket(self, xmin: &str, xmax: &str, y: f64, label: &str) -> Self {
+        self.geom_bracket_many(
+            crate::geom::bracket::GeomBracket::default(),
+            &[(xmin, xmax, y, label)],
+        )
+    }
+
+    /// Draw several significance brackets at once with a configured
+    /// [`GeomBracket`](crate::geom::bracket::GeomBracket). Each tuple is
+    /// `(xmin, xmax, y, label)`.
+    pub fn geom_bracket_many(
+        self,
+        geom: crate::geom::bracket::GeomBracket,
+        brackets: &[(&str, &str, f64, &str)],
+    ) -> Self {
+        let xmin = brackets
+            .iter()
+            .map(|b| Value::Str(b.0.to_string()))
+            .collect::<Vec<_>>();
+        let xmax = brackets
+            .iter()
+            .map(|b| Value::Str(b.1.to_string()))
+            .collect::<Vec<_>>();
+        let y = brackets
+            .iter()
+            .map(|b| Value::Float(b.2))
+            .collect::<Vec<_>>();
+        let label = brackets
+            .iter()
+            .map(|b| Value::Str(b.3.to_string()))
+            .collect::<Vec<_>>();
+        let data = vec![
+            ("xmin".to_string(), xmin),
+            ("xmax".to_string(), xmax),
+            ("y".to_string(), y),
+            ("label".to_string(), label),
+        ];
+        self.add_geom(geom)
+            .layer_data(data)
+            .layer_aes(Aes::new().xmin("xmin").xmax("xmax").y("y").label("label"))
     }
 
     pub fn geom_label(self) -> Self {
@@ -1258,6 +1444,12 @@ impl GGPlot {
 
     pub fn theme_classic(mut self) -> Self {
         self.theme = crate::theme::presets::theme_classic();
+        self
+    }
+
+    /// Apply the publication-ready `theme_pubr()` (ggpubr style).
+    pub fn theme_pubr(mut self) -> Self {
+        self.theme = crate::theme::presets::theme_pubr();
         self
     }
 

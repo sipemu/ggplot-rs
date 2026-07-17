@@ -1,9 +1,9 @@
 use crate::aes::Aesthetic;
 use crate::coord::Coord;
-use crate::data::DataFrame;
+use crate::data::{DataFrame, Value};
 use crate::position::identity::PositionIdentity;
 use crate::position::Position;
-use crate::render::backend::{DrawBackend, LineStyle, Linetype, RectStyle};
+use crate::render::backend::{DrawBackend, LineStyle, Linetype, PointShape, PointStyle, RectStyle};
 use crate::render::RenderError;
 use crate::scale::ScaleSet;
 use crate::stat::smooth::{SmoothMethod, StatSmooth};
@@ -41,6 +41,14 @@ impl GeomSmooth {
     /// Use LOESS smoothing with the given span.
     pub fn loess(mut self, span: f64) -> Self {
         self.method = SmoothMethod::Loess { span };
+        self
+    }
+
+    /// Use penalized B-spline (P-spline) GAM smoothing — ggplot2's
+    /// `method = "gam"`, backed by anofox-regression with GCV-selected λ.
+    #[cfg(feature = "regression")]
+    pub fn gam(mut self) -> Self {
+        self.method = SmoothMethod::Gam;
         self
     }
 }
@@ -149,6 +157,9 @@ impl Geom for GeomSmooth {
                             linetype: Linetype::Solid,
                         },
                     )?;
+                    draw_hover_marks(
+                        backend, &points, indices, x_col, y_col, ymin_col, ymax_col, line_color,
+                    )?;
                 }
             }
         } else {
@@ -208,6 +219,10 @@ impl Geom for GeomSmooth {
                         linetype: Linetype::Solid,
                     },
                 )?;
+                let rows: Vec<usize> = (0..data.nrows()).collect();
+                draw_hover_marks(
+                    backend, &points, &rows, x_col, y_col, ymin_col, ymax_col, self.color,
+                )?;
             }
         }
 
@@ -242,4 +257,63 @@ impl Geom for GeomSmooth {
         self.color = color;
         self.fill = color;
     }
+}
+
+/// The fitted curve is drawn as a single path and so carries no per-point
+/// marks. Emit a sparse set of transparent hover points along it — each tagged
+/// with the fitted `ŷ` (and the CI when present) — so the axis pointer can read
+/// the smoother on hover, mirroring `geom_density`.
+#[allow(clippy::too_many_arguments)]
+fn draw_hover_marks(
+    backend: &mut dyn DrawBackend,
+    points: &[(f64, f64)],
+    rows: &[usize],
+    x_col: &[Value],
+    y_col: &[Value],
+    ymin_col: Option<&[Value]>,
+    ymax_col: Option<&[Value]>,
+    color: (u8, u8, u8),
+) -> Result<(), RenderError> {
+    let step = (rows.len() / 40).max(1);
+    for (k, &i) in rows.iter().enumerate() {
+        if k % step != 0 {
+            continue;
+        }
+        backend.set_tooltip(Some(smooth_tip(y_col, ymin_col, ymax_col, i)));
+        backend.set_mark_axis(Some(super::tip_value(&x_col[i])));
+        backend.draw_shape(
+            points[k],
+            0.6,
+            &PointStyle {
+                color,
+                alpha: 0.0,
+                filled: true,
+                shape: PointShape::Circle,
+            },
+        )?;
+    }
+    backend.set_tooltip(None);
+    backend.set_mark_axis(None);
+    Ok(())
+}
+
+/// `ŷ = <fitted>` plus ` [lo, hi]` when a confidence band is present.
+fn smooth_tip(
+    y_col: &[Value],
+    ymin_col: Option<&[Value]>,
+    ymax_col: Option<&[Value]>,
+    i: usize,
+) -> String {
+    let yv = y_col[i]
+        .as_f64()
+        .map(|f| format!("{f:.3}"))
+        .unwrap_or_default();
+    let ci = match (ymin_col, ymax_col) {
+        (Some(lo), Some(hi)) => match (lo[i].as_f64(), hi[i].as_f64()) {
+            (Some(a), Some(b)) => format!(" [{a:.3}, {b:.3}]"),
+            _ => String::new(),
+        },
+        _ => String::new(),
+    };
+    format!("ŷ = {yv}{ci}")
 }

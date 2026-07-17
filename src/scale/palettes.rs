@@ -44,6 +44,14 @@ pub enum PaletteName {
     Magma,
     Plasma,
     Inferno,
+    // ggsci journal palettes (as used by ggpubr)
+    Npg,
+    Aaas,
+    Nejm,
+    Lancet,
+    Jama,
+    Jco,
+    D3,
 }
 
 /// Get colors for a named palette.
@@ -86,6 +94,13 @@ pub fn palette(name: &PaletteName) -> &'static [RGBAColor] {
         PaletteName::Magma => &MAGMA,
         PaletteName::Plasma => &PLASMA,
         PaletteName::Inferno => &INFERNO,
+        PaletteName::Npg => &NPG,
+        PaletteName::Aaas => &AAAS,
+        PaletteName::Nejm => &NEJM,
+        PaletteName::Lancet => &LANCET,
+        PaletteName::Jama => &JAMA,
+        PaletteName::Jco => &JCO,
+        PaletteName::D3 => &D3,
     }
 }
 
@@ -591,4 +606,98 @@ static INFERNO: [RGBAColor; 16] = [
     c(252, 222, 67),
     c(247, 252, 118),
     c(252, 255, 164),
+];
+
+// ─── ggsci journal palettes (as bundled by ggpubr / ggsci) ──
+
+/// Nature Publishing Group (`ggsci::pal_npg("nrc")`).
+static NPG: [RGBAColor; 10] = [
+    c(230, 75, 53),
+    c(77, 187, 213),
+    c(0, 160, 135),
+    c(60, 84, 136),
+    c(243, 155, 127),
+    c(132, 145, 180),
+    c(145, 209, 194),
+    c(220, 0, 0),
+    c(126, 97, 72),
+    c(176, 156, 133),
+];
+
+/// Science / AAAS (`ggsci::pal_aaas`).
+static AAAS: [RGBAColor; 10] = [
+    c(59, 73, 146),
+    c(238, 0, 0),
+    c(0, 139, 69),
+    c(99, 24, 121),
+    c(0, 130, 128),
+    c(187, 0, 33),
+    c(95, 85, 155),
+    c(162, 0, 86),
+    c(128, 129, 128),
+    c(27, 25, 25),
+];
+
+/// New England Journal of Medicine (`ggsci::pal_nejm`).
+static NEJM: [RGBAColor; 8] = [
+    c(188, 60, 41),
+    c(0, 114, 181),
+    c(225, 135, 39),
+    c(32, 133, 78),
+    c(120, 118, 177),
+    c(111, 153, 173),
+    c(255, 220, 145),
+    c(238, 76, 151),
+];
+
+/// The Lancet (`ggsci::pal_lancet("lanonc")`).
+static LANCET: [RGBAColor; 9] = [
+    c(0, 70, 139),
+    c(237, 0, 0),
+    c(66, 181, 64),
+    c(0, 153, 180),
+    c(146, 94, 159),
+    c(253, 175, 145),
+    c(173, 0, 42),
+    c(173, 182, 182),
+    c(27, 25, 25),
+];
+
+/// JAMA — Journal of the American Medical Association (`ggsci::pal_jama`).
+static JAMA: [RGBAColor; 7] = [
+    c(55, 78, 85),
+    c(223, 143, 68),
+    c(0, 161, 213),
+    c(178, 71, 69),
+    c(121, 175, 151),
+    c(106, 101, 153),
+    c(128, 121, 107),
+];
+
+/// Journal of Clinical Oncology (`ggsci::pal_jco`).
+static JCO: [RGBAColor; 10] = [
+    c(0, 115, 194),
+    c(239, 192, 0),
+    c(134, 134, 134),
+    c(205, 83, 76),
+    c(122, 166, 220),
+    c(0, 60, 103),
+    c(143, 119, 0),
+    c(59, 59, 59),
+    c(167, 48, 48),
+    c(74, 105, 144),
+];
+
+/// D3.js category10 (`ggsci::pal_d3("category10")`).
+static D3: [RGBAColor; 10] = [
+    c(31, 119, 180),
+    c(255, 127, 14),
+    c(44, 160, 44),
+    c(214, 39, 40),
+    c(148, 103, 189),
+    c(140, 86, 75),
+    c(227, 119, 194),
+    c(127, 127, 127),
+    c(188, 189, 34),
+    c(23, 190, 207),
 ];

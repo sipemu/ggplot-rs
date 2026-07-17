@@ -307,6 +307,26 @@ pub fn theme_classic_base(base_size: f64) -> Theme {
     }
 }
 
+// ─── theme_pubr (ggpubr) ─────────────────────────────────────────
+
+/// Publication-ready theme, matching R's `ggpubr::theme_pubr()`: white
+/// background, no gridlines, black axis lines and ticks, and the legend placed
+/// at the top. Built for clean, journal-style figures. Inherits from
+/// [`theme_classic_base`].
+pub fn theme_pubr() -> Theme {
+    theme_pubr_base(12.0)
+}
+
+/// [`theme_pubr`] with a custom base font size (ggpubr's default is 12 pt).
+pub fn theme_pubr_base(base_size: f64) -> Theme {
+    Theme {
+        legend_position: LegendPosition::Top,
+        // ggpubr draws no strip background box (labels sit directly above panels).
+        strip_background: ElementRect::blank(),
+        ..theme_classic_base(base_size)
+    }
+}
+
 // ─── theme_linedraw ──────────────────────────────────────────────
 
 /// Linedraw theme: white background, black panel border, very thin black gridlines.

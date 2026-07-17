@@ -87,14 +87,26 @@ checksum = "4b46cbb362ab8752921c97e041f5e366ee6297bd428a31275b9fcf1e380f7299"
 
 [[package]]
 name = "anofox-regression"
-version = "0.5.9"
+version = "0.5.11"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ac39348895715c1d506359941bb7c1a35a24616d3c40233e943302e155f56c51"
+checksum = "0cbce0110851ef7dd71f0f780f3facffbc43e817b4bd347c1191407d95911f4d"
 dependencies = [
  "argmin",
  "argmin-math",
  "faer",
  "getrandom 0.3.4",
+ "statrs",
+ "thiserror 2.0.18",
+]
+
+[[package]]
+name = "anofox-statistics"
+version = "0.4.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "76af9b3e7bdc3333fc0391a0dc3ba7f9acb6e92c39b0d60b46a0794e0d972d65"
+dependencies = [
+ "rand 0.8.6",
+ "rand_chacha 0.3.1",
  "statrs",
  "thiserror 2.0.18",
 ]
@@ -1196,9 +1208,9 @@ dependencies = [
 
 [[package]]
 name = "ethnum"
-version = "1.5.2"
+version = "1.5.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ca81e6b4777c89fd810c25a4be2b1bd93ea034fbe58e6a75216a34c6b82c539b"
+checksum = "40404c3f5f511ec4da6fe866ddf6a717c309fdbb69fbbad7b0f3edab8f2e835f"
 
 [[package]]
 name = "faer"
@@ -1585,6 +1597,7 @@ version = "0.14.0"
 dependencies = [
  "ab_glyph",
  "anofox-regression",
+ "anofox-statistics",
  "arrow 53.4.1",
  "clap",
  "criterion",

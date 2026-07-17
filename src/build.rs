@@ -438,7 +438,13 @@ impl PlotBuilder {
         // variables, so a computed stat (density/histogram/…) is estimated per
         // panel rather than on pooled data; the facet column is then re-attached
         // to each group's output so faceting can split it back out.
-        let mut group_cols = Self::detect_group_columns(&working_data);
+        // Panelwise stats (e.g. stat_compare_means) see the whole panel at once,
+        // so we group only by facet variables, not by aesthetic groups.
+        let mut group_cols = if stat.panelwise() {
+            Vec::new()
+        } else {
+            Self::detect_group_columns(&working_data)
+        };
         for fv in facet_vars {
             if working_data.has_column(fv) && !group_cols.contains(fv) {
                 group_cols.push(fv.clone());

@@ -103,7 +103,10 @@ impl PlotLayout {
         // A horizontal (top/bottom) legend only needs ONE row of height, not the
         // width-based `legend_size` — otherwise a big gap opens above the plot.
         let legend_band = if has_legend {
-            theme.legend_margin.top + theme.legend_key_height + theme.legend_spacing + theme.legend_margin.bottom
+            theme.legend_margin.top
+                + theme.legend_key_height
+                + theme.legend_spacing
+                + theme.legend_margin.bottom
         } else {
             0.0
         };
