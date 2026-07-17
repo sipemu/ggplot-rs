@@ -1,7 +1,7 @@
 #[cfg(not(target_arch = "wasm32"))]
 use plotters::prelude::IntoDrawingArea;
 
-use crate::aes::{Aes, Aesthetic};
+use crate::aes::Aes;
 use crate::annotate::Annotation;
 use crate::build::PlotBuilder;
 use crate::coord::cartesian::CoordCartesian;
@@ -271,14 +271,17 @@ impl GGPlot {
         comparisons: &[(&str, &str)],
     ) -> Self {
         // Resolve the x/y source columns from the plot mapping + data.
-        let col_for = |a: Aesthetic| {
+        let col_for = |a: crate::aes::Aesthetic| {
             self.mapping
                 .mappings
                 .iter()
                 .find(|m| m.aesthetic == a)
                 .map(|m| m.column.clone())
         };
-        let (xcol, ycol) = match (col_for(Aesthetic::X), col_for(Aesthetic::Y)) {
+        let (xcol, ycol) = match (
+            col_for(crate::aes::Aesthetic::X),
+            col_for(crate::aes::Aesthetic::Y),
+        ) {
             (Some(x), Some(y)) => (x, y),
             _ => return self,
         };
