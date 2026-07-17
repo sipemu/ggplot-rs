@@ -41,6 +41,7 @@ pub use crate::geom::step::{GeomStep, StepDirection};
 pub use crate::geom::text::{GeomLabel, GeomText};
 pub use crate::geom::tile::GeomTile;
 pub use crate::geom::violin::GeomViolin;
+pub use crate::ggpubr::{ggboxplot, ggdensity, gghistogram, ggline, ggscatter, ggviolin};
 pub use crate::guide::config::GuideLegend;
 pub use crate::plot::{GGError, GGPlot, Labels};
 pub use crate::position::dodge::PositionDodge;

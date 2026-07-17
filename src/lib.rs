@@ -5,6 +5,7 @@ pub mod coord;
 pub mod data;
 pub mod facet;
 pub mod geom;
+pub mod ggpubr;
 pub mod guide;
 pub mod plot;
 pub mod position;
