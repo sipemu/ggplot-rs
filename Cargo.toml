@@ -1,6 +1,6 @@
 [package]
 name = "ggplot-rs"
-version = "0.14.0"
+version = "0.15.0"
 edition = "2021"
 # Only the explicit [[bin]] below is a binary; src/bin/load.rs is its module.
 autobins = false
