@@ -44,6 +44,8 @@ pub use crate::geom::violin::GeomViolin;
 pub use crate::ggpubr::{
     ggarrange, ggarrange_save, ggboxplot, ggdensity, gghistogram, ggline, ggscatter, ggviolin,
 };
+#[cfg(not(target_arch = "wasm32"))]
+pub use crate::ggpubr::{ggarrange_png, ggarrange_save_png};
 pub use crate::guide::config::GuideLegend;
 pub use crate::plot::{GGError, GGPlot, Labels};
 pub use crate::position::dodge::PositionDodge;

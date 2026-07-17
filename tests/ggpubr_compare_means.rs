@@ -50,6 +50,23 @@ fn three_groups_render_kruskal_label() {
 }
 
 #[test]
+fn pairwise_brackets_render_p_values() {
+    // ggpubr `comparisons`: two stacked brackets, each labelled with its p-value.
+    let svg = GGPlot::new(grouped(&[("a", 0.0), ("b", 6.0), ("c", 3.0)]))
+        .aes(Aes::new().x("grp").y("val"))
+        .geom_boxplot()
+        .stat_compare_means_pairwise(&[("a", "b"), ("b", "c")])
+        .render_svg()
+        .expect("render");
+    // Each bracket carries a p-value label ("p = .." or the "< 2.2e-16" floor).
+    let hits = svg.matches("p =").count() + svg.matches("p &lt;").count();
+    assert!(
+        hits >= 2,
+        "expected two pairwise p-value labels, got {hits}"
+    );
+}
+
+#[test]
 fn method_override_uses_anova() {
     let stat = StatCompareMeans::new(CompareMethod::Anova);
     let svg = GGPlot::new(grouped(&[("a", 0.0), ("b", 5.0), ("c", 12.0)]))

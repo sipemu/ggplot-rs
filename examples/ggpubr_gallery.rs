@@ -178,7 +178,8 @@ fn arrange_demo() -> Result<(), Box<dyn std::error::Error>> {
         .title("boxplot"),
         ggdensity(xy(), "y", None).title("density"),
     ];
-    ggarrange_save(plots, 2, 340, 250, &out("arrange").replace(".png", ".svg"))?;
+    // Native PNG output — no external rasteriser needed.
+    ggarrange_save_png(plots, 2, 340, 250, &out("arrange"))?;
     Ok(())
 }
 
@@ -188,12 +189,10 @@ fn brackets_demo() -> Result<(), Box<dyn std::error::Error>> {
     GGPlot::new(vec![("grp".to_string(), xs), ("val".to_string(), ys)])
         .aes(Aes::new().x("grp").y("val").fill("grp"))
         .geom_boxplot()
-        .geom_bracket_many(
-            GeomBracket::default(),
-            &[("ctrl", "trt1", 11.0, "**"), ("trt1", "trt2", 12.5, "ns")],
-        )
+        // Auto pairwise brackets: each labelled with its computed Wilcoxon p-value.
+        .stat_compare_means_pairwise(&[("ctrl", "trt1"), ("trt1", "trt2"), ("ctrl", "trt2")])
         .scale_fill_brewer(PaletteName::Npg)
-        .title("geom_bracket(): pairwise significance")
+        .title("stat_compare_means(comparisons): pairwise p-values")
         .xlab("group")
         .ylab("response")
         .theme_pubr()

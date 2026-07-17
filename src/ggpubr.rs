@@ -106,6 +106,54 @@ pub fn ggarrange_save(
     std::fs::write(path, svg).map_err(GGError::Io)
 }
 
+/// [`ggarrange`] rendered as a single PNG. Each plot is rasterised on its own
+/// (via the plotters bitmap backend) and composited into an `ncol`-wide grid.
+/// Returns the encoded PNG bytes.
+#[cfg(not(target_arch = "wasm32"))]
+pub fn ggarrange_png(
+    plots: Vec<GGPlot>,
+    ncol: usize,
+    cell_w: u32,
+    cell_h: u32,
+) -> Result<Vec<u8>, GGError> {
+    use crate::render::RenderError;
+    let n = plots.len();
+    let ncol = ncol.max(1);
+    let nrow = n.div_ceil(ncol).max(1);
+    let mut canvas = image::RgbaImage::from_pixel(
+        ncol as u32 * cell_w,
+        nrow as u32 * cell_h,
+        image::Rgba([255, 255, 255, 255]),
+    );
+    for (i, plot) in plots.into_iter().enumerate() {
+        let png = plot.render_png_with_size(cell_w, cell_h)?;
+        let cell = image::load_from_memory(&png)
+            .map_err(|e| GGError::Render(RenderError::BackendError(format!("decode: {e}"))))?
+            .to_rgba8();
+        let x = ((i % ncol) as u32 * cell_w) as i64;
+        let y = ((i / ncol) as u32 * cell_h) as i64;
+        image::imageops::overlay(&mut canvas, &cell, x, y);
+    }
+    let mut out = std::io::Cursor::new(Vec::new());
+    canvas
+        .write_to(&mut out, image::ImageOutputFormat::Png)
+        .map_err(|e| GGError::Render(RenderError::BackendError(format!("encode: {e}"))))?;
+    Ok(out.into_inner())
+}
+
+/// [`ggarrange_png`] that writes the composited PNG to `path`.
+#[cfg(not(target_arch = "wasm32"))]
+pub fn ggarrange_save_png(
+    plots: Vec<GGPlot>,
+    ncol: usize,
+    cell_w: u32,
+    cell_h: u32,
+    path: &str,
+) -> Result<(), GGError> {
+    let png = ggarrange_png(plots, ncol, cell_w, cell_h)?;
+    std::fs::write(path, png).map_err(GGError::Io)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -151,6 +199,20 @@ mod tests {
         assert!(svg.contains("x=\"300\" y=\"0\""));
         assert!(svg.contains("x=\"0\" y=\"220\""));
         assert!(svg.contains("x=\"300\" y=\"220\""));
+    }
+
+    #[test]
+    #[cfg(not(target_arch = "wasm32"))]
+    fn ggarrange_png_composes_a_grid() {
+        let plots = vec![
+            ggscatter(xy(), "x", "y", None),
+            ggline(xy(), "x", "y", None),
+            ggboxplot(xy(), "g", "y", Some("g")),
+        ];
+        let png = ggarrange_png(plots, 2, 200, 160).expect("png");
+        // Valid PNG signature and non-trivial size.
+        assert_eq!(&png[..8], &[0x89, b'P', b'N', b'G', 0x0d, 0x0a, 0x1a, 0x0a]);
+        assert!(png.len() > 1000);
     }
 
     #[test]

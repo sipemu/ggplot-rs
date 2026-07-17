@@ -179,6 +179,26 @@ fn run_test(method: CompareMethod, groups: &[&[f64]]) -> (&'static str, Option<f
     }
 }
 
+/// Two-sample p-value for one pairwise comparison, honouring `method`: `TTest`
+/// uses a Welch t-test; every other method (incl. `Auto`/`Kruskal`/`Anova`,
+/// which aren't pairwise) falls back to the Wilcoxon rank-sum (Mann-Whitney U),
+/// matching ggpubr's default pairwise test.
+pub(crate) fn pairwise_p(method: CompareMethod, a: &[f64], b: &[f64]) -> Option<f64> {
+    use anofox_statistics::{Alternative, TTestKind};
+    match method {
+        CompareMethod::TTest => {
+            anofox_statistics::t_test(a, b, TTestKind::Welch, Alternative::TwoSided, 0.0, None)
+                .ok()
+                .map(|r| r.p_value)
+        }
+        _ => {
+            anofox_statistics::mann_whitney_u(a, b, Alternative::TwoSided, true, false, None, None)
+                .ok()
+                .map(|r| r.p_value)
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
