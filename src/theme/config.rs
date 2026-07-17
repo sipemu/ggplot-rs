@@ -347,6 +347,14 @@ pub fn parse_palette(name: &str) -> Result<PaletteName, String> {
         "magma" => Magma,
         "plasma" => Plasma,
         "inferno" => Inferno,
+        // ggsci journal palettes (ggpubr)
+        "npg" => Npg,
+        "aaas" => Aaas,
+        "nejm" => Nejm,
+        "lancet" => Lancet,
+        "jama" => Jama,
+        "jco" => Jco,
+        "d3" => D3,
         other => return Err(format!("unknown palette '{other}'")),
     })
 }

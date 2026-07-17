@@ -1261,6 +1261,12 @@ impl GGPlot {
         self
     }
 
+    /// Apply the publication-ready `theme_pubr()` (ggpubr style).
+    pub fn theme_pubr(mut self) -> Self {
+        self.theme = crate::theme::presets::theme_pubr();
+        self
+    }
+
     pub fn theme_linedraw(mut self) -> Self {
         self.theme = crate::theme::presets::theme_linedraw();
         self

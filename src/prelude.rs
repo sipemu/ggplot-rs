@@ -93,7 +93,8 @@ pub use crate::theme::elements::{ElementLine, ElementRect, ElementText};
 pub use crate::theme::presets::{
     theme_bw, theme_bw_base, theme_classic, theme_classic_base, theme_dark, theme_dark_base,
     theme_gray, theme_gray_base, theme_light, theme_light_base, theme_linedraw,
-    theme_linedraw_base, theme_minimal, theme_minimal_base, theme_void, theme_void_base,
+    theme_linedraw_base, theme_minimal, theme_minimal_base, theme_pubr, theme_pubr_base,
+    theme_void, theme_void_base,
 };
 pub use crate::theme::{
     LegendDirection, LegendPosition, Margin, TagPosition, Theme, ThemeUpdate, TitlePosition,
