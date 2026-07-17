@@ -153,7 +153,10 @@ the last two need the `regression` / `ggpubr` features. Regenerate with
       <img src="assets/gallery/compare_means.png" width="260" alt="stat_compare_means"><br>
       <sub>Group p-value · <code>stat_compare_means</code> <sub>(feature <code>ggpubr</code>)</sub></sub>
     </td>
-    <td align="center"></td>
+    <td align="center">
+      <img src="assets/gallery/brackets.png" width="260" alt="geom_bracket"><br>
+      <sub>Significance brackets · <code>geom_bracket</code></sub>
+    </td>
   </tr>
 </table>
 

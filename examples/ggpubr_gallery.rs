@@ -33,6 +33,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     smooth_gam()?;
     stat_cor_demo()?;
     compare_means_demo()?;
+    brackets_demo()?;
     println!("ggpubr gallery written to assets/gallery/");
     Ok(())
 }
@@ -140,6 +141,25 @@ fn compare_means_demo() -> Result<(), Box<dyn std::error::Error>> {
         .ylab("response")
         .theme_pubr()
         .save_with_size(&out("compare_means"), W, H)?;
+    Ok(())
+}
+
+/// Grouped boxplot with pairwise significance brackets (`geom_bracket`).
+fn brackets_demo() -> Result<(), Box<dyn std::error::Error>> {
+    let (xs, ys) = grouped_samples(&[("ctrl", 5.0), ("trt1", 8.0), ("trt2", 6.4)]);
+    GGPlot::new(vec![("grp".to_string(), xs), ("val".to_string(), ys)])
+        .aes(Aes::new().x("grp").y("val").fill("grp"))
+        .geom_boxplot()
+        .geom_bracket_many(
+            GeomBracket::default(),
+            &[("ctrl", "trt1", 11.0, "**"), ("trt1", "trt2", 12.5, "ns")],
+        )
+        .scale_fill_brewer(PaletteName::Npg)
+        .title("geom_bracket(): pairwise significance")
+        .xlab("group")
+        .ylab("response")
+        .theme_pubr()
+        .save_with_size(&out("brackets"), W, H)?;
     Ok(())
 }
 

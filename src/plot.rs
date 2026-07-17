@@ -9,7 +9,7 @@ use crate::coord::fixed::CoordFixed;
 use crate::coord::flip::CoordFlip;
 use crate::coord::polar::CoordPolar;
 use crate::coord::Coord;
-use crate::data::{DataFrame, GGData};
+use crate::data::{DataFrame, GGData, Value};
 use crate::facet::{Facet, FacetLabeller, FacetScales, FacetSpace};
 use crate::geom::area::GeomArea;
 use crate::geom::bar::GeomBar;
@@ -247,6 +247,52 @@ impl GGPlot {
         stat: crate::stat::compare_means::StatCompareMeans,
     ) -> Self {
         self.geom_text().stat(stat)
+    }
+
+    /// Draw a significance bracket over the plot (`ggpubr::geom_bracket`): a bar
+    /// spanning the categorical positions `xmin`..`xmax` at height `y`, captioned
+    /// with `label` (e.g. a p-value or significance stars). Pairs with a boxplot
+    /// and [`stat_compare_means`](GGPlot::stat_compare_means).
+    pub fn geom_bracket(self, xmin: &str, xmax: &str, y: f64, label: &str) -> Self {
+        self.geom_bracket_many(
+            crate::geom::bracket::GeomBracket::default(),
+            &[(xmin, xmax, y, label)],
+        )
+    }
+
+    /// Draw several significance brackets at once with a configured
+    /// [`GeomBracket`](crate::geom::bracket::GeomBracket). Each tuple is
+    /// `(xmin, xmax, y, label)`.
+    pub fn geom_bracket_many(
+        self,
+        geom: crate::geom::bracket::GeomBracket,
+        brackets: &[(&str, &str, f64, &str)],
+    ) -> Self {
+        let xmin = brackets
+            .iter()
+            .map(|b| Value::Str(b.0.to_string()))
+            .collect::<Vec<_>>();
+        let xmax = brackets
+            .iter()
+            .map(|b| Value::Str(b.1.to_string()))
+            .collect::<Vec<_>>();
+        let y = brackets
+            .iter()
+            .map(|b| Value::Float(b.2))
+            .collect::<Vec<_>>();
+        let label = brackets
+            .iter()
+            .map(|b| Value::Str(b.3.to_string()))
+            .collect::<Vec<_>>();
+        let data = vec![
+            ("xmin".to_string(), xmin),
+            ("xmax".to_string(), xmax),
+            ("y".to_string(), y),
+            ("label".to_string(), label),
+        ];
+        self.add_geom(geom)
+            .layer_data(data)
+            .layer_aes(Aes::new().xmin("xmin").xmax("xmax").y("y").label("label"))
     }
 
     pub fn geom_label(self) -> Self {
