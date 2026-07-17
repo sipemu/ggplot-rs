@@ -3,38 +3,7 @@ use crate::data::{DataFrame, Value};
 use crate::scale::ScaleSet;
 
 use super::Stat;
-
-/// Rational approximation of the inverse normal CDF (probit function).
-/// Uses Abramowitz and Stegun approximation (26.2.23).
-fn qnorm(p: f64) -> f64 {
-    if p <= 0.0 {
-        return f64::NEG_INFINITY;
-    }
-    if p >= 1.0 {
-        return f64::INFINITY;
-    }
-
-    // Use symmetry: if p > 0.5, negate result of 1-p
-    if p < 0.5 {
-        -rational_approx((-2.0 * p.ln()).sqrt())
-    } else if p > 0.5 {
-        rational_approx((-2.0 * (1.0 - p).ln()).sqrt())
-    } else {
-        0.0
-    }
-}
-
-fn rational_approx(t: f64) -> f64 {
-    // Coefficients for rational approximation
-    let c0 = 2.515_517;
-    let c1 = 0.802_853;
-    let c2 = 0.010_328;
-    let d1 = 1.432_788;
-    let d2 = 0.189_269;
-    let d3 = 0.001_308;
-
-    t - (c0 + c1 * t + c2 * t * t) / (1.0 + d1 * t + d2 * t * t + d3 * t * t * t)
-}
+use crate::stat::dist::qnorm;
 
 /// R-compatible type-7 quantile interpolation (R's default `quantile()` method).
 fn quantile_type7(sorted: &[f64], p: f64) -> f64 {
@@ -184,6 +153,8 @@ mod tests {
 
     #[test]
     fn test_qnorm_symmetry() {
+        // `qnorm` now lives in stat::dist (exact under `regression`, A&S
+        // approximation otherwise); check it stays symmetric in either build.
         let q = qnorm(0.5);
         assert!((q).abs() < 0.01, "qnorm(0.5) should be ~0, got {q}");
 

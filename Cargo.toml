@@ -44,7 +44,7 @@ rand = "0.8"
 polars = { version = "0.46", features = ["lazy"], optional = true }
 arrow = { version = "53", default-features = false, optional = true }
 # Regression backend for stat_quantile / geom_smooth glm (issues #10, #11).
-anofox-regression = { version = "0.5.10", optional = true }
+anofox-regression = { version = "0.5.11", optional = true }
 faer = { version = "0.23", default-features = false, features = [
     "std",
     "linalg",

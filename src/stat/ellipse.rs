@@ -7,7 +7,8 @@ use super::Stat;
 /// Confidence ellipse for a 2-D point cloud (analogous to R's `stat_ellipse`).
 ///
 /// Assumes a bivariate normal distribution: the ellipse is the covariance
-/// eigen-decomposition scaled by the chi-square quantile for `level` (df = 2).
+/// eigen-decomposition scaled by ggplot2's radius `sqrt(2·F⁻¹(level; 2, n−1))`
+/// (see [`crate::stat::dist::ellipse_radius`]).
 /// Emits `segments + 1` boundary points forming a closed path per group.
 pub struct StatEllipse {
     /// Confidence level in (0, 1). Default 0.95.
@@ -84,8 +85,10 @@ impl Stat for StatEllipse {
         // Second axis is perpendicular to the first.
         let (v2x, v2y) = (-v1y, v1x);
 
-        // Chi-square quantile with 2 dof has the closed form -2 ln(1 - level).
-        let radius = (-2.0 * (1.0 - self.level).ln()).sqrt();
+        // Ellipse radius scaling (ggplot2 stat_ellipse: sqrt(2·F⁻¹(level;2,n−1)),
+        // or the χ²₂ limit without the `regression` feature). Distribution math
+        // lives in stat::dist, not here.
+        let radius = crate::stat::dist::ellipse_radius(self.level, pts.len());
         let a = radius * l1.sqrt();
         let b = radius * l2.sqrt();
 
