@@ -178,7 +178,12 @@ fn bar() -> Result<(), Box<dyn std::error::Error>> {
 /// Grouped boxplots — four treatments with distinct medians and spreads.
 fn boxplot() -> Result<(), Box<dyn std::error::Error>> {
     // (group, mean, sd)
-    let params = [("A", 4.0, 0.8), ("B", 6.2, 1.3), ("C", 5.4, 0.6), ("D", 7.1, 1.0)];
+    let params = [
+        ("A", 4.0, 0.8),
+        ("B", 6.2, 1.3),
+        ("C", 5.4, 0.6),
+        ("D", 7.1, 1.0),
+    ];
     let mut r = seeded(2);
     let (mut group, mut value) = (Vec::new(), Vec::new());
     for (name, mean, sd) in params {
@@ -206,11 +211,7 @@ fn boxplot() -> Result<(), Box<dyn std::error::Error>> {
 /// Violin plots — bimodal distributions a boxplot would hide.
 fn violin() -> Result<(), Box<dyn std::error::Error>> {
     // Each group mixes two normals so the violin shows two lobes.
-    let params = [
-        ("X", -2.0, 2.5),
-        ("Y", -1.0, 3.5),
-        ("Z", 0.0, 4.0),
-    ];
+    let params = [("X", -2.0, 2.5), ("Y", -1.0, 3.5), ("Z", 0.0, 4.0)];
     let mut r = seeded(3);
     let (mut group, mut value) = (Vec::new(), Vec::new());
     for (name, lo, hi) in params {

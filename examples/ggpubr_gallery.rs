@@ -92,7 +92,10 @@ fn palettes_ggsci() -> Result<(), Box<dyn std::error::Error>> {
 
 /// The publication-ready `theme_pubr()` on a grouped boxplot.
 fn theme_pubr_demo() -> Result<(), Box<dyn std::error::Error>> {
-    let (xs, ys) = grouped_samples(&[("ctrl", 5.0, 0.8), ("trt1", 7.5, 1.1), ("trt2", 6.2, 0.9)], 31);
+    let (xs, ys) = grouped_samples(
+        &[("ctrl", 5.0, 0.8), ("trt1", 7.5, 1.1), ("trt2", 6.2, 0.9)],
+        31,
+    );
     GGPlot::new(vec![("grp".to_string(), xs), ("val".to_string(), ys)])
         .aes(Aes::new().x("grp").y("val").fill("grp"))
         .geom_boxplot()
@@ -114,15 +117,18 @@ fn smooth_gam() -> Result<(), Box<dyn std::error::Error>> {
         .iter()
         .map(|&t| (t * 0.6).sin() * 3.0 + t * 0.15 + randn(&mut r) * 0.9)
         .collect();
-    GGPlot::new(vec![("x".to_string(), col_f(x)), ("y".to_string(), col_f(y))])
-        .aes(Aes::new().x("x").y("y"))
-        .geom_point()
-        .geom_smooth_with(GeomSmooth::default().gam())
-        .title("GAM Smoothing (P-spline, method = \"gam\")")
-        .xlab("x")
-        .ylab("y")
-        .theme_bw()
-        .save_with_size(&out("smooth_gam"), W, H)?;
+    GGPlot::new(vec![
+        ("x".to_string(), col_f(x)),
+        ("y".to_string(), col_f(y)),
+    ])
+    .aes(Aes::new().x("x").y("y"))
+    .geom_point()
+    .geom_smooth_with(GeomSmooth::default().gam())
+    .title("GAM Smoothing (P-spline, method = \"gam\")")
+    .xlab("x")
+    .ylab("y")
+    .theme_bw()
+    .save_with_size(&out("smooth_gam"), W, H)?;
     Ok(())
 }
 
@@ -135,22 +141,28 @@ fn stat_cor_demo() -> Result<(), Box<dyn std::error::Error>> {
         .iter()
         .map(|&t| round2(1.5 * t + 2.0 + randn(&mut r) * 2.2))
         .collect();
-    GGPlot::new(vec![("x".to_string(), col_f(x)), ("y".to_string(), col_f(y))])
-        .aes(Aes::new().x("x").y("y"))
-        .geom_point()
-        .stat_cor()
-        .title("stat_cor(): Pearson R + p-value")
-        .xlab("x")
-        .ylab("y")
-        .theme_pubr()
-        .save_with_size(&out("stat_cor"), W, H)?;
+    GGPlot::new(vec![
+        ("x".to_string(), col_f(x)),
+        ("y".to_string(), col_f(y)),
+    ])
+    .aes(Aes::new().x("x").y("y"))
+    .geom_point()
+    .stat_cor()
+    .title("stat_cor(): Pearson R + p-value")
+    .xlab("x")
+    .ylab("y")
+    .theme_pubr()
+    .save_with_size(&out("stat_cor"), W, H)?;
     Ok(())
 }
 
 /// Grouped boxplot annotated with a group-comparison p-value
 /// (`stat_compare_means`, Kruskal-Wallis for >2 groups).
 fn compare_means_demo() -> Result<(), Box<dyn std::error::Error>> {
-    let (xs, ys) = grouped_samples(&[("ctrl", 5.0, 0.9), ("trt1", 7.8, 1.1), ("trt2", 6.4, 1.0)], 31);
+    let (xs, ys) = grouped_samples(
+        &[("ctrl", 5.0, 0.9), ("trt1", 7.8, 1.1), ("trt2", 6.4, 1.0)],
+        31,
+    );
     GGPlot::new(vec![("grp".to_string(), xs), ("val".to_string(), ys)])
         .aes(Aes::new().x("grp").y("val").fill("grp"))
         .geom_boxplot()
@@ -166,7 +178,10 @@ fn compare_means_demo() -> Result<(), Box<dyn std::error::Error>> {
 
 /// Grouped boxplot with pairwise significance brackets (auto p-values).
 fn brackets_demo() -> Result<(), Box<dyn std::error::Error>> {
-    let (xs, ys) = grouped_samples(&[("ctrl", 5.0, 0.9), ("trt1", 8.0, 1.1), ("trt2", 6.4, 1.0)], 31);
+    let (xs, ys) = grouped_samples(
+        &[("ctrl", 5.0, 0.9), ("trt1", 8.0, 1.1), ("trt2", 6.4, 1.0)],
+        31,
+    );
     GGPlot::new(vec![("grp".to_string(), xs), ("val".to_string(), ys)])
         .aes(Aes::new().x("grp").y("val").fill("grp"))
         .geom_boxplot()

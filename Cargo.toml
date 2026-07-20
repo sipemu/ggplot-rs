@@ -181,3 +181,11 @@ required-features = ["polars"]
 [[example]]
 name = "ggpubr_gallery"
 required-features = ["regression", "ggpubr"]
+
+# Keep debug builds (dev, and the test profile that inherits it) free of DWARF
+# debuginfo. The polars + regression + criterion + proptest test-binary set
+# otherwise gets large enough that linking it exhausts CI-runner RAM
+# ("ld: signal 7, Bus error") or disk ("No space left on device"). Profiles only
+# affect builds of THIS crate, not downstream consumers.
+[profile.dev]
+debug = false
