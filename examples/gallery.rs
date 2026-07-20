@@ -1,11 +1,16 @@
 //! Generates the plot gallery shown in the README.
 //!
-//! Run with: `cargo run --example gallery`
+//! Run with: `cargo run --features sf --example gallery`
 //! Writes PNGs to `assets/gallery/`.
+//!
+//! Data is drawn from a seeded RNG with realistic distributions so each plot
+//! resembles a genuine analysis (natural point clouds, real group differences)
+//! rather than an obviously-synthetic wave.
 
 use ggplot_rs::prelude::*;
 use polars::prelude::*;
-use std::f64::consts::PI;
+use rand::rngs::StdRng;
+use rand::{Rng, SeedableRng};
 
 const W: u32 = 640;
 const H: u32 = 480;
@@ -15,6 +20,41 @@ const TH: u32 = 340;
 
 fn out(name: &str) -> String {
     format!("assets/gallery/{name}.png")
+}
+
+fn seeded(seed: u64) -> StdRng {
+    StdRng::seed_from_u64(seed)
+}
+
+/// Approximate standard-normal draw (Irwin–Hall: sum of 12 uniforms − 6).
+fn randn(r: &mut StdRng) -> f64 {
+    (0..12).map(|_| r.gen::<f64>()).sum::<f64>() - 6.0
+}
+
+fn round2(v: f64) -> f64 {
+    (v * 100.0).round() / 100.0
+}
+
+/// Iris-like sample: 50 flowers per species with realistic sepal length/width
+/// (means/SDs close to Fisher's iris), so the three species form distinct,
+/// naturally-scattered clusters.
+fn iris(seed: u64) -> (Vec<f64>, Vec<f64>, Vec<&'static str>) {
+    // (species, len mean, len sd, width mean, width sd)
+    let params = [
+        ("setosa", 5.01, 0.35, 3.43, 0.38),
+        ("versicolor", 5.94, 0.52, 2.77, 0.31),
+        ("virginica", 6.59, 0.64, 2.97, 0.32),
+    ];
+    let mut r = seeded(seed);
+    let (mut x, mut y, mut sp) = (Vec::new(), Vec::new(), Vec::new());
+    for (name, lm, ls, wm, ws) in params {
+        for _ in 0..50 {
+            x.push(round2(lm + randn(&mut r) * ls));
+            y.push(round2(wm + randn(&mut r) * ws));
+            sp.push(name);
+        }
+    }
+    (x, y, sp)
 }
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -46,25 +86,17 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 
-/// Grouped scatter with a qualitative Brewer palette.
+/// Grouped scatter of iris sepal dimensions with a qualitative palette.
 fn scatter() -> Result<(), Box<dyn std::error::Error>> {
-    let n = 150;
-    let x: Vec<f64> = (0..n).map(|i| 4.5 + i as f64 * 0.02).collect();
-    let y: Vec<f64> = (0..n)
-        .map(|i| 2.5 + (i as f64 * 0.15).sin() + (i % 3) as f64 * 0.6)
-        .collect();
-    let species: Vec<&str> = (0..n)
-        .map(|i| ["setosa", "versicolor", "virginica"][i % 3])
-        .collect();
-
+    let (x, y, species) = iris(1);
     let df = df! { "x" => x, "y" => y, "species" => species }?;
     GGPlot::new(df)
         .aes(Aes::new().x("x").y("y").color("species"))
         .geom_point()
         .scale_color_brewer(PaletteName::Set1)
-        .title("Grouped Scatter")
-        .xlab("Sepal Length")
-        .ylab("Sepal Width")
+        .title("Iris Sepal Dimensions")
+        .xlab("Sepal Length (cm)")
+        .ylab("Sepal Width (cm)")
         .theme_minimal()
         .save_with_size(&out("scatter"), W, H)?;
     Ok(())
@@ -73,12 +105,11 @@ fn scatter() -> Result<(), Box<dyn std::error::Error>> {
 /// Points overlaid with a LOESS trend line and confidence band.
 fn smooth() -> Result<(), Box<dyn std::error::Error>> {
     let n = 120;
+    let mut r = seeded(7);
     let x: Vec<f64> = (0..n).map(|i| i as f64 * 0.1).collect();
-    let y: Vec<f64> = (0..n)
-        .map(|i| {
-            let t = i as f64 * 0.1;
-            (t * 0.6).sin() * 3.0 + t * 0.2 + ((i * 7919 % 100) as f64 / 100.0 - 0.5) * 1.5
-        })
+    let y: Vec<f64> = x
+        .iter()
+        .map(|&t| (t * 0.6).sin() * 3.0 + t * 0.2 + randn(&mut r) * 0.8)
         .collect();
 
     let df = df! { "x" => x, "y" => y }?;
@@ -97,16 +128,10 @@ fn smooth() -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 
-/// Histogram of an approximately-normal sample.
+/// Histogram of a normally-distributed sample.
 fn histogram() -> Result<(), Box<dyn std::error::Error>> {
-    let values: Vec<f64> = (0..1500)
-        .map(|i: i32| {
-            let r: f64 = (0..6)
-                .map(|k| ((i * (1237 + k * 311) + 5678) % 1000) as f64 / 1000.0)
-                .sum();
-            (r - 3.0) * 2.0
-        })
-        .collect();
+    let mut r = seeded(11);
+    let values: Vec<f64> = (0..1500).map(|_| randn(&mut r) * 2.0 + 10.0).collect();
 
     let df = df! { "measurement" => values }?;
     GGPlot::new(df)
@@ -150,16 +175,18 @@ fn bar() -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 
-/// Grouped boxplots.
+/// Grouped boxplots — four treatments with distinct medians and spreads.
 fn boxplot() -> Result<(), Box<dyn std::error::Error>> {
-    let n = 240;
-    let group: Vec<&str> = (0..n).map(|i| ["A", "B", "C", "D"][i % 4]).collect();
-    let value: Vec<f64> = (0..n)
-        .map(|i| {
-            let base = (i % 4) as f64 * 1.5;
-            base + (i as f64 * 0.4).sin() * 1.2 + ((i * 6151 % 100) as f64 / 100.0 - 0.5) * 2.0
-        })
-        .collect();
+    // (group, mean, sd)
+    let params = [("A", 4.0, 0.8), ("B", 6.2, 1.3), ("C", 5.4, 0.6), ("D", 7.1, 1.0)];
+    let mut r = seeded(2);
+    let (mut group, mut value) = (Vec::new(), Vec::new());
+    for (name, mean, sd) in params {
+        for _ in 0..60 {
+            group.push(name);
+            value.push(round2(mean + randn(&mut r) * sd));
+        }
+    }
 
     let df = df! { "group" => group, "value" => value }?;
     GGPlot::new(df)
@@ -176,23 +203,30 @@ fn boxplot() -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 
-/// Violin plots of grouped distributions.
+/// Violin plots — bimodal distributions a boxplot would hide.
 fn violin() -> Result<(), Box<dyn std::error::Error>> {
-    let n = 360;
-    let group: Vec<&str> = (0..n).map(|i| ["X", "Y", "Z"][i % 3]).collect();
-    let value: Vec<f64> = (0..n)
-        .map(|i| {
-            let g = (i % 3) as f64;
-            g * 2.0 + (i as f64 * 0.5).sin() * 1.5 + ((i * 4231 % 100) as f64 / 100.0 - 0.5) * 2.5
-        })
-        .collect();
+    // Each group mixes two normals so the violin shows two lobes.
+    let params = [
+        ("X", -2.0, 2.5),
+        ("Y", -1.0, 3.5),
+        ("Z", 0.0, 4.0),
+    ];
+    let mut r = seeded(3);
+    let (mut group, mut value) = (Vec::new(), Vec::new());
+    for (name, lo, hi) in params {
+        for k in 0..120 {
+            group.push(name);
+            let center = if k % 2 == 0 { lo } else { hi };
+            value.push(round2(center + randn(&mut r) * 0.7));
+        }
+    }
 
     let df = df! { "group" => group, "value" => value }?;
     GGPlot::new(df)
         .aes(Aes::new().x("group").y("value").fill("group"))
         .geom_violin()
         .scale_fill_brewer(PaletteName::Accent)
-        .title("Violin")
+        .title("Violin (bimodal groups)")
         .xlab("Group")
         .ylab("Value")
         .theme_minimal()
@@ -230,17 +264,9 @@ fn continuous_color() -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 
-/// Faceted scatter, one panel per group.
+/// Faceted iris scatter, one panel per species.
 fn facet() -> Result<(), Box<dyn std::error::Error>> {
-    let n = 180;
-    let x: Vec<f64> = (0..n).map(|i| (i as f64 * 0.1).cos() * 3.0).collect();
-    let y: Vec<f64> = (0..n)
-        .map(|i| (i as f64 * 0.1).sin() * 3.0 + (i % 3) as f64)
-        .collect();
-    let species: Vec<&str> = (0..n)
-        .map(|i| ["setosa", "versicolor", "virginica"][i % 3])
-        .collect();
-
+    let (x, y, species) = iris(4);
     let df = df! { "x" => x, "y" => y, "species" => species }?;
     GGPlot::new(df)
         .aes(Aes::new().x("x").y("y").color("species"))
@@ -248,24 +274,25 @@ fn facet() -> Result<(), Box<dyn std::error::Error>> {
         .facet_wrap("species", Some(3))
         .scale_color_brewer(PaletteName::Set1)
         .title("Facet Wrap")
-        .xlab("x")
-        .ylab("y")
+        .xlab("Sepal Length (cm)")
+        .ylab("Sepal Width (cm)")
         .theme_bw()
         .save_with_size(&out("facet"), W, H)?;
     Ok(())
 }
 
-/// Overlapping density curves by group.
+/// Overlapping density curves for two separated groups.
 fn density() -> Result<(), Box<dyn std::error::Error>> {
-    let n = 600;
-    let group: Vec<&str> = (0..n).map(|i| ["Group 1", "Group 2"][i % 2]).collect();
-    let value: Vec<f64> = (0..n)
-        .map(|i| {
-            let shift = (i % 2) as f64 * 2.5;
-            let t = i as f64 * 0.05;
-            shift + (t.sin() + (t * 1.7).cos()) + ((i * 3319 % 100) as f64 / 100.0 - 0.5) * PI
-        })
-        .collect();
+    let mut r = seeded(5);
+    let (mut value, mut group) = (Vec::new(), Vec::new());
+    for _ in 0..400 {
+        value.push(round2(randn(&mut r) * 1.0 - 1.0));
+        group.push("Group 1");
+    }
+    for _ in 0..400 {
+        value.push(round2(randn(&mut r) * 1.2 + 2.0));
+        group.push("Group 2");
+    }
 
     let df = df! { "value" => value, "group" => group }?;
     GGPlot::new(df)
@@ -304,21 +331,18 @@ fn contour_filled() -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 
-/// Hexagonal binning of a 2-D point cloud.
+/// Hexagonal binning of a dense bivariate-normal cloud.
 fn hexbin() -> Result<(), Box<dyn std::error::Error>> {
-    let n = 4000;
-    let x: Vec<f64> = (0..n)
-        .map(|i| {
-            let t = i as f64;
-            (t * 0.017).sin() * 2.0 + ((i * 7919 % 1000) as f64 / 1000.0 - 0.5) * 3.0
-        })
-        .collect();
-    let y: Vec<f64> = (0..n)
-        .map(|i| {
-            let t = i as f64;
-            (t * 0.017).cos() * 2.0 + ((i * 6323 % 1000) as f64 / 1000.0 - 0.5) * 3.0
-        })
-        .collect();
+    let n = 6000;
+    let mut r = seeded(9);
+    // Correlated 2-D Gaussian: y shares part of x's draw.
+    let (mut x, mut y) = (Vec::new(), Vec::new());
+    for _ in 0..n {
+        let a = randn(&mut r);
+        let b = randn(&mut r);
+        x.push(a * 2.0);
+        y.push(a * 1.1 + b * 1.4);
+    }
     let df = df! { "x" => x, "y" => y }?;
     GGPlot::new(df)
         .aes(Aes::new().x("x").y("y"))
@@ -351,22 +375,25 @@ fn heatmap() -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 
-/// Jittered categorical scatter (`geom_jitter`).
+/// Jittered dose–response scatter (`geom_jitter`).
 fn jitter() -> Result<(), Box<dyn std::error::Error>> {
-    let n = 300;
-    let group: Vec<&str> = (0..n).map(|i| ["Control", "Low", "High"][i % 3]).collect();
-    let value: Vec<f64> = (0..n)
-        .map(|i| {
-            let base = (i % 3) as f64 * 1.5;
-            base + ((i * 5701 % 1000) as f64 / 1000.0 - 0.5) * 2.0
-        })
-        .collect();
+    let params = [("Control", 2.0, 0.6), ("Low", 3.6, 0.7), ("High", 5.1, 0.8)];
+    let mut r = seeded(6);
+    let (mut group, mut value) = (Vec::new(), Vec::new());
+    for (name, mean, sd) in params {
+        for _ in 0..100 {
+            group.push(name);
+            value.push(round2(mean + randn(&mut r) * sd));
+        }
+    }
     let df = df! { "group" => group, "value" => value }?;
     GGPlot::new(df)
         .aes(Aes::new().x("group").y("value").color("group"))
         .geom_jitter()
         .scale_color_brewer(PaletteName::Dark2)
         .title("Jittered Points")
+        .xlab("Dose")
+        .ylab("Response")
         .theme_minimal()
         .save_with_size(&out("jitter"), W, H)?;
     Ok(())
@@ -377,8 +404,17 @@ fn ribbon() -> Result<(), Box<dyn std::error::Error>> {
     let n = 80;
     let x: Vec<f64> = (0..n).map(|i| i as f64 * 0.15).collect();
     let y: Vec<f64> = x.iter().map(|v| v.sin() + v * 0.1).collect();
-    let ymin: Vec<f64> = y.iter().map(|v| v - 0.4).collect();
-    let ymax: Vec<f64> = y.iter().map(|v| v + 0.4).collect();
+    // Uncertainty widens with x.
+    let ymin: Vec<f64> = x
+        .iter()
+        .zip(&y)
+        .map(|(t, v)| v - (0.25 + t * 0.05))
+        .collect();
+    let ymax: Vec<f64> = x
+        .iter()
+        .zip(&y)
+        .map(|(t, v)| v + (0.25 + t * 0.05))
+        .collect();
     let df = df! { "x" => x, "y" => y, "ymin" => ymin, "ymax" => ymax }?;
     GGPlot::new(df)
         .aes(Aes::new().x("x").y("y").ymin("ymin").ymax("ymax"))
@@ -391,21 +427,17 @@ fn ribbon() -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 
-/// Stacked areas by group.
+/// Stacked areas — three regions over time.
 fn area_stack() -> Result<(), Box<dyn std::error::Error>> {
     let n = 40;
-    let mut x = Vec::new();
-    let mut y = Vec::new();
-    let mut g = Vec::new();
-    for grp in ["North", "South", "East"] {
+    let mut r = seeded(8);
+    let (mut x, mut y, mut g) = (Vec::new(), Vec::new(), Vec::new());
+    for (grp, base, amp) in [("North", 2.0, 1.2), ("South", 3.0, 1.6), ("East", 1.5, 0.9)] {
+        // A smooth seasonal swell plus mild noise, always positive.
         for i in 0..n {
             x.push(i as f64);
-            let base = match grp {
-                "North" => 2.0,
-                "South" => 3.0,
-                _ => 1.5,
-            };
-            y.push(base + (i as f64 * 0.2).sin().abs() * base);
+            let seasonal = (i as f64 * 0.3).sin().abs() * amp;
+            y.push(round2((base + seasonal + randn(&mut r) * 0.2).max(0.1)));
             g.push(grp);
         }
     }
@@ -415,6 +447,8 @@ fn area_stack() -> Result<(), Box<dyn std::error::Error>> {
         .geom_area()
         .scale_fill_brewer(PaletteName::Set2)
         .title("Stacked Area")
+        .xlab("Month")
+        .ylab("Volume")
         .theme_minimal()
         .save_with_size(&out("area"), W, H)?;
     Ok(())
@@ -440,15 +474,10 @@ fn polar() -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 
-/// Empirical cumulative distribution, drawn as a step padded to the panel edges.
+/// Empirical cumulative distribution of a normal sample.
 fn ecdf() -> Result<(), Box<dyn std::error::Error>> {
-    let n = 300;
-    let x: Vec<f64> = (0..n)
-        .map(|i| {
-            let t = i as f64 * 0.05;
-            (t.sin() + (t * 1.7).cos()) * 1.5 + ((i * 3319 % 100) as f64 / 100.0 - 0.5) * 2.0
-        })
-        .collect();
+    let mut r = seeded(12);
+    let x: Vec<f64> = (0..300).map(|_| round2(randn(&mut r) * 1.5)).collect();
     let df = df! { "x" => x }?;
     GGPlot::new(df)
         .aes(Aes::new().x("x"))
@@ -465,12 +494,14 @@ fn ecdf() -> Result<(), Box<dyn std::error::Error>> {
 
 /// Normal quantile-quantile plot with a reference line (`geom_qq`).
 fn qq() -> Result<(), Box<dyn std::error::Error>> {
-    let n = 200;
-    // A heavy-tailed sample so the points bow away from the reference line.
-    let y: Vec<f64> = (0..n)
-        .map(|i| {
-            let u = ((i * 2749 + 13) % 1000) as f64 / 1000.0 - 0.5;
-            u * u * u * 30.0 + u * 4.0
+    // A heavy-tailed (Student-t-like) sample so the points bow away from the
+    // reference line at both ends.
+    let mut r = seeded(13);
+    let y: Vec<f64> = (0..200)
+        .map(|_| {
+            let z = randn(&mut r);
+            // Inflate the tails.
+            round2(z * (1.0 + 0.35 * z * z))
         })
         .collect();
     let df = df! { "y" => y }?;
@@ -517,14 +548,9 @@ fn spatial() -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 
-/// The same plot rendered under every built-in theme.
+/// The same iris scatter rendered under every built-in theme.
 fn themes() -> Result<(), Box<dyn std::error::Error>> {
-    let n = 90;
-    let x: Vec<f64> = (0..n).map(|i| i as f64 * 0.1).collect();
-    let y: Vec<f64> = (0..n)
-        .map(|i| (i as f64 * 0.1).sin() + (i % 3) as f64 * 0.5)
-        .collect();
-    let g: Vec<&str> = (0..n).map(|i| ["A", "B", "C"][i % 3]).collect();
+    let (x, y, g) = iris(14);
     let df = df! { "x" => x, "y" => y, "g" => g }?;
 
     type ThemeFn = fn() -> Theme;
