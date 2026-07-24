@@ -1772,6 +1772,78 @@ impl GGPlot {
             .map(|s| s.axis_position_opposite())
             .unwrap_or(false);
 
+        // Auto-tune categorical axis labels so they stay legible. A flip swaps
+        // which trained scale sits on each visual axis: the bottom (x) axis reads
+        // the Y scale when flipped, the left (y) axis reads the X scale.
+        let flipped = built.coord.is_flipped();
+        let h_aes = if flipped {
+            crate::aes::Aesthetic::Y
+        } else {
+            crate::aes::Aesthetic::X
+        };
+        let v_aes = if flipped {
+            crate::aes::Aesthetic::X
+        } else {
+            crate::aes::Aesthetic::Y
+        };
+
+        // Crowded discrete bottom-axis labels overlap when drawn flat. Rotate
+        // them — 45° if that de-collides, otherwise vertical (90°) — and reserve
+        // the bottom space they actually need. Only when no explicit angle was set.
+        let x_rot: Option<(f64, f64)> =
+            if built.theme.axis_text_x.visible && built.theme.axis_text_x.angle.abs() < 1.0 {
+                built.scales.get(&h_aes).and_then(|hs| {
+                    if !hs.is_discrete() {
+                        return None;
+                    }
+                    let breaks = hs.breaks();
+                    let n = breaks.len().max(1) as f64;
+                    let max_ch = breaks
+                        .iter()
+                        .map(|(_, l)| l.chars().count())
+                        .max()
+                        .unwrap_or(0) as f64;
+                    let font = built.theme.axis_text_x.size;
+                    let label_w = max_ch * font * 0.6; // horizontal extent, drawn flat
+                    let spacing = 0.9 * w as f64 / n; // ~px between adjacent ticks
+                    if label_w <= spacing {
+                        return None; // fits flat — leave it
+                    }
+                    // 45° shrinks the horizontal footprint by cos45; if that fits,
+                    // use it, else go vertical (270° = reads bottom-to-top, hanging
+                    // below the axis like the y-axis title). Reserve the drop height.
+                    let vertical = label_w * 0.707 > spacing;
+                    let angle = if vertical { 270.0 } else { 45.0 };
+                    let drop = if vertical { label_w } else { label_w * 0.707 };
+                    Some((angle, drop + font + 4.0))
+                })
+            } else {
+                None
+            };
+        let x_label_height = x_rot.map(|(_, drop)| drop);
+        if let Some((angle, _)) = x_rot {
+            built.theme.axis_text_x.angle = angle;
+        }
+
+        // Reserve the left-axis width from the actual label lengths so long
+        // category names (a flipped bar chart's rows) aren't clipped. Never
+        // shrinks below the default; grows up to 35% of the width.
+        let y_label_width = if built.theme.axis_text_y.visible {
+            built.scales.get(&v_aes).map(|vs| {
+                let max_ch = vs
+                    .breaks()
+                    .iter()
+                    .map(|(_, l)| l.chars().count())
+                    .max()
+                    .unwrap_or(0);
+                let measured = max_ch as f64 * built.theme.axis_text_y.size * 0.6 + 4.0;
+                let default = built.theme.axis_text_y.size * 3.5 + 4.0;
+                measured.max(default).min(0.35 * w as f64)
+            })
+        } else {
+            None
+        };
+
         let layout = PlotLayout::compute_full(
             w as f64,
             h as f64,
@@ -1781,6 +1853,8 @@ impl GGPlot {
             has_caption,
             has_legend,
             x_axis_top,
+            y_label_width,
+            x_label_height,
         );
 
         Ok((built, layout))

@@ -24,11 +24,16 @@ impl PlotLayout {
         has_legend: bool,
     ) -> Self {
         Self::compute_full(
-            width, height, theme, has_title, false, false, has_legend, false,
+            width, height, theme, has_title, false, false, has_legend, false, None, None,
         )
     }
 
     /// Compute layout with full subtitle/caption support.
+    ///
+    /// `y_label_width` optionally overrides the reserved width (px) of the
+    /// y-axis tick-label text — measured from the actual break labels by the
+    /// caller so long categorical labels (e.g. a flipped bar chart's rows)
+    /// aren't clipped. `None` keeps the fixed `axis_text_y.size * 3.5` estimate.
     #[allow(clippy::too_many_arguments)]
     pub fn compute_full(
         width: f64,
@@ -39,6 +44,8 @@ impl PlotLayout {
         has_caption: bool,
         has_legend: bool,
         x_axis_top: bool,
+        y_label_width: Option<f64>,
+        x_label_height: Option<f64>,
     ) -> Self {
         let margin = &theme.plot_margin;
 
@@ -62,9 +69,10 @@ impl PlotLayout {
 
         let x_axis_height = theme.axis_ticks_length
             + if theme.axis_text_x.visible {
-                // Rotated labels extend vertically, so reserve more bottom space.
+                // Rotated labels extend vertically, so reserve more bottom space —
+                // measured from the actual labels by the caller when available.
                 if theme.axis_text_x.angle.abs() > 10.0 {
-                    theme.axis_text_x.size * 5.0
+                    x_label_height.unwrap_or(theme.axis_text_x.size * 5.0)
                 } else {
                     // Dodged labels stack across N rows.
                     (theme.axis_text_x.size + 4.0) * theme.axis_text_x_dodge.max(1) as f64
@@ -80,7 +88,7 @@ impl PlotLayout {
 
         let y_axis_width = theme.axis_ticks_length
             + if theme.axis_text_y.visible {
-                theme.axis_text_y.size * 3.5 + 4.0
+                y_label_width.unwrap_or(theme.axis_text_y.size * 3.5 + 4.0)
             } else {
                 0.0
             }
