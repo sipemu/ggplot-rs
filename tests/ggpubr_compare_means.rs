@@ -1,5 +1,5 @@
 //! End-to-end: geom_boxplot + stat_compare_means() renders a p-value (ggpubr).
-#![cfg(feature = "ggpubr")]
+#![cfg(all(feature = "ggpubr", feature = "plotters"))]
 
 use ggplot_rs::data::Value;
 use ggplot_rs::prelude::*;

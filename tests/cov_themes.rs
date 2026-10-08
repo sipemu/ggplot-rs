@@ -1,5 +1,7 @@
 //! Coverage-oriented tests that RENDER plots to exercise the theme, coord,
 //! facet, and annotation code paths (which only run during an actual render).
+// Uses the plotters-backed renderers (render_svg/render_png/save).
+#![cfg(feature = "plotters")]
 
 use ggplot_rs::prelude::*;
 

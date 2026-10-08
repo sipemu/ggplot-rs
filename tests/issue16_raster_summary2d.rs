@@ -1,4 +1,6 @@
 //! Issue #16 — geom_raster and stat_summary_2d render end-to-end.
+// Uses the plotters-backed renderers (render_svg/render_png/save).
+#![cfg(feature = "plotters")]
 
 use ggplot_rs::prelude::*;
 

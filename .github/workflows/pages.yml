@@ -7,6 +7,7 @@ on:
       - "web/**"
       - "src/**"
       - "Cargo.toml"
+      - "crates/**"
       - ".github/workflows/pages.yml"
   workflow_dispatch:
 
@@ -33,7 +34,7 @@ jobs:
           targets: wasm32-unknown-unknown
       - uses: jetli/wasm-pack-action@v0.4.0
       - name: Build the WASM bundle
-        run: wasm-pack build --target web --out-dir web/pkg --no-default-features --features wasm,canvas
+        run: wasm-pack build crates/ggplot-rs-wasm --target web --out-dir ../../web/pkg --out-name ggplot_rs
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
         with:

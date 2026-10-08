@@ -1,5 +1,5 @@
 //! End-to-end: geom_point + stat_cor() renders a correlation label (ggpubr).
-#![cfg(feature = "ggpubr")]
+#![cfg(all(feature = "ggpubr", feature = "plotters"))]
 
 use ggplot_rs::data::Value;
 use ggplot_rs::prelude::*;

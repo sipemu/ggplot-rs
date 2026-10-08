@@ -1,4 +1,4 @@
-#[cfg(not(target_arch = "wasm32"))]
+#[cfg(all(feature = "plotters", not(target_arch = "wasm32")))]
 use plotters::prelude::IntoDrawingArea;
 
 use crate::aes::Aes;
@@ -50,7 +50,7 @@ use crate::geom::violin::GeomViolin;
 use crate::geom::{Geom, GeomParams};
 use crate::position::Position;
 use crate::render::layout::PlotLayout;
-#[cfg(not(target_arch = "wasm32"))]
+#[cfg(all(feature = "plotters", not(target_arch = "wasm32")))]
 use crate::render::plotters_backend::PlottersAdapter;
 use crate::render::renderer::PlotRenderer;
 use crate::render::RenderError;
@@ -1582,14 +1582,15 @@ impl GGPlot {
     }
 
     /// Build and save the plot to a file. Format determined by extension.
-    /// (Native only — wasm has no filesystem/plotters backend.)
-    #[cfg(not(target_arch = "wasm32"))]
+    /// (Requires the `plotters` feature, on by default; native only — wasm has
+    /// no filesystem/plotters backend.)
+    #[cfg(all(feature = "plotters", not(target_arch = "wasm32")))]
     pub fn save(self, path: &str) -> Result<(), GGError> {
         self.save_with_size(path, 800, 600)
     }
 
-    /// Build and save with custom dimensions. (Native only.)
-    #[cfg(not(target_arch = "wasm32"))]
+    /// Build and save with custom dimensions. (Feature `plotters`; native only.)
+    #[cfg(all(feature = "plotters", not(target_arch = "wasm32")))]
     pub fn save_with_size(self, path: &str, w: u32, h: u32) -> Result<(), GGError> {
         let (built, layout) = self.prepare(w, h)?;
 
@@ -1616,15 +1617,17 @@ impl GGPlot {
     /// Render the plot to an in-memory SVG document (default 800x600).
     ///
     /// Unlike [`save`](Self::save), this writes nothing to disk — handy for
-    /// serving charts from a web/MCP service.
-    #[cfg(not(target_arch = "wasm32"))]
+    /// serving charts from a web/MCP service. Requires the `plotters` feature
+    /// (on by default); without it use [`render_svg_native`](Self::render_svg_native).
+    #[cfg(all(feature = "plotters", not(target_arch = "wasm32")))]
     pub fn render_svg(self) -> Result<String, GGError> {
         self.render_svg_with_size(800, 600)
     }
 
     /// Render the plot to an in-memory SVG document with custom dimensions.
-    /// (Native only — on wasm use [`render_svg_native`](Self::render_svg_native).)
-    #[cfg(not(target_arch = "wasm32"))]
+    /// (Feature `plotters`; native only — on wasm or without `plotters` use
+    /// [`render_svg_native_with_size`](Self::render_svg_native_with_size).)
+    #[cfg(all(feature = "plotters", not(target_arch = "wasm32")))]
     pub fn render_svg_with_size(self, w: u32, h: u32) -> Result<String, GGError> {
         let (built, layout) = self.prepare(w, h)?;
         let mut buf = String::new();
@@ -1707,15 +1710,17 @@ impl GGPlot {
     /// Render the plot to in-memory PNG bytes (default 800x600).
     ///
     /// Returns a fully-encoded PNG, ready to write to an HTTP response or
-    /// embed as a data URI — no temp files involved.
-    #[cfg(not(target_arch = "wasm32"))]
+    /// embed as a data URI — no temp files involved. Requires the `plotters`
+    /// feature (on by default); see also `render_png_raster_with_size`
+    /// (feature `canvas`).
+    #[cfg(all(feature = "plotters", not(target_arch = "wasm32")))]
     pub fn render_png(self) -> Result<Vec<u8>, GGError> {
         self.render_png_with_size(800, 600)
     }
 
-    /// Render the plot to in-memory PNG bytes with custom dimensions. (Native
-    /// only — PNG needs the plotters bitmap backend.)
-    #[cfg(not(target_arch = "wasm32"))]
+    /// Render the plot to in-memory PNG bytes with custom dimensions. (Feature
+    /// `plotters`; native only — PNG needs the plotters bitmap backend.)
+    #[cfg(all(feature = "plotters", not(target_arch = "wasm32")))]
     pub fn render_png_with_size(self, w: u32, h: u32) -> Result<Vec<u8>, GGError> {
         let (built, layout) = self.prepare(w, h)?;
 
@@ -1862,7 +1867,7 @@ impl GGPlot {
 
     /// Fill the background, render the built plot, and flush — for any plotters
     /// backend. (Native only.)
-    #[cfg(not(target_arch = "wasm32"))]
+    #[cfg(all(feature = "plotters", not(target_arch = "wasm32")))]
     fn render_into<DB>(
         area: plotters::drawing::DrawingArea<DB, plotters::coord::Shift>,
         built: &crate::build::BuiltPlot,
@@ -1881,8 +1886,9 @@ impl GGPlot {
         Ok(())
     }
 
-    /// Save with physical dimensions (inches) and DPI. (Native only.)
-    #[cfg(not(target_arch = "wasm32"))]
+    /// Save with physical dimensions (inches) and DPI. (Feature `plotters`;
+    /// native only.)
+    #[cfg(all(feature = "plotters", not(target_arch = "wasm32")))]
     pub fn ggsave(
         self,
         path: &str,

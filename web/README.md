@@ -27,7 +27,7 @@ from the identical DuckDB query — the browser path is byte-for-byte the same
 
 ```sh
 # 1. Build the ggplot-rs WASM bundle (needs wasm-pack + the wasm32 target)
-wasm-pack build --target web --out-dir web/pkg --no-default-features --features wasm
+wasm-pack build crates/ggplot-rs-wasm --target web --out-dir ../../web/pkg --out-name ggplot_rs
 
 # 2. Serve this directory over HTTP (module workers require it)
 python3 -m http.server -d web 8080
@@ -45,7 +45,7 @@ DuckDB-Wasm (data + spatial)              ggplot-rs WASM (grammar + SVG)
   (shapefile, GeoJSON, GeoPackage)         → <svg> with <title> hover tooltips
 ```
 
-`render_geo(specJson) -> String` (see `src/wasm.rs`) takes columnar geometry +
+`render_geo(specJson) -> String` (see `crates/ggplot-rs-wasm/src/lib.rs`) takes columnar geometry +
 options and returns an SVG document. Every mark is a real DOM element, so hover
 works via the native `<title>` tooltip plus a little CSS.
 

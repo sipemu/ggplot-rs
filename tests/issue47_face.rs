@@ -1,4 +1,6 @@
 //! Issue #47 — element_text face (bold / italic).
+// Uses the plotters-backed renderers (render_svg/render_png/save).
+#![cfg(feature = "plotters")]
 use ggplot_rs::prelude::*;
 
 fn title_attrs(face: FontFace) -> String {

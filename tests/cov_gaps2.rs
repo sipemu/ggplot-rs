@@ -1,6 +1,8 @@
 //! Coverage-focused integration + unit tests targeting under-covered modules:
 //! renderer, guide (legend/axis), dataframe, data::Value, scale trait defaults,
 //! position::dodge2, and a tail of geoms/scales.
+// Uses the plotters-backed renderers (render_svg/render_png/save).
+#![cfg(feature = "plotters")]
 
 use ggplot_rs::data::{DataFrame, Value};
 use ggplot_rs::position::{Position, PositionParams};

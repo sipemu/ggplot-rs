@@ -26,6 +26,15 @@ jobs:
       - name: Format check
         run: cargo fmt --all -- --check
 
+      # The minimal, plotters-free configuration downstream renderers use must
+      # stay tiny: ggplot-rs + indexmap (+ equivalent, hashbrown).
+      - name: Minimal dependency tree (sf, no defaults)
+        run: |
+          cargo tree --no-default-features --features sf -e normal --prefix none \
+            | sed 's/ (.*//' | sort -u | tee /dev/stderr \
+            | grep -Eqv '^(ggplot-rs|indexmap|equivalent|hashbrown) ' \
+            && { echo "::error::unexpected dependency in the minimal tree"; exit 1; } || true
+
       - name: Clippy (default)
         run: cargo clippy --all-targets -- -D warnings
 
@@ -59,7 +68,7 @@ jobs:
       # Target the lib (spatial unit tests) + the sf integration test only:
       # skips the polars-using doctests and trims the link footprint.
       - name: Tests (sf)
-        run: cargo test --no-default-features --features sf --lib --test sf
+        run: cargo test --no-default-features --features sf --lib --test sf --test native_svg
 
       - name: Clippy (geojson)
         run: cargo clippy --no-default-features --features geojson --lib -- -D warnings
@@ -82,8 +91,14 @@ jobs:
       - name: Add wasm target
         run: rustup target add wasm32-unknown-unknown
 
-      - name: Build (wasm + canvas)
-        run: cargo build --target wasm32-unknown-unknown --no-default-features --features wasm,canvas
+      - name: Build library for wasm32 (sf + canvas, no defaults)
+        run: cargo build --target wasm32-unknown-unknown --no-default-features --features sf,canvas
+
+      - name: Clippy (wasm bindings crate)
+        run: cargo clippy -p ggplot-rs-wasm --target wasm32-unknown-unknown -- -D warnings
+
+      - name: Build (wasm bindings crate)
+        run: cargo build -p ggplot-rs-wasm --target wasm32-unknown-unknown
 
       - name: Build examples
         run: cargo build --examples

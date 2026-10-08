@@ -2,6 +2,8 @@
 //! `src/plot.rs`. Exercises every public builder method (geoms, scales,
 //! labels, themes, facets, coords, annotations), all output paths, and the
 //! error paths (unsupported format, missing aesthetic, empty data).
+// Uses the plotters-backed renderers (render_svg/render_png/save).
+#![cfg(feature = "plotters")]
 
 use std::path::Path;
 

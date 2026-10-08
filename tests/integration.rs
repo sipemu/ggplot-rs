@@ -1,3 +1,5 @@
+// Uses the plotters-backed renderers (render_svg/render_png/save).
+#![cfg(feature = "plotters")]
 use std::collections::HashMap;
 use std::path::Path;
 

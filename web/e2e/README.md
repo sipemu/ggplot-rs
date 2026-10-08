@@ -10,7 +10,7 @@ npx playwright install chromium      # one-time browser download
 npm test                             # tests the live demo (sipemu.github.io)
 
 # against a local build:
-#   (from repo root) wasm-pack build --target web --out-dir web/pkg --no-default-features --features wasm,canvas
+#   (from repo root) wasm-pack build crates/ggplot-rs-wasm --target web --out-dir ../../web/pkg --out-name ggplot_rs
 #   python3 -m http.server -d web 8080
 DEMO_URL=http://localhost:8080 npm test
 ```

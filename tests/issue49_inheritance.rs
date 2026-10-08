@@ -1,4 +1,6 @@
 //! Issue #49 — root `text` element cascades to child text elements.
+// Uses the plotters-backed renderers (render_svg/render_png/save).
+#![cfg(feature = "plotters")]
 use ggplot_rs::prelude::*;
 
 fn render_with_text_family(fam: Option<&str>) -> String {

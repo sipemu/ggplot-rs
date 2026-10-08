@@ -4,6 +4,8 @@
 //! so these tests build a minimal valid plot for each geom and force a render,
 //! asserting only that output is produced (`Ok` + non-empty). They intentionally
 //! do not assert pixel/text content.
+// Uses the plotters-backed renderers (render_svg/render_png/save).
+#![cfg(feature = "plotters")]
 
 use ggplot_rs::prelude::*;
 

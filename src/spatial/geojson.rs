@@ -160,7 +160,7 @@ mod tests {
         let svg = GGPlot::new(cols)
             .aes(Aes::new().fill("pop"))
             .geom_sf()
-            .render_svg()
+            .render_svg_native()
             .expect("render geojson");
         assert!(svg.contains("<polygon") || svg.contains("<circle") || svg.contains("<path"));
     }

@@ -1,5 +1,5 @@
 //! Issue #10 — geom_smooth glm/rlm methods via anofox-regression.
-#![cfg(feature = "regression")]
+#![cfg(all(feature = "regression", feature = "plotters"))]
 
 use ggplot_rs::data::{DataFrame, Value};
 use ggplot_rs::prelude::*;

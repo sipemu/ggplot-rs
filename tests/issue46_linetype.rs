@@ -1,6 +1,8 @@
 //! Issue #46 — element_line linetype (dashed/dotted theme lines).
 //! The backend renders non-solid lines by segmenting them, so a dashed grid
 //! emits more path elements than a solid one.
+// Uses the plotters-backed renderers (render_svg/render_png/save).
+#![cfg(feature = "plotters")]
 use ggplot_rs::prelude::*;
 
 fn svg_with_grid(lt: Linetype) -> String {

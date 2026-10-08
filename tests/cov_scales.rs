@@ -8,6 +8,8 @@
 //!  (b) RENDER — for logic only reachable through the render pipeline, build a
 //!      `GGPlot` that uses the scale via the matching aesthetic and assert that
 //!      `render_svg()` returns `Ok`.
+// Uses the plotters-backed renderers (render_svg/render_png/save).
+#![cfg(feature = "plotters")]
 
 use ggplot_rs::prelude::*;
 use ggplot_rs::scale::palettes::palette;

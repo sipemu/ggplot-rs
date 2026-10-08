@@ -1,4 +1,4 @@
-//! Browser (WebAssembly) bindings — feature `wasm`.
+//! Browser (WebAssembly) bindings for ggplot-rs (`ggplot-rs-wasm` crate).
 //!
 //! Exposes a plotters-free renderer to JavaScript: pass a JSON spec (geometry +
 //! optional fill/label + options) and get back an SVG string with per-feature
@@ -8,10 +8,10 @@
 use serde_json::Value as J;
 use wasm_bindgen::prelude::*;
 
-use crate::data::Value;
-use crate::geom::sf::GeomSf;
-use crate::prelude::*;
-use crate::spatial::SfProjection;
+use ggplot_rs::data::Value;
+use ggplot_rs::geom::sf::GeomSf;
+use ggplot_rs::prelude::*;
+use ggplot_rs::spatial::SfProjection;
 
 /// Render a `geom_sf` map from a JSON spec, returning an SVG document.
 ///
@@ -124,7 +124,7 @@ pub fn geo_bounds(spec_json: &str) -> Result<Vec<f64>, JsValue> {
     for g in geom {
         if let Some(b) = g
             .as_str()
-            .and_then(crate::spatial::parse_wkt)
+            .and_then(ggplot_rs::spatial::parse_wkt)
             .and_then(|g| g.bounds())
         {
             x0 = x0.min(b.0);
@@ -173,7 +173,7 @@ fn render_bar_impl(spec_json: &str) -> Result<String, String> {
     let mut plot = GGPlot::new(cols)
         .aes(Aes::new().x("x").y("y").fill("fill").label("label"))
         .geom_col()
-        .scale_fill_brewer(crate::scale::palettes::PaletteName::Set1)
+        .scale_fill_brewer(ggplot_rs::scale::palettes::PaletteName::Set1)
         .theme_minimal();
     // The x-axis already labels the categories, so the fill legend is redundant.
     if !v.get("legend").and_then(|x| x.as_bool()).unwrap_or(true) {
@@ -213,7 +213,7 @@ fn render_hist_impl(
         "x".to_string(),
         values.iter().map(|&v| Value::Float(v)).collect(),
     )];
-    let geom = crate::geom::histogram::GeomHistogram::default().with_bins(bins.max(1) as usize);
+    let geom = ggplot_rs::geom::histogram::GeomHistogram::default().with_bins(bins.max(1) as usize);
     let mut plot = GGPlot::new(cols)
         .aes(Aes::new().x("x"))
         .geom_histogram_with(geom)
@@ -234,8 +234,8 @@ fn jval(x: &J) -> Value {
     }
 }
 
-fn brewer(name: &str) -> crate::scale::palettes::PaletteName {
-    use crate::scale::palettes::PaletteName as P;
+fn brewer(name: &str) -> ggplot_rs::scale::palettes::PaletteName {
+    use ggplot_rs::scale::palettes::PaletteName as P;
     match name {
         "Set2" => P::Set2,
         "Set3" => P::Set3,
@@ -248,8 +248,8 @@ fn brewer(name: &str) -> crate::scale::palettes::PaletteName {
     }
 }
 
-fn smooth_geom(v: &J) -> crate::geom::smooth::GeomSmooth {
-    let g = crate::geom::smooth::GeomSmooth::default();
+fn smooth_geom(v: &J) -> ggplot_rs::geom::smooth::GeomSmooth {
+    let g = ggplot_rs::geom::smooth::GeomSmooth::default();
     match v.get("method").and_then(|x| x.as_str()) {
         Some("loess") => g.loess(v.get("span").and_then(|x| x.as_f64()).unwrap_or(0.75)),
         _ => g,
@@ -325,7 +325,7 @@ fn render_plot_impl(spec_json: &str) -> Result<String, String> {
             if let (Some(xc), Some(yc)) = (find(xn), find(yn)) {
                 let cn = get("color");
                 let cc = cn.and_then(find);
-                let f = crate::geom::tip_value;
+                let f = ggplot_rs::format::format_value;
                 let label: Vec<Value> = (0..xc.len().min(yc.len()))
                     .map(|i| {
                         let base = format!("{xn}: {}, {yn}: {}", f(&xc[i]), f(&yc[i]));
@@ -353,8 +353,9 @@ fn render_plot_impl(spec_json: &str) -> Result<String, String> {
         "violin" => plot.geom_violin(),
         "density" => plot.geom_density(),
         "freqpoly" => plot.geom_freqpoly(),
-        "histogram" => plot
-            .geom_histogram_with(crate::geom::histogram::GeomHistogram::default().with_bins(bins)),
+        "histogram" => plot.geom_histogram_with(
+            ggplot_rs::geom::histogram::GeomHistogram::default().with_bins(bins),
+        ),
         "bin2d" => plot.geom_bin2d(),
         "hex" => plot.geom_hex(),
         "tile" => plot.geom_tile(),
@@ -391,7 +392,7 @@ fn render_plot_impl(spec_json: &str) -> Result<String, String> {
         });
     if let Some(cc) = &color_col {
         plot = if *is_str.get(cc).unwrap_or(&false) {
-            let mut s = crate::scale::color::ScaleColorDiscrete::new(Aesthetic::Color)
+            let mut s = ggplot_rs::scale::color::ScaleColorDiscrete::new(Aesthetic::Color)
                 .with_named_palette(&pal);
             if let Some(lv) = color_levels.clone() {
                 s = s.with_levels(lv);
@@ -563,7 +564,7 @@ fn render_scatter_impl(spec_json: &str) -> Result<Vec<u8>, String> {
         .geom_point()
         .theme(theme_minimal());
     if has_color {
-        plot = plot.scale_color_brewer(crate::scale::palettes::PaletteName::Set1);
+        plot = plot.scale_color_brewer(ggplot_rs::scale::palettes::PaletteName::Set1);
     }
     if let Some(t) = v.get("title").and_then(|x| x.as_str()) {
         plot = plot.title(t);
@@ -728,8 +729,8 @@ fn render_scatter_xy_impl(
         // Fixed factor order so the group→colour mapping is stable regardless of
         // the draw-order reshuffle above (else selection colours don't match the
         // linked bar, which always uses the canonical order).
-        let s = crate::scale::color::ScaleColorDiscrete::new(Aesthetic::Color)
-            .with_named_palette(&crate::scale::palettes::PaletteName::Set1)
+        let s = ggplot_rs::scale::color::ScaleColorDiscrete::new(Aesthetic::Color)
+            .with_named_palette(&ggplot_rs::scale::palettes::PaletteName::Set1)
             .with_levels(group_names.clone());
         plot = plot.scale_color(s);
     }

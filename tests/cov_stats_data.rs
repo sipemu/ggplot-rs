@@ -9,6 +9,8 @@
 //! Run with:
 //!   cargo test --test cov_stats_data
 //!   cargo test --no-default-features --features arrow --test cov_stats_data
+// Uses the plotters-backed renderers (render_svg/render_png/save).
+#![cfg(feature = "plotters")]
 
 use std::collections::HashMap;
 

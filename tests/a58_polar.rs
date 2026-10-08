@@ -1,4 +1,6 @@
 //! A-grade #58 — coord_polar draws radial sectors (not warped rectangles).
+// Uses the plotters-backed renderers (render_svg/render_png/save).
+#![cfg(feature = "plotters")]
 use ggplot_rs::prelude::*;
 
 fn polar_col_svg() -> String {

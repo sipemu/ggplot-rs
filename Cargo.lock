@@ -1612,6 +1612,14 @@ dependencies = [
  "serde",
  "serde_json",
  "toml",
+]
+
+[[package]]
+name = "ggplot-rs-wasm"
+version = "0.16.0"
+dependencies = [
+ "ggplot-rs",
+ "serde_json",
  "wasm-bindgen",
 ]
 

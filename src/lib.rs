@@ -4,6 +4,7 @@ pub mod build;
 pub mod coord;
 pub mod data;
 pub mod facet;
+pub mod format;
 pub mod geom;
 pub mod ggpubr;
 pub mod guide;
@@ -17,7 +18,5 @@ pub mod scale;
 pub mod spatial;
 pub mod stat;
 pub mod theme;
-#[cfg(feature = "wasm")]
-pub mod wasm;
 
 pub use plot::{GGError, GGPlot};

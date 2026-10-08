@@ -47,7 +47,7 @@ fn polygon_choropleth_renders_with_fill() {
         .aes(Aes::new().fill("pop"))
         .geom_sf()
         .scale_fill_viridis_c()
-        .render_svg()
+        .render_svg_native()
         .expect("sf render");
     assert!(
         svg.contains("<polygon") || svg.contains("<path"),
@@ -69,7 +69,7 @@ fn mixed_geometry_types_render() {
     assert!(GGPlot::new(df)
         .aes(Aes::new())
         .geom_sf()
-        .render_svg()
+        .render_svg_native()
         .is_ok());
 }
 
@@ -124,7 +124,7 @@ fn coord_sf_renders_projected_map() {
         .geom_sf_with(GeomSf::default().project(SfProjection::Mercator))
         .coord_sf()
         .scale_fill_viridis_c()
-        .render_svg()
+        .render_svg_native()
         .expect("mercator + coord_sf render");
     assert!(svg.contains("<polygon") || svg.contains("<path"));
 }
