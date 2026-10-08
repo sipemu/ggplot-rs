@@ -37,3 +37,22 @@
 - `GGPlot::render_svg_native_at(x, y, w, h)` renders a nested, positioned
   `<svg x y width height viewBox>` fragment without `xmlns`, for composing
   dashboards without string surgery (`SvgBackend::finish_fragment`).
+
+### Rect bounds
+
+- `-Inf`/`Inf` (`f64::NEG_INFINITY`/`f64::INFINITY`) in `geom_rect` /
+  `annotate("rect")` `xmin`/`xmax`/`ymin`/`ymax` extend the rect to the panel
+  edge (ggplot2) and do not train scales — also on discrete axes. New
+  `Geom::allows_infinite()` hook; other geoms still drop infinite positions.
+
+### Theme / colour
+
+- Theme presets (`theme_minimal()`, `theme_void()`, …) and `theme(t)` keep a
+  previously set `primary_color` (unless the new theme sets its own), so call
+  order no longer matters.
+- `primary_color` no longer overrides colours of geoms added with
+  `geom_*_with(...)` (`Layer::explicit_style`); default-configured geoms still
+  take the brand colour.
+- `ScaleColorDiscrete::sorted()`, `GGPlot::scale_fill_discrete_sorted()` and
+  `scale_color_discrete_sorted()`: discrete colour levels in sorted order, so a
+  level keeps its palette colour across charts regardless of data order.

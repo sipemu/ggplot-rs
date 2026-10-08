@@ -461,6 +461,7 @@ impl PlotBuilder {
             position,
             params: _,
             show_legend,
+            explicit_style,
         } = layer;
 
         // Step 1: Resolve data — use layer data if provided, else plot data
@@ -470,8 +471,9 @@ impl PlotBuilder {
         let merged_mapping = plot_mapping.merge(&layer_mapping);
 
         // Brand/primary color: apply to a single-series geom only when the layer
-        // maps neither color nor fill (an explicit aesthetic always wins).
-        if let Some(color) = primary {
+        // maps neither color nor fill (an explicit aesthetic always wins) and
+        // the geom wasn't configured explicitly via `geom_*_with(...)`.
+        if let Some(color) = primary.filter(|_| !explicit_style) {
             let has_color = merged_mapping.get_mapping(&Aesthetic::Color).is_some();
             let has_fill = merged_mapping.get_mapping(&Aesthetic::Fill).is_some();
             if !has_color && !has_fill {

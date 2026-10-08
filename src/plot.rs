@@ -81,6 +81,9 @@ pub struct Layer {
     pub position: Box<dyn Position>,
     pub params: GeomParams,
     pub show_legend: Option<bool>,
+    /// The geom was configured explicitly (`geom_*_with(...)`), so its colours
+    /// are deliberate and the theme's `primary_color` must not override them.
+    pub explicit_style: bool,
 }
 
 /// The top-level plot specification — builder pattern.
@@ -127,7 +130,7 @@ impl GGPlot {
     }
 
     pub fn geom_point_with(self, geom: GeomPoint) -> Self {
-        self.add_geom(geom)
+        self.add_geom_with(geom)
     }
 
     pub fn geom_line(self) -> Self {
@@ -135,7 +138,7 @@ impl GGPlot {
     }
 
     pub fn geom_line_with(self, geom: GeomLine) -> Self {
-        self.add_geom(geom)
+        self.add_geom_with(geom)
     }
 
     pub fn geom_bar(self) -> Self {
@@ -143,7 +146,7 @@ impl GGPlot {
     }
 
     pub fn geom_bar_with(self, geom: GeomBar) -> Self {
-        self.add_geom(geom)
+        self.add_geom_with(geom)
     }
 
     pub fn geom_histogram(self) -> Self {
@@ -151,7 +154,7 @@ impl GGPlot {
     }
 
     pub fn geom_histogram_with(self, geom: GeomHistogram) -> Self {
-        self.add_geom(geom)
+        self.add_geom_with(geom)
     }
 
     pub fn geom_boxplot(self) -> Self {
@@ -159,7 +162,7 @@ impl GGPlot {
     }
 
     pub fn geom_boxplot_with(self, geom: GeomBoxplot) -> Self {
-        self.add_geom(geom)
+        self.add_geom_with(geom)
     }
 
     pub fn geom_smooth(self) -> Self {
@@ -167,7 +170,7 @@ impl GGPlot {
     }
 
     pub fn geom_smooth_with(self, geom: GeomSmooth) -> Self {
-        self.add_geom(geom)
+        self.add_geom_with(geom)
     }
 
     pub fn geom_col(self) -> Self {
@@ -175,7 +178,7 @@ impl GGPlot {
     }
 
     pub fn geom_col_with(self, geom: GeomCol) -> Self {
-        self.add_geom(geom)
+        self.add_geom_with(geom)
     }
 
     pub fn geom_hline(self, yintercept: f64) -> Self {
@@ -184,7 +187,7 @@ impl GGPlot {
 
     /// Add a horizontal reference line with custom styling (color/linetype/width).
     pub fn geom_hline_with(self, geom: GeomHline) -> Self {
-        self.add_geom(geom)
+        self.add_geom_with(geom)
     }
 
     pub fn geom_vline(self, xintercept: f64) -> Self {
@@ -193,7 +196,7 @@ impl GGPlot {
 
     /// Add a vertical reference line with custom styling (color/linetype/width).
     pub fn geom_vline_with(self, geom: GeomVline) -> Self {
-        self.add_geom(geom)
+        self.add_geom_with(geom)
     }
 
     pub fn geom_abline(self, slope: f64, intercept: f64) -> Self {
@@ -202,7 +205,7 @@ impl GGPlot {
 
     /// Add a slope/intercept reference line with custom styling.
     pub fn geom_abline_with(self, geom: GeomAbline) -> Self {
-        self.add_geom(geom)
+        self.add_geom_with(geom)
     }
 
     pub fn geom_text(self) -> Self {
@@ -210,7 +213,7 @@ impl GGPlot {
     }
 
     pub fn geom_text_with(self, geom: GeomText) -> Self {
-        self.add_geom(geom)
+        self.add_geom_with(geom)
     }
 
     /// Annotate with a correlation coefficient + p-value (`ggpubr::stat_cor()`).
@@ -404,7 +407,7 @@ impl GGPlot {
     }
 
     pub fn geom_label_with(self, geom: GeomLabel) -> Self {
-        self.add_geom(geom)
+        self.add_geom_with(geom)
     }
 
     pub fn geom_area(self) -> Self {
@@ -412,7 +415,7 @@ impl GGPlot {
     }
 
     pub fn geom_area_with(self, geom: GeomArea) -> Self {
-        self.add_geom(geom)
+        self.add_geom_with(geom)
     }
 
     pub fn geom_ribbon(self) -> Self {
@@ -420,7 +423,7 @@ impl GGPlot {
     }
 
     pub fn geom_ribbon_with(self, geom: GeomRibbon) -> Self {
-        self.add_geom(geom)
+        self.add_geom_with(geom)
     }
 
     pub fn geom_errorbar(self) -> Self {
@@ -428,7 +431,7 @@ impl GGPlot {
     }
 
     pub fn geom_errorbar_with(self, geom: GeomErrorbar) -> Self {
-        self.add_geom(geom)
+        self.add_geom_with(geom)
     }
 
     pub fn geom_segment(self) -> Self {
@@ -436,7 +439,7 @@ impl GGPlot {
     }
 
     pub fn geom_segment_with(self, geom: GeomSegment) -> Self {
-        self.add_geom(geom)
+        self.add_geom_with(geom)
     }
 
     pub fn geom_density(self) -> Self {
@@ -444,7 +447,7 @@ impl GGPlot {
     }
 
     pub fn geom_density_with(self, geom: GeomDensity) -> Self {
-        self.add_geom(geom)
+        self.add_geom_with(geom)
     }
 
     pub fn geom_rug(self) -> Self {
@@ -452,7 +455,7 @@ impl GGPlot {
     }
 
     pub fn geom_rug_with(self, geom: GeomRug) -> Self {
-        self.add_geom(geom)
+        self.add_geom_with(geom)
     }
 
     pub fn geom_jitter(self) -> Self {
@@ -460,7 +463,7 @@ impl GGPlot {
     }
 
     pub fn geom_jitter_with(self, geom: GeomJitter) -> Self {
-        self.add_geom(geom)
+        self.add_geom_with(geom)
     }
 
     pub fn geom_path(self) -> Self {
@@ -468,7 +471,7 @@ impl GGPlot {
     }
 
     pub fn geom_path_with(self, geom: GeomPath) -> Self {
-        self.add_geom(geom)
+        self.add_geom_with(geom)
     }
 
     /// Add a confidence-ellipse layer (default 95%) as a path per group.
@@ -506,7 +509,7 @@ impl GGPlot {
     }
 
     pub fn geom_step_with(self, geom: GeomStep) -> Self {
-        self.add_geom(geom)
+        self.add_geom_with(geom)
     }
 
     pub fn geom_freqpoly(self) -> Self {
@@ -514,7 +517,7 @@ impl GGPlot {
     }
 
     pub fn geom_freqpoly_with(self, geom: GeomFreqpoly) -> Self {
-        self.add_geom(geom)
+        self.add_geom_with(geom)
     }
 
     pub fn geom_linerange(self) -> Self {
@@ -522,7 +525,7 @@ impl GGPlot {
     }
 
     pub fn geom_linerange_with(self, geom: GeomLinerange) -> Self {
-        self.add_geom(geom)
+        self.add_geom_with(geom)
     }
 
     pub fn geom_pointrange(self) -> Self {
@@ -530,7 +533,7 @@ impl GGPlot {
     }
 
     pub fn geom_pointrange_with(self, geom: GeomPointrange) -> Self {
-        self.add_geom(geom)
+        self.add_geom_with(geom)
     }
 
     pub fn geom_crossbar(self) -> Self {
@@ -538,7 +541,7 @@ impl GGPlot {
     }
 
     pub fn geom_crossbar_with(self, geom: GeomCrossbar) -> Self {
-        self.add_geom(geom)
+        self.add_geom_with(geom)
     }
 
     pub fn geom_spoke(self) -> Self {
@@ -546,7 +549,7 @@ impl GGPlot {
     }
 
     pub fn geom_spoke_with(self, geom: GeomSpoke) -> Self {
-        self.add_geom(geom)
+        self.add_geom_with(geom)
     }
 
     pub fn geom_rect(self) -> Self {
@@ -554,7 +557,7 @@ impl GGPlot {
     }
 
     pub fn geom_rect_with(self, geom: GeomRect) -> Self {
-        self.add_geom(geom)
+        self.add_geom_with(geom)
     }
 
     pub fn geom_tile(self) -> Self {
@@ -562,7 +565,7 @@ impl GGPlot {
     }
 
     pub fn geom_tile_with(self, geom: GeomTile) -> Self {
-        self.add_geom(geom)
+        self.add_geom_with(geom)
     }
 
     /// Dense regular grid of filled cells (heatmap/raster) from x, y, fill.
@@ -571,7 +574,7 @@ impl GGPlot {
     }
 
     pub fn geom_raster_with(self, geom: crate::geom::raster::GeomRaster) -> Self {
-        self.add_geom(geom)
+        self.add_geom_with(geom)
     }
 
     pub fn geom_polygon(self) -> Self {
@@ -579,7 +582,7 @@ impl GGPlot {
     }
 
     pub fn geom_polygon_with(self, geom: GeomPolygon) -> Self {
-        self.add_geom(geom)
+        self.add_geom_with(geom)
     }
 
     /// Render simple-features geometry from a WKT `geometry` column (feature `sf`).
@@ -590,7 +593,7 @@ impl GGPlot {
 
     #[cfg(feature = "sf")]
     pub fn geom_sf_with(self, geom: crate::geom::sf::GeomSf) -> Self {
-        self.add_geom(geom)
+        self.add_geom_with(geom)
     }
 
     pub fn geom_curve(self) -> Self {
@@ -598,7 +601,7 @@ impl GGPlot {
     }
 
     pub fn geom_curve_with(self, geom: GeomCurve) -> Self {
-        self.add_geom(geom)
+        self.add_geom_with(geom)
     }
 
     pub fn geom_violin(self) -> Self {
@@ -606,7 +609,7 @@ impl GGPlot {
     }
 
     pub fn geom_violin_with(self, geom: GeomViolin) -> Self {
-        self.add_geom(geom)
+        self.add_geom_with(geom)
     }
 
     pub fn geom_dotplot(self) -> Self {
@@ -614,7 +617,7 @@ impl GGPlot {
     }
 
     pub fn geom_dotplot_with(self, geom: GeomDotplot) -> Self {
-        self.add_geom(geom)
+        self.add_geom_with(geom)
     }
 
     pub fn geom_qq(self) -> Self {
@@ -622,7 +625,7 @@ impl GGPlot {
     }
 
     pub fn geom_qq_with(self, geom: GeomQQ) -> Self {
-        self.add_geom(geom)
+        self.add_geom_with(geom)
     }
 
     pub fn geom_qq_line(self) -> Self {
@@ -630,7 +633,7 @@ impl GGPlot {
     }
 
     pub fn geom_qq_line_with(self, geom: GeomQQLine) -> Self {
-        self.add_geom(geom)
+        self.add_geom_with(geom)
     }
 
     pub fn geom_bin2d(self) -> Self {
@@ -638,7 +641,7 @@ impl GGPlot {
     }
 
     pub fn geom_bin2d_with(self, geom: GeomBin2d) -> Self {
-        self.add_geom(geom)
+        self.add_geom_with(geom)
     }
 
     pub fn geom_hex(self) -> Self {
@@ -646,7 +649,7 @@ impl GGPlot {
     }
 
     pub fn geom_hex_with(self, geom: GeomHex) -> Self {
-        self.add_geom(geom)
+        self.add_geom_with(geom)
     }
 
     pub fn geom_count(self) -> Self {
@@ -654,7 +657,7 @@ impl GGPlot {
     }
 
     pub fn geom_count_with(self, geom: GeomCount) -> Self {
-        self.add_geom(geom)
+        self.add_geom_with(geom)
     }
 
     pub fn geom_contour(self) -> Self {
@@ -662,7 +665,7 @@ impl GGPlot {
     }
 
     pub fn geom_contour_with(self, geom: GeomContour) -> Self {
-        self.add_geom(geom)
+        self.add_geom_with(geom)
     }
 
     /// Filled contour bands from gridded (x, y, z) data — draws polygons filled by
@@ -681,11 +684,21 @@ impl GGPlot {
     }
 
     pub fn geom_density2d_with(self, geom: GeomDensity2d) -> Self {
-        self.add_geom(geom)
+        self.add_geom_with(geom)
     }
 
     pub fn geom_blank(self) -> Self {
         self.add_geom(GeomBlank)
+    }
+
+    /// Add a geom configured explicitly by the caller: its colours win over
+    /// the theme's `primary_color`.
+    fn add_geom_with(self, geom: impl Geom + 'static) -> Self {
+        let mut plot = self.add_geom(geom);
+        if let Some(layer) = plot.layers.last_mut() {
+            layer.explicit_style = true;
+        }
+        plot
     }
 
     fn add_geom(mut self, geom: impl Geom + 'static) -> Self {
@@ -700,6 +713,7 @@ impl GGPlot {
             position,
             params,
             show_legend: None,
+            explicit_style: false,
         });
         self
     }
@@ -960,6 +974,22 @@ impl GGPlot {
         let s =
             crate::scale::steps::ScaleColorSteps::new(crate::aes::Aesthetic::Fill, stops, n_bins);
         self.scale_fill(s)
+    }
+
+    /// Default discrete fill palette with levels in sorted order, so a level
+    /// keeps its colour across charts regardless of data order. For a custom
+    /// palette: `scale_fill(ScaleColorDiscrete::new(Aesthetic::Fill)
+    /// .with_palette(p).sorted())`.
+    pub fn scale_fill_discrete_sorted(self) -> Self {
+        use crate::scale::color::ScaleColorDiscrete;
+        self.scale_fill(ScaleColorDiscrete::new(crate::aes::Aesthetic::Fill).sorted())
+    }
+
+    /// Default discrete colour palette with levels in sorted order (see
+    /// [`scale_fill_discrete_sorted`](Self::scale_fill_discrete_sorted)).
+    pub fn scale_color_discrete_sorted(self) -> Self {
+        use crate::scale::color::ScaleColorDiscrete;
+        self.scale_color(ScaleColorDiscrete::new(crate::aes::Aesthetic::Color).sorted())
     }
 
     pub fn scale_fill_brewer(self, name: crate::scale::palettes::PaletteName) -> Self {
@@ -1341,9 +1371,19 @@ impl GGPlot {
 
     // ─── Theme ───────────────────────────────────────────────────
 
+    /// Replace the theme. A `primary_color` set earlier is kept unless the new
+    /// theme sets its own, so preset/`primary_color` call order doesn't matter.
     pub fn theme(mut self, theme: Theme) -> Self {
-        self.theme = theme;
+        self.apply_preset(theme);
         self
+    }
+
+    fn apply_preset(&mut self, theme: Theme) {
+        let primary = self.theme.primary;
+        self.theme = theme;
+        if self.theme.primary.is_none() {
+            self.theme.primary = primary;
+        }
     }
 
     /// Rotate the x-axis tick labels by `degrees` (R's
@@ -1428,48 +1468,48 @@ impl GGPlot {
     }
 
     pub fn theme_minimal(mut self) -> Self {
-        self.theme = crate::theme::presets::theme_minimal();
+        self.apply_preset(crate::theme::presets::theme_minimal());
         self
     }
 
     pub fn theme_bw(mut self) -> Self {
-        self.theme = crate::theme::presets::theme_bw();
+        self.apply_preset(crate::theme::presets::theme_bw());
         self
     }
 
     pub fn theme_gray(mut self) -> Self {
-        self.theme = crate::theme::presets::theme_gray();
+        self.apply_preset(crate::theme::presets::theme_gray());
         self
     }
 
     pub fn theme_classic(mut self) -> Self {
-        self.theme = crate::theme::presets::theme_classic();
+        self.apply_preset(crate::theme::presets::theme_classic());
         self
     }
 
     /// Apply the publication-ready `theme_pubr()` (ggpubr style).
     pub fn theme_pubr(mut self) -> Self {
-        self.theme = crate::theme::presets::theme_pubr();
+        self.apply_preset(crate::theme::presets::theme_pubr());
         self
     }
 
     pub fn theme_linedraw(mut self) -> Self {
-        self.theme = crate::theme::presets::theme_linedraw();
+        self.apply_preset(crate::theme::presets::theme_linedraw());
         self
     }
 
     pub fn theme_light(mut self) -> Self {
-        self.theme = crate::theme::presets::theme_light();
+        self.apply_preset(crate::theme::presets::theme_light());
         self
     }
 
     pub fn theme_dark(mut self) -> Self {
-        self.theme = crate::theme::presets::theme_dark();
+        self.apply_preset(crate::theme::presets::theme_dark());
         self
     }
 
     pub fn theme_void(mut self) -> Self {
-        self.theme = crate::theme::presets::theme_void();
+        self.apply_preset(crate::theme::presets::theme_void());
         self
     }
 

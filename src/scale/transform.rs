@@ -123,7 +123,8 @@ impl ScaleTransform {
         match value.as_f64() {
             Some(f) => {
                 let t = self.apply(f);
-                if t.is_finite() {
+                // ±Inf in → ±Inf out is kept: it means "panel edge" (geom_rect).
+                if t.is_finite() || (f.is_infinite() && t.is_infinite()) {
                     Value::Float(t)
                 } else {
                     Value::Na
