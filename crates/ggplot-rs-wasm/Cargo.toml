@@ -1,6 +1,6 @@
 [package]
 name = "ggplot-rs-wasm"
-version = "0.16.0"
+version = "0.17.0"
 edition = "2021"
 description = "Browser (wasm-bindgen) bindings for ggplot-rs: JSON spec in, SVG / RGBA out"
 authors = ["Simon Müller <sm@data-zoo.de>"]
