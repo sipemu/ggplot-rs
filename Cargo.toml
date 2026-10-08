@@ -1,6 +1,6 @@
 [package]
 name = "ggplot-rs"
-version = "0.16.0"
+version = "0.17.0"
 edition = "2021"
 # Only the explicit [[bin]] below is a binary; src/bin/load.rs is its module.
 autobins = false
@@ -47,7 +47,7 @@ indexmap = "2"
 polars = { version = "0.46", features = ["lazy"], optional = true }
 arrow = { version = "53", default-features = false, optional = true }
 # Regression backend for stat_quantile / geom_smooth glm (issues #10, #11).
-anofox-regression = { version = "0.5.11", optional = true }
+anofox-regression = { version = "0.5.17", optional = true }
 # Hypothesis tests behind ggpubr-style annotations (stat_cor / stat_compare_means).
 anofox-statistics = { version = "0.4", optional = true }
 faer = { version = "0.23", default-features = false, features = [

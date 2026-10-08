@@ -51,12 +51,51 @@ impl BuiltPlot {
 /// Columns holding *position* values: rows with non-finite values here are
 /// dropped before stats (and again after, for stat output).
 const POSITION_COLS: &[&str] = &[
-    "x", "y", "xmin", "xmax", "ymin", "ymax", "xend", "yend", "open", "high", "low", "close",
+    "x",
+    "y",
+    "xmin",
+    "xmax",
+    "ymin",
+    "ymax",
+    "xend",
+    "yend",
+    "open",
+    "high",
+    "low",
+    "close",
+    "xintercept",
+    "yintercept",
+    "slope",
+    "intercept",
 ];
 
 /// Columns a position scale's transformation applies to (pre-stat).
-const X_FAMILY: &[&str] = &["x", "xmin", "xmax", "xend"];
-const Y_FAMILY: &[&str] = &["y", "ymin", "ymax", "yend", "open", "high", "low", "close"];
+const X_FAMILY: &[&str] = &["x", "xmin", "xmax", "xend", "xintercept"];
+const Y_FAMILY: &[&str] = &[
+    "y",
+    "ymin",
+    "ymax",
+    "yend",
+    "open",
+    "high",
+    "low",
+    "close",
+    "yintercept",
+];
+
+/// Reference-line intercept columns and the position scale they train
+/// (ggplot2: `xintercept`/`yintercept` are x/y aesthetics).
+const INTERCEPT_COLS: [(&str, Aesthetic); 2] =
+    [("xintercept", Aesthetic::X), ("yintercept", Aesthetic::Y)];
+
+/// Train `scale` on reference-line intercepts. A numeric intercept on a
+/// discrete axis is a position *between* categories (ggplot2), not a level.
+fn train_intercepts(scale: &mut Box<dyn crate::scale::Scale>, values: &[crate::data::Value]) {
+    if scale.is_discrete() && values.iter().all(|v| v.as_f64().is_some() || v.is_na()) {
+        return;
+    }
+    scale.train(values);
+}
 
 /// The grammar pipeline: transforms a GGPlot specification into render-ready data.
 pub struct PlotBuilder;
@@ -121,6 +160,17 @@ impl PlotBuilder {
         // Final scale training pass across all layers
         for bl in &built_layers {
             scale_set.train_layer(&bl.data);
+            for (col, aes) in &INTERCEPT_COLS {
+                // No layer created this position scale: the intercepts do.
+                if let (Some(values), None) = (bl.data.column(col), scale_set.get(aes)) {
+                    let mut frame = DataFrame::new();
+                    frame.add_column(aes.col_name().to_string(), values.to_vec());
+                    scale_set.ensure_scale(aes, &frame);
+                }
+                if let (Some(values), Some(scale)) = (bl.data.column(col), scale_set.get_mut(aes)) {
+                    train_intercepts(scale, values);
+                }
+            }
         }
 
         // An empty plot (no layers, or only layers without data) still gets a
@@ -488,7 +538,13 @@ impl PlotBuilder {
         let source_data = layer_data.as_ref().unwrap_or(plot_data);
 
         // Step 2: Merge mappings — layer overrides plot-level
-        let merged_mapping = plot_mapping.merge(&layer_mapping);
+        // (Reference lines don't inherit the plot mapping — ggplot2's
+        // `inherit.aes = FALSE`.)
+        let merged_mapping = if geom.inherit_aes() {
+            plot_mapping.merge(&layer_mapping)
+        } else {
+            layer_mapping.clone()
+        };
 
         // Brand/primary color: apply to a single-series geom only when the layer
         // maps neither color nor fill (an explicit aesthetic always wins) and
@@ -713,6 +769,12 @@ impl PlotBuilder {
 
         // Step 8: Train scales on this layer's data
         scale_set.train_layer(&working_data);
+        for (col, aes) in &INTERCEPT_COLS {
+            if let (Some(values), Some(scale)) = (working_data.column(col), scale_set.get_mut(aes))
+            {
+                train_intercepts(scale, values);
+            }
+        }
 
         // Step 8b: Positional scales also need to see stat-computed extent columns
         // (e.g. boxplot/errorbar/pointrange emit ymin/ymax but no "y"). Without
@@ -826,8 +888,8 @@ impl PlotBuilder {
                 for layer_data in panel_layers {
                     panel_set.train_layer(layer_data);
                     for (cols, aes) in [
-                        (["xmin", "xmax"], Aesthetic::X),
-                        (["ymin", "ymax"], Aesthetic::Y),
+                        (["xmin", "xmax", "xintercept"], Aesthetic::X),
+                        (["ymin", "ymax", "yintercept"], Aesthetic::Y),
                     ] {
                         let freed = match aes {
                             Aesthetic::X => free_x,
@@ -840,7 +902,11 @@ impl PlotBuilder {
                             if let (Some(vals), Some(s)) =
                                 (layer_data.column(c), panel_set.get_mut(&aes))
                             {
-                                s.train(vals);
+                                if c.ends_with("intercept") {
+                                    train_intercepts(s, vals);
+                                } else {
+                                    s.train(vals);
+                                }
                             }
                         }
                     }

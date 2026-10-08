@@ -44,3 +44,11 @@ pub(crate) fn preserve_raw_y(data: &mut DataFrame, y: &[crate::data::Value]) {
         data.add_column(RAW_Y_COL.to_string(), y.to_vec());
     }
 }
+
+/// Column in which dodging positions store each row's offset (in category
+/// units) when x is *discrete*: the category itself can't move, so geoms add
+/// `offset / n_levels` to the mapped x (see `geom::support::XMapper`).
+pub const DODGE_OFFSET_COL: &str = ".x_dodge_offset";
+/// Number of dodged groups sharing a row's discrete x position (stored next to
+/// [`DODGE_OFFSET_COL`]); bar-like geoms divide their width by it.
+pub const DODGE_N_COL: &str = ".x_dodge_n";

@@ -51,7 +51,6 @@ impl Geom for GeomErrorbar {
             .ok_or(RenderError::MissingAesthetic("ymax".into()))?;
 
         let plot_area = backend.plot_area();
-        let x_scale = scales.get(&Aesthetic::X);
         let y_scale = scales.get(&Aesthetic::Y);
 
         let style = LineStyle {
@@ -61,27 +60,38 @@ impl Geom for GeomErrorbar {
             linetype: Linetype::Solid,
         };
 
+        let xm = super::support::XMapper::new(data, scales);
+        let color_col = data.column("color");
         for i in 0..data.nrows() {
-            let nx = x_scale.map(|s| s.map(&x_col[i])).unwrap_or(0.0);
+            let nx = xm.map(&x_col[i], i);
             let ny_min = y_scale.map(|s| s.map(&ymin_col[i])).unwrap_or(0.0);
             let ny_max = y_scale.map(|s| s.map(&ymax_col[i])).unwrap_or(0.0);
+            let color = color_col
+                .and_then(|cc| scales.map_color(&Aesthetic::Color, &cc[i]))
+                .unwrap_or(self.color);
+            let style = LineStyle {
+                color,
+                ..style.clone()
+            };
 
-            let (cx, top) = coord.transform((nx, ny_max), &plot_area);
-            let (_, bottom) = coord.transform((nx, ny_min), &plot_area);
-
-            // Vertical bar
-            backend.draw_line(&[(cx, top), (cx, bottom)], &style)?;
-
-            // Top cap
-            let (cap_l, _) = coord.transform((nx - self.cap_width, ny_max), &plot_area);
-            let (cap_r, _) = coord.transform((nx + self.cap_width, ny_max), &plot_area);
-            backend.draw_line(&[(cap_l, top), (cap_r, top)], &style)?;
-
-            // Bottom cap
-            let (cap_l, _) = coord.transform((nx - self.cap_width, ny_min), &plot_area);
-            let (cap_r, _) = coord.transform((nx + self.cap_width, ny_min), &plot_area);
-            backend.draw_line(&[(cap_l, bottom), (cap_r, bottom)], &style)?;
+            // One connected polyline per bar — cap, bar, cap — transformed
+            // point by point so it is correct under coord_flip too.
+            let c = self.cap_width;
+            let t = |p: (f64, f64)| coord.transform(p, &plot_area);
+            super::support::mark_interval(backend, data, i, &x_col[i], &ymin_col[i], &ymax_col[i]);
+            backend.draw_line(
+                &[
+                    t((nx - c, ny_max)),
+                    t((nx + c, ny_max)),
+                    t((nx, ny_max)),
+                    t((nx, ny_min)),
+                    t((nx - c, ny_min)),
+                    t((nx + c, ny_min)),
+                ],
+                &style,
+            )?;
         }
+        super::clear_mark(backend);
 
         Ok(())
     }

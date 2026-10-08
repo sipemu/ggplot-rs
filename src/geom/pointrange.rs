@@ -55,26 +55,28 @@ impl Geom for GeomPointrange {
         let color_col = data.column("color");
 
         let plot_area = backend.plot_area();
-        let x_scale = scales.get(&Aesthetic::X);
         let y_scale = scales.get(&Aesthetic::Y);
 
+        let xm = super::support::XMapper::new(data, scales);
         for i in 0..data.nrows() {
-            let nx = x_scale.map(|s| s.map(&x_col[i])).unwrap_or(0.0);
+            let nx = xm.map(&x_col[i], i);
             let ny = y_scale.map(|s| s.map(&y_col[i])).unwrap_or(0.0);
             let ny_min = y_scale.map(|s| s.map(&ymin_col[i])).unwrap_or(0.0);
             let ny_max = y_scale.map(|s| s.map(&ymax_col[i])).unwrap_or(0.0);
 
-            let (cx, top) = coord.transform((nx, ny_max), &plot_area);
-            let (_, bottom) = coord.transform((nx, ny_min), &plot_area);
+            // Transform both ends (under coord_flip the range is horizontal).
+            let top = coord.transform((nx, ny_max), &plot_area);
+            let bottom = coord.transform((nx, ny_min), &plot_area);
             let (px, py) = coord.transform((nx, ny), &plot_area);
 
             let pt_color = color_col
                 .and_then(|cc| scales.map_color(&Aesthetic::Color, &cc[i]))
                 .unwrap_or(self.color);
 
+            super::support::mark_interval(backend, data, i, &x_col[i], &ymin_col[i], &ymax_col[i]);
             // Vertical line
             backend.draw_line(
-                &[(cx, top), (cx, bottom)],
+                &[top, bottom],
                 &LineStyle {
                     color: pt_color,
                     alpha: self.alpha,
@@ -95,6 +97,7 @@ impl Geom for GeomPointrange {
                 },
             )?;
         }
+        super::clear_mark(backend);
 
         Ok(())
     }

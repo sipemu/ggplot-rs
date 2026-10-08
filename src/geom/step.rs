@@ -18,6 +18,8 @@ pub enum StepDirection {
     Hv,
     /// Draw vertical first, then horizontal.
     Vh,
+    /// Step half-way between adjacent x values (ggplot2's `"mid"`).
+    Mid,
 }
 
 /// Step function line geometry.
@@ -54,89 +56,75 @@ impl Geom for GeomStep {
         let y_col = data
             .column("y")
             .ok_or(RenderError::MissingAesthetic("y".into()))?;
-        let color_col = data.column("color");
-
         let plot_area = backend.plot_area();
         let x_scale = scales.get(&Aesthetic::X);
         let y_scale = scales.get(&Aesthetic::Y);
 
-        // Sort by x
-        let mut sorted: Vec<usize> = (0..data.nrows()).collect();
-        sorted.sort_by(|&a, &b| {
-            let xa = x_col[a].as_f64().unwrap_or(0.0);
-            let xb = x_col[b].as_f64().unwrap_or(0.0);
-            xa.total_cmp(&xb)
-        });
+        // One step line per group (colour / group / linetype level), so e.g.
+        // a Kaplan–Meier curve per stratum or an ECDF per group.
+        for rows in super::support::row_groups(data) {
+            let mut raw: Vec<(f64, f64)> = rows
+                .iter()
+                .map(|&i| {
+                    let nx = x_scale.map(|s| s.map(&x_col[i])).unwrap_or(0.0);
+                    let ny = y_scale.map(|s| s.map(&y_col[i])).unwrap_or(0.0);
+                    (nx, ny)
+                })
+                .collect();
+            // Sort by x (stable, so tied x keep their row order).
+            raw.sort_by(|a, b| a.0.total_cmp(&b.0));
+            let step_points = super::ribbon::stepped(&raw, &self.direction);
 
-        // Build raw normalized points
-        let raw: Vec<(f64, f64)> = sorted
-            .iter()
-            .map(|&i| {
-                let nx = x_scale.map(|s| s.map(&x_col[i])).unwrap_or(0.0);
-                let ny = y_scale.map(|s| s.map(&y_col[i])).unwrap_or(0.0);
-                (nx, ny)
-            })
-            .collect();
+            let points: Vec<(f64, f64)> = step_points
+                .iter()
+                .map(|&(nx, ny)| {
+                    let (px, py) = coord.transform((nx, ny), &plot_area);
+                    // Clamp non-finite coords (e.g. stat_ecdf's ±Inf padding, which
+                    // extends the step to the panel edge) to the panel border so the
+                    // flat segments draw to the edge instead of off-canvas.
+                    let px = if px.is_finite() {
+                        px
+                    } else if nx < 0.0 {
+                        plot_area.x
+                    } else {
+                        plot_area.x + plot_area.width
+                    };
+                    let py = if py.is_finite() {
+                        py
+                    } else if ny < 0.0 {
+                        plot_area.y + plot_area.height
+                    } else {
+                        plot_area.y
+                    };
+                    (px, py)
+                })
+                .collect();
 
-        // Insert step points
-        let mut step_points: Vec<(f64, f64)> = Vec::new();
-        for (j, &(nx, ny)) in raw.iter().enumerate() {
-            if j > 0 {
-                let (prev_nx, prev_ny) = raw[j - 1];
-                match self.direction {
-                    StepDirection::Hv => step_points.push((nx, prev_ny)),
-                    StepDirection::Vh => step_points.push((prev_nx, ny)),
-                }
+            let first = rows[0];
+            let line_color = data
+                .column("color")
+                .and_then(|cc| scales.map_color(&Aesthetic::Color, &cc[first]))
+                .unwrap_or(self.color);
+            let linetype = data
+                .column("linetype")
+                .and_then(|c| scales.map_linetype(&c[first]))
+                .unwrap_or(Linetype::Solid);
+            let series = super::series_key(data, first);
+            super::set_mark(backend, series.clone(), None, series, None);
+
+            if points.len() >= 2 {
+                backend.draw_line(
+                    &points,
+                    &LineStyle {
+                        color: line_color,
+                        alpha: self.alpha,
+                        width: self.width,
+                        linetype,
+                    },
+                )?;
             }
-            step_points.push((nx, ny));
         }
-
-        let points: Vec<(f64, f64)> = step_points
-            .iter()
-            .map(|&(nx, ny)| {
-                let (px, py) = coord.transform((nx, ny), &plot_area);
-                // Clamp non-finite coords (e.g. stat_ecdf's ±Inf padding, which
-                // extends the step to the panel edge) to the panel border so the
-                // flat segments draw to the edge instead of off-canvas.
-                let px = if px.is_finite() {
-                    px
-                } else if nx < 0.0 {
-                    plot_area.x
-                } else {
-                    plot_area.x + plot_area.width
-                };
-                let py = if py.is_finite() {
-                    py
-                } else if ny < 0.0 {
-                    plot_area.y + plot_area.height
-                } else {
-                    plot_area.y
-                };
-                (px, py)
-            })
-            .collect();
-
-        let line_color = color_col
-            .and_then(|cc| {
-                if cc.is_empty() {
-                    None
-                } else {
-                    scales.map_color(&Aesthetic::Color, &cc[0])
-                }
-            })
-            .unwrap_or(self.color);
-
-        if points.len() >= 2 {
-            backend.draw_line(
-                &points,
-                &LineStyle {
-                    color: line_color,
-                    alpha: self.alpha,
-                    width: self.width,
-                    linetype: Linetype::Solid,
-                },
-            )?;
-        }
+        super::clear_mark(backend);
 
         Ok(())
     }

@@ -209,6 +209,11 @@ pub trait DrawBackend {
     /// marks — SVG emits it as `data-value`. Default: no-op.
     fn set_mark_value(&mut self, _value: Option<String>) {}
 
+    /// Report a non-fatal problem found while drawing (e.g. labels a repel
+    /// layout had to drop). Backends that collect warnings (the native SVG
+    /// backend) append it to the render warnings. Default: ignored.
+    fn warn(&mut self, _message: String) {}
+
     /// Draw a point with a specific shape. Default delegates to draw_circle for Circle.
     fn draw_shape(
         &mut self,

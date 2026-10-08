@@ -51,6 +51,17 @@ impl GeomSmooth {
         self.method = SmoothMethod::Gam;
         self
     }
+
+    /// Use a generalized linear model — ggplot2's
+    /// `geom_smooth(method = "glm", method.args = list(family = …))` — e.g.
+    /// `GeomSmooth::default().glm(SmoothFamily::binomial())`. The band is the
+    /// link-scale confidence interval mapped through the inverse link (see
+    /// [`SmoothFamily`](crate::stat::smooth::SmoothFamily)).
+    #[cfg(feature = "regression")]
+    pub fn glm(mut self, family: crate::stat::smooth::SmoothFamily) -> Self {
+        self.method = SmoothMethod::Glm { family };
+        self
+    }
 }
 
 impl Geom for GeomSmooth {

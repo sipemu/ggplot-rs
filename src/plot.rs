@@ -60,6 +60,10 @@ use crate::scale::Scale;
 use crate::stat::Stat;
 use crate::theme::Theme;
 
+// Builder methods for the 0.17 statistical-graphics layers (QQ, step ribbons,
+// ECDF bands, Cook's contours, horizontal error bars).
+mod stat_layers;
+
 /// Labels for the plot.
 #[derive(Clone, Debug, Default)]
 pub struct Labels {
@@ -194,31 +198,134 @@ impl GGPlot {
         self.add_geom_with(geom)
     }
 
+    /// Horizontal reference line at a constant `yintercept`. Like ggplot2 the
+    /// intercept trains the y scale (the line is always visible) and the line
+    /// appears in every facet panel.
     pub fn geom_hline(self, yintercept: f64) -> Self {
-        self.add_geom(GeomHline::new(yintercept))
+        self.add_refline(
+            GeomHline::new(yintercept),
+            false,
+            &[("yintercept", yintercept)],
+        )
     }
 
     /// Add a horizontal reference line with custom styling (color/linetype/width).
     pub fn geom_hline_with(self, geom: GeomHline) -> Self {
-        self.add_geom_with(geom)
+        let y = geom.yintercept;
+        self.add_refline(geom, true, &[("yintercept", y)])
     }
 
+    /// Data-mapped horizontal lines (ggplot2's `geom_hline(aes(yintercept =
+    /// …))`): one line per row of the layer data (the plot data unless
+    /// [`layer_data`](Self::layer_data) follows), per facet panel, styled by
+    /// any `color`/`linetype`/`alpha` in `mapping`. The plot-level mapping is
+    /// not inherited.
+    ///
+    /// ```
+    /// # use ggplot_rs::prelude::*;
+    /// let thresholds: Vec<(String, Vec<Value>)> = vec![
+    ///     ("bound".into(), vec![Value::Float(-0.2), Value::Float(0.2)]),
+    /// ];
+    /// let svg = GGPlot::new(vec![
+    ///         ("lag".to_string(), vec![Value::Float(1.0), Value::Float(2.0)]),
+    ///         ("acf".to_string(), vec![Value::Float(0.5), Value::Float(0.1)]),
+    ///     ])
+    ///     .aes(Aes::new().x("lag").y("acf"))
+    ///     .geom_col()
+    ///     .geom_hline_aes(Aes::new().yintercept("bound"))
+    ///     .layer_data(thresholds)
+    ///     .render_svg_native()
+    ///     .unwrap();
+    /// assert!(svg.contains("data-value=\"0.2\""));
+    /// ```
+    pub fn geom_hline_aes(self, mapping: Aes) -> Self {
+        self.add_geom(GeomHline::mapped()).layer_aes(mapping)
+    }
+
+    /// [`geom_hline_aes`](Self::geom_hline_aes) with custom default styling.
+    pub fn geom_hline_aes_with(self, geom: GeomHline, mapping: Aes) -> Self {
+        self.add_geom_with(geom).layer_aes(mapping)
+    }
+
+    /// Vertical reference line at a constant `xintercept` (trains the x
+    /// scale, appears in every panel).
     pub fn geom_vline(self, xintercept: f64) -> Self {
-        self.add_geom(GeomVline::new(xintercept))
+        self.add_refline(
+            GeomVline::new(xintercept),
+            false,
+            &[("xintercept", xintercept)],
+        )
     }
 
     /// Add a vertical reference line with custom styling (color/linetype/width).
     pub fn geom_vline_with(self, geom: GeomVline) -> Self {
-        self.add_geom_with(geom)
+        let x = geom.xintercept;
+        self.add_refline(geom, true, &[("xintercept", x)])
     }
 
+    /// Data-mapped vertical lines (`aes(xintercept = …)`), one per row; see
+    /// [`geom_hline_aes`](Self::geom_hline_aes).
+    pub fn geom_vline_aes(self, mapping: Aes) -> Self {
+        self.add_geom(GeomVline::mapped()).layer_aes(mapping)
+    }
+
+    /// [`geom_vline_aes`](Self::geom_vline_aes) with custom default styling.
+    pub fn geom_vline_aes_with(self, geom: GeomVline, mapping: Aes) -> Self {
+        self.add_geom_with(geom).layer_aes(mapping)
+    }
+
+    /// Line `y = intercept + slope · x` in data space, clipped to the panel.
+    /// It does not train any scale (as in ggplot2).
     pub fn geom_abline(self, slope: f64, intercept: f64) -> Self {
-        self.add_geom(GeomAbline::new(slope, intercept))
+        self.add_refline(
+            GeomAbline::new(slope, intercept),
+            false,
+            &[("slope", slope), ("intercept", intercept)],
+        )
     }
 
     /// Add a slope/intercept reference line with custom styling.
     pub fn geom_abline_with(self, geom: GeomAbline) -> Self {
-        self.add_geom_with(geom)
+        let (b, a) = (geom.slope, geom.intercept);
+        self.add_refline(geom, true, &[("slope", b), ("intercept", a)])
+    }
+
+    /// Data-mapped ablines (`aes(slope = …, intercept = …)`), one per row; a
+    /// missing aesthetic defaults to slope 1 / intercept 0.
+    pub fn geom_abline_aes(self, mapping: Aes) -> Self {
+        self.add_geom(GeomAbline::mapped()).layer_aes(mapping)
+    }
+
+    /// [`geom_abline_aes`](Self::geom_abline_aes) with custom default styling.
+    pub fn geom_abline_aes_with(self, geom: GeomAbline, mapping: Aes) -> Self {
+        self.add_geom_with(geom).layer_aes(mapping)
+    }
+
+    /// A constant reference line as ggplot2 builds it: a one-row layer frame
+    /// holding the constants, mapped to their aesthetics.
+    fn add_refline(
+        self,
+        geom: impl Geom + 'static,
+        explicit: bool,
+        values: &[(&str, f64)],
+    ) -> Self {
+        let mut data = DataFrame::new();
+        let mut mapping = Aes::new();
+        for (col, v) in values {
+            data.add_column(col.to_string(), vec![Value::Float(*v)]);
+            mapping = match *col {
+                "xintercept" => mapping.xintercept(col),
+                "yintercept" => mapping.yintercept(col),
+                "slope" => mapping.slope(col),
+                _ => mapping.intercept(col),
+            };
+        }
+        let plot = if explicit {
+            self.add_geom_with(geom)
+        } else {
+            self.add_geom(geom)
+        };
+        plot.layer_aes(mapping).layer_data(data)
     }
 
     pub fn geom_text(self) -> Self {
@@ -413,6 +520,90 @@ impl GGPlot {
         self.add_geom(geom)
             .layer_data(data)
             .layer_aes(Aes::new().xmin("xmin").xmax("xmax").y("y").label("label"))
+    }
+
+    /// Significance brackets from a precomputed test table (ggpubr's
+    /// `stat_pvalue_manual` / `geom_bracket(data = …)`) — e.g. the anofox
+    /// `test` contract output (`group1`, `group2`, `p_adj`/`p_value`, optional
+    /// `y_position`, `label`). No test is recomputed. See
+    /// [`BracketTable`](crate::geom::bracket::BracketTable) for the column
+    /// rules, label templates (`"p = {p_adj}"`, `"{p.signif}"`) and the
+    /// automatic stacking of rows without a `y_position`. Rows that cannot be
+    /// drawn are dropped with a build warning.
+    pub fn geom_bracket_table(
+        mut self,
+        table: impl GGData,
+        spec: crate::geom::bracket::BracketTable,
+    ) -> Self {
+        let table = table.into_dataframe();
+        let col_for = |a: crate::aes::Aesthetic| {
+            self.mapping
+                .mappings
+                .iter()
+                .find(|m| m.aesthetic == a)
+                .map(|m| m.column.clone())
+        };
+        // The plot's x categories (to reject unknown groups) and finite y
+        // range (to stack brackets above the data).
+        let x_levels: Vec<String> = col_for(crate::aes::Aesthetic::X)
+            .and_then(|c| self.data.column(&c))
+            .filter(|col| col.iter().any(|v| matches!(v, Value::Str(_))))
+            .map(|col| {
+                let mut seen = std::collections::HashSet::new();
+                col.iter()
+                    .filter(|v| !v.is_na())
+                    .map(|v| v.to_group_key())
+                    .filter(|k| seen.insert(k.clone()))
+                    .collect()
+            })
+            .unwrap_or_default();
+        let y_range = col_for(crate::aes::Aesthetic::Y)
+            .and_then(|c| self.data.column(&c))
+            .and_then(|col| {
+                let (lo, hi) = col
+                    .iter()
+                    .filter_map(|v| v.as_f64())
+                    .filter(|v| v.is_finite())
+                    .fold((f64::INFINITY, f64::NEG_INFINITY), |(lo, hi), v| {
+                        (lo.min(v), hi.max(v))
+                    });
+                (lo <= hi).then_some((lo, hi))
+            });
+        let mut warnings = Vec::new();
+        let resolved = spec.resolve(&table, &x_levels, y_range, &mut warnings);
+        self.warnings.extend(warnings);
+        match resolved {
+            Some(data) => self
+                .add_geom(crate::geom::bracket::GeomBracket::from(spec.geom))
+                .layer_data(data)
+                .layer_aes(Aes::new().xmin("xmin").xmax("xmax").y("y").label("label")),
+            None => self,
+        }
+    }
+
+    /// Text labels that repel each other and their points
+    /// (`ggrepel::geom_text_repel`) — deterministic (seeded) layout; see
+    /// [`GeomTextRepel`](crate::geom::repel::GeomTextRepel). Requires `x`,
+    /// `y` and `label`.
+    pub fn geom_text_repel(self) -> Self {
+        self.add_geom(crate::geom::repel::GeomTextRepel::default())
+    }
+
+    /// [`geom_text_repel`](Self::geom_text_repel) with a configured geom
+    /// (padding, nudge, `max_overlaps`, seed, …).
+    pub fn geom_text_repel_with(self, geom: crate::geom::repel::GeomTextRepel) -> Self {
+        self.add_geom_with(geom)
+    }
+
+    /// Boxed labels that repel each other and their points
+    /// (`ggrepel::geom_label_repel`).
+    pub fn geom_label_repel(self) -> Self {
+        self.add_geom(crate::geom::repel::GeomLabelRepel::default())
+    }
+
+    /// [`geom_label_repel`](Self::geom_label_repel) with a configured geom.
+    pub fn geom_label_repel_with(self, geom: crate::geom::repel::GeomLabelRepel) -> Self {
+        self.add_geom_with(geom)
     }
 
     pub fn geom_label(self) -> Self {
@@ -1894,7 +2085,9 @@ impl GGPlot {
         let mut backend = crate::render::svg_backend::SvgBackend::new(w, h, pa.clone());
         backend.set_root_attrs(crate::render::svg_backend::root_data_attrs(&built));
         PlotRenderer::render(&built, &mut backend).map_err(GGError::Render)?;
-        Ok((backend, built.warnings, pa))
+        let mut warnings = built.warnings;
+        warnings.extend(backend.take_warnings());
+        Ok((backend, warnings, pa))
     }
 
     /// Render to a raw RGBA pixel buffer via the self-contained raster
@@ -1976,7 +2169,19 @@ impl GGPlot {
     }
 
     /// Shared pipeline: build the plot, apply label overrides, compute layout.
-    fn prepare(self, w: u32, h: u32) -> Result<(crate::build::BuiltPlot, PlotLayout), GGError> {
+    pub(crate) fn prepare(
+        self,
+        w: u32,
+        h: u32,
+    ) -> Result<(crate::build::BuiltPlot, PlotLayout), GGError> {
+        let (mut built, meta) = self.build_for_render()?;
+        let layout = Self::layout_built(&mut built, &meta, w, h);
+        Ok((built, layout))
+    }
+
+    /// The size-independent half of [`prepare`](Self::prepare): build the plot,
+    /// resolve theme inheritance and apply axis-label overrides.
+    pub(crate) fn build_for_render(self) -> Result<(crate::build::BuiltPlot, RenderMeta), GGError> {
         let plot = self;
 
         let has_title = plot.labels.title.is_some();
@@ -2003,6 +2208,31 @@ impl GGPlot {
             }
         }
 
+        Ok((
+            built,
+            RenderMeta {
+                has_title,
+                has_subtitle,
+                has_caption,
+                has_legend,
+            },
+        ))
+    }
+
+    /// The size-dependent half of [`prepare`](Self::prepare): auto-tune axis
+    /// labels for `w`×`h` and compute the layout.
+    pub(crate) fn layout_built(
+        built: &mut crate::build::BuiltPlot,
+        meta: &RenderMeta,
+        w: u32,
+        h: u32,
+    ) -> PlotLayout {
+        let RenderMeta {
+            has_title,
+            has_subtitle,
+            has_caption,
+            has_legend,
+        } = *meta;
         let x_axis_top = built
             .scales
             .get(&crate::aes::Aesthetic::X)
@@ -2081,7 +2311,7 @@ impl GGPlot {
             None
         };
 
-        let layout = PlotLayout::compute_full(
+        PlotLayout::compute_full(
             w as f64,
             h as f64,
             &built.theme,
@@ -2092,9 +2322,7 @@ impl GGPlot {
             x_axis_top,
             y_label_width,
             x_label_height,
-        );
-
-        Ok((built, layout))
+        )
     }
 
     /// Fill the background, render the built plot, and flush — for any plotters
@@ -2146,6 +2374,15 @@ impl GGPlot {
             )
         })
     }
+}
+
+/// Size-independent facts about a built plot that its layout needs.
+#[derive(Clone, Copy, Debug)]
+pub(crate) struct RenderMeta {
+    pub(crate) has_title: bool,
+    pub(crate) has_subtitle: bool,
+    pub(crate) has_caption: bool,
+    pub(crate) has_legend: bool,
 }
 
 /// Top-level error type.

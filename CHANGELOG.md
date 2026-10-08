@@ -3,6 +3,181 @@
 All notable changes to this project are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.17.0] — 2026-10-08
+
+### Breaking changes
+
+- `Aesthetic` gained the variants `Xintercept`, `Yintercept`, `Slope` and
+  `Intercept` (exhaustive matches on `Aesthetic` need new arms).
+- `geom_hline` / `geom_vline` (constant and mapped) now train the y / x
+  position scale on their intercepts, as in ggplot2: a reference line outside
+  the data range widens the axis instead of being drawn off-panel.
+- `geom_abline` is now drawn in data space (`y = intercept + slope · x` in the
+  scales' — possibly transformed — units) and clipped to the panel; it used to
+  interpret slope/intercept in normalized panel units.
+- `StepDirection` gained the variant `Mid`.
+- `PositionDodge` is now a struct with `width: Option<f64>` and `reverse:
+  bool` (a same-named `const` keeps `.position(PositionDodge)` compiling);
+  `PositionDodge2` gained the public fields `width` and `reverse` (construct
+  it with `new` / `default` and the `with_*` builders). Both now dodge the
+  groups present at each x (ggplot2's default `preserve = "total"`) instead
+  of reserving a slot for every group, and key groups on group + fill +
+  colour together.
+- Reference-line geoms no longer inherit the plot-level mapping (ggplot2's
+  `inherit.aes = FALSE`): a plot-level `color` no longer leaks into
+  `geom_hline`. New `Geom::inherit_aes()` (default `true`) controls this.
+
+- `StatQQ` / `StatQQLine` use the exact normal quantile in every build (they
+  used the Abramowitz–Stegun approximation, |error| ≈ 4.5e-4, without
+  `regression`), and `StatQQLine` needs 2 sample values instead of 4.
+
+### Fixed
+
+- `geom_errorbar`, `geom_linerange` and `geom_pointrange` collapsed to a
+  point under `coord_flip` (only the x pixel of one end was used); every end
+  is now transformed. `geom_errorbar` / `geom_linerange` honour a mapped
+  `color`; an error bar is one polyline (cap–bar–cap) per row.
+
+### Fixed — dodged bars
+
+- `geom_col` / `geom_bar` with `position_dodge` on a **discrete** x now shift
+  and narrow each bar by the stored dodge offset and the number of groups at
+  that x (new `position::DODGE_N_COL`), so grouped bars sit side by side
+  instead of on top of each other.
+
+### Added — statistical geoms (reference lines, QQ, Cook's contours, KM/ECDF, dodge)
+
+- **Data-mapped reference lines (U1).** `Aes::{xintercept, yintercept, slope,
+  intercept}` plus `GGPlot::{geom_hline_aes, geom_vline_aes, geom_abline_aes}`
+  (and `*_aes_with(geom, aes)` for custom default styling) draw one line per
+  row of the layer data, per facet panel, coloured / linetyped by any mapped
+  `color` / `linetype` / `alpha`. Constant lines are now one-row layers, so
+  they appear in every facet panel. Lines carry `data-series` / `data-value`
+  (the intercept) and a tooltip on the native SVG path. Non-finite intercepts
+  are dropped with a warning; a numeric `xintercept` on a discrete axis sits
+  between categories (1-based, as in ggplot2) without becoming a level, and a
+  reference line added before a discrete layer no longer forces a continuous
+  scale. `GeomHline::mapped()`, `GeomVline::mapped()`, `GeomAbline::mapped()`.
+- **QQ plots against several distributions, with confidence bands (U2).**
+  `QQDistribution::{Normal { mean, sd }, StudentT { df }, Exponential { rate },
+  HalfNormal { sd }}` (ggplot2's `distribution` + `dparams`; constructors
+  `normal()`, `t(df)`, `exponential()`, `half_normal()`), `StatQQDist`,
+  `StatQQLineDist` (line through the `line_p` quartiles over the range of the
+  theoretical quantiles; also emits `slope`/`intercept`) and `StatQQBand`
+  (qqplotr's `stat_qq_band`: `QQBandType::Pointwise` normal-theory envelope or
+  `QQBandType::Ks` DKW band, `level`), drawn by the new `GeomQQBand`. Builder
+  methods `GGPlot::{stat_qq(dist), stat_qq_line(dist), stat_qq_band(band),
+  geom_qq_band(), geom_qq_band_with(geom, band)}`. Validated against
+  ggplot2 4.0 and qqplotr 0.0.7 to 1e-9 (`tests/qq_dist_r.rs`,
+  `validation/generate_diagnostics.R`). QQ points now carry `data-x` /
+  `data-value` / tooltips; `geom_qq_line` draws one line per group.
+- **Cook's-distance contours (U4).** `GGPlot::stat_cooks_contour(p, levels)`
+  / `geom_cooks_contour_with(GeomCooksContour)` draw R's `plot.lm(which = 5)`
+  contours `±√(level · p · (1 − h) / h)` on a residuals-vs-leverage panel:
+  dashed, clipped to the panel (geometrically — the native SVG has no clip
+  paths), labelled with the level, in every facet panel, optionally limited
+  to `with_h_range(lo, hi)`; they train no scale. Helpers
+  `geom::cooks::{cooks_contour_y, cooks_distance}`. Checked against R
+  (`tests/cooks_contour_r.rs`).
+- **Kaplan–Meier / ECDF / horizontal-CI building blocks (U7).**
+  `GeomStepribbon` (`geom_stepribbon()`, `geom_stepribbon_with(geom)`; step
+  edges with `StepDirection::{Hv, Vh, Mid}`, ±Inf x to the panel edge) for KM
+  confidence bands; censor marks `geom_censor_marks(censor_col)` /
+  `GeomCensorMarks` + `StatCensored` (`+` glyphs at rows whose column is
+  `> 0` / `true`); `stat_ecdf()` and `stat_ecdf_band(level)` / `StatEcdfBand`
+  (simultaneous DKW band `F̂ ± √(ln(2/(1−level))/(2n))`, validated against R);
+  `geom_errorbarh()` / `GeomErrorbarh` (`xmin`/`xmax`/`y`, one hoverable
+  polyline per interval with `data-value="xmin xmax"`).
+- `geom_step` draws one step line per group (colour / group / linetype) with
+  mapped linetype and `data-series`, and gains `StepDirection::Mid`
+  (ggplot2's `"mid"`). `stat_ecdf` ignores non-finite input values.
+- **Multi-model coefficient forests (U8).** `position_dodge(width)` /
+  `PositionDodge::new(width).with_reverse(bool)` and
+  `PositionDodge2::new(padding).with_width(w).with_reverse(bool)` now work on
+  a *discrete* x axis (terms): the per-row offset is stored in
+  `.x_dodge_offset` (`position::DODGE_OFFSET_COL`) and applied by
+  `geom_point`, `geom_pointrange`, `geom_errorbar`, `geom_linerange`,
+  `geom_ribbon` and censor marks, so several models' intervals per term sit
+  side by side — also under `coord_flip`. Interval geoms map `color` per row
+  and carry `data-x` (term) / `data-series` (model) / `data-value` (estimate,
+  else `"ymin ymax"`) plus a tooltip.
+- `examples/diagnostics.rs` (runs with `--no-default-features`): a
+  regression-diagnostic gallery on the native SVG path — QQ with pointwise +
+  KS bands, QQ against t(5), residuals vs leverage with Cook's contours,
+  Kaplan–Meier (`survival::lung`) with CI step ribbon and censor marks, ECDF
+  with DKW band, dodged three-model coefficient forest, per-facet mapped ACF
+  bounds — written to `assets/gallery/diagnostics/*.svg`.
+- `ggplot_rs::stat::distribution`: dependency-free `qnorm` (AS 241), `dnorm`,
+  `pt` / `qt` / `dt` (any `p`, any `df`) and `ln_gamma`, available in every
+  feature configuration (the existing `stat::dist::qt` still returns the
+  normal 0.975 quantile without `regression`).
+- `geom_ribbon` draws one band per group (group / colour / fill) with a
+  mapped `fill`, instead of a single polygon through every row.
+- The native SVG backend draws every `PointShape` (square, triangle, diamond,
+  `+`, `×`) instead of falling back to circles; `+`/`×` are one stroked
+  `<path>` per point, so they keep their `data-*` hover attributes.
+
+### Added — composition, label repel, GLM smooths, table brackets
+
+- `geom_smooth(method = "glm")` families: `SmoothFamily::Binomial(link)`
+  (`SmoothBinomialLink::{Logit, Probit, Cloglog}`, shorthand
+  `SmoothFamily::binomial()`), `SmoothFamily::Gamma(link)`
+  (`SmoothGammaLink::{Inverse, Log}`, shorthand `SmoothFamily::gamma()`) and
+  `SmoothFamily::NegativeBinomial` (log link, θ by ML as `MASS::glm.nb`), plus
+  the `GeomSmooth::glm(family)` builder. Bands follow ggplot2's
+  `predictdf.glm`: `linkinv(η ± qnorm(0.975)·se(η))`, so they stay inside the
+  response range. Validated against R `glm()`/`predict()` in
+  `tests/glm_smooth_r.rs`.
+- `GGPlot::geom_bracket_table(table, BracketTable)` — significance brackets
+  from a **precomputed** test table (ggpubr `stat_pvalue_manual`), no test is
+  recomputed. Reads the anofox `test` contract (`group1`, `group2`, `p_adj`
+  falling back to `p_value` per row, `test_id`) plus optional `y_position` /
+  `label` columns; label templates (`"p = {p_adj}"`, `{p}`, `{p.signif}` /
+  `{stars}` with configurable cutpoints, any `{column}`), `hide_ns`, automatic
+  stacking above the data for rows without `y_position`. Rows with missing or
+  unknown groups are dropped with a build warning. Pure grammar: available
+  without the `ggpubr` feature.
+- Brackets (`geom_bracket*`) now carry host hover metadata: a `<title>`
+  tooltip, `data-x="g1 vs g2"`, `data-series` (`test_id` for table brackets)
+  and `data-value` (the p-value).
+- `geom_text_repel` / `geom_label_repel` (`GeomTextRepel`, `GeomLabelRepel`,
+  `RepelParams`, `RepelDirection`; ggrepel): deterministic, seeded label
+  layout that avoids other labels and the labelled points and stays inside the
+  panel; `nudge`, `box_padding`, `point_padding`, `force`/`force_pull`,
+  `direction`, `max_iter` + `max_time` bounds, `max_overlaps` (dropped labels
+  are reported as a warning), connecting segments beyond
+  `min_segment_length`. Sweep-pruned collision checks; above `max_labels`
+  (default 500) the force layout is skipped with a warning.
+- `DrawBackend::warn` (default no-op): geoms can report draw-time warnings;
+  the native SVG backend collects them (`SvgBackend::take_warnings`) and
+  `render_svg_native_with_warnings` returns them after the build warnings.
+- `PlotGrid` (`ggplot_rs::compose`, in the prelude): patchwork-style
+  composition on the native SVG path — `PlotGrid::new().add(p).ncol(2)`, or
+  `a | b` (side by side) and `a / b` (stacked; chains flatten, mixed operators
+  nest), `add_spacer`, `nrow`/`byrow`, relative `widths`/`heights`, `spacing`,
+  shared `title`/`subtitle`/`caption`, panel tags (`TagLevels::{Lower, Upper,
+  Numeric, LowerRoman, UpperRoman, Custom}` + `tag_affixes`), and
+  `collect_legends(true)` (each distinct legend drawn once to the right or
+  bottom, identical legends de-duplicated). Renders one SVG
+  (`render_svg_native[_with_size|_with_warnings|_at]`); every sub-plot is a
+  nested `<svg>` that keeps its host attributes and adds
+  `data-panel="<tag or index>"`; the root carries `data-grid="<rows> <cols>"`.
+  Sub-plot warnings are returned prefixed `panel <tag>: `.
+- `examples/regression_diagnostics.rs`: a plotters-free 2×2 diagnostics grid
+  with repelled labels, table-driven brackets and a logistic GLM smooth.
+
+### Changed
+
+- `SmoothFamily::Poisson` bands are now formed on the link scale and mapped
+  through `exp` (as R/ggplot2), instead of a response-scale interval.
+- `ggpubr::ggarrange` now delegates to `PlotGrid`: cells are nested SVG
+  fragments without a per-cell `xmlns`, positioned as `x="300.00"`, and carry
+  `data-panel="<index>"`.
+- The `regression` feature now requires `anofox-regression` ^0.5.17 — the
+  version the anofox-statistics DuckDB extension uses — and GLM smooths use
+  that extension's IRLS settings (tolerance 1e-8, ≤ 100 iterations), so SQL
+  fits and plotted smooths agree.
+
 ## [0.16.0] — 2026-10-08
 
 ### Breaking changes

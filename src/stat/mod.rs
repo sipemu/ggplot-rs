@@ -14,6 +14,7 @@ pub mod count;
 pub mod density;
 pub mod density2d;
 pub mod dist;
+pub mod distribution;
 pub mod ecdf;
 pub mod ellipse;
 pub mod function;

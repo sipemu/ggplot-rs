@@ -52,13 +52,22 @@ impl ScaleSet {
         // they get no scale of their own.
         if matches!(
             aes,
-            Aesthetic::Open | Aesthetic::High | Aesthetic::Low | Aesthetic::Close
+            Aesthetic::Open
+                | Aesthetic::High
+                | Aesthetic::Low
+                | Aesthetic::Close
+                | Aesthetic::Slope
+                | Aesthetic::Intercept
+                // Reference-line intercepts live on the x / y scale; the
+                // build creates that scale from them only if no layer did
+                // (so a `geom_vline(0)` added first can't force a
+                // continuous scale onto a discrete axis).
+                | Aesthetic::Xintercept
+                | Aesthetic::Yintercept
         ) {
             return;
         }
-
-        let col_name = aes.col_name();
-        let values = data.column(col_name);
+        let values = data.column(aes.col_name());
 
         let is_discrete = match values {
             Some(vals) => vals

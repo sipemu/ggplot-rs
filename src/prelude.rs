@@ -1,5 +1,6 @@
 pub use crate::aes::{Aes, Aesthetic};
 pub use crate::annotate::Annotation;
+pub use crate::compose::{GridCell, GridLegendPosition, PlotGrid, TagLevels};
 pub use crate::coord::polar::CoordPolar;
 pub use crate::coord::radar::CoordRadar;
 pub use crate::data::{GGData, Value};
@@ -9,7 +10,7 @@ pub use crate::geom::bar::GeomBar;
 pub use crate::geom::bin2d::GeomBin2d;
 pub use crate::geom::blank::GeomBlank;
 pub use crate::geom::boxplot::GeomBoxplot;
-pub use crate::geom::bracket::GeomBracket;
+pub use crate::geom::bracket::{BracketTable, GeomBracket, GeomBracketStyle};
 pub use crate::geom::candlestick::{GeomCandlestick, GeomOhlc};
 pub use crate::geom::col::GeomCol;
 pub use crate::geom::contour::GeomContour;
@@ -34,6 +35,7 @@ pub use crate::geom::qq::{GeomQQ, GeomQQLine};
 pub use crate::geom::raster::GeomRaster;
 pub use crate::geom::rect::GeomRect;
 pub use crate::geom::refline::{GeomAbline, GeomHline, GeomVline};
+pub use crate::geom::repel::{GeomLabelRepel, GeomTextRepel, RepelDirection, RepelParams};
 pub use crate::geom::ribbon::GeomRibbon;
 pub use crate::geom::rug::GeomRug;
 pub use crate::geom::segment::GeomSegment;
@@ -95,9 +97,9 @@ pub use crate::stat::identity::StatIdentity;
 pub use crate::stat::loess::StatLoess;
 #[cfg(feature = "regression")]
 pub use crate::stat::quantile::StatQuantile;
-#[cfg(feature = "regression")]
-pub use crate::stat::smooth::SmoothFamily;
 pub use crate::stat::smooth::SmoothMethod;
+#[cfg(feature = "regression")]
+pub use crate::stat::smooth::{SmoothBinomialLink, SmoothFamily, SmoothGammaLink};
 pub use crate::stat::sum::StatSum;
 pub use crate::stat::summary::{StatSummary, SummaryData, SummaryFun};
 pub use crate::stat::summary2d::StatSummary2d;
@@ -114,3 +116,13 @@ pub use crate::theme::{
 };
 #[cfg(feature = "polars")]
 pub use polars;
+
+// 0.17 statistical-graphics layers (QQ distributions/bands, step ribbons).
+pub use crate::geom::censor::{GeomCensorMarks, StatCensored};
+pub use crate::geom::cooks::GeomCooksContour;
+pub use crate::geom::errorbarh::GeomErrorbarh;
+pub use crate::geom::qq::GeomQQBand;
+pub use crate::geom::ribbon::GeomStepribbon;
+pub use crate::position::dodge::position_dodge;
+pub use crate::stat::ecdf::StatEcdfBand;
+pub use crate::stat::qq::{QQBandType, QQDistribution, StatQQBand, StatQQDist, StatQQLineDist};

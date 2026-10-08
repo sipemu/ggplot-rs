@@ -5,8 +5,10 @@ pub mod blank;
 pub mod boxplot;
 pub mod bracket;
 pub mod candlestick;
+pub mod censor;
 pub mod col;
 pub mod contour;
+pub mod cooks;
 pub mod count;
 pub mod crossbar;
 pub mod curve;
@@ -14,6 +16,7 @@ pub mod density;
 pub mod density2d;
 pub mod dotplot;
 pub mod errorbar;
+pub mod errorbarh;
 pub mod freqpoly;
 pub mod hex;
 pub mod histogram;
@@ -28,6 +31,7 @@ pub mod qq;
 pub mod raster;
 pub mod rect;
 pub mod refline;
+pub mod repel;
 pub mod ribbon;
 pub mod rug;
 pub mod segment;
@@ -36,6 +40,7 @@ pub mod sf;
 pub mod smooth;
 pub mod spoke;
 pub mod step;
+pub(crate) mod support;
 pub mod text;
 pub mod tile;
 pub mod violin;
@@ -114,6 +119,14 @@ pub trait Geom: Send + Sync {
     /// its `xmin`/`xmax`/`ymin`/`ymax` extents so continuous scales train on
     /// them. Default: no-op.
     fn setup_data(&self, _data: &mut DataFrame) {}
+
+    /// Whether the layer inherits the plot-level aesthetic mapping (ggplot2's
+    /// `inherit.aes`). Reference-line geoms return false, as in ggplot2, so a
+    /// plot-level `color`/`x`/`y` mapping does not leak into a `geom_hline`.
+    /// Default true.
+    fn inherit_aes(&self) -> bool {
+        true
+    }
 }
 
 /// Format a value for a hover tooltip — strings verbatim, numbers rounded short,
