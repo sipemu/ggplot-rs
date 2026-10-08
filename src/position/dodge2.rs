@@ -5,7 +5,7 @@ use super::{Position, PositionParams};
 
 /// Like position_dodge but preserves total width and adds padding between
 /// groups (ggplot2's `position_dodge2(width, padding, reverse)`). Elements
-/// are centred exactly as [`PositionDodge`](super::dodge::PositionDodge)
+/// are centred exactly as [`PositionDodge`](struct@super::dodge::PositionDodge)
 /// places them; on a continuous axis `xmin`/`xmax` shrink to
 /// `(1 − padding)` of each group's share.
 #[derive(Clone, Debug, PartialEq)]

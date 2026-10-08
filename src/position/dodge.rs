@@ -48,7 +48,7 @@ impl PositionDodge {
     }
 }
 
-/// `position_dodge(width)` — see [`PositionDodge`].
+/// `position_dodge(width)` — see [`PositionDodge`](struct@PositionDodge).
 pub fn position_dodge(width: f64) -> PositionDodge {
     PositionDodge::new(width)
 }
