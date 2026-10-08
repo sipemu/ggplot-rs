@@ -24,6 +24,7 @@ pub struct SvgBackend {
     series_key: Option<String>,
     value_key: Option<String>,
     root_attrs: Vec<(String, String)>,
+    warnings: Vec<String>,
 }
 
 impl SvgBackend {
@@ -42,6 +43,7 @@ impl SvgBackend {
             series_key: None,
             value_key: None,
             root_attrs: Vec::new(),
+            warnings: Vec::new(),
         }
     }
 
@@ -50,6 +52,11 @@ impl SvgBackend {
     /// attribute names; values are escaped on output.
     pub fn set_root_attrs(&mut self, attrs: Vec<(String, String)>) {
         self.root_attrs = attrs;
+    }
+
+    /// Take the warnings reported while drawing (see [`DrawBackend::warn`]).
+    pub fn take_warnings(&mut self) -> Vec<String> {
+        std::mem::take(&mut self.warnings)
     }
 
     /// Emit `<tag attrs/>`, or `<tag attrs data-…><title>tip</title></tag>`
@@ -276,6 +283,10 @@ impl DrawBackend for SvgBackend {
 
     fn set_mark_value(&mut self, value: Option<String>) {
         self.value_key = value;
+    }
+
+    fn warn(&mut self, message: String) {
+        self.warnings.push(message);
     }
 
     fn draw_circle(

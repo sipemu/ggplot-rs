@@ -34,6 +34,7 @@ pub use crate::geom::qq::{GeomQQ, GeomQQLine};
 pub use crate::geom::raster::GeomRaster;
 pub use crate::geom::rect::GeomRect;
 pub use crate::geom::refline::{GeomAbline, GeomHline, GeomVline};
+pub use crate::geom::repel::{GeomLabelRepel, GeomTextRepel, RepelDirection, RepelParams};
 pub use crate::geom::ribbon::GeomRibbon;
 pub use crate::geom::rug::GeomRug;
 pub use crate::geom::segment::GeomSegment;

@@ -474,6 +474,31 @@ impl GGPlot {
         }
     }
 
+    /// Text labels that repel each other and their points
+    /// (`ggrepel::geom_text_repel`) — deterministic (seeded) layout; see
+    /// [`GeomTextRepel`](crate::geom::repel::GeomTextRepel). Requires `x`,
+    /// `y` and `label`.
+    pub fn geom_text_repel(self) -> Self {
+        self.add_geom(crate::geom::repel::GeomTextRepel::default())
+    }
+
+    /// [`geom_text_repel`](Self::geom_text_repel) with a configured geom
+    /// (padding, nudge, `max_overlaps`, seed, …).
+    pub fn geom_text_repel_with(self, geom: crate::geom::repel::GeomTextRepel) -> Self {
+        self.add_geom_with(geom)
+    }
+
+    /// Boxed labels that repel each other and their points
+    /// (`ggrepel::geom_label_repel`).
+    pub fn geom_label_repel(self) -> Self {
+        self.add_geom(crate::geom::repel::GeomLabelRepel::default())
+    }
+
+    /// [`geom_label_repel`](Self::geom_label_repel) with a configured geom.
+    pub fn geom_label_repel_with(self, geom: crate::geom::repel::GeomLabelRepel) -> Self {
+        self.add_geom_with(geom)
+    }
+
     pub fn geom_label(self) -> Self {
         self.add_geom(GeomLabel::default())
     }
@@ -1953,7 +1978,9 @@ impl GGPlot {
         let mut backend = crate::render::svg_backend::SvgBackend::new(w, h, pa.clone());
         backend.set_root_attrs(crate::render::svg_backend::root_data_attrs(&built));
         PlotRenderer::render(&built, &mut backend).map_err(GGError::Render)?;
-        Ok((backend, built.warnings, pa))
+        let mut warnings = built.warnings;
+        warnings.extend(backend.take_warnings());
+        Ok((backend, warnings, pa))
     }
 
     /// Render to a raw RGBA pixel buffer via the self-contained raster

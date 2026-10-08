@@ -28,6 +28,7 @@ pub mod qq;
 pub mod raster;
 pub mod rect;
 pub mod refline;
+pub mod repel;
 pub mod ribbon;
 pub mod rug;
 pub mod segment;

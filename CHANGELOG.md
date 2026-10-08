@@ -28,6 +28,17 @@ All notable changes to this project are documented here. The format follows
 - Brackets (`geom_bracket*`) now carry host hover metadata: a `<title>`
   tooltip, `data-x="g1 vs g2"`, `data-series` (`test_id` for table brackets)
   and `data-value` (the p-value).
+- `geom_text_repel` / `geom_label_repel` (`GeomTextRepel`, `GeomLabelRepel`,
+  `RepelParams`, `RepelDirection`; ggrepel): deterministic, seeded label
+  layout that avoids other labels and the labelled points and stays inside the
+  panel; `nudge`, `box_padding`, `point_padding`, `force`/`force_pull`,
+  `direction`, `max_iter` + `max_time` bounds, `max_overlaps` (dropped labels
+  are reported as a warning), connecting segments beyond
+  `min_segment_length`. Sweep-pruned collision checks; above `max_labels`
+  (default 500) the force layout is skipped with a warning.
+- `DrawBackend::warn` (default no-op): geoms can report draw-time warnings;
+  the native SVG backend collects them (`SvgBackend::take_warnings`) and
+  `render_svg_native_with_warnings` returns them after the build warnings.
 
 ### Changed
 
