@@ -161,6 +161,11 @@ impl Geom for GeomStep {
         "step"
     }
 
+    /// stat_ecdf pads the step with ±Inf (ggplot2), drawn to the panel edge.
+    fn allows_infinite(&self) -> bool {
+        true
+    }
+
     fn set_series_color(&mut self, color: (u8, u8, u8)) {
         self.color = color;
     }

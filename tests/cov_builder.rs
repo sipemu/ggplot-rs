@@ -739,11 +739,12 @@ fn missing_required_aesthetic_errs() {
 }
 
 #[test]
-fn empty_data_errs() {
+fn empty_data_renders_empty_panel() {
+    // ggplot2 draws an empty panel for zero-row data rather than failing.
     let empty = vec![col("x", f(&[])), col("y", f(&[]))];
     let r = GGPlot::new(empty)
         .aes(Aes::new().x("x").y("y"))
         .geom_point()
         .render_svg();
-    assert!(r.is_err(), "empty data should error, got Ok");
+    assert!(r.is_ok(), "empty data should render an empty panel: {r:?}");
 }

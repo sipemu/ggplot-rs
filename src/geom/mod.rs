@@ -4,6 +4,7 @@ pub mod bin2d;
 pub mod blank;
 pub mod boxplot;
 pub mod bracket;
+pub mod candlestick;
 pub mod col;
 pub mod contour;
 pub mod count;
@@ -99,6 +100,20 @@ pub trait Geom: Send + Sync {
     fn include_zero_baseline(&self) -> bool {
         false
     }
+
+    /// Whether `-Inf`/`Inf` position values are meaningful for this geom
+    /// (ggplot2: "extend to the panel edge"). Rows with infinite positions are
+    /// otherwise dropped with a warning before stats run. `NaN` is always
+    /// dropped. Default false; `geom_rect` returns true.
+    fn allows_infinite(&self) -> bool {
+        false
+    }
+
+    /// Geom-specific data preparation after the stat and position steps but
+    /// before scale training (ggplot2's `GeomX$setup_data`) — e.g. a tile adds
+    /// its `xmin`/`xmax`/`ymin`/`ymax` extents so continuous scales train on
+    /// them. Default: no-op.
+    fn setup_data(&self, _data: &mut DataFrame) {}
 }
 
 /// Format a value for a hover tooltip — strings verbatim, numbers rounded short,
@@ -128,4 +143,60 @@ pub(crate) fn continuous_bar_half_width(
     } else {
         fallback
     }
+}
+
+/// Raw (unformatted) value for a `data-value` attribute: numbers in shortest
+/// round-trip form, date-times as epoch seconds, strings verbatim. `None` for
+/// missing / non-finite values.
+pub(crate) fn raw_value(v: &crate::data::Value) -> Option<String> {
+    use crate::data::Value;
+    match v {
+        Value::Float(f) if f.is_finite() => Some(format!("{f}")),
+        Value::Float(_) | Value::Na => None,
+        Value::Integer(i) => Some(i.to_string()),
+        Value::DateTime(s) => Some(s.to_string()),
+        Value::Str(s) => Some(s.clone()),
+        Value::Bool(b) => Some(b.to_string()),
+    }
+}
+
+/// The series key of row `i` — its colour, else fill, else group level — for
+/// a `data-series` attribute.
+pub(crate) fn series_key(data: &DataFrame, i: usize) -> Option<String> {
+    ["color", "fill", "group"].iter().find_map(|c| {
+        data.column(c)
+            .and_then(|col| col.get(i))
+            .filter(|v| !v.is_na())
+            .map(tip_value)
+            .filter(|s| !s.is_empty())
+    })
+}
+
+/// The raw measured y of row `i`. Stacked/filled positions overwrite `y` with
+/// the cumulative top, so prefer the pre-position value they preserve.
+pub(crate) fn measured_value(data: &DataFrame, i: usize) -> Option<String> {
+    data.column(crate::position::RAW_Y_COL)
+        .or_else(|| data.column("y"))
+        .and_then(|c| c.get(i))
+        .and_then(raw_value)
+}
+
+/// Set all per-mark metadata (tooltip, `data-x`, `data-series`, `data-value`)
+/// for the next drawn mark(s).
+pub(crate) fn set_mark(
+    backend: &mut dyn DrawBackend,
+    tooltip: Option<String>,
+    x: Option<String>,
+    series: Option<String>,
+    value: Option<String>,
+) {
+    backend.set_tooltip(tooltip);
+    backend.set_mark_axis(x);
+    backend.set_mark_series(series);
+    backend.set_mark_value(value);
+}
+
+/// Clear all per-mark metadata after a geom has drawn its marks.
+pub(crate) fn clear_mark(backend: &mut dyn DrawBackend) {
+    set_mark(backend, None, None, None, None);
 }

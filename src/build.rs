@@ -33,7 +33,30 @@ pub struct BuiltPlot {
     pub suppressed_aes: std::collections::HashSet<Aesthetic>,
     /// Per-panel scale sets for free facets. Empty when FacetScales::Fixed.
     pub panel_scales: Vec<ScaleSet>,
+    /// Non-fatal problems found while building (ggplot2's warnings), e.g.
+    /// "geom_point: removed 2 rows containing non-finite values". See
+    /// [`BuiltPlot::warnings`].
+    pub warnings: Vec<String>,
 }
+
+impl BuiltPlot {
+    /// Non-fatal build warnings, in layer order: rows dropped for non-finite
+    /// positions, and layers skipped because their stat produced no data
+    /// (e.g. a density of a single value). Rendering still succeeds.
+    pub fn warnings(&self) -> &[String] {
+        &self.warnings
+    }
+}
+
+/// Columns holding *position* values: rows with non-finite values here are
+/// dropped before stats (and again after, for stat output).
+const POSITION_COLS: &[&str] = &[
+    "x", "y", "xmin", "xmax", "ymin", "ymax", "xend", "yend", "open", "high", "low", "close",
+];
+
+/// Columns a position scale's transformation applies to (pre-stat).
+const X_FAMILY: &[&str] = &["x", "xmin", "xmax", "xend"];
+const Y_FAMILY: &[&str] = &["y", "ymin", "ymax", "yend", "open", "high", "low", "close"];
 
 /// The grammar pipeline: transforms a GGPlot specification into render-ready data.
 pub struct PlotBuilder;
@@ -51,7 +74,13 @@ impl PlotBuilder {
             facet,
             annotations,
             guide_legend,
+            warnings: plot_warnings,
+            default_aspect_ratio,
         } = plot;
+        let mut theme = theme;
+        if theme.aspect_ratio.is_none() {
+            theme.aspect_ratio = default_aspect_ratio;
+        }
 
         // Malformed input (e.g. mismatched column lengths) is reported here as
         // a validation error instead of panicking when the frame is assembled.
@@ -70,6 +99,7 @@ impl PlotBuilder {
         }
 
         let mut built_layers = Vec::new();
+        let mut warnings: Vec<String> = plot_warnings;
 
         // Faceting variables — used to group stat computation per panel so a
         // computed stat (density/histogram) is estimated per panel, not pooled.
@@ -83,6 +113,7 @@ impl PlotBuilder {
                 &mut scale_set,
                 theme.primary,
                 &facet_vars,
+                &mut warnings,
             )?;
             built_layers.push(built);
         }
@@ -92,6 +123,19 @@ impl PlotBuilder {
             scale_set.train_layer(&bl.data);
         }
 
+        // An empty plot (no layers, or only layers without data) still gets a
+        // panel with axes: make sure both position scales exist. They stay
+        // untrained, so they draw no breaks and map everything to the centre.
+        if built_layers.iter().all(|bl| bl.data.nrows() == 0) {
+            for aes in [Aesthetic::X, Aesthetic::Y] {
+                if scale_set.get(&aes).is_none() {
+                    scale_set.add(Box::new(
+                        crate::scale::continuous::ScaleContinuous::new().for_aesthetic(aes),
+                    ));
+                }
+            }
+        }
+
         // Apply coord zoom limits (coord_cartesian xlim/ylim)
         if let Some((min, max)) = coord.zoom_x() {
             scale_set.set_limits(&Aesthetic::X, min, max);
@@ -99,6 +143,9 @@ impl PlotBuilder {
         if let Some((min, max)) = coord.zoom_y() {
             scale_set.set_limits(&Aesthetic::Y, min, max);
         }
+
+        // Let the coordinate system adjust/inspect the trained scales.
+        coord.train_scales(&mut scale_set);
 
         // Supply trained axis spans to the coordinate system (used by coord_trans).
         // pmin/pmax are the panel positions of the domain endpoints, so the coord
@@ -168,7 +215,53 @@ impl PlotBuilder {
             guide_legend,
             suppressed_aes,
             panel_scales,
+            warnings,
         })
+    }
+
+    /// Keep only the rows whose `keep` flag is set.
+    fn retain_rows(data: &mut DataFrame, keep: &[bool]) {
+        if keep.iter().all(|&k| k) {
+            return;
+        }
+        let mut result = DataFrame::new();
+        for col_name in data.column_names() {
+            if let Some(src) = data.column(col_name) {
+                let vals: Vec<_> = src
+                    .iter()
+                    .zip(keep)
+                    .filter(|(_, &k)| k)
+                    .map(|(v, _)| v.clone())
+                    .collect();
+                result.add_column(col_name.to_string(), vals);
+            }
+        }
+        *data = result;
+    }
+
+    /// Drop rows with a non-finite value in any position column (`NaN` always;
+    /// `±Inf` unless the geom gives infinities meaning). Returns the number of
+    /// rows removed.
+    fn drop_non_finite(data: &mut DataFrame, allow_infinite: bool) -> usize {
+        let n = data.nrows();
+        let mut keep = vec![true; n];
+        for col in POSITION_COLS {
+            if let Some(values) = data.column(col) {
+                for (i, v) in values.iter().enumerate() {
+                    if let crate::data::Value::Float(f) = v {
+                        let bad = f.is_nan() || (f.is_infinite() && !allow_infinite);
+                        if bad {
+                            keep[i] = false;
+                        }
+                    }
+                }
+            }
+        }
+        let removed = keep.iter().filter(|&&k| !k).count();
+        if removed > 0 {
+            Self::retain_rows(data, &keep);
+        }
+        removed
     }
 
     /// The column name(s) a facet splits on, if any.
@@ -376,6 +469,7 @@ impl PlotBuilder {
         scale_set: &mut ScaleSet,
         primary: Option<(u8, u8, u8)>,
         facet_vars: &[String],
+        warnings: &mut Vec<String>,
     ) -> Result<BuiltLayer, GGError> {
         let Layer {
             data: layer_data,
@@ -385,6 +479,7 @@ impl PlotBuilder {
             position,
             params: _,
             show_legend,
+            explicit_style,
         } = layer;
 
         // Step 1: Resolve data — use layer data if provided, else plot data
@@ -396,8 +491,9 @@ impl PlotBuilder {
         let merged_mapping = plot_mapping.merge(&layer_mapping);
 
         // Brand/primary color: apply to a single-series geom only when the layer
-        // maps neither color nor fill (an explicit aesthetic always wins).
-        if let Some(color) = primary {
+        // maps neither color nor fill (an explicit aesthetic always wins) and
+        // the geom wasn't configured explicitly via `geom_*_with(...)`.
+        if let Some(color) = primary.filter(|_| !explicit_style) {
             let has_color = merged_mapping.get_mapping(&Aesthetic::Color).is_some();
             let has_fill = merged_mapping.get_mapping(&Aesthetic::Fill).is_some();
             if !has_color && !has_fill {
@@ -423,19 +519,37 @@ impl PlotBuilder {
             scale_set.ensure_scale(&m.aesthetic, &working_data);
         }
 
-        // Step 5: Scale transformation (e.g., log10 before stats)
+        // Step 5: Scale transformation (e.g., log10 before stats). A position
+        // scale transforms every column of its family (y also ymin/ymax/…).
         for scale in scale_set.iter() {
-            let col_name = scale.aesthetic().col_name().to_string();
-            if let Some(col) = working_data.column(&col_name) {
-                let transformed: Vec<_> = col.iter().map(|v| scale.transform(v)).collect();
+            let aes = scale.aesthetic();
+            let cols: Vec<&str> = match aes {
+                Aesthetic::X => X_FAMILY.to_vec(),
+                Aesthetic::Y => Y_FAMILY.to_vec(),
+                _ => vec![aes.col_name()],
+            };
+            for col_name in cols {
+                let Some(col) = working_data.column(col_name) else {
+                    continue;
+                };
+                // A transform that is undefined for a value (log of 0 or a
+                // negative) yields NaN, so the non-finite filter below drops
+                // the row with a warning instead of drawing it at 0.
+                let transformed: Vec<_> = col
+                    .iter()
+                    .map(|v| match (scale.transform(v), v.as_f64()) {
+                        (crate::data::Value::Na, Some(_)) => crate::data::Value::Float(f64::NAN),
+                        (t, _) => t,
+                    })
+                    .collect();
                 let any_changed = transformed.iter().zip(col.iter()).any(|(t, o)| {
                     match (t.as_f64(), o.as_f64()) {
-                        (Some(a), Some(b)) => (a - b).abs() > f64::EPSILON,
+                        (Some(a), Some(b)) => a.is_nan() || (a - b).abs() > f64::EPSILON,
                         _ => false,
                     }
                 });
                 if any_changed {
-                    if let Some(col_mut) = working_data.column_mut(&col_name) {
+                    if let Some(col_mut) = working_data.column_mut(col_name) {
                         *col_mut = transformed;
                     }
                 }
@@ -444,6 +558,19 @@ impl PlotBuilder {
 
         // Step 5b: Filter out-of-bounds data (xlim/ylim filter before stats)
         Self::filter_oob_data(&mut working_data, scale_set);
+
+        // Step 5c: Drop rows whose position is NaN (or ±Inf, unless the geom
+        // reads infinities as "panel edge"), like ggplot2's
+        // "Removed n rows containing non-finite values".
+        let geom_label = format!("geom_{}", geom.name());
+        let removed = Self::drop_non_finite(&mut working_data, geom.allows_infinite());
+        if removed > 0 {
+            warnings.push(format!(
+                "{geom_label}: removed {removed} row{} containing non-finite values",
+                if removed == 1 { "" } else { "s" }
+            ));
+        }
+        let input_rows = working_data.nrows();
 
         // Step 6: Compute statistics. Group by aesthetic groups AND the facet
         // variables, so a computed stat (density/histogram/…) is estimated per
@@ -487,6 +614,47 @@ impl PlotBuilder {
 
         // Step 6a: Apply after_stat() mappings (rename stat-computed columns)
         apply_after_stat(&mut working_data, &merged_mapping);
+
+        // Stat output can contain NaN (e.g. a fit on degenerate input): drop
+        // those rows too, so nothing non-finite reaches a geom.
+        let removed = Self::drop_non_finite(&mut working_data, geom.allows_infinite());
+        if removed > 0 {
+            warnings.push(format!(
+                "{geom_label}: removed {removed} row{} containing missing values (stat_{} output)",
+                if removed == 1 { "" } else { "s" },
+                stat.name()
+            ));
+        }
+
+        // A layer with no data draws nothing — an empty input, or a stat that
+        // cannot estimate anything (a density of one value, loess on two
+        // points). It must not fail the whole plot. A stat's own required
+        // aesthetics are still validated when there *was* input.
+        if working_data.nrows() == 0 {
+            if input_rows > 0 {
+                for aes in &stat.required_aes() {
+                    let col_name = aes.col_name();
+                    if !pre_stat_columns.iter().any(|c| c == col_name) {
+                        return Err(GGError::ValidationError(format!(
+                            "stat_{} requires aesthetic '{}' but it was not provided",
+                            stat.name(),
+                            col_name
+                        )));
+                    }
+                }
+                warnings.push(format!(
+                    "{geom_label}: stat_{} produced no data from {input_rows} row{} \
+                     (too few or degenerate values); layer skipped",
+                    stat.name(),
+                    if input_rows == 1 { "" } else { "s" }
+                ));
+            }
+            return Ok(BuiltLayer {
+                data: DataFrame::new(),
+                geom,
+                show_legend,
+            });
+        }
 
         // Step 6a-validate: A required aesthetic must have been supplied by the
         // user (pre-stat) or synthesized by the stat (post-stat). This lets
@@ -533,6 +701,15 @@ impl PlotBuilder {
         // Step 7: Position adjustment
         let params = PositionParams::default();
         position.compute(&mut working_data, &params);
+
+        // Step 7b: Geom-specific setup (e.g. tile/candlestick extents), then
+        // make sure position scales exist for any extent columns it added.
+        geom.setup_data(&mut working_data);
+        for (col, aes) in &stat_aes {
+            if working_data.has_column(col) {
+                scale_set.ensure_scale(aes, &working_data);
+            }
+        }
 
         // Step 8: Train scales on this layer's data
         scale_set.train_layer(&working_data);
@@ -644,9 +821,29 @@ impl PlotBuilder {
                     }
                 }
 
-                // Retrain on this panel's data
+                // Retrain on this panel's data, including extent columns
+                // (bars/tiles/ranges), so free scales cover whole marks.
                 for layer_data in panel_layers {
                     panel_set.train_layer(layer_data);
+                    for (cols, aes) in [
+                        (["xmin", "xmax"], Aesthetic::X),
+                        (["ymin", "ymax"], Aesthetic::Y),
+                    ] {
+                        let freed = match aes {
+                            Aesthetic::X => free_x,
+                            _ => free_y,
+                        };
+                        if !freed {
+                            continue;
+                        }
+                        for c in cols {
+                            if let (Some(vals), Some(s)) =
+                                (layer_data.column(c), panel_set.get_mut(&aes))
+                            {
+                                s.train(vals);
+                            }
+                        }
+                    }
                 }
 
                 panel_set

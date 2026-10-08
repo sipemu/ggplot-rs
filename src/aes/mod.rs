@@ -25,6 +25,12 @@ pub enum Aesthetic {
     Yend,
     Angle,
     Radius,
+    /// Financial OHLC aesthetics (`geom_candlestick` / `geom_ohlc`); they
+    /// share the y position scale.
+    Open,
+    High,
+    Low,
+    Close,
 }
 
 impl Aesthetic {
@@ -50,6 +56,10 @@ impl Aesthetic {
             Aesthetic::Yend => "yend",
             Aesthetic::Angle => "angle",
             Aesthetic::Radius => "radius",
+            Aesthetic::Open => "open",
+            Aesthetic::High => "high",
+            Aesthetic::Low => "low",
+            Aesthetic::Close => "close",
         }
     }
 }
@@ -209,6 +219,22 @@ impl Aes {
     }
     pub fn linetype(self, col: &str) -> Self {
         self.push(col, Aesthetic::Linetype)
+    }
+    /// Opening price (`geom_candlestick` / `geom_ohlc`).
+    pub fn open(self, col: &str) -> Self {
+        self.push(col, Aesthetic::Open)
+    }
+    /// Period high (`geom_candlestick` / `geom_ohlc`).
+    pub fn high(self, col: &str) -> Self {
+        self.push(col, Aesthetic::High)
+    }
+    /// Period low (`geom_candlestick` / `geom_ohlc`).
+    pub fn low(self, col: &str) -> Self {
+        self.push(col, Aesthetic::Low)
+    }
+    /// Closing price (`geom_candlestick` / `geom_ohlc`).
+    pub fn close(self, col: &str) -> Self {
+        self.push(col, Aesthetic::Close)
     }
 
     // ─── after_stat() mappings ──────────────────────────────────

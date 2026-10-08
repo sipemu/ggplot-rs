@@ -80,6 +80,10 @@ impl Scale for ScaleDiscrete {
             self.levels = limits.clone();
         } else {
             for v in values {
+                // ±Inf (a rect extending to the panel edge) is not a level.
+                if matches!(v, Value::Float(f) if !f.is_finite()) {
+                    continue;
+                }
                 let key = v.key_str();
                 if !self.levels.contains(key.as_ref()) {
                     self.levels.insert(key.into_owned());
@@ -89,6 +93,11 @@ impl Scale for ScaleDiscrete {
     }
 
     fn map(&self, value: &Value) -> f64 {
+        match value {
+            Value::Float(f) if *f == f64::INFINITY => return 1.0,
+            Value::Float(f) if *f == f64::NEG_INFINITY => return 0.0,
+            _ => {}
+        }
         let key = value.key_str();
         let effective = self.effective_levels();
         let n = effective.len();

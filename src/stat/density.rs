@@ -27,14 +27,8 @@ impl Stat for StatDensity {
             return DataFrame::new();
         }
 
-        let n = values.len() as f64;
-        let mean = values.iter().sum::<f64>() / n;
-        let var = values.iter().map(|x| (x - mean).powi(2)).sum::<f64>() / (n - 1.0);
-        let sd = var.sqrt();
-
-        // Silverman's rule of thumb
-        let bandwidth = 0.9 * sd.min(iqr(&values) / 1.34) * n.powf(-0.2);
-        let bandwidth = if bandwidth > 0.0 { bandwidth } else { sd * 0.5 };
+        // R's bw.nrd0 (positive even for zero-spread data).
+        let bandwidth = super::bw_nrd0(&values);
 
         let x_min = values.iter().cloned().fold(f64::INFINITY, f64::min) - 3.0 * bandwidth;
         let x_max = values.iter().cloned().fold(f64::NEG_INFINITY, f64::max) + 3.0 * bandwidth;
@@ -161,28 +155,6 @@ fn gaussian_kernel(x: f64) -> f64 {
     (-(x * x) / 2.0).exp() / (2.0 * std::f64::consts::PI).sqrt()
 }
 
-fn iqr(values: &[f64]) -> f64 {
-    let mut sorted = values.to_vec();
-    sorted.sort_by(|a, b| a.total_cmp(b));
-    quantile_type7(&sorted, 0.75) - quantile_type7(&sorted, 0.25)
-}
-
-/// R-compatible type-7 quantile interpolation (R's default `quantile()` method).
-fn quantile_type7(sorted: &[f64], p: f64) -> f64 {
-    let n = sorted.len();
-    if n == 0 {
-        return 0.0;
-    }
-    if n == 1 {
-        return sorted[0];
-    }
-    let h = (n - 1) as f64 * p;
-    let lo = h.floor() as usize;
-    let hi = (lo + 1).min(n - 1);
-    let frac = h - lo as f64;
-    sorted[lo] + frac * (sorted[hi] - sorted[lo])
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -215,10 +187,7 @@ mod tests {
     }
 
     fn setup(values: &[f64]) -> (f64, f64, f64) {
-        let n = values.len() as f64;
-        let mean = values.iter().sum::<f64>() / n;
-        let sd = (values.iter().map(|x| (x - mean).powi(2)).sum::<f64>() / (n - 1.0)).sqrt();
-        let bw = 0.9 * sd.min(iqr(values) / 1.34) * n.powf(-0.2);
+        let bw = crate::stat::bw_nrd0(values);
         let lo = values.iter().cloned().fold(f64::INFINITY, f64::min) - 3.0 * bw;
         let hi = values.iter().cloned().fold(f64::NEG_INFINITY, f64::max) + 3.0 * bw;
         (bw, lo, (hi - lo) / 511.0)

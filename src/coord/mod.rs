@@ -2,6 +2,7 @@ pub mod cartesian;
 pub mod fixed;
 pub mod flip;
 pub mod polar;
+pub mod radar;
 #[cfg(feature = "sf")]
 pub mod sf;
 pub mod trans;
@@ -62,4 +63,15 @@ pub trait Coord: Send + Sync {
     /// that warp the axis (e.g. `coord_trans`) need this to map a normalized
     /// position back to a data value. Default is a no-op.
     fn set_domains(&mut self, _x: Option<AxisSpan>, _y: Option<AxisSpan>) {}
+
+    /// Radar coordinates: straight segments between spokes, closed paths, and
+    /// ring/spoke guides instead of cartesian axes. Default false.
+    fn is_radar(&self) -> bool {
+        false
+    }
+
+    /// Inspect / adjust the trained scales once training is complete (e.g.
+    /// `coord_radar` anchors the radius at 0 and counts its spokes). Default:
+    /// no-op.
+    fn train_scales(&mut self, _scales: &mut crate::scale::ScaleSet) {}
 }

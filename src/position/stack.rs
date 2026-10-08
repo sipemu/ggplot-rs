@@ -19,6 +19,7 @@ impl Position for PositionStack {
             Some(c) => c.to_vec(),
             None => return,
         };
+        super::preserve_raw_y(data, &y_col);
 
         // ggplot2 stacks the first group at the TOP (so the stack order top-to-
         // bottom matches the legend), so accumulate downward from each x's total

@@ -98,6 +98,9 @@ pub struct ScaleColorDiscrete {
     /// fills would otherwise be quadratic). Kept in sync with `levels`.
     level_index: HashMap<String, usize>,
     palette: Vec<RGBAColor>,
+    /// Keep levels in sorted (lexicographic) order instead of first-seen
+    /// order — see [`ScaleColorDiscrete::sorted`].
+    sorted: bool,
 }
 
 impl ScaleColorDiscrete {
@@ -108,7 +111,31 @@ impl ScaleColorDiscrete {
             levels: Vec::new(),
             level_index: HashMap::new(),
             palette: DEFAULT_PALETTE.to_vec(),
+            sorted: false,
         }
+    }
+
+    /// Order levels lexicographically (instead of first appearance) so a given
+    /// level always gets the same palette colour and legend position across
+    /// charts, whatever order the data arrives in — no need to pre-sort levels
+    /// and repeat a manual palette per chart.
+    pub fn sorted(mut self) -> Self {
+        self.sorted = true;
+        self.resort();
+        self
+    }
+
+    fn resort(&mut self) {
+        if !self.sorted {
+            return;
+        }
+        self.levels.sort();
+        self.level_index = self
+            .levels
+            .iter()
+            .enumerate()
+            .map(|(i, l)| (l.clone(), i))
+            .collect();
     }
 
     pub fn with_palette(mut self, colors: Vec<RGBAColor>) -> Self {
@@ -130,6 +157,7 @@ impl ScaleColorDiscrete {
         for l in levels {
             self.push_level(l);
         }
+        self.resort();
         self
     }
 
@@ -170,11 +198,15 @@ impl Scale for ScaleColorDiscrete {
     }
 
     fn train(&mut self, values: &[Value]) {
+        let before = self.levels.len();
         for v in values {
             let key = v.key_str();
             if !self.level_index.contains_key(key.as_ref()) {
                 self.push_level(key.into_owned());
             }
+        }
+        if self.levels.len() != before {
+            self.resort();
         }
     }
 
