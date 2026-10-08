@@ -3,6 +3,39 @@
 All notable changes to this project are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [Unreleased] — 0.17.0
+
+### Breaking changes
+
+- `Aesthetic` gained the variants `Xintercept`, `Yintercept`, `Slope` and
+  `Intercept` (exhaustive matches on `Aesthetic` need new arms).
+- `geom_hline` / `geom_vline` (constant and mapped) now train the y / x
+  position scale on their intercepts, as in ggplot2: a reference line outside
+  the data range widens the axis instead of being drawn off-panel.
+- `geom_abline` is now drawn in data space (`y = intercept + slope · x` in the
+  scales' — possibly transformed — units) and clipped to the panel; it used to
+  interpret slope/intercept in normalized panel units.
+- Reference-line geoms no longer inherit the plot-level mapping (ggplot2's
+  `inherit.aes = FALSE`): a plot-level `color` no longer leaks into
+  `geom_hline`. New `Geom::inherit_aes()` (default `true`) controls this.
+
+### Added
+
+- **Data-mapped reference lines (U1).** `Aes::{xintercept, yintercept, slope,
+  intercept}` plus `GGPlot::{geom_hline_aes, geom_vline_aes, geom_abline_aes}`
+  (and `*_aes_with(geom, aes)` for custom default styling) draw one line per
+  row of the layer data, per facet panel, coloured / linetyped by any mapped
+  `color` / `linetype` / `alpha`. Constant lines are now one-row layers, so
+  they appear in every facet panel. Lines carry `data-series` / `data-value`
+  (the intercept) and a tooltip on the native SVG path. Non-finite intercepts
+  are dropped with a warning; a numeric `xintercept` on a discrete axis sits
+  between categories (1-based, as in ggplot2) without becoming a level, and a
+  reference line added before a discrete layer no longer forces a continuous
+  scale. `GeomHline::mapped()`, `GeomVline::mapped()`, `GeomAbline::mapped()`.
+- The native SVG backend draws every `PointShape` (square, triangle, diamond,
+  `+`, `×`) instead of falling back to circles; `+`/`×` are one stroked
+  `<path>` per point, so they keep their `data-*` hover attributes.
+
 ## [0.16.0] — 2026-10-08
 
 ### Breaking changes

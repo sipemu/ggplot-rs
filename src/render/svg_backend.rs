@@ -5,7 +5,7 @@
 //! (text is `<text>` with font attributes the viewer renders).
 
 use super::backend::{
-    DrawBackend, FontFace, LineStyle, PointStyle, RectStyle, TextAnchor, TextStyle,
+    DrawBackend, FontFace, LineStyle, PointShape, PointStyle, RectStyle, TextAnchor, TextStyle,
 };
 use super::{Rect, RenderError};
 
@@ -294,6 +294,86 @@ impl DrawBackend for SvgBackend {
             finite_or(style.alpha, 1.0)
         );
         self.push_mark("circle", &attrs);
+        Ok(())
+    }
+
+    /// Native shapes: filled polygons for square/triangle/diamond, a single
+    /// stroked `<path>` for the `+` / `×` glyphs (so each point stays one
+    /// hoverable mark carrying its `data-*` attributes).
+    fn draw_shape(
+        &mut self,
+        (cx, cy): (f64, f64),
+        radius: f64,
+        style: &PointStyle,
+    ) -> Result<(), RenderError> {
+        if !(cx.is_finite() && cy.is_finite() && radius.is_finite()) {
+            return Ok(());
+        }
+        let r = radius.max(0.0);
+        let color = rgb(style.color);
+        let alpha = finite_or(style.alpha, 1.0);
+        let poly = |pts: &[(f64, f64)]| {
+            if style.filled {
+                format!(
+                    "points=\"{}\" fill=\"{color}\" fill-opacity=\"{alpha:.3}\"",
+                    points(pts)
+                )
+            } else {
+                format!(
+                    "points=\"{}\" fill=\"none\" stroke=\"{color}\" stroke-opacity=\"{alpha:.3}\"",
+                    points(pts)
+                )
+            }
+        };
+        match style.shape {
+            PointShape::Circle => return self.draw_circle((cx, cy), radius, style),
+            PointShape::Square => {
+                let a = poly(&[
+                    (cx - r, cy - r),
+                    (cx + r, cy - r),
+                    (cx + r, cy + r),
+                    (cx - r, cy + r),
+                ]);
+                self.push_mark("polygon", &a);
+            }
+            PointShape::Triangle => {
+                let a = poly(&[(cx, cy - r), (cx + r, cy + r), (cx - r, cy + r)]);
+                self.push_mark("polygon", &a);
+            }
+            PointShape::Diamond => {
+                let a = poly(&[(cx, cy - r), (cx + r, cy), (cx, cy + r), (cx - r, cy)]);
+                self.push_mark("polygon", &a);
+            }
+            PointShape::Plus | PointShape::Cross => {
+                let d = if style.shape == PointShape::Plus {
+                    format!(
+                        "M{:.2} {cy:.2}H{:.2}M{cx:.2} {:.2}V{:.2}",
+                        cx - r,
+                        cx + r,
+                        cy - r,
+                        cy + r
+                    )
+                } else {
+                    format!(
+                        "M{:.2} {:.2}L{:.2} {:.2}M{:.2} {:.2}L{:.2} {:.2}",
+                        cx - r,
+                        cy - r,
+                        cx + r,
+                        cy + r,
+                        cx - r,
+                        cy + r,
+                        cx + r,
+                        cy - r
+                    )
+                };
+                let a = format!(
+                    "d=\"{d}\" fill=\"none\" stroke=\"{color}\" stroke-width=\"{:.2}\" \
+                     stroke-opacity=\"{alpha:.3}\"",
+                    (r / 2.5).clamp(1.0, 3.0)
+                );
+                self.push_mark("path", &a);
+            }
+        }
         Ok(())
     }
 

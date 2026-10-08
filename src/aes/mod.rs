@@ -31,6 +31,13 @@ pub enum Aesthetic {
     High,
     Low,
     Close,
+    /// Reference-line aesthetics (`geom_hline` / `geom_vline` /
+    /// `geom_abline`). `xintercept`/`yintercept` share (and train) the x / y
+    /// position scale, as in ggplot2; `slope`/`intercept` get no scale.
+    Xintercept,
+    Yintercept,
+    Slope,
+    Intercept,
 }
 
 impl Aesthetic {
@@ -60,6 +67,10 @@ impl Aesthetic {
             Aesthetic::High => "high",
             Aesthetic::Low => "low",
             Aesthetic::Close => "close",
+            Aesthetic::Xintercept => "xintercept",
+            Aesthetic::Yintercept => "yintercept",
+            Aesthetic::Slope => "slope",
+            Aesthetic::Intercept => "intercept",
         }
     }
 }
@@ -235,6 +246,22 @@ impl Aes {
     /// Closing price (`geom_candlestick` / `geom_ohlc`).
     pub fn close(self, col: &str) -> Self {
         self.push(col, Aesthetic::Close)
+    }
+    /// Data-mapped `geom_vline` position (one line per row).
+    pub fn xintercept(self, col: &str) -> Self {
+        self.push(col, Aesthetic::Xintercept)
+    }
+    /// Data-mapped `geom_hline` position (one line per row).
+    pub fn yintercept(self, col: &str) -> Self {
+        self.push(col, Aesthetic::Yintercept)
+    }
+    /// Data-mapped `geom_abline` slope (one line per row).
+    pub fn slope(self, col: &str) -> Self {
+        self.push(col, Aesthetic::Slope)
+    }
+    /// Data-mapped `geom_abline` intercept (one line per row).
+    pub fn intercept(self, col: &str) -> Self {
+        self.push(col, Aesthetic::Intercept)
     }
 
     // ─── after_stat() mappings ──────────────────────────────────

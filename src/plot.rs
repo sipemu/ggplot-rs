@@ -194,31 +194,134 @@ impl GGPlot {
         self.add_geom_with(geom)
     }
 
+    /// Horizontal reference line at a constant `yintercept`. Like ggplot2 the
+    /// intercept trains the y scale (the line is always visible) and the line
+    /// appears in every facet panel.
     pub fn geom_hline(self, yintercept: f64) -> Self {
-        self.add_geom(GeomHline::new(yintercept))
+        self.add_refline(
+            GeomHline::new(yintercept),
+            false,
+            &[("yintercept", yintercept)],
+        )
     }
 
     /// Add a horizontal reference line with custom styling (color/linetype/width).
     pub fn geom_hline_with(self, geom: GeomHline) -> Self {
-        self.add_geom_with(geom)
+        let y = geom.yintercept;
+        self.add_refline(geom, true, &[("yintercept", y)])
     }
 
+    /// Data-mapped horizontal lines (ggplot2's `geom_hline(aes(yintercept =
+    /// …))`): one line per row of the layer data (the plot data unless
+    /// [`layer_data`](Self::layer_data) follows), per facet panel, styled by
+    /// any `color`/`linetype`/`alpha` in `mapping`. The plot-level mapping is
+    /// not inherited.
+    ///
+    /// ```
+    /// # use ggplot_rs::prelude::*;
+    /// let thresholds: Vec<(String, Vec<Value>)> = vec![
+    ///     ("bound".into(), vec![Value::Float(-0.2), Value::Float(0.2)]),
+    /// ];
+    /// let svg = GGPlot::new(vec![
+    ///         ("lag".to_string(), vec![Value::Float(1.0), Value::Float(2.0)]),
+    ///         ("acf".to_string(), vec![Value::Float(0.5), Value::Float(0.1)]),
+    ///     ])
+    ///     .aes(Aes::new().x("lag").y("acf"))
+    ///     .geom_col()
+    ///     .geom_hline_aes(Aes::new().yintercept("bound"))
+    ///     .layer_data(thresholds)
+    ///     .render_svg_native()
+    ///     .unwrap();
+    /// assert!(svg.contains("data-value=\"0.2\""));
+    /// ```
+    pub fn geom_hline_aes(self, mapping: Aes) -> Self {
+        self.add_geom(GeomHline::mapped()).layer_aes(mapping)
+    }
+
+    /// [`geom_hline_aes`](Self::geom_hline_aes) with custom default styling.
+    pub fn geom_hline_aes_with(self, geom: GeomHline, mapping: Aes) -> Self {
+        self.add_geom_with(geom).layer_aes(mapping)
+    }
+
+    /// Vertical reference line at a constant `xintercept` (trains the x
+    /// scale, appears in every panel).
     pub fn geom_vline(self, xintercept: f64) -> Self {
-        self.add_geom(GeomVline::new(xintercept))
+        self.add_refline(
+            GeomVline::new(xintercept),
+            false,
+            &[("xintercept", xintercept)],
+        )
     }
 
     /// Add a vertical reference line with custom styling (color/linetype/width).
     pub fn geom_vline_with(self, geom: GeomVline) -> Self {
-        self.add_geom_with(geom)
+        let x = geom.xintercept;
+        self.add_refline(geom, true, &[("xintercept", x)])
     }
 
+    /// Data-mapped vertical lines (`aes(xintercept = …)`), one per row; see
+    /// [`geom_hline_aes`](Self::geom_hline_aes).
+    pub fn geom_vline_aes(self, mapping: Aes) -> Self {
+        self.add_geom(GeomVline::mapped()).layer_aes(mapping)
+    }
+
+    /// [`geom_vline_aes`](Self::geom_vline_aes) with custom default styling.
+    pub fn geom_vline_aes_with(self, geom: GeomVline, mapping: Aes) -> Self {
+        self.add_geom_with(geom).layer_aes(mapping)
+    }
+
+    /// Line `y = intercept + slope · x` in data space, clipped to the panel.
+    /// It does not train any scale (as in ggplot2).
     pub fn geom_abline(self, slope: f64, intercept: f64) -> Self {
-        self.add_geom(GeomAbline::new(slope, intercept))
+        self.add_refline(
+            GeomAbline::new(slope, intercept),
+            false,
+            &[("slope", slope), ("intercept", intercept)],
+        )
     }
 
     /// Add a slope/intercept reference line with custom styling.
     pub fn geom_abline_with(self, geom: GeomAbline) -> Self {
-        self.add_geom_with(geom)
+        let (b, a) = (geom.slope, geom.intercept);
+        self.add_refline(geom, true, &[("slope", b), ("intercept", a)])
+    }
+
+    /// Data-mapped ablines (`aes(slope = …, intercept = …)`), one per row; a
+    /// missing aesthetic defaults to slope 1 / intercept 0.
+    pub fn geom_abline_aes(self, mapping: Aes) -> Self {
+        self.add_geom(GeomAbline::mapped()).layer_aes(mapping)
+    }
+
+    /// [`geom_abline_aes`](Self::geom_abline_aes) with custom default styling.
+    pub fn geom_abline_aes_with(self, geom: GeomAbline, mapping: Aes) -> Self {
+        self.add_geom_with(geom).layer_aes(mapping)
+    }
+
+    /// A constant reference line as ggplot2 builds it: a one-row layer frame
+    /// holding the constants, mapped to their aesthetics.
+    fn add_refline(
+        self,
+        geom: impl Geom + 'static,
+        explicit: bool,
+        values: &[(&str, f64)],
+    ) -> Self {
+        let mut data = DataFrame::new();
+        let mut mapping = Aes::new();
+        for (col, v) in values {
+            data.add_column(col.to_string(), vec![Value::Float(*v)]);
+            mapping = match *col {
+                "xintercept" => mapping.xintercept(col),
+                "yintercept" => mapping.yintercept(col),
+                "slope" => mapping.slope(col),
+                _ => mapping.intercept(col),
+            };
+        }
+        let plot = if explicit {
+            self.add_geom_with(geom)
+        } else {
+            self.add_geom(geom)
+        };
+        plot.layer_aes(mapping).layer_data(data)
     }
 
     pub fn geom_text(self) -> Self {
