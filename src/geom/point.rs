@@ -38,100 +38,18 @@ impl Geom for GeomPoint {
         _theme: &Theme,
         backend: &mut dyn DrawBackend,
     ) -> Result<(), RenderError> {
-        let x_col = data
-            .column("x")
-            .ok_or(RenderError::MissingAesthetic("x".into()))?;
-        let y_col = data
-            .column("y")
-            .ok_or(RenderError::MissingAesthetic("y".into()))?;
-        let color_col = data.column("color");
-        let size_col = data.column("size");
-        let alpha_col = data.column("alpha");
-        let shape_col = data.column("shape");
-        let label_col = data.column("label");
-
-        let plot_area = backend.plot_area();
-        let x_scale = scales.get(&Aesthetic::X);
-        let y_scale = scales.get(&Aesthetic::Y);
-
-        for i in 0..data.nrows() {
-            // Drop missing values (ggplot2 removes rows with NA x/y). Without this
-            // an NA maps to 0.0 and paints a spurious point at the panel baseline.
-            if matches!(x_col[i], crate::data::Value::Na)
-                || matches!(y_col[i], crate::data::Value::Na)
-            {
-                continue;
-            }
-            let nx = x_scale.map(|s| s.map(&x_col[i])).unwrap_or(0.0);
-            let ny = y_scale.map(|s| s.map(&y_col[i])).unwrap_or(0.0);
-            let (px, py) = coord.transform((nx, ny), &plot_area);
-
-            // Hover tooltip: an explicit `label` with its y value ("series: 22"),
-            // else "(x, y)" prefixed by group.
-            let tip = match label_col
-                .map(|c| super::tip_value(&c[i]))
-                .filter(|s| !s.is_empty())
-            {
-                Some(l) => Some(format!("{l}: {}", super::tip_value(&y_col[i]))),
-                None => {
-                    let xy = format!(
-                        "({}, {})",
-                        super::tip_value(&x_col[i]),
-                        super::tip_value(&y_col[i])
-                    );
-                    match color_col
-                        .map(|c| super::tip_value(&c[i]))
-                        .filter(|s| !s.is_empty())
-                    {
-                        Some(gr) => Some(format!("{gr}: {xy}")),
-                        None => Some(xy),
-                    }
-                }
-            };
-            super::set_mark(
-                backend,
-                tip,
-                Some(super::tip_value(&x_col[i])),
-                super::series_key(data, i),
-                super::measured_value(data, i),
-            );
-
-            let (r, g, b) = if let Some(cc) = color_col {
-                scales
-                    .map_color(&Aesthetic::Color, &cc[i])
-                    .unwrap_or(self.color)
-            } else {
-                self.color
-            };
-
-            let alpha = alpha_col
-                .and_then(|c| scales.map_alpha(&c[i]))
-                .or_else(|| alpha_col.and_then(|c| c[i].as_f64()))
-                .unwrap_or(self.alpha);
-
-            let size = size_col
-                .and_then(|c| scales.map_size(&c[i]))
-                .or_else(|| size_col.and_then(|c| c[i].as_f64()))
-                .unwrap_or(self.size);
-
-            let shape = shape_col
-                .and_then(|c| scales.map_shape(&c[i]))
-                .unwrap_or(PointShape::Circle);
-
-            backend.draw_shape(
-                (px, py),
-                size,
-                &PointStyle {
-                    color: (r, g, b),
-                    alpha,
-                    filled: true,
-                    shape,
-                },
-            )?;
-        }
-        super::clear_mark(backend);
-
-        Ok(())
+        draw_points(
+            data,
+            coord,
+            scales,
+            backend,
+            PointDefaults {
+                size: self.size,
+                color: self.color,
+                alpha: self.alpha,
+                shape: PointShape::Circle,
+            },
+        )
     }
 
     fn required_aes(&self) -> Vec<Aesthetic> {
@@ -157,4 +75,117 @@ impl Geom for GeomPoint {
     fn set_series_color(&mut self, color: (u8, u8, u8)) {
         self.color = color;
     }
+}
+
+/// Unmapped defaults for [`draw_points`].
+pub(crate) struct PointDefaults {
+    pub size: f64,
+    pub color: (u8, u8, u8),
+    pub alpha: f64,
+    pub shape: PointShape,
+}
+
+/// Draw one point per row (shared by `geom_point` and censor marks):
+/// mapped `color`/`size`/`alpha`/`shape` win over `defaults`; the x position
+/// honours a dodge offset; every point carries hover metadata.
+pub(crate) fn draw_points(
+    data: &DataFrame,
+    coord: &dyn Coord,
+    scales: &ScaleSet,
+    backend: &mut dyn DrawBackend,
+    defaults: PointDefaults,
+) -> Result<(), RenderError> {
+    let x_col = data
+        .column("x")
+        .ok_or(RenderError::MissingAesthetic("x".into()))?;
+    let y_col = data
+        .column("y")
+        .ok_or(RenderError::MissingAesthetic("y".into()))?;
+    let color_col = data.column("color");
+    let size_col = data.column("size");
+    let alpha_col = data.column("alpha");
+    let shape_col = data.column("shape");
+    let label_col = data.column("label");
+
+    let plot_area = backend.plot_area();
+    let xm = super::support::XMapper::new(data, scales);
+    let y_scale = scales.get(&Aesthetic::Y);
+
+    for i in 0..data.nrows() {
+        // Drop missing values (ggplot2 removes rows with NA x/y). Without this
+        // an NA maps to 0.0 and paints a spurious point at the panel baseline.
+        if matches!(x_col[i], crate::data::Value::Na) || matches!(y_col[i], crate::data::Value::Na)
+        {
+            continue;
+        }
+        let nx = xm.map(&x_col[i], i);
+        let ny = y_scale.map(|s| s.map(&y_col[i])).unwrap_or(0.0);
+        let (px, py) = coord.transform((nx, ny), &plot_area);
+
+        // Hover tooltip: an explicit `label` with its y value ("series: 22"),
+        // else "(x, y)" prefixed by group.
+        let tip = match label_col
+            .map(|c| super::tip_value(&c[i]))
+            .filter(|s| !s.is_empty())
+        {
+            Some(l) => Some(format!("{l}: {}", super::tip_value(&y_col[i]))),
+            None => {
+                let xy = format!(
+                    "({}, {})",
+                    super::tip_value(&x_col[i]),
+                    super::tip_value(&y_col[i])
+                );
+                match color_col
+                    .map(|c| super::tip_value(&c[i]))
+                    .filter(|s| !s.is_empty())
+                {
+                    Some(gr) => Some(format!("{gr}: {xy}")),
+                    None => Some(xy),
+                }
+            }
+        };
+        super::set_mark(
+            backend,
+            tip,
+            Some(super::tip_value(&x_col[i])),
+            super::series_key(data, i),
+            super::measured_value(data, i),
+        );
+
+        let (r, g, b) = if let Some(cc) = color_col {
+            scales
+                .map_color(&Aesthetic::Color, &cc[i])
+                .unwrap_or(defaults.color)
+        } else {
+            defaults.color
+        };
+
+        let alpha = alpha_col
+            .and_then(|c| scales.map_alpha(&c[i]))
+            .or_else(|| alpha_col.and_then(|c| c[i].as_f64()))
+            .unwrap_or(defaults.alpha);
+
+        let size = size_col
+            .and_then(|c| scales.map_size(&c[i]))
+            .or_else(|| size_col.and_then(|c| c[i].as_f64()))
+            .unwrap_or(defaults.size);
+
+        let shape = shape_col
+            .and_then(|c| scales.map_shape(&c[i]))
+            .unwrap_or(defaults.shape);
+
+        backend.draw_shape(
+            (px, py),
+            size,
+            &PointStyle {
+                color: (r, g, b),
+                alpha,
+                filled: true,
+                shape,
+            },
+        )?;
+    }
+    super::clear_mark(backend);
+
+    Ok(())
 }

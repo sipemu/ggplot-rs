@@ -21,7 +21,11 @@ impl Stat for StatEcdf {
             None => return DataFrame::new(),
         };
 
-        let mut values: Vec<f64> = x_col.iter().filter_map(|v| v.as_f64()).collect();
+        let mut values: Vec<f64> = x_col
+            .iter()
+            .filter_map(|v| v.as_f64())
+            .filter(|v| v.is_finite())
+            .collect();
         if values.is_empty() {
             return DataFrame::new();
         }
@@ -67,5 +71,88 @@ impl Stat for StatEcdf {
 
     fn name(&self) -> &str {
         "ecdf"
+    }
+}
+
+/// ECDF with a simultaneous Dvoretzky–Kiefer–Wolfowitz confidence band:
+/// `F̂(x) ± ε`, `ε = √(ln(2 / (1 − level)) / (2n))`, clamped to `[0, 1]`.
+/// Output `x` (±Inf padded, as [`StatEcdf`]), `y`, `ymin`, `ymax` — draw it
+/// with `geom_stepribbon` (see `GGPlot::stat_ecdf_band`).
+#[derive(Clone, Debug)]
+pub struct StatEcdfBand {
+    /// Confidence level (default 0.95).
+    pub level: f64,
+}
+
+impl Default for StatEcdfBand {
+    fn default() -> Self {
+        StatEcdfBand { level: 0.95 }
+    }
+}
+
+impl StatEcdfBand {
+    pub fn new(level: f64) -> Self {
+        StatEcdfBand { level }
+    }
+
+    /// The DKW half-width `ε` for `n` observations at this level.
+    pub fn epsilon(&self, n: usize) -> f64 {
+        ((2.0 / (1.0 - self.level)).ln() / (2.0 * n as f64)).sqrt()
+    }
+}
+
+impl Stat for StatEcdfBand {
+    fn compute_group(&self, data: &DataFrame, scales: &ScaleSet) -> DataFrame {
+        if !(self.level > 0.0 && self.level < 1.0) {
+            return DataFrame::new();
+        }
+        // Only finite x count towards n (±Inf / NaN input rows are dropped).
+        let finite: Vec<Value> = data
+            .column("x")
+            .map(|c| {
+                c.iter()
+                    .filter(|v| v.as_f64().is_some_and(f64::is_finite))
+                    .cloned()
+                    .collect()
+            })
+            .unwrap_or_default();
+        let n = finite.len();
+        if n == 0 {
+            return DataFrame::new();
+        }
+        let mut input = DataFrame::new();
+        input.add_column("x".into(), finite);
+        for col in ["color", "fill", "group"] {
+            if let Some(first) = data.column(col).and_then(|c| c.first()) {
+                input.add_column(col.into(), vec![first.clone(); n]);
+            }
+        }
+        let mut out = StatEcdf.compute_group(&input, scales);
+        let eps = self.epsilon(n);
+        let y: Vec<f64> = out
+            .column("y")
+            .map(|c| c.iter().filter_map(|v| v.as_f64()).collect())
+            .unwrap_or_default();
+        out.add_column(
+            "ymin".into(),
+            y.iter()
+                .map(|&v| Value::Float((v - eps).max(0.0)))
+                .collect(),
+        );
+        out.add_column(
+            "ymax".into(),
+            y.iter()
+                .map(|&v| Value::Float((v + eps).min(1.0)))
+                .collect(),
+        );
+        out
+    }
+
+    fn required_aes(&self) -> Vec<Aesthetic> {
+        vec![Aesthetic::X]
+    }
+
+    fn name(&self) -> &str {
+        "ecdf_band"
     }
 }

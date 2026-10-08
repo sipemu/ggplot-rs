@@ -71,6 +71,7 @@ w(bands, "qq_band.csv")
 # ---- ECDF + DKW band ---------------------------------------------------------
 x <- qq_input$resid
 ld <- layer_data(ggplot(data.frame(x = x), aes(x)) + stat_ecdf())
+ld <- ld[order(ld$x), ]
 eps <- sqrt(log(2 / 0.05) / (2 * length(x)))
 ecdf_band <- data.frame(x = ld$x, y = ld$y,
                         ymin = pmax(ld$y - eps, 0), ymax = pmin(ld$y + eps, 1))

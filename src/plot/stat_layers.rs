@@ -5,8 +5,13 @@
 
 use super::GGPlot;
 use crate::data::{DataFrame, Value};
+use crate::geom::censor::{GeomCensorMarks, StatCensored};
 use crate::geom::cooks::GeomCooksContour;
+use crate::geom::errorbarh::GeomErrorbarh;
 use crate::geom::qq::{GeomQQ, GeomQQBand, GeomQQLine};
+use crate::geom::ribbon::GeomStepribbon;
+use crate::geom::step::GeomStep;
+use crate::stat::ecdf::{StatEcdf, StatEcdfBand};
 use crate::stat::qq::{QQDistribution, StatQQBand, StatQQDist, StatQQLineDist};
 
 impl GGPlot {
@@ -74,5 +79,54 @@ impl GGPlot {
         let mut data = DataFrame::new();
         data.add_column(".cooks".into(), vec![Value::Float(0.0)]);
         self.add_geom_with(geom).layer_data(data)
+    }
+
+    /// Step ribbon between `ymin` and `ymax` (pammtools' `geom_stepribbon`,
+    /// `direction = "hv"`): the confidence band of a Kaplan–Meier curve.
+    pub fn geom_stepribbon(self) -> Self {
+        self.add_geom(GeomStepribbon::default())
+    }
+
+    /// Step ribbon with custom fill / alpha / direction (`Hv`, `Vh`, `Mid`).
+    pub fn geom_stepribbon_with(self, geom: GeomStepribbon) -> Self {
+        self.add_geom_with(geom)
+    }
+
+    /// Empirical CDF of `x` as a step line (ggplot2's `stat_ecdf()`), one
+    /// per group, padded to the panel edges.
+    pub fn stat_ecdf(self) -> Self {
+        self.add_geom(GeomStep::default()).stat(StatEcdf)
+    }
+
+    /// Simultaneous DKW confidence band for the ECDF of `x` at `level`
+    /// (`F̂ ± √(ln(2/(1−level))/(2n))`, clamped to [0, 1]) as a step ribbon.
+    /// Add it before [`stat_ecdf`](Self::stat_ecdf) so the line is on top.
+    pub fn stat_ecdf_band(self, level: f64) -> Self {
+        self.add_geom(GeomStepribbon::default())
+            .stat(StatEcdfBand::new(level))
+    }
+
+    /// Censor marks (`+`) at the rows whose `censor_col` is `> 0` / `true`,
+    /// at the layer's `x` (time) and `y` (survival) — e.g. a Kaplan–Meier
+    /// table with an `n_censor` column. Coloured like the curves when the
+    /// plot maps `color`.
+    pub fn geom_censor_marks(self, censor_col: &str) -> Self {
+        self.add_geom(GeomCensorMarks::default())
+            .stat(StatCensored::new(censor_col))
+    }
+
+    /// Censor marks with custom size / colour / shape.
+    pub fn geom_censor_marks_with(self, geom: GeomCensorMarks, censor_col: &str) -> Self {
+        self.add_geom_with(geom).stat(StatCensored::new(censor_col))
+    }
+
+    /// Horizontal error bars from `xmin` to `xmax` at `y`.
+    pub fn geom_errorbarh(self) -> Self {
+        self.add_geom(GeomErrorbarh::default())
+    }
+
+    /// Horizontal error bars with custom styling.
+    pub fn geom_errorbarh_with(self, geom: GeomErrorbarh) -> Self {
+        self.add_geom_with(geom)
     }
 }

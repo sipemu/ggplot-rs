@@ -15,6 +15,7 @@ All notable changes to this project are documented here. The format follows
 - `geom_abline` is now drawn in data space (`y = intercept + slope · x` in the
   scales' — possibly transformed — units) and clipped to the panel; it used to
   interpret slope/intercept in normalized panel units.
+- `StepDirection` gained the variant `Mid`.
 - Reference-line geoms no longer inherit the plot-level mapping (ggplot2's
   `inherit.aes = FALSE`): a plot-level `color` no longer leaks into
   `geom_hline`. New `Geom::inherit_aes()` (default `true`) controls this.
@@ -57,6 +58,18 @@ All notable changes to this project are documented here. The format follows
   to `with_h_range(lo, hi)`; they train no scale. Helpers
   `geom::cooks::{cooks_contour_y, cooks_distance}`. Checked against R
   (`tests/cooks_contour_r.rs`).
+- **Kaplan–Meier / ECDF / horizontal-CI building blocks (U7).**
+  `GeomStepribbon` (`geom_stepribbon()`, `geom_stepribbon_with(geom)`; step
+  edges with `StepDirection::{Hv, Vh, Mid}`, ±Inf x to the panel edge) for KM
+  confidence bands; censor marks `geom_censor_marks(censor_col)` /
+  `GeomCensorMarks` + `StatCensored` (`+` glyphs at rows whose column is
+  `> 0` / `true`); `stat_ecdf()` and `stat_ecdf_band(level)` / `StatEcdfBand`
+  (simultaneous DKW band `F̂ ± √(ln(2/(1−level))/(2n))`, validated against R);
+  `geom_errorbarh()` / `GeomErrorbarh` (`xmin`/`xmax`/`y`, one hoverable
+  polyline per interval with `data-value="xmin xmax"`).
+- `geom_step` draws one step line per group (colour / group / linetype) with
+  mapped linetype and `data-series`, and gains `StepDirection::Mid`
+  (ggplot2's `"mid"`). `stat_ecdf` ignores non-finite input values.
 - `ggplot_rs::stat::distribution`: dependency-free `qnorm` (AS 241), `dnorm`,
   `pt` / `qt` / `dt` (any `p`, any `df`) and `ln_gamma`, available in every
   feature configuration (the existing `stat::dist::qt` still returns the
