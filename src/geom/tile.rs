@@ -116,7 +116,13 @@ impl Geom for GeomTile {
                 Some(v) => format!("{xs}, {ys}: {v}"),
                 None => format!("{xs}, {ys}"),
             };
-            backend.set_tooltip(Some(tip));
+            super::set_mark(
+                backend,
+                Some(tip),
+                Some(xs),
+                Some(ys),
+                fill_col.and_then(|c| super::raw_value(&c[i])),
+            );
 
             backend.draw_rect(
                 (left, top.min(bottom)),
@@ -130,7 +136,7 @@ impl Geom for GeomTile {
                 },
             )?;
         }
-        backend.set_tooltip(None);
+        super::clear_mark(backend);
 
         Ok(())
     }

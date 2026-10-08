@@ -39,14 +39,8 @@ impl Stat for StatYDensity {
             .unwrap_or(Value::Float(0.0));
 
         let n = values.len() as f64;
-        let mean = values.iter().sum::<f64>() / n;
-        let var = values.iter().map(|y| (y - mean).powi(2)).sum::<f64>() / (n - 1.0);
-        let sd = var.sqrt();
-
-        // Silverman's rule of thumb
-        let iqr_val = iqr(&values);
-        let bandwidth = 0.9 * sd.min(iqr_val / 1.34) * n.powf(-0.2);
-        let bandwidth = if bandwidth > 0.0 { bandwidth } else { sd * 0.5 };
+        // R's bw.nrd0 (positive even for zero-spread data).
+        let bandwidth = super::bw_nrd0(&values);
 
         // ggplot2's geom_violin defaults to trim = TRUE: evaluate the density
         // over the observed data range, not extended by ±3 bandwidths.
@@ -116,28 +110,6 @@ impl Stat for StatYDensity {
 
 fn gaussian_kernel(x: f64) -> f64 {
     (-(x * x) / 2.0).exp() / (2.0 * std::f64::consts::PI).sqrt()
-}
-
-fn iqr(values: &[f64]) -> f64 {
-    let mut sorted = values.to_vec();
-    sorted.sort_by(|a, b| a.total_cmp(b));
-    quantile_type7(&sorted, 0.75) - quantile_type7(&sorted, 0.25)
-}
-
-/// R-compatible type-7 quantile interpolation (R's default `quantile()` method).
-fn quantile_type7(sorted: &[f64], p: f64) -> f64 {
-    let n = sorted.len();
-    if n == 0 {
-        return 0.0;
-    }
-    if n == 1 {
-        return sorted[0];
-    }
-    let h = (n - 1) as f64 * p;
-    let lo = h.floor() as usize;
-    let hi = (lo + 1).min(n - 1);
-    let frac = h - lo as f64;
-    sorted[lo] + frac * (sorted[hi] - sorted[lo])
 }
 
 #[cfg(test)]

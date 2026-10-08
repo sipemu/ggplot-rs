@@ -108,7 +108,9 @@ impl PlotRenderer {
         }
 
         // 5. Draw each layer's geometry
-        for layer in &built.layers {
+        // A layer whose data is empty (no input rows, or a stat that produced
+        // nothing) simply draws nothing.
+        for layer in built.layers.iter().filter(|l| l.data.nrows() > 0) {
             layer.geom.draw(
                 &layer.data,
                 built.coord.as_ref(),
@@ -803,6 +805,18 @@ impl<'a> DrawBackend for PanelBackendAdapter<'a> {
     }
     fn plot_area(&self) -> crate::render::Rect {
         self.panel_rect.clone()
+    }
+    fn set_tooltip(&mut self, tooltip: Option<String>) {
+        self.inner.set_tooltip(tooltip)
+    }
+    fn set_mark_axis(&mut self, key: Option<String>) {
+        self.inner.set_mark_axis(key)
+    }
+    fn set_mark_series(&mut self, series: Option<String>) {
+        self.inner.set_mark_series(series)
+    }
+    fn set_mark_value(&mut self, value: Option<String>) {
+        self.inner.set_mark_value(value)
     }
     fn total_area(&self) -> crate::render::Rect {
         self.inner.total_area()

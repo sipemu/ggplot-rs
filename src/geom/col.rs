@@ -142,16 +142,26 @@ impl Geom for GeomCol {
                     .as_f64()
                     .map(|f| format!("{}", (f * 1000.0).round() / 1000.0)),
             });
-            let yval = y_col[i]
-                .as_f64()
+            // The tooltip reports the measured value — for stacked/filled bars
+            // the segment's own value, not the cumulative stack top.
+            let raw = super::measured_value(data, i);
+            let yval = raw
+                .as_deref()
+                .and_then(|r| r.parse::<f64>().ok())
                 .map(|f| format!("{}", (f * 1000.0).round() / 1000.0));
-            backend.set_tooltip(match (label, yval) {
+            let tip = match (label, yval) {
                 (Some(l), Some(y)) => Some(format!("{l}: {y}")),
                 (Some(l), None) => Some(l),
                 (None, Some(y)) => Some(y),
                 (None, None) => None,
-            });
-            backend.set_mark_axis(Some(super::tip_value(&x_col[i])));
+            };
+            super::set_mark(
+                backend,
+                tip,
+                Some(super::tip_value(&x_col[i])),
+                super::series_key(data, i),
+                raw,
+            );
 
             if coord.is_polar() {
                 // A bar becomes a radial sector: tessellate the outer arc
@@ -176,8 +186,7 @@ impl Geom for GeomCol {
                 )?;
             }
         }
-        backend.set_tooltip(None);
-        backend.set_mark_axis(None);
+        super::clear_mark(backend);
 
         Ok(())
     }

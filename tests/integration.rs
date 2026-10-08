@@ -102,15 +102,18 @@ fn cols(pairs: &[(&str, &[f64])]) -> Vec<(String, Vec<Value>)> {
 }
 
 #[test]
-fn empty_input_errs_without_panicking() {
-    // A stateless renderer may be handed an empty result set; it must return an
-    // Err (reaching this assertion at all proves it did not panic).
+fn empty_input_renders_empty_panel_without_panicking() {
+    // A stateless renderer may be handed an empty result set; it must not panic
+    // and (like ggplot2) draws an empty panel instead of failing.
     let empty = cols(&[("x", &[]), ("y", &[])]);
     let r = GGPlot::new(empty)
         .aes(Aes::new().x("x").y("y"))
         .geom_point()
         .render_svg();
-    assert!(r.is_err(), "empty data should error, got {r:?}");
+    assert!(
+        r.is_ok(),
+        "empty data should render an empty panel, got {r:?}"
+    );
 }
 
 #[test]

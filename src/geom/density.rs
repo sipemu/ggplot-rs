@@ -153,8 +153,13 @@ impl Geom for GeomDensity {
                 } else {
                     format!("{group_label}: {dens}")
                 };
-                backend.set_tooltip(Some(tip));
-                backend.set_mark_axis(Some(super::tip_value(&x_col[i])));
+                super::set_mark(
+                    backend,
+                    Some(tip),
+                    Some(super::tip_value(&x_col[i])),
+                    super::series_key(data, i),
+                    super::measured_value(data, i),
+                );
                 backend.draw_shape(
                     upper[k],
                     0.6,
@@ -166,8 +171,7 @@ impl Geom for GeomDensity {
                     },
                 )?;
             }
-            backend.set_tooltip(None);
-            backend.set_mark_axis(None);
+            super::clear_mark(backend);
         }
 
         Ok(())

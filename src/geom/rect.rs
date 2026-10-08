@@ -115,4 +115,10 @@ impl Geom for GeomRect {
     fn set_series_color(&mut self, color: (u8, u8, u8)) {
         self.fill = color;
     }
+
+    /// `-Inf`/`Inf` bounds extend the rect to the panel edge (ggplot2), e.g.
+    /// a full-height shaded x-region: `ymin = -Inf, ymax = Inf`.
+    fn allows_infinite(&self) -> bool {
+        true
+    }
 }

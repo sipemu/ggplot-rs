@@ -69,7 +69,8 @@ impl Geom for GeomLine {
                     .map_color(&Aesthetic::Color, &cc[first_idx])
                     .unwrap_or(self.color);
                 // Tag each line with its series (for hover + linked highlighting).
-                backend.set_tooltip(Some(super::tip_value(&cc[first_idx])));
+                let series = Some(super::tip_value(&cc[first_idx]));
+                super::set_mark(backend, series.clone(), None, series, None);
 
                 let lt = linetype_col
                     .and_then(|lc| scales.map_linetype(&lc[first_idx]))
@@ -104,7 +105,7 @@ impl Geom for GeomLine {
                     )?;
                 }
             }
-            backend.set_tooltip(None);
+            super::clear_mark(backend);
         } else {
             let lt = linetype_col
                 .and_then(|lc| {

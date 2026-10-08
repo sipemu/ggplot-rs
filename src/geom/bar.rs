@@ -97,6 +97,15 @@ impl Geom for GeomBar {
                 clip: !coord.is_polar(),
             };
 
+            // Hover: "<series>: <count>" with data-x / data-series / data-value.
+            let raw = super::measured_value(data, i);
+            let series = super::series_key(data, i);
+            let tip = raw.as_ref().map(|v| match &series {
+                Some(s) => format!("{s}: {v}"),
+                None => v.clone(),
+            });
+            super::set_mark(backend, tip, Some(super::tip_value(&x_col[i])), series, raw);
+
             if coord.is_polar() {
                 let points = super::col::polar_sector(
                     coord,
@@ -117,6 +126,7 @@ impl Geom for GeomBar {
                 )?;
             }
         }
+        super::clear_mark(backend);
 
         Ok(())
     }

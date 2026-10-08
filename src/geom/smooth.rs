@@ -279,8 +279,13 @@ fn draw_hover_marks(
         if k % step != 0 {
             continue;
         }
-        backend.set_tooltip(Some(smooth_tip(y_col, ymin_col, ymax_col, i)));
-        backend.set_mark_axis(Some(super::tip_value(&x_col[i])));
+        super::set_mark(
+            backend,
+            Some(smooth_tip(y_col, ymin_col, ymax_col, i)),
+            Some(super::tip_value(&x_col[i])),
+            None,
+            super::raw_value(&y_col[i]),
+        );
         backend.draw_shape(
             points[k],
             0.6,
@@ -292,8 +297,7 @@ fn draw_hover_marks(
             },
         )?;
     }
-    backend.set_tooltip(None);
-    backend.set_mark_axis(None);
+    super::clear_mark(backend);
     Ok(())
 }
 

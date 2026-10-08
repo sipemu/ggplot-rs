@@ -15,6 +15,7 @@ impl Position for PositionFill {
             Some(c) => c.to_vec(),
             None => return,
         };
+        super::preserve_raw_y(data, &y_col);
 
         // First compute totals per x group
         let mut x_totals: Vec<(String, f64)> = Vec::new();

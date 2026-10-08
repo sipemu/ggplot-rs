@@ -1643,23 +1643,73 @@ impl GGPlot {
     }
 
     /// [`render_svg_native`](Self::render_svg_native) with an explicit size.
+    ///
+    /// The root `<svg>` carries `data-plot="x y w h"` (the panel rect) and the
+    /// trained position domains (`data-domain`, `data-xdomain`, `data-ydomain`,
+    /// `data-xlevels`, `data-ylevels` — see
+    /// [`root_data_attrs`](crate::render::svg_backend::root_data_attrs)).
+    /// Hoverable marks carry `data-x`, `data-series` and `data-value`.
     pub fn render_svg_native_with_size(self, w: u32, h: u32) -> Result<String, GGError> {
-        let (built, layout) = self.prepare(w, h)?;
-        let mut backend =
-            crate::render::svg_backend::SvgBackend::new(w, h, layout.plot_area.clone());
-        PlotRenderer::render(&built, &mut backend).map_err(GGError::Render)?;
-        Ok(backend.finish())
+        Ok(self.render_native(w, h)?.0.finish())
+    }
+
+    /// Like [`render_svg_native_with_size`](Self::render_svg_native_with_size),
+    /// but also returns the build warnings (rows dropped for non-finite
+    /// positions, layers whose stat produced no data, …) — see
+    /// [`BuiltPlot::warnings`](crate::build::BuiltPlot::warnings).
+    pub fn render_svg_native_with_warnings(
+        self,
+        w: u32,
+        h: u32,
+    ) -> Result<(String, Vec<String>), GGError> {
+        let (backend, warnings, _) = self.render_native(w, h)?;
+        Ok((backend.finish(), warnings))
+    }
+
+    /// Render a `w`×`h` chart as a *nested* `<svg x=.. y=.. width=.. height=..
+    /// viewBox="0 0 w h">` fragment for composition into a larger SVG (a
+    /// dashboard): no `xmlns` (inherited from the parent), positioned at
+    /// `(x, y)` in the parent's user space. No string surgery needed:
+    ///
+    /// ```ignore
+    /// let mut page = String::from(r#"<svg xmlns="http://www.w3.org/2000/svg" width="900" height="400">"#);
+    /// page += &plot_a.render_svg_native_at(0.0, 0.0, 450, 400)?;
+    /// page += &plot_b.render_svg_native_at(450.0, 0.0, 450, 400)?;
+    /// page += "</svg>";
+    /// ```
+    pub fn render_svg_native_at(self, x: f64, y: f64, w: u32, h: u32) -> Result<String, GGError> {
+        Ok(self.render_native(w, h)?.0.finish_fragment(x, y))
     }
 
     /// Like [`render_svg_native_with_size`](Self::render_svg_native_with_size),
     /// but also returns the panel rect in pixels `[x, y, w, h]` — enough to
     /// overlay a WebGL/canvas layer that draws marks in data coordinates.
     pub fn render_svg_area_with_size(self, w: u32, h: u32) -> Result<(String, [f64; 4]), GGError> {
+        let (backend, _, pa) = self.render_native(w, h)?;
+        Ok((backend.finish(), [pa.x, pa.y, pa.width, pa.height]))
+    }
+
+    /// Shared native-SVG pipeline: build, lay out, render into an
+    /// [`SvgBackend`](crate::render::svg_backend::SvgBackend) (not yet
+    /// finished), returning it with the build warnings and the panel rect.
+    fn render_native(
+        self,
+        w: u32,
+        h: u32,
+    ) -> Result<
+        (
+            crate::render::svg_backend::SvgBackend,
+            Vec<String>,
+            crate::render::Rect,
+        ),
+        GGError,
+    > {
         let (built, layout) = self.prepare(w, h)?;
         let pa = layout.plot_area.clone();
         let mut backend = crate::render::svg_backend::SvgBackend::new(w, h, pa.clone());
+        backend.set_root_attrs(crate::render::svg_backend::root_data_attrs(&built));
         PlotRenderer::render(&built, &mut backend).map_err(GGError::Render)?;
-        Ok((backend.finish(), [pa.x, pa.y, pa.width, pa.height]))
+        Ok((backend, built.warnings, pa))
     }
 
     /// Render to a raw RGBA pixel buffer via the self-contained raster

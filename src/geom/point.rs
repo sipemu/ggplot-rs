@@ -88,8 +88,13 @@ impl Geom for GeomPoint {
                     }
                 }
             };
-            backend.set_tooltip(tip);
-            backend.set_mark_axis(Some(super::tip_value(&x_col[i])));
+            super::set_mark(
+                backend,
+                tip,
+                Some(super::tip_value(&x_col[i])),
+                super::series_key(data, i),
+                super::measured_value(data, i),
+            );
 
             let (r, g, b) = if let Some(cc) = color_col {
                 scales
@@ -124,8 +129,7 @@ impl Geom for GeomPoint {
                 },
             )?;
         }
-        backend.set_tooltip(None);
-        backend.set_mark_axis(None);
+        super::clear_mark(backend);
 
         Ok(())
     }
