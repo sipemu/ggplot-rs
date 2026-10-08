@@ -25,6 +25,9 @@ pub struct SvgBackend {
     value_key: Option<String>,
     root_attrs: Vec<(String, String)>,
     warnings: Vec<String>,
+    /// Emit the root `data-plot` panel rect (off for composite pages, whose
+    /// root is not a single panel).
+    plot_attr: bool,
 }
 
 impl SvgBackend {
@@ -44,6 +47,7 @@ impl SvgBackend {
             value_key: None,
             root_attrs: Vec::new(),
             warnings: Vec::new(),
+            plot_attr: true,
         }
     }
 
@@ -52,6 +56,22 @@ impl SvgBackend {
     /// attribute names; values are escaped on output.
     pub fn set_root_attrs(&mut self, attrs: Vec<(String, String)>) {
         self.root_attrs = attrs;
+    }
+
+    /// Omit the root `data-plot` attribute (composite pages).
+    pub(crate) fn without_plot_attr(&mut self) {
+        self.plot_attr = false;
+    }
+
+    /// Append pre-rendered, already-escaped SVG markup (e.g. a nested plot
+    /// fragment) to the body. Crate-internal: callers guarantee well-formedness.
+    pub(crate) fn push_raw(&mut self, markup: &str) {
+        self.body.push_str(markup);
+    }
+
+    /// The accumulated body markup (without the root element).
+    pub(crate) fn body(&self) -> &str {
+        &self.body
     }
 
     /// Take the warnings reported while drawing (see [`DrawBackend::warn`]).
@@ -86,14 +106,18 @@ impl SvgBackend {
         for (k, v) in &self.root_attrs {
             extra.push_str(&format!(" {k}=\"{}\"", escape(v)));
         }
-        format!(
-            "<svg {prefix}width=\"{w}\" height=\"{h}\" viewBox=\"0 0 {w} {h}\" \
-             data-plot=\"{} {} {} {}\"{extra}>",
-            num(p.x),
-            num(p.y),
-            num(p.width),
-            num(p.height),
-        )
+        let plot = if self.plot_attr {
+            format!(
+                " data-plot=\"{} {} {} {}\"",
+                num(p.x),
+                num(p.y),
+                num(p.width),
+                num(p.height),
+            )
+        } else {
+            String::new()
+        };
+        format!("<svg {prefix}width=\"{w}\" height=\"{h}\" viewBox=\"0 0 {w} {h}\"{plot}{extra}>")
     }
 
     /// Wrap the accumulated elements in a complete `<svg>` document. The

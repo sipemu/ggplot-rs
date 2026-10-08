@@ -102,7 +102,7 @@ impl Default for RepelParams {
             max_iter: 2000,
             max_time: std::time::Duration::from_millis(500),
             max_overlaps: 10,
-            min_segment_length: 6.0,
+            min_segment_length: 12.0,
             seed: 42,
             direction: RepelDirection::Both,
             max_labels: 500,

@@ -64,7 +64,10 @@ pub fn ggdensity(data: impl GGData, x: &str, color: Option<&str>) -> GGPlot {
 /// Arrange several plots in a grid, composed into a single SVG document
 /// (`ggpubr::ggarrange`). Plots fill row-major across `ncol` columns; each
 /// occupies a `cell_w` × `cell_h` cell and is embedded as a positioned nested
-/// `<svg>`. Returns the combined SVG string.
+/// `<svg>` carrying `data-panel="<index>"`. Returns the combined SVG string.
+///
+/// This is a thin wrapper over [`PlotGrid`](crate::compose::PlotGrid) — use
+/// it directly for titles, panel tags, collected legends and relative sizes.
 pub fn ggarrange(
     plots: Vec<GGPlot>,
     ncol: usize,
@@ -73,25 +76,14 @@ pub fn ggarrange(
 ) -> Result<String, GGError> {
     let n = plots.len();
     let ncol = ncol.max(1);
-    let nrow = n.div_ceil(ncol);
-    let total_w = ncol as u32 * cell_w;
-    let total_h = nrow.max(1) as u32 * cell_h;
-
-    let mut children = String::new();
-    for (i, plot) in plots.into_iter().enumerate() {
-        let inner = plot.render_svg_native_with_size(cell_w, cell_h)?;
-        let x = (i % ncol) as u32 * cell_w;
-        let y = (i / ncol) as u32 * cell_h;
-        // Turn each child's root `<svg …>` into a positioned nested `<svg x y …>`;
-        // it keeps its own viewBox/width/height so it fills exactly its cell.
-        let positioned = inner.replacen("<svg ", &format!("<svg x=\"{x}\" y=\"{y}\" "), 1);
-        children.push_str(&positioned);
-    }
-
-    Ok(format!(
-        "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"{total_w}\" height=\"{total_h}\" \
-         viewBox=\"0 0 {total_w} {total_h}\">{children}</svg>"
-    ))
+    let nrow = n.div_ceil(ncol).max(1);
+    crate::compose::PlotGrid::new()
+        .add_all(plots)
+        .ncol(ncol)
+        .render_svg_native_with_size(
+            (ncol as u32).saturating_mul(cell_w),
+            (nrow as u32).saturating_mul(cell_h),
+        )
 }
 
 /// [`ggarrange`] that writes the combined SVG to `path`.
@@ -201,10 +193,11 @@ mod tests {
         assert!(svg.contains("width=\"600\" height=\"440\""), "outer size");
         assert_eq!(svg.matches("<svg ").count(), 5, "outer + 4 nested svgs");
         // The children are positioned into the four cells.
-        assert!(svg.contains("x=\"0\" y=\"0\""));
-        assert!(svg.contains("x=\"300\" y=\"0\""));
-        assert!(svg.contains("x=\"0\" y=\"220\""));
-        assert!(svg.contains("x=\"300\" y=\"220\""));
+        assert!(svg.contains("x=\"0.00\" y=\"0.00\" width=\"300\" height=\"220\""));
+        assert!(svg.contains("x=\"300.00\" y=\"0.00\""));
+        assert!(svg.contains("x=\"0.00\" y=\"220.00\""));
+        assert!(svg.contains("x=\"300.00\" y=\"220.00\""));
+        assert!(svg.contains("data-panel=\"4\""));
     }
 
     #[test]

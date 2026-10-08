@@ -39,11 +39,28 @@ All notable changes to this project are documented here. The format follows
 - `DrawBackend::warn` (default no-op): geoms can report draw-time warnings;
   the native SVG backend collects them (`SvgBackend::take_warnings`) and
   `render_svg_native_with_warnings` returns them after the build warnings.
+- `PlotGrid` (`ggplot_rs::compose`, in the prelude): patchwork-style
+  composition on the native SVG path — `PlotGrid::new().add(p).ncol(2)`, or
+  `a | b` (side by side) and `a / b` (stacked; chains flatten, mixed operators
+  nest), `add_spacer`, `nrow`/`byrow`, relative `widths`/`heights`, `spacing`,
+  shared `title`/`subtitle`/`caption`, panel tags (`TagLevels::{Lower, Upper,
+  Numeric, LowerRoman, UpperRoman, Custom}` + `tag_affixes`), and
+  `collect_legends(true)` (each distinct legend drawn once to the right or
+  bottom, identical legends de-duplicated). Renders one SVG
+  (`render_svg_native[_with_size|_with_warnings|_at]`); every sub-plot is a
+  nested `<svg>` that keeps its host attributes and adds
+  `data-panel="<tag or index>"`; the root carries `data-grid="<rows> <cols>"`.
+  Sub-plot warnings are returned prefixed `panel <tag>: `.
+- `examples/regression_diagnostics.rs`: a plotters-free 2×2 diagnostics grid
+  with repelled labels, table-driven brackets and a logistic GLM smooth.
 
 ### Changed
 
 - `SmoothFamily::Poisson` bands are now formed on the link scale and mapped
   through `exp` (as R/ggplot2), instead of a response-scale interval.
+- `ggpubr::ggarrange` now delegates to `PlotGrid`: cells are nested SVG
+  fragments without a per-cell `xmlns`, positioned as `x="300.00"`, and carry
+  `data-panel="<index>"`.
 - The `regression` feature now requires `anofox-regression` ^0.5.17 — the
   version the anofox-statistics DuckDB extension uses — and GLM smooths use
   that extension's IRLS settings (tolerance 1e-8, ≤ 100 iterations), so SQL

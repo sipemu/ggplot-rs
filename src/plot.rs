@@ -2062,7 +2062,19 @@ impl GGPlot {
     }
 
     /// Shared pipeline: build the plot, apply label overrides, compute layout.
-    fn prepare(self, w: u32, h: u32) -> Result<(crate::build::BuiltPlot, PlotLayout), GGError> {
+    pub(crate) fn prepare(
+        self,
+        w: u32,
+        h: u32,
+    ) -> Result<(crate::build::BuiltPlot, PlotLayout), GGError> {
+        let (mut built, meta) = self.build_for_render()?;
+        let layout = Self::layout_built(&mut built, &meta, w, h);
+        Ok((built, layout))
+    }
+
+    /// The size-independent half of [`prepare`](Self::prepare): build the plot,
+    /// resolve theme inheritance and apply axis-label overrides.
+    pub(crate) fn build_for_render(self) -> Result<(crate::build::BuiltPlot, RenderMeta), GGError> {
         let plot = self;
 
         let has_title = plot.labels.title.is_some();
@@ -2089,6 +2101,31 @@ impl GGPlot {
             }
         }
 
+        Ok((
+            built,
+            RenderMeta {
+                has_title,
+                has_subtitle,
+                has_caption,
+                has_legend,
+            },
+        ))
+    }
+
+    /// The size-dependent half of [`prepare`](Self::prepare): auto-tune axis
+    /// labels for `w`×`h` and compute the layout.
+    pub(crate) fn layout_built(
+        built: &mut crate::build::BuiltPlot,
+        meta: &RenderMeta,
+        w: u32,
+        h: u32,
+    ) -> PlotLayout {
+        let RenderMeta {
+            has_title,
+            has_subtitle,
+            has_caption,
+            has_legend,
+        } = *meta;
         let x_axis_top = built
             .scales
             .get(&crate::aes::Aesthetic::X)
@@ -2167,7 +2204,7 @@ impl GGPlot {
             None
         };
 
-        let layout = PlotLayout::compute_full(
+        PlotLayout::compute_full(
             w as f64,
             h as f64,
             &built.theme,
@@ -2178,9 +2215,7 @@ impl GGPlot {
             x_axis_top,
             y_label_width,
             x_label_height,
-        );
-
-        Ok((built, layout))
+        )
     }
 
     /// Fill the background, render the built plot, and flush — for any plotters
@@ -2232,6 +2267,15 @@ impl GGPlot {
             )
         })
     }
+}
+
+/// Size-independent facts about a built plot that its layout needs.
+#[derive(Clone, Copy, Debug)]
+pub(crate) struct RenderMeta {
+    pub(crate) has_title: bool,
+    pub(crate) has_subtitle: bool,
+    pub(crate) has_caption: bool,
+    pub(crate) has_legend: bool,
 }
 
 /// Top-level error type.

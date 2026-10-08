@@ -1,5 +1,6 @@
 pub use crate::aes::{Aes, Aesthetic};
 pub use crate::annotate::Annotation;
+pub use crate::compose::{GridCell, GridLegendPosition, PlotGrid, TagLevels};
 pub use crate::coord::polar::CoordPolar;
 pub use crate::coord::radar::CoordRadar;
 pub use crate::data::{GGData, Value};

@@ -1,6 +1,7 @@
 pub mod aes;
 pub mod annotate;
 pub mod build;
+pub mod compose;
 pub mod coord;
 pub mod data;
 pub mod facet;

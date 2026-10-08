@@ -106,15 +106,43 @@ fn different_seed_still_valid() {
 
 #[test]
 fn displaced_labels_get_segments() {
-    // Nudge every label far up: each needs a connecting segment.
-    let (svg, _) = render(
-        GeomTextRepel::default()
-            .nudge(0.0, 1.0)
-            .segment_color((200, 0, 0)),
-        12,
+    // Four labelled points mid-panel (plus unlabelled extremes setting the
+    // range); a large upward nudge displaces every label well away.
+    let xs = [1.0, 2.0, 3.0, 4.0, 1.0, 4.0];
+    let ys = [0.0, 0.0, 0.0, 0.0, -3.0, 3.0];
+    let labels = ["a", "b", "c", "d", "", ""];
+    let data = vec![
+        (
+            "x".to_string(),
+            xs.iter().map(|v| Value::Float(*v)).collect(),
+        ),
+        (
+            "y".to_string(),
+            ys.iter().map(|v| Value::Float(*v)).collect(),
+        ),
+        (
+            "label".to_string(),
+            labels.iter().map(|v| Value::Str(v.to_string())).collect(),
+        ),
+    ];
+    let svg = GGPlot::new(data)
+        .aes(Aes::new().x("x").y("y").label("label"))
+        .geom_point()
+        .geom_text_repel_with(
+            GeomTextRepel::default()
+                .nudge(0.0, 1.5)
+                .segment_color((200, 0, 0)),
+        )
+        .render_svg_native_with_size(500, 400)
+        .unwrap();
+    assert_eq!(
+        svg.matches("stroke=\"#C80000\"").count(),
+        4,
+        "one segment per label"
     );
-    let segs = svg.matches("stroke=\"#C80000\"").count();
-    assert_eq!(segs, 4, "one segment per label");
+    // Without displacement no segment is needed.
+    let (svg, _) = render(GeomTextRepel::default().segment_color((200, 0, 0)), 3);
+    assert_eq!(svg.matches("stroke=\"#C80000\"").count(), 0);
 }
 
 #[test]
