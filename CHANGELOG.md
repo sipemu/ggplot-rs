@@ -3,6 +3,29 @@
 All notable changes to this project are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [Unreleased] — 0.17.0
+
+### Added
+
+- `geom_smooth(method = "glm")` families: `SmoothFamily::Binomial(link)`
+  (`SmoothBinomialLink::{Logit, Probit, Cloglog}`, shorthand
+  `SmoothFamily::binomial()`), `SmoothFamily::Gamma(link)`
+  (`SmoothGammaLink::{Inverse, Log}`, shorthand `SmoothFamily::gamma()`) and
+  `SmoothFamily::NegativeBinomial` (log link, θ by ML as `MASS::glm.nb`), plus
+  the `GeomSmooth::glm(family)` builder. Bands follow ggplot2's
+  `predictdf.glm`: `linkinv(η ± qnorm(0.975)·se(η))`, so they stay inside the
+  response range. Validated against R `glm()`/`predict()` in
+  `tests/glm_smooth_r.rs`.
+
+### Changed
+
+- `SmoothFamily::Poisson` bands are now formed on the link scale and mapped
+  through `exp` (as R/ggplot2), instead of a response-scale interval.
+- The `regression` feature now requires `anofox-regression` ^0.5.17 — the
+  version the anofox-statistics DuckDB extension uses — and GLM smooths use
+  that extension's IRLS settings (tolerance 1e-8, ≤ 100 iterations), so SQL
+  fits and plotted smooths agree.
+
 ## [0.16.0] — 2026-10-08
 
 ### Breaking changes
