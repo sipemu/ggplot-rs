@@ -26,6 +26,14 @@ All notable changes to this project are documented here. The format follows
   these must add `features = ["plotters"]`; the self-contained
   `render_svg_native*` path is always available. `canvas` now implies `png`.
   `cli` implies `plotters`.
+- `DataFrame::add_column` no longer panics on a length mismatch: it pads the
+  shorter side with `Value::Na` and records an issue
+  (`DataFrame::issues()` / `validate()`); `GGPlot::try_build` and every
+  `render_*`/`save*` then return `GGError::ValidationError`. This is reachable
+  from `GGPlot::new(Vec<(String, Vec<Value>)>)` with ragged columns, which used
+  to panic. New `DataFrame::try_add_column` rejects the column instead.
+- `DataFrame::group_by` / `unique_values` keep `Value::Na` distinct from the
+  literal string `"NA"` (they used to merge into one group).
 - `label_number(…, prefix, …)` is now sign-aware: `-5` with prefix `"€"`
   renders `"-€5"` (was `"€-5"`), and a value rounding to zero drops its sign.
 - `PositionJitter` gained a `seed: u64` field, and `width`/`height` are now
@@ -48,6 +56,11 @@ All notable changes to this project are documented here. The format follows
 - `tests/native_svg.rs`: smoke coverage of the plotters-free SVG path across
   geoms/coords/facets/themes, run in every feature configuration.
 
+- `Value::group_key() -> GroupKey` (injective w.r.t. missingness, borrows
+  strings) and `Value::key_str() -> Cow<str>` (allocation-free form of
+  `to_group_key`).
+- `DataFrame::try_add_column`, `DataFrame::issues`, `DataFrame::validate`.
+
 ### Changed
 
 - Minimal dependency tree (`default-features = false, features = ["sf"]`):
@@ -60,6 +73,15 @@ All notable changes to this project are documented here. The format follows
   smeared by a fixed ±0.4 data units.
 
 ### Fixed
+
+- Empty manual scales (`scale_color_manual(vec![])`, `scale_fill_manual`,
+  `scale_shape_manual`, `scale_linetype_manual`) no longer panic with a
+  division by zero; the geom falls back to its default colour/shape/linetype.
+- `format_epoch_secs` is total over `i64` (it overflowed for `i64::MIN`).
+- `stat_binhex` / `geom_hex` output order is deterministic (row-major) instead
+  of following `HashMap` iteration order, so identical data renders identical
+  SVG.
+- Discrete scale training/lookups no longer allocate a `String` per value.
 
 - `label_number` / `label_currency` with an `accuracy` that keeps decimals no
   longer inserts thousands marks into the fractional part

@@ -177,7 +177,9 @@ impl GGData for Vec<HashMap<String, Value>> {
     }
 }
 
-/// Column-oriented input: Vec of (name, values) pairs.
+/// Column-oriented input: Vec of (name, values) pairs. Columns of differing
+/// lengths don't panic: they're padded with `Value::Na` and recorded as an
+/// issue, so building the plot returns `GGError::ValidationError`.
 impl GGData for Vec<(String, Vec<Value>)> {
     fn into_dataframe(self) -> DataFrame {
         let mut df = DataFrame::new();

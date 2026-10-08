@@ -99,6 +99,11 @@ pub struct GGPlot {
 
 impl GGPlot {
     /// Create a new plot with the given data source.
+    ///
+    /// Never panics on malformed input: e.g. column-oriented data whose columns
+    /// have different lengths is padded with `NA` and reported as a
+    /// [`GGError::ValidationError`] by [`try_build`](Self::try_build) and the
+    /// `render_*`/`save*` methods.
     pub fn new(data: impl GGData) -> Self {
         GGPlot {
             data: data.into_dataframe(),

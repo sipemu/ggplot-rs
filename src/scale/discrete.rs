@@ -80,20 +80,22 @@ impl Scale for ScaleDiscrete {
             self.levels = limits.clone();
         } else {
             for v in values {
-                let key = v.to_group_key();
-                self.levels.insert(key);
+                let key = v.key_str();
+                if !self.levels.contains(key.as_ref()) {
+                    self.levels.insert(key.into_owned());
+                }
             }
         }
     }
 
     fn map(&self, value: &Value) -> f64 {
-        let key = value.to_group_key();
+        let key = value.key_str();
         let effective = self.effective_levels();
         let n = effective.len();
         if n == 0 {
             return 0.5;
         }
-        match effective.get_index_of(&key) {
+        match effective.get_index_of(key.as_ref()) {
             Some(idx) => (idx as f64 + 0.5) / n as f64,
             None => 0.5, // Not in limits → maps to middle
         }

@@ -34,15 +34,17 @@ impl Scale for ScaleManual {
 
     fn train(&mut self, values: &[Value]) {
         for v in values {
-            let key = v.to_group_key();
-            self.levels.insert(key);
+            let key = v.key_str();
+            if !self.levels.contains(key.as_ref()) {
+                self.levels.insert(key.into_owned());
+            }
         }
     }
 
     fn map(&self, value: &Value) -> f64 {
-        let key = value.to_group_key();
+        let key = value.key_str();
         self.levels
-            .get_index_of(&key)
+            .get_index_of(key.as_ref())
             .map(|i| i as f64)
             .unwrap_or(0.0)
     }
@@ -68,16 +70,16 @@ impl Scale for ScaleManual {
     }
 
     fn map_to_color(&self, value: &Value) -> Option<(u8, u8, u8)> {
-        let key = value.to_group_key();
-        let idx = self.levels.get_index_of(&key).unwrap_or(0);
-        if idx < self.colors.len() {
-            let c = self.colors[idx];
-            Some((c.r, c.g, c.b))
-        } else {
-            // Wrap around
-            let c = self.colors[idx % self.colors.len()];
-            Some((c.r, c.g, c.b))
+        // No values supplied (`scale_color_manual(vec![])`): no mapping, so
+        // the geom falls back to its default colour instead of panicking.
+        if self.colors.is_empty() {
+            return None;
         }
+        let key = value.key_str();
+        let idx = self.levels.get_index_of(key.as_ref()).unwrap_or(0);
+        // Wrap around when there are more levels than colours.
+        let c = self.colors[idx % self.colors.len()];
+        Some((c.r, c.g, c.b))
     }
 
     fn clone_box(&self) -> Box<dyn Scale> {

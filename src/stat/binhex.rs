@@ -58,9 +58,11 @@ impl Stat for StatBinHex {
         let hex_w = x_range / self.bins_x as f64;
         let hex_h = y_range / self.bins_y as f64;
 
-        // Use HashMap with (col, row) keys for hex bins
-        let mut counts: std::collections::HashMap<(i64, i64), usize> =
-            std::collections::HashMap::new();
+        // Ordered map keyed (row, col): the output is deterministic — bins come
+        // out row by row (bottom to top), left to right — so identical data
+        // always yields identical layer data and SVG.
+        let mut counts: std::collections::BTreeMap<(i64, i64), usize> =
+            std::collections::BTreeMap::new();
 
         for i in 0..n {
             // Convert to hex grid coordinates
@@ -74,14 +76,14 @@ impl Stat for StatBinHex {
                 col
             };
 
-            *counts.entry((adj_col, row)).or_insert(0) += 1;
+            *counts.entry((row, adj_col)).or_insert(0) += 1;
         }
 
         let mut x_vals = Vec::new();
         let mut y_vals = Vec::new();
         let mut fill_vals = Vec::new();
 
-        for (&(col, row), &count) in &counts {
+        for (&(row, col), &count) in &counts {
             if count == 0 {
                 continue;
             }
@@ -135,5 +137,45 @@ mod tests {
         assert!(result.column("x").is_some());
         assert!(result.column("y").is_some());
         assert!(result.column("fill").is_some());
+    }
+
+    #[test]
+    fn output_order_is_deterministic() {
+        let mut data = DataFrame::new();
+        let x: Vec<Value> = (0..500)
+            .map(|i| Value::Float(((i * 37) % 101) as f64))
+            .collect();
+        let y: Vec<Value> = (0..500)
+            .map(|i| Value::Float(((i * 53) % 97) as f64))
+            .collect();
+        data.add_column("x".to_string(), x);
+        data.add_column("y".to_string(), y);
+        let stat = StatBinHex {
+            bins_x: 12,
+            bins_y: 12,
+        };
+        let scales = ScaleSet::new();
+        let a = stat.compute_group(&data, &scales);
+        for _ in 0..5 {
+            let b = stat.compute_group(&data, &scales);
+            assert_eq!(a.column("x"), b.column("x"));
+            assert_eq!(a.column("y"), b.column("y"));
+            assert_eq!(a.column("fill"), b.column("fill"));
+        }
+        // Row-major: y never decreases along the output.
+        let ys: Vec<f64> = a
+            .column("y")
+            .unwrap()
+            .iter()
+            .map(|v| v.as_f64().unwrap())
+            .collect();
+        assert!(ys.windows(2).all(|w| w[0] <= w[1]));
+        let total: f64 = a
+            .column("fill")
+            .unwrap()
+            .iter()
+            .map(|v| v.as_f64().unwrap())
+            .sum();
+        assert_eq!(total, 500.0);
     }
 }

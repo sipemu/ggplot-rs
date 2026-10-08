@@ -53,15 +53,17 @@ impl Scale for ScaleColorGrey {
 
     fn train(&mut self, values: &[Value]) {
         for v in values {
-            let key = v.to_group_key();
-            self.levels.insert(key);
+            let key = v.key_str();
+            if !self.levels.contains(key.as_ref()) {
+                self.levels.insert(key.into_owned());
+            }
         }
     }
 
     fn map(&self, value: &Value) -> f64 {
-        let key = value.to_group_key();
+        let key = value.key_str();
         self.levels
-            .get_index_of(&key)
+            .get_index_of(key.as_ref())
             .map(|i| i as f64)
             .unwrap_or(0.0)
     }
@@ -87,8 +89,8 @@ impl Scale for ScaleColorGrey {
     }
 
     fn map_to_color(&self, value: &Value) -> Option<(u8, u8, u8)> {
-        let key = value.to_group_key();
-        let idx = self.levels.get_index_of(&key).unwrap_or(0);
+        let key = value.key_str();
+        let idx = self.levels.get_index_of(key.as_ref()).unwrap_or(0);
         let g = self.grey_for_index(idx);
         Some((g, g, g))
     }

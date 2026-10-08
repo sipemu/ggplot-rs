@@ -53,6 +53,15 @@ impl PlotBuilder {
             guide_legend,
         } = plot;
 
+        // Malformed input (e.g. mismatched column lengths) is reported here as
+        // a validation error instead of panicking when the frame is assembled.
+        plot_data.validate()?;
+        for layer in &layers {
+            if let Some(d) = &layer.data {
+                d.validate()?;
+            }
+        }
+
         let mut scale_set = ScaleSet::new();
 
         // Add user-specified scales

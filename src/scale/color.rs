@@ -154,7 +154,7 @@ impl ScaleColorDiscrete {
 
     /// Get color for a value.
     pub fn color_for_value(&self, value: &Value) -> RGBAColor {
-        let key = value.to_group_key();
+        let key = value.key_str();
         let idx = self.level_position(&key).unwrap_or(0);
         self.color_for_index(idx)
     }
@@ -171,13 +171,15 @@ impl Scale for ScaleColorDiscrete {
 
     fn train(&mut self, values: &[Value]) {
         for v in values {
-            let key = v.to_group_key();
-            self.push_level(key);
+            let key = v.key_str();
+            if !self.level_index.contains_key(key.as_ref()) {
+                self.push_level(key.into_owned());
+            }
         }
     }
 
     fn map(&self, value: &Value) -> f64 {
-        let key = value.to_group_key();
+        let key = value.key_str();
         self.level_position(&key).map(|i| i as f64).unwrap_or(0.0)
     }
 

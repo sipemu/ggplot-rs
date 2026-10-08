@@ -127,3 +127,47 @@ fn manual_scales_render() {
     );
     assert!(svg.contains("255,0,0") || svg.contains("#ff0000") || svg.contains("#FF0000"));
 }
+
+#[test]
+fn empty_manual_scales_fall_back_instead_of_panicking() {
+    let gl = || {
+        GGPlot::new(data())
+            .aes(Aes::new().x("x").y("y").color("g").shape("g").linetype("g"))
+            .geom_point()
+            .geom_line()
+    };
+    check(gl().scale_color_manual(vec![]), "empty color manual");
+    check(gl().scale_fill_manual(vec![]), "empty fill manual");
+    check(gl().scale_shape_manual(vec![]), "empty shape manual");
+    check(gl().scale_linetype_manual(vec![]), "empty linetype manual");
+}
+
+#[test]
+fn mismatched_column_lengths_are_a_validation_error_not_a_panic() {
+    let cols: Cols = vec![
+        ("x".into(), vec![Value::Float(1.0), Value::Float(2.0)]),
+        ("y".into(), vec![Value::Float(1.0)]),
+    ];
+    let plot = || {
+        GGPlot::new(cols.clone())
+            .aes(Aes::new().x("x").y("y"))
+            .geom_point()
+    };
+    match plot().render_svg_native() {
+        Err(GGError::ValidationError(msg)) => assert!(msg.contains("'y'"), "{msg}"),
+        other => panic!("expected a validation error, got {other:?}"),
+    }
+    assert!(plot().try_build().is_err());
+
+    // Per-layer data is validated too.
+    let ok: Cols = vec![
+        ("x".into(), vec![Value::Float(1.0)]),
+        ("y".into(), vec![Value::Float(2.0)]),
+    ];
+    let r = GGPlot::new(ok)
+        .aes(Aes::new().x("x").y("y"))
+        .geom_point()
+        .layer_data(cols.clone())
+        .render_svg_native();
+    assert!(matches!(r, Err(GGError::ValidationError(_))), "{r:?}");
+}
