@@ -94,6 +94,12 @@ All notable changes to this project are documented here. The format follows
   side by side — also under `coord_flip`. Interval geoms map `color` per row
   and carry `data-x` (term) / `data-series` (model) / `data-value` (estimate,
   else `"ymin ymax"`) plus a tooltip.
+- `examples/diagnostics.rs` (runs with `--no-default-features`): a
+  regression-diagnostic gallery on the native SVG path — QQ with pointwise +
+  KS bands, QQ against t(5), residuals vs leverage with Cook's contours,
+  Kaplan–Meier (`survival::lung`) with CI step ribbon and censor marks, ECDF
+  with DKW band, dodged three-model coefficient forest, per-facet mapped ACF
+  bounds — written to `assets/gallery/diagnostics/*.svg`.
 - `ggplot_rs::stat::distribution`: dependency-free `qnorm` (AS 241), `dnorm`,
   `pt` / `qt` / `dt` (any `p`, any `df`) and `ln_gamma`, available in every
   feature configuration (the existing `stat::dist::qt` still returns the
