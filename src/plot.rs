@@ -522,6 +522,90 @@ impl GGPlot {
             .layer_aes(Aes::new().xmin("xmin").xmax("xmax").y("y").label("label"))
     }
 
+    /// Significance brackets from a precomputed test table (ggpubr's
+    /// `stat_pvalue_manual` / `geom_bracket(data = …)`) — e.g. the anofox
+    /// `test` contract output (`group1`, `group2`, `p_adj`/`p_value`, optional
+    /// `y_position`, `label`). No test is recomputed. See
+    /// [`BracketTable`](crate::geom::bracket::BracketTable) for the column
+    /// rules, label templates (`"p = {p_adj}"`, `"{p.signif}"`) and the
+    /// automatic stacking of rows without a `y_position`. Rows that cannot be
+    /// drawn are dropped with a build warning.
+    pub fn geom_bracket_table(
+        mut self,
+        table: impl GGData,
+        spec: crate::geom::bracket::BracketTable,
+    ) -> Self {
+        let table = table.into_dataframe();
+        let col_for = |a: crate::aes::Aesthetic| {
+            self.mapping
+                .mappings
+                .iter()
+                .find(|m| m.aesthetic == a)
+                .map(|m| m.column.clone())
+        };
+        // The plot's x categories (to reject unknown groups) and finite y
+        // range (to stack brackets above the data).
+        let x_levels: Vec<String> = col_for(crate::aes::Aesthetic::X)
+            .and_then(|c| self.data.column(&c))
+            .filter(|col| col.iter().any(|v| matches!(v, Value::Str(_))))
+            .map(|col| {
+                let mut seen = std::collections::HashSet::new();
+                col.iter()
+                    .filter(|v| !v.is_na())
+                    .map(|v| v.to_group_key())
+                    .filter(|k| seen.insert(k.clone()))
+                    .collect()
+            })
+            .unwrap_or_default();
+        let y_range = col_for(crate::aes::Aesthetic::Y)
+            .and_then(|c| self.data.column(&c))
+            .and_then(|col| {
+                let (lo, hi) = col
+                    .iter()
+                    .filter_map(|v| v.as_f64())
+                    .filter(|v| v.is_finite())
+                    .fold((f64::INFINITY, f64::NEG_INFINITY), |(lo, hi), v| {
+                        (lo.min(v), hi.max(v))
+                    });
+                (lo <= hi).then_some((lo, hi))
+            });
+        let mut warnings = Vec::new();
+        let resolved = spec.resolve(&table, &x_levels, y_range, &mut warnings);
+        self.warnings.extend(warnings);
+        match resolved {
+            Some(data) => self
+                .add_geom(crate::geom::bracket::GeomBracket::from(spec.geom))
+                .layer_data(data)
+                .layer_aes(Aes::new().xmin("xmin").xmax("xmax").y("y").label("label")),
+            None => self,
+        }
+    }
+
+    /// Text labels that repel each other and their points
+    /// (`ggrepel::geom_text_repel`) — deterministic (seeded) layout; see
+    /// [`GeomTextRepel`](crate::geom::repel::GeomTextRepel). Requires `x`,
+    /// `y` and `label`.
+    pub fn geom_text_repel(self) -> Self {
+        self.add_geom(crate::geom::repel::GeomTextRepel::default())
+    }
+
+    /// [`geom_text_repel`](Self::geom_text_repel) with a configured geom
+    /// (padding, nudge, `max_overlaps`, seed, …).
+    pub fn geom_text_repel_with(self, geom: crate::geom::repel::GeomTextRepel) -> Self {
+        self.add_geom_with(geom)
+    }
+
+    /// Boxed labels that repel each other and their points
+    /// (`ggrepel::geom_label_repel`).
+    pub fn geom_label_repel(self) -> Self {
+        self.add_geom(crate::geom::repel::GeomLabelRepel::default())
+    }
+
+    /// [`geom_label_repel`](Self::geom_label_repel) with a configured geom.
+    pub fn geom_label_repel_with(self, geom: crate::geom::repel::GeomLabelRepel) -> Self {
+        self.add_geom_with(geom)
+    }
+
     pub fn geom_label(self) -> Self {
         self.add_geom(GeomLabel::default())
     }
@@ -2001,7 +2085,9 @@ impl GGPlot {
         let mut backend = crate::render::svg_backend::SvgBackend::new(w, h, pa.clone());
         backend.set_root_attrs(crate::render::svg_backend::root_data_attrs(&built));
         PlotRenderer::render(&built, &mut backend).map_err(GGError::Render)?;
-        Ok((backend, built.warnings, pa))
+        let mut warnings = built.warnings;
+        warnings.extend(backend.take_warnings());
+        Ok((backend, warnings, pa))
     }
 
     /// Render to a raw RGBA pixel buffer via the self-contained raster
@@ -2083,7 +2169,19 @@ impl GGPlot {
     }
 
     /// Shared pipeline: build the plot, apply label overrides, compute layout.
-    fn prepare(self, w: u32, h: u32) -> Result<(crate::build::BuiltPlot, PlotLayout), GGError> {
+    pub(crate) fn prepare(
+        self,
+        w: u32,
+        h: u32,
+    ) -> Result<(crate::build::BuiltPlot, PlotLayout), GGError> {
+        let (mut built, meta) = self.build_for_render()?;
+        let layout = Self::layout_built(&mut built, &meta, w, h);
+        Ok((built, layout))
+    }
+
+    /// The size-independent half of [`prepare`](Self::prepare): build the plot,
+    /// resolve theme inheritance and apply axis-label overrides.
+    pub(crate) fn build_for_render(self) -> Result<(crate::build::BuiltPlot, RenderMeta), GGError> {
         let plot = self;
 
         let has_title = plot.labels.title.is_some();
@@ -2110,6 +2208,31 @@ impl GGPlot {
             }
         }
 
+        Ok((
+            built,
+            RenderMeta {
+                has_title,
+                has_subtitle,
+                has_caption,
+                has_legend,
+            },
+        ))
+    }
+
+    /// The size-dependent half of [`prepare`](Self::prepare): auto-tune axis
+    /// labels for `w`×`h` and compute the layout.
+    pub(crate) fn layout_built(
+        built: &mut crate::build::BuiltPlot,
+        meta: &RenderMeta,
+        w: u32,
+        h: u32,
+    ) -> PlotLayout {
+        let RenderMeta {
+            has_title,
+            has_subtitle,
+            has_caption,
+            has_legend,
+        } = *meta;
         let x_axis_top = built
             .scales
             .get(&crate::aes::Aesthetic::X)
@@ -2188,7 +2311,7 @@ impl GGPlot {
             None
         };
 
-        let layout = PlotLayout::compute_full(
+        PlotLayout::compute_full(
             w as f64,
             h as f64,
             &built.theme,
@@ -2199,9 +2322,7 @@ impl GGPlot {
             x_axis_top,
             y_label_width,
             x_label_height,
-        );
-
-        Ok((built, layout))
+        )
     }
 
     /// Fill the background, render the built plot, and flush — for any plotters
@@ -2253,6 +2374,15 @@ impl GGPlot {
             )
         })
     }
+}
+
+/// Size-independent facts about a built plot that its layout needs.
+#[derive(Clone, Copy, Debug)]
+pub(crate) struct RenderMeta {
+    pub(crate) has_title: bool,
+    pub(crate) has_subtitle: bool,
+    pub(crate) has_caption: bool,
+    pub(crate) has_legend: bool,
 }
 
 /// Top-level error type.

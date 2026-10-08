@@ -24,7 +24,20 @@ pub enum SmoothMethod {
     Gam,
 }
 
-/// GLM family for regression-backed smoothing (`SmoothMethod::Glm`).
+/// GLM family for regression-backed smoothing (`SmoothMethod::Glm`), R's
+/// `glm(family = …)`.
+///
+/// For every non-Gaussian family the confidence band is computed as ggplot2's
+/// `predictdf.glm` does: the linear predictor and its standard error come from
+/// `predict(type = "link", se.fit = TRUE)`, the interval
+/// `η ± qnorm(0.975)·se(η)` is formed on the link scale and both ends are
+/// mapped through the inverse link — so the band respects the response range
+/// (probabilities stay in `[0, 1]`, means stay positive). Dispersion follows
+/// R: fixed at 1 for binomial / Poisson / negative binomial, Pearson-estimated
+/// for Gamma.
+///
+/// `Gaussian` keeps the ordinary-least-squares fit with its `t`-based interval
+/// (identical to `method = "lm"`).
 #[cfg(feature = "regression")]
 #[derive(Clone, Copy, Debug, Default, PartialEq)]
 pub enum SmoothFamily {
@@ -33,6 +46,52 @@ pub enum SmoothFamily {
     Gaussian,
     /// Poisson regression (log link) for count responses.
     Poisson,
+    /// Binomial regression for 0/1 (or proportion) responses —
+    /// `binomial(link)`, R's default link is logit.
+    Binomial(SmoothBinomialLink),
+    /// Gamma regression for positive continuous responses — `Gamma(link)`;
+    /// R's default link is the inverse.
+    Gamma(SmoothGammaLink),
+    /// Negative-binomial regression (log link, θ estimated by maximum
+    /// likelihood) for over-dispersed counts — R's `MASS::glm.nb`.
+    NegativeBinomial,
+}
+
+#[cfg(feature = "regression")]
+impl SmoothFamily {
+    /// `binomial("logit")` — logistic regression.
+    pub fn binomial() -> Self {
+        SmoothFamily::Binomial(SmoothBinomialLink::Logit)
+    }
+
+    /// `Gamma("inverse")` — R's canonical Gamma link.
+    pub fn gamma() -> Self {
+        SmoothFamily::Gamma(SmoothGammaLink::Inverse)
+    }
+}
+
+/// Link function for [`SmoothFamily::Binomial`].
+#[cfg(feature = "regression")]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum SmoothBinomialLink {
+    /// `log(μ / (1 − μ))` (canonical).
+    #[default]
+    Logit,
+    /// `Φ⁻¹(μ)`.
+    Probit,
+    /// `log(−log(1 − μ))`.
+    Cloglog,
+}
+
+/// Link function for [`SmoothFamily::Gamma`].
+#[cfg(feature = "regression")]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum SmoothGammaLink {
+    /// `1 / μ` (R's canonical Gamma link).
+    #[default]
+    Inverse,
+    /// `log(μ)`.
+    Log,
 }
 
 /// Smoothing statistic — supports both linear regression and LOESS.
@@ -185,9 +244,9 @@ impl StatSmooth {
     #[cfg(feature = "regression")]
     fn compute_glm(&self, data: &DataFrame, family: Option<SmoothFamily>) -> DataFrame {
         use anofox_regression::solvers::{
-            FittedRegressor, HuberRegressor, OlsRegressor, PoissonRegressor, Regressor,
+            FittedRegressor, HuberRegressor, OlsRegressor, Regressor,
         };
-        use anofox_regression::{IntervalType, PoissonFamily, RegressionOptions};
+        use anofox_regression::{IntervalType, RegressionOptions};
         use faer::{Col, Mat};
 
         let (x_col, y_col) = match (data.column("x"), data.column("y")) {
@@ -230,14 +289,10 @@ impl StatSmooth {
                     Err(_) => return DataFrame::new(),
                 }
             }
-            Some(SmoothFamily::Poisson) => {
-                let reg =
-                    PoissonRegressor::new(RegressionOptions::default(), PoissonFamily::default());
-                match reg.fit(&x, &y) {
-                    Ok(f) => f.predict_with_interval(&grid, interval, 0.95),
-                    Err(_) => return DataFrame::new(),
-                }
-            }
+            Some(family) => match glm_link_prediction(family, &x, &y, &grid, self.se) {
+                Some(p) => p,
+                None => return DataFrame::new(),
+            },
         };
 
         let mut x_vals = Vec::with_capacity(steps);
@@ -248,8 +303,10 @@ impl StatSmooth {
             x_vals.push(Value::Float(grid[(k, 0)]));
             y_vals.push(Value::Float(pred.fit[k]));
             if self.se {
-                ymin_vals.push(Value::Float(pred.lower[k]));
-                ymax_vals.push(Value::Float(pred.upper[k]));
+                // An inverse link can swap the ends (e.g. Gamma's 1/η).
+                let (a, b) = (pred.lower[k], pred.upper[k]);
+                ymin_vals.push(Value::Float(a.min(b)));
+                ymax_vals.push(Value::Float(a.max(b)));
             }
         }
 
@@ -344,4 +401,118 @@ impl StatSmooth {
         }
         result
     }
+}
+
+/// IRLS convergence settings shared with the anofox-statistics DuckDB
+/// extension's GLM aggregates (R's `glm.control(epsilon = 1e-8)`), so a fit in
+/// SQL and the plotted smooth agree numerically.
+#[cfg(feature = "regression")]
+const GLM_TOL: f64 = 1e-8;
+#[cfg(feature = "regression")]
+const GLM_MAX_ITER: usize = 100;
+
+/// Fitted mean and (optionally) a 95% confidence band for a non-Gaussian GLM
+/// family over `grid`, computed like ggplot2's `predictdf.glm`: the band is
+/// `linkinv(η ± qnorm(0.975)·se(η))`. `None` when the fit fails (degenerate
+/// or out-of-range responses, e.g. a negative count).
+#[cfg(feature = "regression")]
+fn glm_link_prediction(
+    family: SmoothFamily,
+    x: &faer::Mat<f64>,
+    y: &faer::Col<f64>,
+    grid: &faer::Mat<f64>,
+    se: bool,
+) -> Option<anofox_regression::PredictionResult> {
+    use anofox_regression::core::PredictionType;
+    use anofox_regression::solvers::{
+        BinomialRegressor, GammaRegressor, NegativeBinomialRegressor, PoissonRegressor, Regressor,
+    };
+    use anofox_regression::{BinomialLink, PredictionResult};
+    use faer::Col;
+
+    // Link-scale prediction (η and se(η)) plus the inverse link.
+    let (link_pred, linkinv): (PredictionResult, Box<dyn Fn(f64) -> f64>) = match family {
+        SmoothFamily::Gaussian => return None,
+        SmoothFamily::Poisson => {
+            let f = PoissonRegressor::log()
+                .tolerance(GLM_TOL)
+                .max_iterations(GLM_MAX_ITER)
+                .build()
+                .fit(x, y)
+                .ok()?;
+            (
+                f.predict_with_se(grid, PredictionType::Link, None, 0.95),
+                Box::new(f64::exp),
+            )
+        }
+        SmoothFamily::NegativeBinomial => {
+            let f = NegativeBinomialRegressor::builder()
+                .tolerance(GLM_TOL)
+                .max_iterations(GLM_MAX_ITER)
+                .build()
+                .fit(x, y)
+                .ok()?;
+            (
+                f.predict_with_se(grid, PredictionType::Link, None, 0.95),
+                Box::new(f64::exp),
+            )
+        }
+        SmoothFamily::Binomial(link) => {
+            let link = match link {
+                SmoothBinomialLink::Logit => BinomialLink::Logit,
+                SmoothBinomialLink::Probit => BinomialLink::Probit,
+                SmoothBinomialLink::Cloglog => BinomialLink::Cloglog,
+            };
+            let f = BinomialRegressor::builder()
+                .link(link)
+                .tolerance(GLM_TOL)
+                .max_iterations(GLM_MAX_ITER)
+                .build()
+                .fit(x, y)
+                .ok()?;
+            (
+                f.predict_with_se(grid, PredictionType::Link, None, 0.95),
+                Box::new(move |eta| link.link_inverse(eta)),
+            )
+        }
+        SmoothFamily::Gamma(link) => {
+            let (power, inv): (f64, Box<dyn Fn(f64) -> f64>) = match link {
+                SmoothGammaLink::Inverse => (-1.0, Box::new(|eta: f64| 1.0 / eta)),
+                SmoothGammaLink::Log => (0.0, Box::new(f64::exp)),
+            };
+            let f = GammaRegressor::builder()
+                .link_power(power)
+                .tolerance(GLM_TOL)
+                .max_iterations(GLM_MAX_ITER)
+                .build()
+                .fit(x, y)
+                .ok()?;
+            (
+                f.inner()
+                    .predict_with_se(grid, PredictionType::Link, None, 0.95),
+                inv,
+            )
+        }
+    };
+
+    let n = grid.nrows();
+    let eta = &link_pred.fit;
+    let fit = Col::from_fn(n, |k| linkinv(eta[k]));
+    if !se {
+        return Some(PredictionResult::with_intervals(
+            fit,
+            Col::zeros(n),
+            Col::zeros(n),
+            Col::zeros(n),
+        ));
+    }
+    let z = crate::stat::dist::qnorm(0.975);
+    let lower = Col::from_fn(n, |k| linkinv(eta[k] - z * link_pred.se[k]));
+    let upper = Col::from_fn(n, |k| linkinv(eta[k] + z * link_pred.se[k]));
+    Some(PredictionResult::with_intervals(
+        fit,
+        lower,
+        upper,
+        link_pred.se.clone(),
+    ))
 }

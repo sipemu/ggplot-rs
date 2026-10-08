@@ -38,7 +38,7 @@ All notable changes to this project are documented here. The format follows
   is now transformed. `geom_errorbar` / `geom_linerange` honour a mapped
   `color`; an error bar is one polyline (cap–bar–cap) per row.
 
-### Added
+### Added — statistical geoms (reference lines, QQ, Cook's contours, KM/ECDF, dodge)
 
 - **Data-mapped reference lines (U1).** `Aes::{xintercept, yintercept, slope,
   intercept}` plus `GGPlot::{geom_hline_aes, geom_vline_aes, geom_abline_aes}`
@@ -109,6 +109,67 @@ All notable changes to this project are documented here. The format follows
 - The native SVG backend draws every `PointShape` (square, triangle, diamond,
   `+`, `×`) instead of falling back to circles; `+`/`×` are one stroked
   `<path>` per point, so they keep their `data-*` hover attributes.
+
+### Added — composition, label repel, GLM smooths, table brackets
+
+- `geom_smooth(method = "glm")` families: `SmoothFamily::Binomial(link)`
+  (`SmoothBinomialLink::{Logit, Probit, Cloglog}`, shorthand
+  `SmoothFamily::binomial()`), `SmoothFamily::Gamma(link)`
+  (`SmoothGammaLink::{Inverse, Log}`, shorthand `SmoothFamily::gamma()`) and
+  `SmoothFamily::NegativeBinomial` (log link, θ by ML as `MASS::glm.nb`), plus
+  the `GeomSmooth::glm(family)` builder. Bands follow ggplot2's
+  `predictdf.glm`: `linkinv(η ± qnorm(0.975)·se(η))`, so they stay inside the
+  response range. Validated against R `glm()`/`predict()` in
+  `tests/glm_smooth_r.rs`.
+- `GGPlot::geom_bracket_table(table, BracketTable)` — significance brackets
+  from a **precomputed** test table (ggpubr `stat_pvalue_manual`), no test is
+  recomputed. Reads the anofox `test` contract (`group1`, `group2`, `p_adj`
+  falling back to `p_value` per row, `test_id`) plus optional `y_position` /
+  `label` columns; label templates (`"p = {p_adj}"`, `{p}`, `{p.signif}` /
+  `{stars}` with configurable cutpoints, any `{column}`), `hide_ns`, automatic
+  stacking above the data for rows without `y_position`. Rows with missing or
+  unknown groups are dropped with a build warning. Pure grammar: available
+  without the `ggpubr` feature.
+- Brackets (`geom_bracket*`) now carry host hover metadata: a `<title>`
+  tooltip, `data-x="g1 vs g2"`, `data-series` (`test_id` for table brackets)
+  and `data-value` (the p-value).
+- `geom_text_repel` / `geom_label_repel` (`GeomTextRepel`, `GeomLabelRepel`,
+  `RepelParams`, `RepelDirection`; ggrepel): deterministic, seeded label
+  layout that avoids other labels and the labelled points and stays inside the
+  panel; `nudge`, `box_padding`, `point_padding`, `force`/`force_pull`,
+  `direction`, `max_iter` + `max_time` bounds, `max_overlaps` (dropped labels
+  are reported as a warning), connecting segments beyond
+  `min_segment_length`. Sweep-pruned collision checks; above `max_labels`
+  (default 500) the force layout is skipped with a warning.
+- `DrawBackend::warn` (default no-op): geoms can report draw-time warnings;
+  the native SVG backend collects them (`SvgBackend::take_warnings`) and
+  `render_svg_native_with_warnings` returns them after the build warnings.
+- `PlotGrid` (`ggplot_rs::compose`, in the prelude): patchwork-style
+  composition on the native SVG path — `PlotGrid::new().add(p).ncol(2)`, or
+  `a | b` (side by side) and `a / b` (stacked; chains flatten, mixed operators
+  nest), `add_spacer`, `nrow`/`byrow`, relative `widths`/`heights`, `spacing`,
+  shared `title`/`subtitle`/`caption`, panel tags (`TagLevels::{Lower, Upper,
+  Numeric, LowerRoman, UpperRoman, Custom}` + `tag_affixes`), and
+  `collect_legends(true)` (each distinct legend drawn once to the right or
+  bottom, identical legends de-duplicated). Renders one SVG
+  (`render_svg_native[_with_size|_with_warnings|_at]`); every sub-plot is a
+  nested `<svg>` that keeps its host attributes and adds
+  `data-panel="<tag or index>"`; the root carries `data-grid="<rows> <cols>"`.
+  Sub-plot warnings are returned prefixed `panel <tag>: `.
+- `examples/regression_diagnostics.rs`: a plotters-free 2×2 diagnostics grid
+  with repelled labels, table-driven brackets and a logistic GLM smooth.
+
+### Changed
+
+- `SmoothFamily::Poisson` bands are now formed on the link scale and mapped
+  through `exp` (as R/ggplot2), instead of a response-scale interval.
+- `ggpubr::ggarrange` now delegates to `PlotGrid`: cells are nested SVG
+  fragments without a per-cell `xmlns`, positioned as `x="300.00"`, and carry
+  `data-panel="<index>"`.
+- The `regression` feature now requires `anofox-regression` ^0.5.17 — the
+  version the anofox-statistics DuckDB extension uses — and GLM smooths use
+  that extension's IRLS settings (tolerance 1e-8, ≤ 100 iterations), so SQL
+  fits and plotted smooths agree.
 
 ## [0.16.0] — 2026-10-08
 

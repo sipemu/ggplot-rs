@@ -828,6 +828,9 @@ impl<'a> DrawBackend for PanelBackendAdapter<'a> {
     fn set_mark_value(&mut self, value: Option<String>) {
         self.inner.set_mark_value(value)
     }
+    fn warn(&mut self, message: String) {
+        self.inner.warn(message)
+    }
     fn total_area(&self) -> crate::render::Rect {
         self.inner.total_area()
     }
