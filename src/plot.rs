@@ -415,6 +415,65 @@ impl GGPlot {
             .layer_aes(Aes::new().xmin("xmin").xmax("xmax").y("y").label("label"))
     }
 
+    /// Significance brackets from a precomputed test table (ggpubr's
+    /// `stat_pvalue_manual` / `geom_bracket(data = …)`) — e.g. the anofox
+    /// `test` contract output (`group1`, `group2`, `p_adj`/`p_value`, optional
+    /// `y_position`, `label`). No test is recomputed. See
+    /// [`BracketTable`](crate::geom::bracket::BracketTable) for the column
+    /// rules, label templates (`"p = {p_adj}"`, `"{p.signif}"`) and the
+    /// automatic stacking of rows without a `y_position`. Rows that cannot be
+    /// drawn are dropped with a build warning.
+    pub fn geom_bracket_table(
+        mut self,
+        table: impl GGData,
+        spec: crate::geom::bracket::BracketTable,
+    ) -> Self {
+        let table = table.into_dataframe();
+        let col_for = |a: crate::aes::Aesthetic| {
+            self.mapping
+                .mappings
+                .iter()
+                .find(|m| m.aesthetic == a)
+                .map(|m| m.column.clone())
+        };
+        // The plot's x categories (to reject unknown groups) and finite y
+        // range (to stack brackets above the data).
+        let x_levels: Vec<String> = col_for(crate::aes::Aesthetic::X)
+            .and_then(|c| self.data.column(&c))
+            .filter(|col| col.iter().any(|v| matches!(v, Value::Str(_))))
+            .map(|col| {
+                let mut seen = std::collections::HashSet::new();
+                col.iter()
+                    .filter(|v| !v.is_na())
+                    .map(|v| v.to_group_key())
+                    .filter(|k| seen.insert(k.clone()))
+                    .collect()
+            })
+            .unwrap_or_default();
+        let y_range = col_for(crate::aes::Aesthetic::Y)
+            .and_then(|c| self.data.column(&c))
+            .and_then(|col| {
+                let (lo, hi) = col
+                    .iter()
+                    .filter_map(|v| v.as_f64())
+                    .filter(|v| v.is_finite())
+                    .fold((f64::INFINITY, f64::NEG_INFINITY), |(lo, hi), v| {
+                        (lo.min(v), hi.max(v))
+                    });
+                (lo <= hi).then_some((lo, hi))
+            });
+        let mut warnings = Vec::new();
+        let resolved = spec.resolve(&table, &x_levels, y_range, &mut warnings);
+        self.warnings.extend(warnings);
+        match resolved {
+            Some(data) => self
+                .add_geom(crate::geom::bracket::GeomBracket::from(spec.geom))
+                .layer_data(data)
+                .layer_aes(Aes::new().xmin("xmin").xmax("xmax").y("y").label("label")),
+            None => self,
+        }
+    }
+
     pub fn geom_label(self) -> Self {
         self.add_geom(GeomLabel::default())
     }

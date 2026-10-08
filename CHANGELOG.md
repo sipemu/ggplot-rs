@@ -16,6 +16,18 @@ All notable changes to this project are documented here. The format follows
   `predictdf.glm`: `linkinv(η ± qnorm(0.975)·se(η))`, so they stay inside the
   response range. Validated against R `glm()`/`predict()` in
   `tests/glm_smooth_r.rs`.
+- `GGPlot::geom_bracket_table(table, BracketTable)` — significance brackets
+  from a **precomputed** test table (ggpubr `stat_pvalue_manual`), no test is
+  recomputed. Reads the anofox `test` contract (`group1`, `group2`, `p_adj`
+  falling back to `p_value` per row, `test_id`) plus optional `y_position` /
+  `label` columns; label templates (`"p = {p_adj}"`, `{p}`, `{p.signif}` /
+  `{stars}` with configurable cutpoints, any `{column}`), `hide_ns`, automatic
+  stacking above the data for rows without `y_position`. Rows with missing or
+  unknown groups are dropped with a build warning. Pure grammar: available
+  without the `ggpubr` feature.
+- Brackets (`geom_bracket*`) now carry host hover metadata: a `<title>`
+  tooltip, `data-x="g1 vs g2"`, `data-series` (`test_id` for table brackets)
+  and `data-value` (the p-value).
 
 ### Changed
 
