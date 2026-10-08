@@ -215,8 +215,7 @@ impl Scale for ScaleContinuous {
                 .collect();
         }
 
-        let range = self.max - self.min;
-        if range.abs() < f64::EPSILON {
+        if super::util::is_degenerate_range(self.min, self.max) {
             let label = self.format_label(self.scale_transform.inverse(self.min));
             return vec![(0.5, label)];
         }

@@ -117,3 +117,26 @@ pub(crate) fn tip_value(v: &crate::data::Value) -> String {
             .unwrap_or_default(),
     }
 }
+
+/// Half-width (normalized panel units) for bars on a continuous / date x axis:
+/// `width` × the smallest gap between distinct mapped x positions, like
+/// ggplot2's `resolution(x)`. A fixed fraction would make 60 daily bars overlap
+/// and 3 bars look like slivers. Falls back to `fallback` with < 2 distinct xs.
+pub(crate) fn continuous_bar_half_width(
+    mapped_xs: impl Iterator<Item = f64>,
+    width: f64,
+    fallback: f64,
+) -> f64 {
+    let mut xs: Vec<f64> = mapped_xs.filter(|x| x.is_finite()).collect();
+    xs.sort_by(|a, b| a.total_cmp(b));
+    xs.dedup_by(|a, b| (*a - *b).abs() < 1e-12);
+    let gap = xs
+        .windows(2)
+        .map(|w| w[1] - w[0])
+        .fold(f64::INFINITY, f64::min);
+    if gap.is_finite() && gap > 0.0 {
+        gap * width / 2.0
+    } else {
+        fallback
+    }
+}

@@ -175,7 +175,7 @@ impl DataFrame {
         indices.sort_by(|&a, &b| {
             let va = col[a].as_f64().unwrap_or(f64::NAN);
             let vb = col[b].as_f64().unwrap_or(f64::NAN);
-            va.partial_cmp(&vb).unwrap_or(std::cmp::Ordering::Equal)
+            va.total_cmp(&vb)
         });
 
         let mut df = DataFrame::new();
@@ -217,12 +217,10 @@ impl DataFrame {
             Some(c) => c,
             None => return vec![],
         };
-        let mut seen: Vec<String> = Vec::new();
+        let mut seen = std::collections::HashSet::new();
         let mut result = Vec::new();
         for v in col {
-            let key = v.to_group_key();
-            if !seen.contains(&key) {
-                seen.push(key);
+            if seen.insert(v.to_group_key()) {
                 result.push(v.clone());
             }
         }

@@ -1,5 +1,6 @@
 use crate::aes::Aesthetic;
 use crate::data::Value;
+use indexmap::IndexSet;
 
 use super::color::RGBAColor;
 use super::Scale;
@@ -9,13 +10,13 @@ use super::Scale;
 pub struct ScaleManual {
     aesthetic: Aesthetic,
     name: String,
-    levels: Vec<String>,
+    levels: IndexSet<String>,
     colors: Vec<RGBAColor>,
 }
 
 impl ScaleManual {
     pub fn new(aesthetic: Aesthetic, values: Vec<(&str, RGBAColor)>) -> Self {
-        let levels: Vec<String> = values.iter().map(|(k, _)| k.to_string()).collect();
+        let levels: IndexSet<String> = values.iter().map(|(k, _)| k.to_string()).collect();
         let colors: Vec<RGBAColor> = values.iter().map(|(_, c)| *c).collect();
         ScaleManual {
             aesthetic,
@@ -34,17 +35,14 @@ impl Scale for ScaleManual {
     fn train(&mut self, values: &[Value]) {
         for v in values {
             let key = v.to_group_key();
-            if !self.levels.contains(&key) {
-                self.levels.push(key);
-            }
+            self.levels.insert(key);
         }
     }
 
     fn map(&self, value: &Value) -> f64 {
         let key = value.to_group_key();
         self.levels
-            .iter()
-            .position(|l| l == &key)
+            .get_index_of(&key)
             .map(|i| i as f64)
             .unwrap_or(0.0)
     }
@@ -71,7 +69,7 @@ impl Scale for ScaleManual {
 
     fn map_to_color(&self, value: &Value) -> Option<(u8, u8, u8)> {
         let key = value.to_group_key();
-        let idx = self.levels.iter().position(|l| l == &key).unwrap_or(0);
+        let idx = self.levels.get_index_of(&key).unwrap_or(0);
         if idx < self.colors.len() {
             let c = self.colors[idx];
             Some((c.r, c.g, c.b))

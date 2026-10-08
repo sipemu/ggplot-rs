@@ -94,6 +94,19 @@ impl Geom for GeomCol {
         // A `label` mapping (and the value) becomes a hover tooltip on each bar.
         let label_col = data.column("label");
 
+        // Bar width in normalized coords — computed once, not per row (breaks()
+        // allocates every level label, which made many-category charts O(n²)).
+        let half_width = if x_is_discrete {
+            let n_breaks = x_scale.map(|s| s.breaks().len()).unwrap_or(1);
+            self.width / (n_breaks.max(1) as f64 * 1.1) / 2.0
+        } else {
+            super::continuous_bar_half_width(
+                x_col.iter().filter_map(|v| x_scale.map(|s| s.map(v))),
+                self.width,
+                0.02,
+            )
+        };
+
         for i in 0..data.nrows() {
             let nx = x_scale.map(|s| s.map(&x_col[i])).unwrap_or(0.0);
             let ny = y_scale.map(|s| s.map(&y_col[i])).unwrap_or(0.0);
@@ -107,14 +120,6 @@ impl Geom for GeomCol {
                         .map(|s| s.map(&crate::data::Value::Float(0.0)))
                         .unwrap_or(0.0)
                 });
-
-            let half_width = if x_is_discrete {
-                let n_breaks = x_scale.map(|s| s.breaks().len()).unwrap_or(1);
-                let bar_frac = self.width / (n_breaks.max(1) as f64 * 1.1);
-                bar_frac / 2.0
-            } else {
-                0.02
-            };
 
             let (fr, fg, fb) = if let Some(fc) = fill_col {
                 scales

@@ -1,5 +1,6 @@
 use crate::aes::Aesthetic;
 use crate::data::Value;
+use indexmap::IndexSet;
 
 use super::Scale;
 
@@ -8,10 +9,12 @@ use super::Scale;
 pub struct ScaleDiscrete {
     aesthetic: Aesthetic,
     name: String,
-    levels: Vec<String>,
+    /// Insertion-ordered set: O(1) training and lookup, so many-category
+    /// scales stay linear in the number of rows.
+    levels: IndexSet<String>,
     custom_labels: Option<Vec<String>>,
     /// Pre-set level order/filter. When set, only these levels are shown (in this order).
-    limits: Option<Vec<String>>,
+    limits: Option<IndexSet<String>>,
 }
 
 impl ScaleDiscrete {
@@ -19,7 +22,7 @@ impl ScaleDiscrete {
         ScaleDiscrete {
             aesthetic: Aesthetic::X,
             name: String::new(),
-            levels: Vec::new(),
+            levels: IndexSet::new(),
             custom_labels: None,
             limits: None,
         }
@@ -51,7 +54,7 @@ impl ScaleDiscrete {
 
 impl ScaleDiscrete {
     /// Get the effective levels (filtered by limits if set).
-    fn effective_levels(&self) -> &[String] {
+    fn effective_levels(&self) -> &IndexSet<String> {
         if let Some(ref limits) = self.limits {
             limits
         } else {
@@ -78,9 +81,7 @@ impl Scale for ScaleDiscrete {
         } else {
             for v in values {
                 let key = v.to_group_key();
-                if !self.levels.contains(&key) {
-                    self.levels.push(key);
-                }
+                self.levels.insert(key);
             }
         }
     }
@@ -92,7 +93,7 @@ impl Scale for ScaleDiscrete {
         if n == 0 {
             return 0.5;
         }
-        match effective.iter().position(|l| l == &key) {
+        match effective.get_index_of(&key) {
             Some(idx) => (idx as f64 + 0.5) / n as f64,
             None => 0.5, // Not in limits → maps to middle
         }

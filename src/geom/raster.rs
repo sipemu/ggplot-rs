@@ -34,7 +34,7 @@ impl Default for GeomRaster {
 /// Smallest positive gap between distinct, sorted values (fallback 1.0).
 fn infer_step(values: &[f64]) -> f64 {
     let mut uniq: Vec<f64> = values.to_vec();
-    uniq.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
+    uniq.sort_by(|a, b| a.total_cmp(b));
     uniq.dedup_by(|a, b| (*a - *b).abs() < 1e-12);
     let mut step = f64::INFINITY;
     for w in uniq.windows(2) {

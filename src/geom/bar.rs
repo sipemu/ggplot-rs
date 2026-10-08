@@ -55,6 +55,20 @@ impl Geom for GeomBar {
 
         let x_is_discrete = x_scale.map(|s| s.is_discrete()).unwrap_or(false);
 
+        // Bar width in normalized coords — computed once, not per row (breaks()
+        // allocates every level label, which made many-category charts O(n²)).
+        let half_width = if x_is_discrete {
+            // Band-based: each category occupies 1/n of the axis
+            let n_breaks = x_scale.map(|s| s.breaks().len()).unwrap_or(1);
+            self.width / n_breaks.max(1) as f64 / 2.0
+        } else {
+            super::continuous_bar_half_width(
+                x_col.iter().filter_map(|v| x_scale.map(|s| s.map(v))),
+                self.width,
+                0.02,
+            )
+        };
+
         for i in 0..data.nrows() {
             let nx = x_scale.map(|s| s.map(&x_col[i])).unwrap_or(0.0);
             let ny = y_scale.map(|s| s.map(&y_col[i])).unwrap_or(0.0);
@@ -67,16 +81,6 @@ impl Geom for GeomBar {
                         .map(|s| s.map(&crate::data::Value::Float(0.0)))
                         .unwrap_or(0.0)
                 });
-
-            // Bar width in normalized coords
-            let half_width = if x_is_discrete {
-                // Band-based: each category occupies 1/n of the axis
-                let n_breaks = x_scale.map(|s| s.breaks().len()).unwrap_or(1);
-                let band_width = 1.0 / n_breaks.max(1) as f64;
-                band_width * self.width / 2.0
-            } else {
-                0.02 // Thin bars for continuous
-            };
 
             let (fr, fg, fb) = if let Some(fc) = fill_col {
                 scales

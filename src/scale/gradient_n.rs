@@ -22,7 +22,7 @@ impl ScaleColorGradientN {
     /// Stops are `(position, color)` where position is in [0, 1].
     pub fn new(aesthetic: Aesthetic, stops: Vec<(f64, RGBAColor)>) -> Self {
         let mut stops = stops;
-        stops.sort_by(|a, b| a.0.partial_cmp(&b.0).unwrap_or(std::cmp::Ordering::Equal));
+        stops.sort_by(|a, b| a.0.total_cmp(&b.0));
         ScaleColorGradientN {
             aesthetic,
             name: String::new(),
@@ -123,21 +123,17 @@ impl Scale for ScaleColorGradientN {
             return vec![];
         }
         let range = self.max - self.min;
-        if range.abs() < f64::EPSILON {
+        if super::util::is_degenerate_range(self.min, self.max) {
             return vec![(0.5, format_number(self.min))];
         }
         let n_breaks = 5;
         let raw_step = range / n_breaks as f64;
         let step = nice_step(raw_step);
         let start = (self.min / step).ceil() * step;
-        let mut breaks = Vec::new();
-        let mut v = start;
-        while v <= self.max + step * 0.001 {
-            let pos = self.map(&Value::Float(v));
-            breaks.push((pos, format_number(v)));
-            v += step;
-        }
-        breaks
+        super::util::stepped_breaks(start, self.max, step)
+            .into_iter()
+            .map(|v| (self.map(&Value::Float(v)), format_number(v)))
+            .collect()
     }
 
     fn name(&self) -> &str {

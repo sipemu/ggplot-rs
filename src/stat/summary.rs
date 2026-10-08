@@ -23,7 +23,7 @@ impl SummaryFun {
             SummaryFun::Mean => mean(values),
             SummaryFun::Median => {
                 let mut sorted = values.to_vec();
-                sorted.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
+                sorted.sort_by(|a, b| a.total_cmp(b));
                 quantile_type7(&sorted, 0.5)
             }
             SummaryFun::Min => values.iter().cloned().fold(f64::INFINITY, f64::min),
@@ -79,7 +79,7 @@ impl SummaryData {
             }
             SummaryData::MedianHilow { level } => {
                 let mut s = values.to_vec();
-                s.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
+                s.sort_by(|a, b| a.total_cmp(b));
                 (
                     quantile_type7(&s, 0.5),
                     quantile_type7(&s, (1.0 - level) / 2.0),
@@ -102,7 +102,7 @@ impl SummaryData {
                     }
                     means.push(acc / n as f64);
                 }
-                means.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
+                means.sort_by(|a, b| a.total_cmp(b));
                 (
                     m,
                     quantile_type7(&means, (1.0 - level) / 2.0),

@@ -26,7 +26,7 @@ impl Stat for StatEcdf {
             return DataFrame::new();
         }
 
-        values.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
+        values.sort_by(|a, b| a.total_cmp(b));
         let n = values.len() as f64;
 
         let mut x_vals = Vec::with_capacity(values.len() + 2);

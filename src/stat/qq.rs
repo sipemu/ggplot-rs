@@ -37,7 +37,7 @@ impl Stat for StatQQ {
             return DataFrame::new();
         }
 
-        values.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
+        values.sort_by(|a, b| a.total_cmp(b));
         let n = values.len();
 
         let mut x_vals = Vec::with_capacity(n);
@@ -93,7 +93,7 @@ impl Stat for StatQQLine {
             return DataFrame::new();
         }
 
-        values.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
+        values.sort_by(|a, b| a.total_cmp(b));
         let n = values.len();
 
         // Sample Q1 and Q3 using R-compatible type-7 quantile interpolation

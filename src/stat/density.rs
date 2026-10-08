@@ -86,7 +86,7 @@ fn gaussian_kernel(x: f64) -> f64 {
 
 fn iqr(values: &[f64]) -> f64 {
     let mut sorted = values.to_vec();
-    sorted.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
+    sorted.sort_by(|a, b| a.total_cmp(b));
     quantile_type7(&sorted, 0.75) - quantile_type7(&sorted, 0.25)
 }
 

@@ -1,8 +1,10 @@
-use rand::Rng;
+use rand::{Rng, SeedableRng};
 
 use crate::data::{DataFrame, Value};
 
 use super::{Position, PositionParams};
+
+const JITTER_SEED: u64 = 0x6A17_7E2D;
 
 /// Add random noise to x and y positions to reduce overplotting.
 pub struct PositionJitter {
@@ -21,7 +23,10 @@ impl Default for PositionJitter {
 
 impl Position for PositionJitter {
     fn compute(&self, data: &mut DataFrame, _params: &PositionParams) {
-        let mut rng = rand::thread_rng();
+        // Fixed seed: the same data must render the same SVG (stable snapshots,
+        // cacheable output, no flicker when a host re-renders), as with
+        // ggplot2's `position_jitter(seed = …)`.
+        let mut rng = rand::rngs::StdRng::seed_from_u64(JITTER_SEED);
 
         if let Some(x_col) = data.column_mut("x") {
             for v in x_col.iter_mut() {

@@ -72,10 +72,27 @@ fn rgb((r, g, b): (u8, u8, u8)) -> String {
     format!("#{r:02X}{g:02X}{b:02X}")
 }
 
+/// Escape text for use in SVG element content *and* quoted attribute values.
+/// Quotes must be escaped too: data values land in `data-x="…"`, and the SVG is
+/// routinely inlined into HTML, so an unescaped `"` would let data inject
+/// attributes (e.g. event handlers). Characters that are not legal in XML 1.0
+/// (C0 controls other than tab/LF/CR) are dropped so the document stays
+/// well-formed.
 fn escape(s: &str) -> String {
-    s.replace('&', "&amp;")
-        .replace('<', "&lt;")
-        .replace('>', "&gt;")
+    let mut out = String::with_capacity(s.len());
+    for c in s.chars() {
+        match c {
+            '&' => out.push_str("&amp;"),
+            '<' => out.push_str("&lt;"),
+            '>' => out.push_str("&gt;"),
+            '"' => out.push_str("&quot;"),
+            '\'' => out.push_str("&#39;"),
+            '\t' | '\n' | '\r' => out.push(c),
+            c if (c as u32) < 0x20 || c == '\u{FFFE}' || c == '\u{FFFF}' => {}
+            c => out.push(c),
+        }
+    }
+    out
 }
 
 fn points(pts: &[(f64, f64)]) -> String {

@@ -80,7 +80,7 @@ impl Geom for GeomLine {
                 sorted.sort_by(|&a, &b| {
                     let xa = x_col[a].as_f64().unwrap_or(0.0);
                     let xb = x_col[b].as_f64().unwrap_or(0.0);
-                    xa.partial_cmp(&xb).unwrap_or(std::cmp::Ordering::Equal)
+                    xa.total_cmp(&xb)
                 });
 
                 let points: Vec<(f64, f64)> = sorted
@@ -121,7 +121,7 @@ impl Geom for GeomLine {
             sorted_indices.sort_by(|&a, &b| {
                 let xa = x_col[a].as_f64().unwrap_or(0.0);
                 let xb = x_col[b].as_f64().unwrap_or(0.0);
-                xa.partial_cmp(&xb).unwrap_or(std::cmp::Ordering::Equal)
+                xa.total_cmp(&xb)
             });
 
             let points: Vec<(f64, f64)> = sorted_indices

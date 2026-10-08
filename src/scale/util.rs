@@ -1,8 +1,41 @@
+/// Upper bound on label-start candidates per (q, j, k, z) in [`extended_breaks`].
+/// Real inputs need a handful; only precision-degenerate ranges get near this.
+const MAX_START_CANDIDATES: f64 = 10_000.0;
+
+/// True when `[dmin, dmax]` is too narrow, relative to its magnitude, to place
+/// distinct ticks on (floating-point noise around a constant value).
+pub fn is_degenerate_range(dmin: f64, dmax: f64) -> bool {
+    let range = (dmax - dmin).abs();
+    range < f64::EPSILON || range <= 1e-10 * dmin.abs().max(dmax.abs())
+}
+
+/// Evenly spaced break values `start, start+step, …` up to `end` (inclusive,
+/// with a small tolerance). Index-driven and capped, so it terminates even when
+/// `step` is below the floating-point resolution of `start` (where repeated
+/// `v += step` would never advance).
+pub fn stepped_breaks(start: f64, end: f64, step: f64) -> Vec<f64> {
+    const MAX_BREAKS: f64 = 1_000.0;
+    if !(start.is_finite() && end.is_finite() && step.is_finite()) || step <= 0.0 {
+        return vec![];
+    }
+    let n = ((end + step * 0.001 - start) / step).floor();
+    if !(0.0..=MAX_BREAKS).contains(&n) {
+        return vec![];
+    }
+    (0..=n as usize).map(|i| start + i as f64 * step).collect()
+}
+
 /// Extended-Wilkinson tick locations (Talbot, Lin & Hanrahan 2010), matching R's
 /// `scales::extended_breaks()` / `labeling::extended()`. Returns "nice" break
 /// values covering `[dmin, dmax]` with roughly `m` labels.
 pub fn extended_breaks(dmin: f64, dmax: f64, m: usize) -> Vec<f64> {
     if !(dmin.is_finite() && dmax.is_finite()) || dmax <= dmin || m < 2 {
+        return vec![];
+    }
+    // A range that is negligible relative to the magnitude of the data (e.g.
+    // 1-ulp float noise from SUM/AVG) has no meaningful breaks, and the search
+    // below would need more than 2^53 candidate starts to cover it.
+    if is_degenerate_range(dmin, dmax) {
         return vec![];
     }
     // Preferred step mantissas and score weights (simplicity, coverage, density,
@@ -77,8 +110,14 @@ pub fn extended_breaks(dmin: f64, dmax: f64, m: usize) -> Vec<f64> {
                     if min_start > max_start {
                         continue;
                     }
-                    let mut start = min_start;
-                    while start <= max_start {
+                    // Integer-driven so the loop always terminates: once
+                    // `start` exceeds 2^53, `start += 1.0` no longer changes it.
+                    let n_starts = max_start - min_start;
+                    if !n_starts.is_finite() || n_starts > MAX_START_CANDIDATES {
+                        continue;
+                    }
+                    for si in 0..=(n_starts as u64) {
+                        let start = min_start + si as f64;
                         let lmin = start * step / j;
                         let lmax = lmin + step * (k - 1.0);
                         let s = simplicity(qi, j, lmin, lmax, step);
@@ -89,7 +128,6 @@ pub fn extended_breaks(dmin: f64, dmax: f64, m: usize) -> Vec<f64> {
                             best_score = score;
                             best = (lmin, lmax, step);
                         }
-                        start += 1.0;
                     }
                 }
             }

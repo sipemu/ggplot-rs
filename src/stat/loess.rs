@@ -118,7 +118,7 @@ fn local_regression(pairs: &[(f64, f64)], x0: f64, k: usize) -> f64 {
         .enumerate()
         .map(|(i, (x, _))| (i, (x - x0).abs()))
         .collect();
-    dists.sort_by(|a, b| a.1.partial_cmp(&b.1).unwrap_or(std::cmp::Ordering::Equal));
+    dists.sort_by(|a, b| a.1.total_cmp(&b.1));
 
     let max_dist = dists[k - 1].1;
     let max_dist = if max_dist < f64::EPSILON {

@@ -1,6 +1,7 @@
 use crate::aes::Aesthetic;
 use crate::data::Value;
 use crate::render::backend::Linetype;
+use indexmap::IndexSet;
 
 use super::Scale;
 
@@ -8,13 +9,13 @@ use super::Scale;
 #[derive(Clone, Debug)]
 pub struct ScaleLinetypeManual {
     name: String,
-    levels: Vec<String>,
+    levels: IndexSet<String>,
     linetypes: Vec<Linetype>,
 }
 
 impl ScaleLinetypeManual {
     pub fn new(values: Vec<(&str, Linetype)>) -> Self {
-        let levels: Vec<String> = values.iter().map(|(k, _)| k.to_string()).collect();
+        let levels: IndexSet<String> = values.iter().map(|(k, _)| k.to_string()).collect();
         let linetypes: Vec<Linetype> = values.iter().map(|(_, lt)| *lt).collect();
         ScaleLinetypeManual {
             name: String::new(),
@@ -32,17 +33,14 @@ impl Scale for ScaleLinetypeManual {
     fn train(&mut self, values: &[Value]) {
         for v in values {
             let key = v.to_group_key();
-            if !self.levels.contains(&key) {
-                self.levels.push(key);
-            }
+            self.levels.insert(key);
         }
     }
 
     fn map(&self, value: &Value) -> f64 {
         let key = value.to_group_key();
         self.levels
-            .iter()
-            .position(|l| l == &key)
+            .get_index_of(&key)
             .map(|i| i as f64)
             .unwrap_or(0.0)
     }
@@ -69,7 +67,7 @@ impl Scale for ScaleLinetypeManual {
 
     fn map_to_linetype(&self, value: &Value) -> Option<Linetype> {
         let key = value.to_group_key();
-        let idx = self.levels.iter().position(|l| l == &key).unwrap_or(0);
+        let idx = self.levels.get_index_of(&key).unwrap_or(0);
         if idx < self.linetypes.len() {
             Some(self.linetypes[idx])
         } else {

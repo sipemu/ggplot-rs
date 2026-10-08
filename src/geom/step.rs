@@ -65,7 +65,7 @@ impl Geom for GeomStep {
         sorted.sort_by(|&a, &b| {
             let xa = x_col[a].as_f64().unwrap_or(0.0);
             let xb = x_col[b].as_f64().unwrap_or(0.0);
-            xa.partial_cmp(&xb).unwrap_or(std::cmp::Ordering::Equal)
+            xa.total_cmp(&xb)
         });
 
         // Build raw normalized points

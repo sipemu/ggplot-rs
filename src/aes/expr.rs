@@ -235,7 +235,7 @@ fn aggregate(name: &str) -> Option<fn(&[f64]) -> f64> {
                 return f64::NAN;
             }
             let mut s = v.to_vec();
-            s.sort_by(|a, b| a.partial_cmp(b).unwrap());
+            s.sort_by(|a, b| a.total_cmp(b));
             let m = s.len() / 2;
             if s.len().is_multiple_of(2) {
                 (s[m - 1] + s[m]) / 2.0

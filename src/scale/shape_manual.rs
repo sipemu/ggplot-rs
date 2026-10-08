@@ -1,6 +1,7 @@
 use crate::aes::Aesthetic;
 use crate::data::Value;
 use crate::render::backend::PointShape;
+use indexmap::IndexSet;
 
 use super::Scale;
 
@@ -8,13 +9,13 @@ use super::Scale;
 #[derive(Clone, Debug)]
 pub struct ScaleShapeManual {
     name: String,
-    levels: Vec<String>,
+    levels: IndexSet<String>,
     shapes: Vec<PointShape>,
 }
 
 impl ScaleShapeManual {
     pub fn new(values: Vec<(&str, PointShape)>) -> Self {
-        let levels: Vec<String> = values.iter().map(|(k, _)| k.to_string()).collect();
+        let levels: IndexSet<String> = values.iter().map(|(k, _)| k.to_string()).collect();
         let shapes: Vec<PointShape> = values.iter().map(|(_, s)| *s).collect();
         ScaleShapeManual {
             name: String::new(),
@@ -32,17 +33,14 @@ impl Scale for ScaleShapeManual {
     fn train(&mut self, values: &[Value]) {
         for v in values {
             let key = v.to_group_key();
-            if !self.levels.contains(&key) {
-                self.levels.push(key);
-            }
+            self.levels.insert(key);
         }
     }
 
     fn map(&self, value: &Value) -> f64 {
         let key = value.to_group_key();
         self.levels
-            .iter()
-            .position(|l| l == &key)
+            .get_index_of(&key)
             .map(|i| i as f64)
             .unwrap_or(0.0)
     }
@@ -69,7 +67,7 @@ impl Scale for ScaleShapeManual {
 
     fn map_to_shape(&self, value: &Value) -> Option<PointShape> {
         let key = value.to_group_key();
-        let idx = self.levels.iter().position(|l| l == &key).unwrap_or(0);
+        let idx = self.levels.get_index_of(&key).unwrap_or(0);
         if idx < self.shapes.len() {
             Some(self.shapes[idx])
         } else {
