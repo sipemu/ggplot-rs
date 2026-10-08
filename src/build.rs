@@ -74,7 +74,13 @@ impl PlotBuilder {
             facet,
             annotations,
             guide_legend,
+            warnings: plot_warnings,
+            default_aspect_ratio,
         } = plot;
+        let mut theme = theme;
+        if theme.aspect_ratio.is_none() {
+            theme.aspect_ratio = default_aspect_ratio;
+        }
 
         let mut scale_set = ScaleSet::new();
 
@@ -84,7 +90,7 @@ impl PlotBuilder {
         }
 
         let mut built_layers = Vec::new();
-        let mut warnings: Vec<String> = Vec::new();
+        let mut warnings: Vec<String> = plot_warnings;
 
         // Faceting variables — used to group stat computation per panel so a
         // computed stat (density/histogram) is estimated per panel, not pooled.
@@ -128,6 +134,9 @@ impl PlotBuilder {
         if let Some((min, max)) = coord.zoom_y() {
             scale_set.set_limits(&Aesthetic::Y, min, max);
         }
+
+        // Let the coordinate system adjust/inspect the trained scales.
+        coord.train_scales(&mut scale_set);
 
         // Supply trained axis spans to the coordinate system (used by coord_trans).
         // pmin/pmax are the panel positions of the domain endpoints, so the coord

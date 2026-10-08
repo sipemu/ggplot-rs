@@ -98,6 +98,12 @@ pub struct GGPlot {
     pub(crate) facet: Facet,
     pub(crate) annotations: Vec<Annotation>,
     pub(crate) guide_legend: crate::guide::config::GuideLegend,
+    /// Warnings raised while specifying the plot (e.g. a clipped calendar
+    /// span); prepended to the build warnings.
+    pub(crate) warnings: Vec<String>,
+    /// Panel aspect ratio used when the theme sets none (helpers such as
+    /// `geom_calendar` need square cells; survives theme presets).
+    pub(crate) default_aspect_ratio: Option<f64>,
 }
 
 impl GGPlot {
@@ -114,6 +120,8 @@ impl GGPlot {
             facet: Facet::default(),
             annotations: Vec::new(),
             guide_legend: crate::guide::config::GuideLegend::default(),
+            warnings: Vec::new(),
+            default_aspect_ratio: None,
         }
     }
 
@@ -685,6 +693,122 @@ impl GGPlot {
 
     pub fn geom_density2d_with(self, geom: GeomDensity2d) -> Self {
         self.add_geom_with(geom)
+    }
+
+    /// Candlestick chart: map `x` and `open`/`high`/`low`/`close`
+    /// (`Aes::new().x("date").open("o").high("h").low("l").close("c")`).
+    pub fn geom_candlestick(self) -> Self {
+        self.add_geom(crate::geom::candlestick::GeomCandlestick::default())
+    }
+
+    pub fn geom_candlestick_with(self, geom: crate::geom::candlestick::GeomCandlestick) -> Self {
+        self.add_geom_with(geom)
+    }
+
+    /// OHLC bar chart (high–low bar with open/close ticks); same aesthetics as
+    /// [`geom_candlestick`](Self::geom_candlestick).
+    pub fn geom_ohlc(self) -> Self {
+        self.add_geom(crate::geom::candlestick::GeomOhlc::default())
+    }
+
+    pub fn geom_ohlc_with(self, geom: crate::geom::candlestick::GeomOhlc) -> Self {
+        self.add_geom_with(geom)
+    }
+
+    /// Calendar heatmap (GitHub/ECharts style): the plot's `x` (a date —
+    /// `DateTime`, epoch seconds or `"YYYY-MM-DD"`) is laid out as week
+    /// columns × weekday rows (Sunday on top) via [`StatCalendar`], coloured
+    /// by `fill`, with month labels along x, Mon/Wed/Fri along y, month
+    /// boundary outlines and square cells. Spans over
+    /// [`MAX_CALENDAR_YEARS`] are clipped to the most recent years (with a
+    /// build warning). Uses the plot-level data and `x` mapping.
+    ///
+    /// [`StatCalendar`]: crate::stat::calendar::StatCalendar
+    /// [`MAX_CALENDAR_YEARS`]: crate::stat::calendar::MAX_CALENDAR_YEARS
+    pub fn geom_calendar(self) -> Self {
+        self.geom_calendar_with(
+            GeomTile {
+                color: (255, 255, 255),
+                line_width: 1.5,
+                ..Default::default()
+            },
+            false,
+        )
+    }
+
+    /// [`geom_calendar`](Self::geom_calendar) with a custom cell style and
+    /// optionally Monday-first weeks.
+    pub fn geom_calendar_with(mut self, tile: GeomTile, monday_first: bool) -> Self {
+        use crate::stat::calendar::{
+            day_number, month_boundaries, month_breaks, CalendarGrid, StatCalendar,
+            MAX_CALENDAR_YEARS,
+        };
+        let grid = self
+            .mapping
+            .get_mapping(&crate::aes::Aesthetic::X)
+            .and_then(|c| self.data.column(c))
+            .and_then(|col| {
+                CalendarGrid::from_days(col.iter().filter_map(day_number), monday_first)
+            });
+        let Some((grid, clipped)) = grid else {
+            // No dates: an empty calendar layer (renders an empty panel).
+            return self.add_geom_with(tile).stat(StatCalendar {
+                grid: None,
+                monday_first,
+            });
+        };
+        if clipped {
+            self.warnings.push(format!(
+                "geom_calendar: dates more than {MAX_CALENDAR_YEARS} years before the newest were dropped"
+            ));
+        }
+        let (xb, xl) = month_breaks(&grid);
+        // Rows: y = 6 - weekday; label Mon/Wed/Fri.
+        let (yb, yl) = if monday_first {
+            (vec![6.0, 4.0, 2.0], ["Mon", "Wed", "Fri"])
+        } else {
+            (vec![5.0, 3.0, 1.0], ["Mon", "Wed", "Fri"])
+        };
+        let segs = month_boundaries(&grid);
+        let col = |f: fn(&(f64, f64, f64, f64)) -> f64| -> Vec<Value> {
+            segs.iter().map(|s| Value::Float(f(s))).collect()
+        };
+        let boundaries = vec![
+            ("x".to_string(), col(|s| s.0)),
+            ("y".to_string(), col(|s| s.1)),
+            ("xend".to_string(), col(|s| s.2)),
+            ("yend".to_string(), col(|s| s.3)),
+        ];
+        self.default_aspect_ratio = Some(7.0 / grid.n_weeks().max(1) as f64);
+        let plot = self
+            .add_geom_with(tile)
+            .stat(StatCalendar {
+                grid: Some(grid),
+                monday_first,
+            })
+            .scale_x_continuous(
+                ScaleContinuous::new()
+                    .with_breaks(xb)
+                    .with_labels(xl)
+                    .with_expand(0.0, 0.0),
+            )
+            .scale_y_continuous(
+                ScaleContinuous::new()
+                    .with_breaks(yb)
+                    .with_labels(yl.iter().map(|s| s.to_string()).collect())
+                    .with_expand(0.0, 0.0),
+            );
+        if segs.is_empty() {
+            return plot;
+        }
+        plot.geom_segment_with(GeomSegment {
+            color: (120, 128, 140),
+            width: 1.2,
+            alpha: 1.0,
+        })
+        .layer_data(boundaries)
+        .layer_aes(Aes::new().x("x").y("y").xend("xend").yend("yend"))
+        .show_legend(false)
     }
 
     pub fn geom_blank(self) -> Self {
@@ -1361,6 +1485,19 @@ impl GGPlot {
 
     pub fn coord_polar(mut self) -> Self {
         self.coord = Box::new(CoordPolar::new());
+        self
+    }
+
+    /// Radar / spider chart coordinates: discrete `x` → spokes, `y` → distance
+    /// from the centre, straight segments, ring/spoke guides. Pair with
+    /// `geom_polygon` (closed series) and `geom_point`.
+    pub fn coord_radar(mut self) -> Self {
+        self.coord = Box::new(crate::coord::radar::CoordRadar::new());
+        self
+    }
+
+    pub fn coord_radar_with(mut self, coord: crate::coord::radar::CoordRadar) -> Self {
+        self.coord = Box::new(coord);
         self
     }
 

@@ -113,6 +113,7 @@ impl Geom for GeomTile {
         let fill_col = data.column("fill");
         // A `label` (or the fill value) becomes each tile's hover tooltip.
         let label_col = data.column("label").or(fill_col);
+        let date_key = data.column(crate::stat::calendar::DATE_KEY_COL);
 
         let plot_area = backend.plot_area();
         let x_scale = scales.get(&Aesthetic::X);
@@ -180,23 +181,27 @@ impl Geom for GeomTile {
                 .and_then(|fc| scales.map_color(&Aesthetic::Fill, &fc[i]))
                 .unwrap_or(self.fill);
 
-            // Hover tooltip: "x, y: value".
-            let xs = super::tip_value(&x_col[i]);
-            let ys = super::tip_value(&y_col[i]);
-            let tip = match label_col
+            // Hover tooltip: "x, y: value" — or "date: value" for calendar
+            // cells, whose x/y are layout positions.
+            let value = label_col
                 .map(|c| super::tip_value(&c[i]))
-                .filter(|s| !s.is_empty())
-            {
-                Some(v) => format!("{xs}, {ys}: {v}"),
-                None => format!("{xs}, {ys}"),
-            };
-            super::set_mark(
-                backend,
-                Some(tip),
-                Some(xs),
-                Some(ys),
-                fill_col.and_then(|c| super::raw_value(&c[i])),
-            );
+                .filter(|s| !s.is_empty());
+            let raw = fill_col.and_then(|c| super::raw_value(&c[i]));
+            if let Some(key) = date_key.map(|c| super::tip_value(&c[i])) {
+                let tip = match value {
+                    Some(v) => format!("{key}: {v}"),
+                    None => key.clone(),
+                };
+                super::set_mark(backend, Some(tip), Some(key), None, raw);
+            } else {
+                let xs = super::tip_value(&x_col[i]);
+                let ys = super::tip_value(&y_col[i]);
+                let tip = match value {
+                    Some(v) => format!("{xs}, {ys}: {v}"),
+                    None => format!("{xs}, {ys}"),
+                };
+                super::set_mark(backend, Some(tip), Some(xs), Some(ys), raw);
+            }
 
             backend.draw_rect(
                 (left, top.min(bottom)),

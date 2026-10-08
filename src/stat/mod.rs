@@ -3,6 +3,7 @@ pub mod bin2d;
 pub mod bindot;
 pub mod binhex;
 pub mod boxplot;
+pub mod calendar;
 #[cfg(feature = "ggpubr")]
 pub mod compare_means;
 pub mod contour;

@@ -64,24 +64,27 @@ impl Geom for GeomRect {
             let nymin = y_scale.map(|s| s.map(&ymin_col[i])).unwrap_or(0.0);
             let nymax = y_scale.map(|s| s.map(&ymax_col[i])).unwrap_or(0.0);
 
-            let (left, top) = coord.transform((nxmin, nymax), &plot_area);
-            let (right, bottom) = coord.transform((nxmax, nymin), &plot_area);
-
             let fill_color = fill_col
                 .and_then(|fc| scales.map_color(&Aesthetic::Fill, &fc[i]))
                 .unwrap_or(self.fill);
+            let style = RectStyle {
+                fill: Some(fill_color),
+                stroke: (self.line_width > 0.0).then_some(self.color),
+                stroke_width: self.line_width,
+                alpha: self.alpha,
+                clip: !coord.is_polar(),
+            };
 
-            backend.draw_rect(
-                (left, top.min(bottom)),
-                (right, top.max(bottom)),
-                &RectStyle {
-                    fill: Some(fill_color),
-                    stroke: Some(self.color),
-                    stroke_width: self.line_width,
-                    alpha: self.alpha,
-                    clip: true,
-                },
-            )?;
+            if coord.is_polar() {
+                // Under polar coords a rect is an annulus sector (gauge bands).
+                let pts = super::col::polar_sector(coord, &plot_area, nxmin, nxmax, nymin, nymax);
+                backend.draw_polygon(&pts, &style)?;
+                continue;
+            }
+
+            let (left, top) = coord.transform((nxmin, nymax), &plot_area);
+            let (right, bottom) = coord.transform((nxmax, nymin), &plot_area);
+            backend.draw_rect((left, top.min(bottom)), (right, top.max(bottom)), &style)?;
         }
 
         Ok(())

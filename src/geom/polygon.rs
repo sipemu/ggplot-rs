@@ -46,8 +46,14 @@ impl Geom for GeomPolygon {
         let y_col = data
             .column("y")
             .ok_or(RenderError::MissingAesthetic("y".into()))?;
-        let group_col = data.column("group");
+        // Group by `group`, else by a mapped colour / fill (ggplot2 groups by
+        // discrete aesthetics), else one polygon.
+        let group_col = data
+            .column("group")
+            .or_else(|| data.column("color"))
+            .or_else(|| data.column("fill"));
         let fill_col = data.column("fill");
+        let color_col = data.column("color");
 
         let plot_area = backend.plot_area();
         let x_scale = scales.get(&Aesthetic::X);
@@ -79,14 +85,28 @@ impl Geom for GeomPolygon {
                 .and_then(|fc| scales.map_color(&Aesthetic::Fill, &fc[first_idx]))
                 .unwrap_or(self.fill);
 
-            let points: Vec<(f64, f64)> = indices
+            let stroke_color = color_col
+                .and_then(|cc| scales.map_color(&Aesthetic::Color, &cc[first_idx]))
+                .unwrap_or(self.color);
+
+            let mut mapped: Vec<(f64, f64)> = indices
                 .iter()
                 .map(|&i| {
                     let nx = x_scale.map(|s| s.map(&x_col[i])).unwrap_or(0.0);
                     let ny = y_scale.map(|s| s.map(&y_col[i])).unwrap_or(0.0);
-                    coord.transform((nx, ny), &plot_area)
+                    (nx, ny)
                 })
                 .collect();
+            // Radar series go around the spokes in axis order.
+            if coord.is_radar() {
+                mapped.sort_by(|a, b| a.0.total_cmp(&b.0));
+            }
+            let points: Vec<(f64, f64)> = mapped
+                .into_iter()
+                .map(|p| coord.transform(p, &plot_area))
+                .collect();
+            let series = super::series_key(data, first_idx);
+            super::set_mark(backend, series.clone(), None, series, None);
 
             backend.draw_polygon(
                 &points,
@@ -94,19 +114,20 @@ impl Geom for GeomPolygon {
                     fill: Some(fill_color),
                     // No outline when line_width <= 0 (e.g. filled contour bands,
                     // where per-triangle strokes would show the triangulation).
-                    stroke: (self.line_width > 0.0).then_some(self.color),
+                    stroke: (self.line_width > 0.0).then_some(stroke_color),
                     stroke_width: self.line_width,
                     alpha: self.alpha,
                     clip: true,
                 },
             )?;
         }
+        super::clear_mark(backend);
 
         Ok(())
     }
 
     fn required_aes(&self) -> Vec<Aesthetic> {
-        vec![Aesthetic::X, Aesthetic::Y, Aesthetic::Group]
+        vec![Aesthetic::X, Aesthetic::Y]
     }
 
     fn default_stat(&self) -> Box<dyn Stat> {

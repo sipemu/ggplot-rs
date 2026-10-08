@@ -66,3 +66,31 @@
   past the axes and no `with_expand(…)` workaround is needed. New
   `Geom::setup_data()` hook (ggplot2's `setup_data`). Free facet scales also
   train on extent columns.
+
+### New chart types
+
+- `geom_candlestick()` / `geom_ohlc()` (+ `_with`): financial charts from the
+  new `open`/`high`/`low`/`close` aesthetics (`Aes::open()` …,
+  `Aesthetic::{Open, High, Low, Close}`); configurable `up`/`down` colours;
+  the y scale trains on high–low; hover carries `data-value` = close and
+  `data-series` = `up`/`down` (or the mapped group).
+- `coord_radar()` / `CoordRadar`: radar/spider charts — discrete x → spokes
+  (first level at 12 o'clock), y → radius from 0, straight segments, rings at
+  the y breaks, spokes and outside labels. `geom_polygon` now groups by
+  `group`, else `color`/`fill` (no longer requires `group`), strokes with the
+  mapped colour, and orders radar vertices by spoke; `geom_line` closes its
+  path under radar and orders points by mapped x position. New
+  `Coord::is_radar()` / `Coord::train_scales()` hooks.
+- Gauges: `CoordPolar::with_span(start, end)` sweeps the theta range over a
+  partial arc (e.g. `-PI/2..PI/2` for a half donut) and fits the arc to the
+  panel; `geom_rect` draws annulus sectors under polar coords, so a gauge is
+  `geom_rect` bands + a `geom_segment` needle.
+- Calendar heatmaps: `geom_calendar()` / `geom_calendar_with(tile, monday_first)`
+  and `StatCalendar` lay a date `x` (`DateTime`, epoch seconds or
+  `YYYY-MM-DD`) out as week × weekday tiles with month labels, Mon/Wed/Fri
+  labels, month boundary outlines and square cells; spans over
+  `MAX_CALENDAR_YEARS` (50) are clipped to the most recent years with a
+  warning. Tiles' hover key (`data-x`, tooltip) is the ISO date.
+- `geom_step` accepts `±Inf` (stat_ecdf's padding reaches the panel edges
+  again).
+- Gallery: `candlestick`, `radar`, `gauge`, `calendar` examples.

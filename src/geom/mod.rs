@@ -4,6 +4,7 @@ pub mod bin2d;
 pub mod blank;
 pub mod boxplot;
 pub mod bracket;
+pub mod candlestick;
 pub mod col;
 pub mod contour;
 pub mod count;

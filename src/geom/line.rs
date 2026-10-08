@@ -79,12 +79,12 @@ impl Geom for GeomLine {
                 // Sort indices by x value
                 let mut sorted = indices.clone();
                 sorted.sort_by(|&a, &b| {
-                    let xa = x_col[a].as_f64().unwrap_or(0.0);
-                    let xb = x_col[b].as_f64().unwrap_or(0.0);
+                    let xa = x_scale.map(|s| s.map(&x_col[a])).unwrap_or(0.0);
+                    let xb = x_scale.map(|s| s.map(&x_col[b])).unwrap_or(0.0);
                     xa.total_cmp(&xb)
                 });
 
-                let points: Vec<(f64, f64)> = sorted
+                let mut points: Vec<(f64, f64)> = sorted
                     .iter()
                     .map(|&i| {
                         let nx = x_scale.map(|s| s.map(&x_col[i])).unwrap_or(0.0);
@@ -92,6 +92,7 @@ impl Geom for GeomLine {
                         coord.transform((nx, ny), &plot_area)
                     })
                     .collect();
+                close_for_radar(coord, &mut points);
 
                 if points.len() >= 2 {
                     backend.draw_line(
@@ -120,12 +121,12 @@ impl Geom for GeomLine {
             // Sort by x value
             let mut sorted_indices: Vec<usize> = (0..data.nrows()).collect();
             sorted_indices.sort_by(|&a, &b| {
-                let xa = x_col[a].as_f64().unwrap_or(0.0);
-                let xb = x_col[b].as_f64().unwrap_or(0.0);
+                let xa = x_scale.map(|s| s.map(&x_col[a])).unwrap_or(0.0);
+                let xb = x_scale.map(|s| s.map(&x_col[b])).unwrap_or(0.0);
                 xa.total_cmp(&xb)
             });
 
-            let points: Vec<(f64, f64)> = sorted_indices
+            let mut points: Vec<(f64, f64)> = sorted_indices
                 .iter()
                 .map(|&i| {
                     let nx = x_scale.map(|s| s.map(&x_col[i])).unwrap_or(0.0);
@@ -133,6 +134,7 @@ impl Geom for GeomLine {
                     coord.transform((nx, ny), &plot_area)
                 })
                 .collect();
+            close_for_radar(coord, &mut points);
 
             if points.len() >= 2 {
                 backend.draw_line(
@@ -172,5 +174,13 @@ impl Geom for GeomLine {
 
     fn set_series_color(&mut self, color: (u8, u8, u8)) {
         self.color = color;
+    }
+}
+
+/// Under `coord_radar` a series is a closed loop around the spokes.
+fn close_for_radar(coord: &dyn Coord, points: &mut Vec<(f64, f64)>) {
+    if coord.is_radar() && points.len() >= 3 {
+        let first = points[0];
+        points.push(first);
     }
 }

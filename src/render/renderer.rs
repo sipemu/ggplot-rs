@@ -91,7 +91,17 @@ impl PlotRenderer {
             (x_scale, y_scale)
         };
 
-        if let (Some(hs), Some(vs)) = (h_scale, v_scale) {
+        if let (true, Some(xs), Some(ys)) = (built.coord.is_radar(), x_scale, y_scale) {
+            // Radar: rings + spokes + labels replace cartesian grid/axes.
+            crate::guide::polar::draw_radar_guides(
+                xs,
+                ys,
+                built.coord.as_ref(),
+                theme,
+                &plot_area,
+                backend,
+            )?;
+        } else if let (Some(hs), Some(vs)) = (h_scale, v_scale) {
             // Gridlines under the data, unless panel.ontop draws them over it.
             if built.coord.gridlines() && !theme.panel_ontop {
                 axis::draw_gridlines(hs, vs, built.coord.as_ref(), theme, &plot_area, backend)?;
