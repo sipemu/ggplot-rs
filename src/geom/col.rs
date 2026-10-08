@@ -107,8 +107,17 @@ impl Geom for GeomCol {
             )
         };
 
+        // A discrete-axis dodge stores per-row offsets (in category units) and
+        // the number of groups sharing the slot; bars shift and narrow by them.
+        let x_mapper = super::support::XMapper::new(data, scales);
+        let dodge_n = data.column(crate::position::DODGE_N_COL);
+
         for i in 0..data.nrows() {
-            let nx = x_scale.map(|s| s.map(&x_col[i])).unwrap_or(0.0);
+            let nx = x_mapper.map(&x_col[i], i);
+            let half_width = match dodge_n.and_then(|c| c[i].as_f64()) {
+                Some(n) if n > 1.0 && x_is_discrete => half_width / n,
+                _ => half_width,
+            };
             let ny = y_scale.map(|s| s.map(&y_col[i])).unwrap_or(0.0);
             // Honor a stacked/filled base (ymin) so stacked columns draw as
             // distinct segments rather than all from zero.

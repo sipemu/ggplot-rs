@@ -226,3 +226,43 @@ fn continuous_x_dodge_moves_x() {
         assert!((got - want).abs() < 1e-12);
     }
 }
+
+/// Dodged columns on a discrete axis sit side by side within each category
+/// (they used to ignore the stored offset and draw on top of each other).
+#[test]
+fn dodged_columns_do_not_overlap_on_a_discrete_axis() {
+    let svg = GGPlot::new(vec![
+        ("x".to_string(), strs(&["W1", "W1", "W1", "W2", "W2", "W2"])),
+        ("y".to_string(), floats(&[3.0, 5.0, 2.0, 4.0, 1.0, 6.0])),
+        (
+            "g".to_string(),
+            strs(&["api", "app", "web", "api", "app", "web"]),
+        ),
+    ])
+    .aes(Aes::new().x("x").y("y").fill("g"))
+    .geom_col()
+    .position(position_dodge(0.9))
+    .render_svg_native_with_size(400, 300)
+    .expect("render");
+    let attr = |r: &str, k: &str| -> f64 {
+        r.split(&format!(" {k}=\""))
+            .nth(1)
+            .unwrap()
+            .split('"')
+            .next()
+            .unwrap()
+            .parse()
+            .unwrap()
+    };
+    let mut bars: Vec<(f64, f64)> = svg
+        .split("<rect")
+        .skip(1)
+        .filter(|r| r.contains("data-x="))
+        .map(|r| (attr(r, "x"), attr(r, "width")))
+        .collect();
+    assert_eq!(bars.len(), 6, "{svg}");
+    bars.sort_by(|a, b| a.0.total_cmp(&b.0));
+    for w in bars.windows(2) {
+        assert!(w[0].0 + w[0].1 <= w[1].0 + 0.01, "overlap: {w:?}");
+    }
+}

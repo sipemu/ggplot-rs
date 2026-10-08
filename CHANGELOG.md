@@ -38,6 +38,13 @@ All notable changes to this project are documented here. The format follows
   is now transformed. `geom_errorbar` / `geom_linerange` honour a mapped
   `color`; an error bar is one polyline (cap–bar–cap) per row.
 
+### Fixed — dodged bars
+
+- `geom_col` / `geom_bar` with `position_dodge` on a **discrete** x now shift
+  and narrow each bar by the stored dodge offset and the number of groups at
+  that x (new `position::DODGE_N_COL`), so grouped bars sit side by side
+  instead of on top of each other.
+
 ### Added — statistical geoms (reference lines, QQ, Cook's contours, KM/ECDF, dodge)
 
 - **Data-mapped reference lines (U1).** `Aes::{xintercept, yintercept, slope,

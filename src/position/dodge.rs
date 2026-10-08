@@ -1,6 +1,6 @@
 use crate::data::{DataFrame, Value};
 
-use super::{Position, PositionParams, DODGE_OFFSET_COL};
+use super::{Position, PositionParams, DODGE_N_COL, DODGE_OFFSET_COL};
 
 /// Place groups side-by-side (ggplot2's `position_dodge(width)`).
 ///
@@ -129,6 +129,7 @@ pub(crate) fn dodge_rows(data: &mut DataFrame, width: f64, padding: Option<f64>,
         .iter()
         .any(|v| matches!(v, Value::Str(_) | Value::Bool(_)));
     let mut offsets = vec![Value::Float(0.0); x_col.len()];
+    let mut counts = vec![Value::Float(1.0); x_col.len()];
     let mut new_x = x_col.clone();
     let mut new_xmin = data.column("xmin").map(|c| c.to_vec());
     let mut new_xmax = data.column("xmax").map(|c| c.to_vec());
@@ -145,6 +146,7 @@ pub(crate) fn dodge_rows(data: &mut DataFrame, width: f64, padding: Option<f64>,
         let offset = (k - (n - 1.0) / 2.0) * group_width;
         if discrete {
             offsets[i] = Value::Float(offset);
+            counts[i] = Value::Float(n);
             continue;
         }
         let Some(xv) = x.as_f64() else {
@@ -168,6 +170,11 @@ pub(crate) fn dodge_rows(data: &mut DataFrame, width: f64, padding: Option<f64>,
             *col = offsets;
         } else {
             data.add_column(DODGE_OFFSET_COL.to_string(), offsets);
+        }
+        if let Some(col) = data.column_mut(DODGE_N_COL) {
+            *col = counts;
+        } else {
+            data.add_column(DODGE_N_COL.to_string(), counts);
         }
         return;
     }
