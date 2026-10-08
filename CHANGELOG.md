@@ -16,6 +16,13 @@ All notable changes to this project are documented here. The format follows
   scales' — possibly transformed — units) and clipped to the panel; it used to
   interpret slope/intercept in normalized panel units.
 - `StepDirection` gained the variant `Mid`.
+- `PositionDodge` is now a struct with `width: Option<f64>` and `reverse:
+  bool` (a same-named `const` keeps `.position(PositionDodge)` compiling);
+  `PositionDodge2` gained the public fields `width` and `reverse` (construct
+  it with `new` / `default` and the `with_*` builders). Both now dodge the
+  groups present at each x (ggplot2's default `preserve = "total"`) instead
+  of reserving a slot for every group, and key groups on group + fill +
+  colour together.
 - Reference-line geoms no longer inherit the plot-level mapping (ggplot2's
   `inherit.aes = FALSE`): a plot-level `color` no longer leaks into
   `geom_hline`. New `Geom::inherit_aes()` (default `true`) controls this.
@@ -23,6 +30,13 @@ All notable changes to this project are documented here. The format follows
 - `StatQQ` / `StatQQLine` use the exact normal quantile in every build (they
   used the Abramowitz–Stegun approximation, |error| ≈ 4.5e-4, without
   `regression`), and `StatQQLine` needs 2 sample values instead of 4.
+
+### Fixed
+
+- `geom_errorbar`, `geom_linerange` and `geom_pointrange` collapsed to a
+  point under `coord_flip` (only the x pixel of one end was used); every end
+  is now transformed. `geom_errorbar` / `geom_linerange` honour a mapped
+  `color`; an error bar is one polyline (cap–bar–cap) per row.
 
 ### Added
 
@@ -70,6 +84,16 @@ All notable changes to this project are documented here. The format follows
 - `geom_step` draws one step line per group (colour / group / linetype) with
   mapped linetype and `data-series`, and gains `StepDirection::Mid`
   (ggplot2's `"mid"`). `stat_ecdf` ignores non-finite input values.
+- **Multi-model coefficient forests (U8).** `position_dodge(width)` /
+  `PositionDodge::new(width).with_reverse(bool)` and
+  `PositionDodge2::new(padding).with_width(w).with_reverse(bool)` now work on
+  a *discrete* x axis (terms): the per-row offset is stored in
+  `.x_dodge_offset` (`position::DODGE_OFFSET_COL`) and applied by
+  `geom_point`, `geom_pointrange`, `geom_errorbar`, `geom_linerange`,
+  `geom_ribbon` and censor marks, so several models' intervals per term sit
+  side by side — also under `coord_flip`. Interval geoms map `color` per row
+  and carry `data-x` (term) / `data-series` (model) / `data-value` (estimate,
+  else `"ymin ymax"`) plus a tooltip.
 - `ggplot_rs::stat::distribution`: dependency-free `qnorm` (AS 241), `dnorm`,
   `pt` / `qt` / `dt` (any `p`, any `df`) and `ln_gamma`, available in every
   feature configuration (the existing `stat::dist::qt` still returns the

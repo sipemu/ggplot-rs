@@ -69,6 +69,37 @@ impl<'a> XMapper<'a> {
     }
 }
 
+/// Hover metadata for an interval mark (errorbar / linerange / pointrange):
+/// `data-x` = the x key, `data-series`, `data-value` = the point estimate
+/// `y` when present, else `"ymin ymax"`; tooltip `"<series>: <x>: y [lo, hi]"`.
+pub(crate) fn mark_interval(
+    backend: &mut dyn crate::render::backend::DrawBackend,
+    data: &DataFrame,
+    i: usize,
+    x: &Value,
+    lo: &Value,
+    hi: &Value,
+) {
+    let series = super::series_key(data, i);
+    let y = data.column("y").and_then(|c| c.get(i));
+    let range = format!("[{}, {}]", super::tip_value(lo), super::tip_value(hi));
+    let body = match y {
+        Some(y) => format!("{}: {} {range}", super::tip_value(x), super::tip_value(y)),
+        None => format!("{}: {range}", super::tip_value(x)),
+    };
+    let tip = Some(match &series {
+        Some(s) => format!("{s}: {body}"),
+        None => body,
+    });
+    let value = match y {
+        Some(y) => super::raw_value(y),
+        None => super::raw_value(lo)
+            .zip(super::raw_value(hi))
+            .map(|(a, b)| format!("{a} {b}")),
+    };
+    super::set_mark(backend, tip, Some(super::tip_value(x)), series, value);
+}
+
 /// Map a numeric position through a position scale. A numeric value on a
 /// *discrete* scale is read as ggplot2 does — category `k` sits at `k`
 /// (1-based), so `1.5` falls between the first two categories.

@@ -121,5 +121,6 @@ pub use crate::geom::cooks::GeomCooksContour;
 pub use crate::geom::errorbarh::GeomErrorbarh;
 pub use crate::geom::qq::GeomQQBand;
 pub use crate::geom::ribbon::GeomStepribbon;
+pub use crate::position::dodge::position_dodge;
 pub use crate::stat::ecdf::StatEcdfBand;
 pub use crate::stat::qq::{QQBandType, QQDistribution, StatQQBand, StatQQDist, StatQQLineDist};
