@@ -1,5 +1,7 @@
 //! A-grade #59 — serif/monospace families render real glyphs (not just the
 //! SVG attribute): the rasterized PNG differs from sans-serif.
+// Uses the plotters-backed renderers (render_svg/render_png/save).
+#![cfg(feature = "plotters")]
 use ggplot_rs::prelude::*;
 
 fn png_for_family(family: &str) -> Vec<u8> {

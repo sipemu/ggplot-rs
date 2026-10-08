@@ -1,5 +1,6 @@
 use crate::aes::Aesthetic;
 use crate::data::Value;
+use indexmap::IndexSet;
 
 use super::Scale;
 
@@ -8,10 +9,12 @@ use super::Scale;
 pub struct ScaleDiscrete {
     aesthetic: Aesthetic,
     name: String,
-    levels: Vec<String>,
+    /// Insertion-ordered set: O(1) training and lookup, so many-category
+    /// scales stay linear in the number of rows.
+    levels: IndexSet<String>,
     custom_labels: Option<Vec<String>>,
     /// Pre-set level order/filter. When set, only these levels are shown (in this order).
-    limits: Option<Vec<String>>,
+    limits: Option<IndexSet<String>>,
 }
 
 impl ScaleDiscrete {
@@ -19,7 +22,7 @@ impl ScaleDiscrete {
         ScaleDiscrete {
             aesthetic: Aesthetic::X,
             name: String::new(),
-            levels: Vec::new(),
+            levels: IndexSet::new(),
             custom_labels: None,
             limits: None,
         }
@@ -51,7 +54,7 @@ impl ScaleDiscrete {
 
 impl ScaleDiscrete {
     /// Get the effective levels (filtered by limits if set).
-    fn effective_levels(&self) -> &[String] {
+    fn effective_levels(&self) -> &IndexSet<String> {
         if let Some(ref limits) = self.limits {
             limits
         } else {
@@ -77,22 +80,31 @@ impl Scale for ScaleDiscrete {
             self.levels = limits.clone();
         } else {
             for v in values {
-                let key = v.to_group_key();
-                if !self.levels.contains(&key) {
-                    self.levels.push(key);
+                // ±Inf (a rect extending to the panel edge) is not a level.
+                if matches!(v, Value::Float(f) if !f.is_finite()) {
+                    continue;
+                }
+                let key = v.key_str();
+                if !self.levels.contains(key.as_ref()) {
+                    self.levels.insert(key.into_owned());
                 }
             }
         }
     }
 
     fn map(&self, value: &Value) -> f64 {
-        let key = value.to_group_key();
+        match value {
+            Value::Float(f) if *f == f64::INFINITY => return 1.0,
+            Value::Float(f) if *f == f64::NEG_INFINITY => return 0.0,
+            _ => {}
+        }
+        let key = value.key_str();
         let effective = self.effective_levels();
         let n = effective.len();
         if n == 0 {
             return 0.5;
         }
-        match effective.iter().position(|l| l == &key) {
+        match effective.get_index_of(key.as_ref()) {
             Some(idx) => (idx as f64 + 0.5) / n as f64,
             None => 0.5, // Not in limits → maps to middle
         }

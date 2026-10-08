@@ -1,4 +1,6 @@
 //! Issue #48 — theme text hjust aligns the title (left/center/right).
+// Uses the plotters-backed renderers (render_svg/render_png/save).
+#![cfg(feature = "plotters")]
 use ggplot_rs::prelude::*;
 
 fn title_anchor(hjust: f64) -> String {

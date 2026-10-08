@@ -1,4 +1,6 @@
 //! Issue #9 — computed aesthetics: aes() accepts expressions, not just columns.
+// Uses the plotters-backed renderers (render_svg/render_png/save).
+#![cfg(feature = "plotters")]
 
 use ggplot_rs::prelude::*;
 

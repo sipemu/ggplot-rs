@@ -1,3 +1,6 @@
+use std::borrow::Cow;
+use std::collections::HashMap;
+
 use crate::data::{DataFrame, Value};
 
 use super::{Position, PositionParams};
@@ -16,48 +19,33 @@ impl Position for PositionStack {
             Some(c) => c.to_vec(),
             None => return,
         };
+        super::preserve_raw_y(data, &y_col);
 
         // ggplot2 stacks the first group at the TOP (so the stack order top-to-
         // bottom matches the legend), so accumulate downward from each x's total
         // rather than upward from 0.
-        let mut totals: Vec<(String, f64)> = Vec::new();
+        // Per-x accumulators keyed by the borrowed x key: O(1) per row instead
+        // of a linear scan over the distinct x values.
+        let mut totals: HashMap<Cow<'_, str>, f64> = HashMap::new();
         for (x, y) in x_col.iter().zip(y_col.iter()) {
-            let x_key = x.to_group_key();
-            let y_val = y.as_f64().unwrap_or(0.0);
-            if let Some(entry) = totals.iter_mut().find(|(k, _)| k == &x_key) {
-                entry.1 += y_val;
-            } else {
-                totals.push((x_key, y_val));
-            }
+            *totals.entry(x.key_str()).or_insert(0.0) += y.as_f64().unwrap_or(0.0);
         }
 
-        let mut consumed: Vec<(String, f64)> = Vec::new();
+        let mut consumed: HashMap<Cow<'_, str>, f64> = HashMap::new();
         let mut new_y = Vec::with_capacity(y_col.len());
         let mut ymin_vals = Vec::with_capacity(y_col.len());
 
         for (x, y) in x_col.iter().zip(y_col.iter()) {
-            let x_key = x.to_group_key();
+            let x_key = x.key_str();
             let y_val = y.as_f64().unwrap_or(0.0);
-            let total = totals
-                .iter()
-                .find(|(k, _)| k == &x_key)
-                .map(|(_, v)| *v)
-                .unwrap_or(0.0);
-            let run = consumed
-                .iter()
-                .find(|(k, _)| k == &x_key)
-                .map(|(_, v)| *v)
-                .unwrap_or(0.0);
+            let total = totals.get(&x_key).copied().unwrap_or(0.0);
+            let run = consumed.get(&x_key).copied().unwrap_or(0.0);
 
             // This group occupies [total - run - y, total - run] (top-down).
             new_y.push(Value::Float(total - run));
             ymin_vals.push(Value::Float(total - run - y_val));
 
-            if let Some(entry) = consumed.iter_mut().find(|(k, _)| k == &x_key) {
-                entry.1 += y_val;
-            } else {
-                consumed.push((x_key, y_val));
-            }
+            *consumed.entry(x_key).or_insert(0.0) += y_val;
         }
 
         if let Some(col) = data.column_mut("y") {

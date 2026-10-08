@@ -1,4 +1,6 @@
 //! Issue #13 — expanded scale transforms render end-to-end.
+// Uses the plotters-backed renderers (render_svg/render_png/save).
+#![cfg(feature = "plotters")]
 
 use ggplot_rs::prelude::*;
 

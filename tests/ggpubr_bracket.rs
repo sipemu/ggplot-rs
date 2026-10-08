@@ -1,4 +1,6 @@
 //! geom_bracket: significance brackets over a grouped boxplot (ggpubr).
+// Uses the plotters-backed renderers (render_svg/render_png/save).
+#![cfg(feature = "plotters")]
 
 use ggplot_rs::data::Value;
 use ggplot_rs::prelude::*;

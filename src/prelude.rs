@@ -1,6 +1,7 @@
 pub use crate::aes::{Aes, Aesthetic};
 pub use crate::annotate::Annotation;
 pub use crate::coord::polar::CoordPolar;
+pub use crate::coord::radar::CoordRadar;
 pub use crate::data::{GGData, Value};
 pub use crate::facet::{FacetLabeller, FacetScales, FacetSpace};
 pub use crate::geom::area::GeomArea;
@@ -9,6 +10,7 @@ pub use crate::geom::bin2d::GeomBin2d;
 pub use crate::geom::blank::GeomBlank;
 pub use crate::geom::boxplot::GeomBoxplot;
 pub use crate::geom::bracket::GeomBracket;
+pub use crate::geom::candlestick::{GeomCandlestick, GeomOhlc};
 pub use crate::geom::col::GeomCol;
 pub use crate::geom::contour::GeomContour;
 pub use crate::geom::count::GeomCount;
@@ -44,7 +46,7 @@ pub use crate::geom::violin::GeomViolin;
 pub use crate::ggpubr::{
     ggarrange, ggarrange_save, ggboxplot, ggdensity, gghistogram, ggline, ggscatter, ggviolin,
 };
-#[cfg(not(target_arch = "wasm32"))]
+#[cfg(all(feature = "plotters", not(target_arch = "wasm32")))]
 pub use crate::ggpubr::{ggarrange_png, ggarrange_save_png};
 pub use crate::guide::config::GuideLegend;
 pub use crate::plot::{GGError, GGPlot, Labels};
@@ -63,8 +65,8 @@ pub use crate::scale::continuous::ScaleContinuous;
 pub use crate::scale::datetime::ScaleDateTime;
 pub use crate::scale::discrete::ScaleDiscrete;
 pub use crate::scale::format::{
-    label_bytes, label_comma, label_dollar, label_number, label_ordinal, label_percent,
-    label_scientific, label_si,
+    label_bytes, label_comma, label_currency, label_dollar, label_number, label_ordinal,
+    label_percent, label_scientific, label_si,
 };
 pub use crate::scale::gradient::ScaleColorGradient2;
 pub use crate::scale::gradient_n::ScaleColorGradientN;
@@ -78,6 +80,7 @@ pub use crate::scale::size::ScaleSizeContinuous;
 pub use crate::scale::steps::ScaleColorSteps;
 pub use crate::scale::transform::ScaleTransform;
 pub use crate::stat::bin::StatBin;
+pub use crate::stat::calendar::StatCalendar;
 #[cfg(feature = "ggpubr")]
 pub use crate::stat::compare_means::{CompareMethod, StatCompareMeans};
 pub use crate::stat::contour_filled::StatContourFilled;

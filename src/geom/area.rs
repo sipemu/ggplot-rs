@@ -84,7 +84,7 @@ impl Geom for GeomArea {
             idx.sort_by(|&a, &b| {
                 let xa = x_scale.map(|s| s.map(&x_col[a])).unwrap_or(0.0);
                 let xb = x_scale.map(|s| s.map(&x_col[b])).unwrap_or(0.0);
-                xa.partial_cmp(&xb).unwrap_or(std::cmp::Ordering::Equal)
+                xa.total_cmp(&xb)
             });
 
             let fill = group_col

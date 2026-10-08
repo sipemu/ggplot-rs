@@ -1,3 +1,6 @@
+use std::borrow::Cow;
+use std::collections::HashMap;
+
 use crate::data::{DataFrame, Value};
 
 use super::{Position, PositionParams};
@@ -15,34 +18,24 @@ impl Position for PositionFill {
             Some(c) => c.to_vec(),
             None => return,
         };
+        super::preserve_raw_y(data, &y_col);
 
         // First compute totals per x group
-        let mut x_totals: Vec<(String, f64)> = Vec::new();
+        let mut x_totals: HashMap<Cow<'_, str>, f64> = HashMap::new();
         for (x, y) in x_col.iter().zip(y_col.iter()) {
-            let x_key = x.to_group_key();
-            let y_val = y.as_f64().unwrap_or(0.0);
-
-            if let Some(entry) = x_totals.iter_mut().find(|(k, _)| k == &x_key) {
-                entry.1 += y_val;
-            } else {
-                x_totals.push((x_key, y_val));
-            }
+            *x_totals.entry(x.key_str()).or_insert(0.0) += y.as_f64().unwrap_or(0.0);
         }
 
         // Then compute normalized stacked positions
-        let mut x_cumsum: Vec<(String, f64)> = Vec::new();
+        let mut x_cumsum: HashMap<Cow<'_, str>, f64> = HashMap::new();
         let mut new_y = Vec::with_capacity(y_col.len());
         let mut ymin_vals = Vec::with_capacity(y_col.len());
 
         for (x, y) in x_col.iter().zip(y_col.iter()) {
-            let x_key = x.to_group_key();
+            let x_key = x.key_str();
             let y_val = y.as_f64().unwrap_or(0.0);
 
-            let total = x_totals
-                .iter()
-                .find(|(k, _)| k == &x_key)
-                .map(|(_, v)| *v)
-                .unwrap_or(1.0);
+            let total = x_totals.get(&x_key).copied().unwrap_or(1.0);
             let total = if total.abs() < f64::EPSILON {
                 1.0
             } else {
@@ -50,21 +43,13 @@ impl Position for PositionFill {
             };
 
             // ggplot2 puts the first group at the top, so fill downward from 1.
-            let consumed = x_cumsum
-                .iter()
-                .find(|(k, _)| k == &x_key)
-                .map(|(_, v)| *v)
-                .unwrap_or(0.0);
+            let consumed = x_cumsum.get(&x_key).copied().unwrap_or(0.0);
 
             let norm_y = y_val / total;
             new_y.push(Value::Float(1.0 - consumed));
             ymin_vals.push(Value::Float(1.0 - consumed - norm_y));
 
-            if let Some(entry) = x_cumsum.iter_mut().find(|(k, _)| k == &x_key) {
-                entry.1 += norm_y;
-            } else {
-                x_cumsum.push((x_key, norm_y));
-            }
+            *x_cumsum.entry(x_key).or_insert(0.0) += norm_y;
         }
 
         if let Some(col) = data.column_mut("y") {

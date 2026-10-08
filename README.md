@@ -6,8 +6,9 @@
 [![codecov](https://codecov.io/gh/sipemu/ggplot-rs/branch/main/graph/badge.svg)](https://codecov.io/gh/sipemu/ggplot-rs)
 [![License: MIT OR Apache-2.0](https://img.shields.io/badge/license-MIT%2FApache--2.0-blue.svg)](#license)
 
-A Rust implementation of ggplot2's Grammar of Graphics, rendering through the
-[plotters](https://github.com/plotters-rs/plotters) backend.
+A Rust implementation of ggplot2's Grammar of Graphics, rendering through a
+self-contained SVG backend (no dependencies) or, with the default `plotters`
+feature, the [plotters](https://github.com/plotters-rs/plotters) SVG/bitmap backend.
 
 **Validated against R.** Computed layers — binning, density, stacking, QQ/ECDF,
 LOESS, and axis-tick placement (extended-Wilkinson) — are checked against
@@ -127,7 +128,7 @@ choropleth needs the `sf` feature; drop it for the rest).
 
 Journal palettes, `theme_pubr()`, GAM smoothing, and statistical annotations —
 the last two need the `regression` / `ggpubr` features. Regenerate with
-`cargo run --no-default-features --features regression,ggpubr --example ggpubr_gallery`.
+`cargo run --no-default-features --features regression,ggpubr,plotters --example ggpubr_gallery`.
 
 <table>
   <tr>
@@ -413,12 +414,16 @@ just works.
 Earth countries into a hover-able choropleth, plus a **100k-point scatter** via the
 raster backend.
 
-The `wasm` feature exposes a plotters-free renderer to JavaScript. It compiles to
-`wasm32` and uses the self-contained [`SvgBackend`](#rendering), so the bundle is
-small (~310 KB `.wasm`, no polars, no fonts — text is `<text>` the browser draws):
+The [`crates/ggplot-rs-wasm`](crates/ggplot-rs-wasm) workspace crate (a `cdylib`,
+not published) exposes a plotters-free renderer to JavaScript via `wasm-bindgen`.
+It compiles to `wasm32` and uses the self-contained [`SvgBackend`](#rendering), so
+the bundle is small (~310 KB `.wasm`, no polars, no fonts — text is `<text>` the
+browser draws). The `ggplot-rs` library itself is a plain `rlib` with no
+wasm-specific dependencies, so it also builds for `wasm32-unknown-unknown` /
+emscripten targets directly (`default-features = false`):
 
 ```sh
-wasm-pack build --target web --out-dir web/pkg --no-default-features --features wasm
+wasm-pack build crates/ggplot-rs-wasm --target web --out-dir ../../web/pkg --out-name ggplot_rs
 ```
 
 ```js
@@ -439,7 +444,7 @@ WKT entirely client-side.
 
 **Large N.** SVG is one DOM node per mark (great to ~10k–50k). For more, the
 `canvas` feature adds a self-contained **RGBA raster backend** (`render_rgba` /
-`render_png_raster`, or `wasm::render_scatter_rgba`) — it rasterises everything in
+`render_png_raster`, or the wasm crate's `render_scatter_rgba`) — it rasterises everything in
 pure Rust (text via `ab_glyph`), so it's fast and wasm-compatible: 500k points
 render in a fraction of a second to a bitmap you blit with `putImageData`. (Or
 aggregate in DuckDB — `GROUP BY`, hex-bins, sampling — and render the summary.)
@@ -480,8 +485,8 @@ GGPlot::new(rows)
 result, with polars switched off:
 
 ```toml
-# Cargo.toml — no polars in the dependency tree
-ggplot-rs = { version = "0.9", default-features = false, features = ["arrow"] }
+# Cargo.toml — no polars in the dependency tree (add "plotters" for render_svg/render_png)
+ggplot-rs = { version = "0.16", default-features = false, features = ["arrow"] }
 ```
 
 ```rust
@@ -501,7 +506,14 @@ GGPlot::new(df)
 
 ## Rendering
 
-Save to a file (format inferred from the extension — `svg`, `png`, `jpg`, ...):
+**Without plotters** (`default-features = false`) — the self-contained SVG
+backend, also used in the browser; zero rendering dependencies:
+
+```rust
+let svg: String = plot.render_svg_native_with_size(800, 600)?;
+```
+
+The remaining methods need the `plotters` feature (on by default). Save to a file (format inferred from the extension — `svg`, `png`, `jpg`, ...):
 
 ```rust
 plot.save("out.svg")?;              // 800x600 default
@@ -564,20 +576,26 @@ GGPlot::new(data)
 | Feature      | Default | Provides                                                    |
 | ------------ | :-----: | ----------------------------------------------------------- |
 | `polars`     |   yes   | `impl GGData for polars::DataFrame` + `polars` re-export     |
+| `plotters`   |   yes   | plotters-backed `render_svg`, `render_png`, `save`, `ggsave`, `ggarrange_png` (implies `png`) |
+| `png`        |  (yes)  | PNG encoding via `image` (pulled in by `plotters` and `canvas`) |
 | `arrow`      |   no    | `impl GGData for arrow::RecordBatch` (Arrow/DuckDB input)    |
 | `regression` |   no    | `stat_quantile`/`geom_quantile` + `geom_smooth` glm/rlm via anofox-regression |
 | `serde`      |   no    | `theme::config::ThemeConfig` — a serde-deserialisable partial theme overlay (TOML/JSON) |
 | `sf`         |   no    | `geom_sf` / `coord_sf` — render simple-features (WKT) geometry with projections; no extra deps |
 | `geojson`    |   no    | read GeoJSON into a plot-ready frame (`spatial::geojson`); adds `serde_json` |
 | `canvas`     |   no    | self-contained RGBA raster backend for large-N (`render_rgba`/`render_png_raster`); wasm-ok |
-| `wasm`       |   no    | browser bindings (`wasm::render_geo` → SVG w/ hover) via the plotters-free SVG backend |
+| `wasm`       |   no    | **deprecated** alias for `sf` (the browser bindings moved to the `crates/ggplot-rs-wasm` crate) |
 | `cli`        |   no    | the `ggplot-rs` command-line tool (parquet/CSV/DuckDB → SVG/PNG), via clap + bundled DuckDB |
 
-To skip the heavy polars dependency (e.g. an Arrow-only service), disable defaults:
+To skip the heavy polars and plotters dependencies (e.g. an Arrow-only service
+that renders with `render_svg_native*`), disable defaults:
 
 ```toml
-ggplot-rs = { version = "0.9", default-features = false, features = ["arrow"] }
+ggplot-rs = { version = "0.16", default-features = false, features = ["arrow"] }
 ```
+
+With `default-features = false, features = ["sf"]` the whole dependency tree is
+`ggplot-rs` + `indexmap` (+ its two dependencies).
 
 ## Examples
 
@@ -596,15 +614,14 @@ cargo run --example coord_flip
 cargo run --example log_scale
 cargo run --example color_palettes
 cargo run --example gallery            # regenerates the gallery above
-cargo run --example supplier_leadtime  # polars-free; runs with --no-default-features
+cargo run --example supplier_leadtime  # polars-free; runs with --no-default-features --features plotters
 ```
 
 ## Dependencies
 
-- [plotters](https://crates.io/crates/plotters) 0.3 — SVG/PNG rendering (`ab_glyph` text backend; no fontconfig)
-- [image](https://crates.io/crates/image) 0.24 — in-memory PNG encoding
 - [indexmap](https://crates.io/crates/indexmap) 2 — ordered maps for internal data
-- [rand](https://crates.io/crates/rand) 0.8 — jitter positioning
+- [plotters](https://crates.io/crates/plotters) 0.3 — SVG/PNG rendering (`ab_glyph` text backend; no fontconfig) *(optional, default)*
+- [image](https://crates.io/crates/image) 0.24 — in-memory PNG encoding *(optional, via `plotters`/`canvas`)*
 - [polars](https://crates.io/crates/polars) 0.46 — DataFrame input *(optional, default)*
 - [arrow](https://crates.io/crates/arrow) 53 — Arrow `RecordBatch` input *(optional)*
 - [clap](https://crates.io/crates/clap) 4 + [duckdb](https://crates.io/crates/duckdb) 1 (bundled) — the `cli` tool *(optional)*

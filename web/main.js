@@ -2,7 +2,7 @@
 // (the scatter needs no DuckDB and runs first), so one failure is reported in
 // place rather than blanking the page.
 //
-// Build:  wasm-pack build --target web --out-dir web/pkg --no-default-features --features wasm,canvas
+// Build:  wasm-pack build crates/ggplot-rs-wasm --target web --out-dir ../../web/pkg --out-name ggplot_rs
 
 import * as duckdb from "https://cdn.jsdelivr.net/npm/@duckdb/duckdb-wasm@1.29.0/+esm";
 import { Grid } from "https://cdn.jsdelivr.net/npm/gridjs/+esm";

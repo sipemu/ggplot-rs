@@ -1,4 +1,6 @@
 //! Issue #14 — binned (stepped) colour scales render with a stepped legend.
+// Uses the plotters-backed renderers (render_svg/render_png/save).
+#![cfg(feature = "plotters")]
 
 use ggplot_rs::prelude::*;
 

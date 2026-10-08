@@ -24,12 +24,7 @@ impl Position for PositionDodge {
         };
 
         // Find unique groups
-        let mut unique_groups: Vec<String> = Vec::new();
-        for g in &group_keys {
-            if !unique_groups.contains(g) {
-                unique_groups.push(g.clone());
-            }
-        }
+        let unique_groups: indexmap::IndexSet<&String> = group_keys.iter().collect();
 
         let n_groups = unique_groups.len() as f64;
         if n_groups <= 1.0 {
@@ -41,7 +36,7 @@ impl Position for PositionDodge {
 
         let mut new_x = x_col.clone();
         for (i, (x, group)) in x_col.iter().zip(group_keys.iter()).enumerate() {
-            let group_idx = unique_groups.iter().position(|g| g == group).unwrap() as f64;
+            let group_idx = unique_groups.get_index_of(group).unwrap_or(0) as f64;
             let offset = (group_idx - (n_groups - 1.0) / 2.0) * group_width;
 
             if let Some(x_val) = x.as_f64() {

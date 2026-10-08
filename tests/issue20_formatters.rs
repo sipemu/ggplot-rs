@@ -1,4 +1,6 @@
 //! Issue #20 — configurable label formatters applied to a continuous scale.
+// Uses the plotters-backed renderers (render_svg/render_png/save).
+#![cfg(feature = "plotters")]
 
 use ggplot_rs::prelude::*;
 use ggplot_rs::scale::continuous::ScaleContinuous;

@@ -79,11 +79,18 @@ impl Geom for GeomBoxplot {
             // Hover tooltip for the whole box: group + median (IQR).
             let group = super::tip_value(&x_col[i]);
             let r = |v: f64| (v * 100.0).round() / 100.0;
-            backend.set_tooltip(Some(if group.is_empty() {
+            let tip = if group.is_empty() {
                 format!("median {} ({}–{})", r(middle), r(lower), r(upper))
             } else {
                 format!("{group}: median {} ({}–{})", r(middle), r(lower), r(upper))
-            }));
+            };
+            super::set_mark(
+                backend,
+                Some(tip),
+                Some(group.clone()).filter(|g| !g.is_empty()),
+                super::series_key(data, i).or(Some(group).filter(|g| !g.is_empty())),
+                super::raw_value(&Value::Float(middle)),
+            );
 
             // Box (IQR) — honour a mapped `fill` (e.g. by group), else the default.
             let box_fill = fill_col
@@ -188,7 +195,7 @@ impl Geom for GeomBoxplot {
                 }
             }
         }
-        backend.set_tooltip(None);
+        super::clear_mark(backend);
 
         Ok(())
     }

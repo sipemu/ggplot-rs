@@ -298,6 +298,18 @@ impl Scale for ScaleDateTime {
             Some(f) => f,
             None => return 0.0,
         };
+        // ±Inf means "panel edge" (ggplot2): -Inf → lower edge, +Inf → upper.
+        if f == f64::INFINITY {
+            return 1.0;
+        }
+        if f == f64::NEG_INFINITY {
+            return 0.0;
+        }
+        // An untrained scale (empty data) has no domain — centre everything
+        // rather than producing NaN.
+        if !self.trained || !self.min.is_finite() || !self.max.is_finite() {
+            return 0.5;
+        }
         let (emin, emax) = self.expanded_range();
         let range = emax - emin;
         if range.abs() < f64::EPSILON {
@@ -307,17 +319,38 @@ impl Scale for ScaleDateTime {
         }
     }
 
+    fn expanded_domain(&self) -> Option<(f64, f64)> {
+        if !self.trained || !self.min.is_finite() || !self.max.is_finite() {
+            return None;
+        }
+        let (a, b) = self.expanded_range();
+        if !(a.is_finite() && b.is_finite()) {
+            return None;
+        }
+        if (b - a).abs() < f64::EPSILON {
+            // A degenerate domain maps everything to the panel centre.
+            return Some((a - 0.5, b + 0.5));
+        }
+        Some((a, b))
+    }
+
     fn breaks(&self) -> Vec<(f64, String)> {
         if !self.trained || self.min > self.max {
             return vec![];
         }
 
         let range = self.max - self.min;
-        if range.abs() < f64::EPSILON {
+        if super::util::is_degenerate_range(self.min, self.max) {
             return vec![(0.5, self.label(self.min, 1.0))];
         }
 
         let (emin, emax) = self.expanded_range();
+        // Beyond ~±31,700 years the civil-calendar arithmetic below would
+        // overflow i64; such values are corrupt data, so draw no breaks.
+        const MAX_ABS_SECS: f64 = 1e12;
+        if !(emin.abs() <= MAX_ABS_SECS && emax.abs() <= MAX_ABS_SECS) {
+            return vec![];
+        }
 
         // Calendar-month breaks snap to the first of the month.
         if let Some(DateBreak::Months(n)) = self.date_breaks {
@@ -401,13 +434,10 @@ impl Scale for ScaleDateTime {
         }
 
         let start = (emin / step).ceil() * step;
-        let mut breaks = Vec::new();
-        let mut v = start;
-        while v <= emax + step * 0.001 {
-            breaks.push((self.map(&Value::Float(v)), self.label(v, step)));
-            v += step;
-        }
-        breaks
+        super::util::stepped_breaks(start, emax, step)
+            .into_iter()
+            .map(|v| (self.map(&Value::Float(v)), self.label(v, step)))
+            .collect()
     }
 
     fn name(&self) -> &str {

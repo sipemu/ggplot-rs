@@ -4,6 +4,7 @@ pub mod build;
 pub mod coord;
 pub mod data;
 pub mod facet;
+pub mod format;
 pub mod geom;
 pub mod ggpubr;
 pub mod guide;
@@ -11,12 +12,11 @@ pub mod plot;
 pub mod position;
 pub mod prelude;
 pub mod render;
+pub(crate) mod rng;
 pub mod scale;
 #[cfg(feature = "sf")]
 pub mod spatial;
 pub mod stat;
 pub mod theme;
-#[cfg(feature = "wasm")]
-pub mod wasm;
 
 pub use plot::{GGError, GGPlot};

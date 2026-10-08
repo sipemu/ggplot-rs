@@ -181,6 +181,18 @@ impl Scale for ScaleContinuous {
             Some(f) => f,
             None => return 0.0,
         };
+        // ±Inf means "panel edge" (ggplot2): -Inf → lower edge, +Inf → upper.
+        if f == f64::INFINITY {
+            return 1.0;
+        }
+        if f == f64::NEG_INFINITY {
+            return 0.0;
+        }
+        // An untrained scale (empty data) has no domain — centre everything
+        // rather than producing NaN.
+        if !self.trained || !self.min.is_finite() || !self.max.is_finite() {
+            return 0.5;
+        }
         let (emin, emax) = self.expanded_range();
         let range = emax - emin;
         if range.abs() < f64::EPSILON {
@@ -188,6 +200,21 @@ impl Scale for ScaleContinuous {
         } else {
             (f - emin) / range
         }
+    }
+
+    fn expanded_domain(&self) -> Option<(f64, f64)> {
+        if !self.trained || !self.min.is_finite() || !self.max.is_finite() {
+            return None;
+        }
+        let (a, b) = self.expanded_range();
+        if !(a.is_finite() && b.is_finite()) {
+            return None;
+        }
+        if (b - a).abs() < f64::EPSILON {
+            // A degenerate domain maps everything to the panel centre.
+            return Some((a - 0.5, b + 0.5));
+        }
+        Some((a, b))
     }
 
     fn breaks(&self) -> Vec<(f64, String)> {
@@ -215,8 +242,7 @@ impl Scale for ScaleContinuous {
                 .collect();
         }
 
-        let range = self.max - self.min;
-        if range.abs() < f64::EPSILON {
+        if super::util::is_degenerate_range(self.min, self.max) {
             let label = self.format_label(self.scale_transform.inverse(self.min));
             return vec![(0.5, label)];
         }

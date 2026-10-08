@@ -78,6 +78,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     polar()?;
     ecdf()?;
     qq()?;
+    candlestick()?;
+    radar()?;
+    gauge()?;
+    calendar()?;
     #[cfg(feature = "sf")]
     spatial()?;
     themes()?;
@@ -574,5 +578,178 @@ fn themes() -> Result<(), Box<dyn std::error::Error>> {
             .title(&format!("theme_{name}"))
             .save_with_size(&out(&format!("theme_{name}")), TW, TH)?;
     }
+    Ok(())
+}
+
+/// Daily OHLC prices as a candlestick chart (`geom_candlestick`).
+fn candlestick() -> Result<(), Box<dyn std::error::Error>> {
+    use ggplot_rs::stat::calendar::days_from_civil;
+    let start = days_from_civil(2024, 3, 1);
+    let (mut date, mut o, mut h, mut l, mut c) = (vec![], vec![], vec![], vec![], vec![]);
+    let mut price: f64 = 100.0;
+    for i in 0..40i64 {
+        // Deterministic wiggle: drift + two incommensurate waves.
+        let open = price;
+        let close = open + 1.6 * (i as f64 * 0.9).sin() + 0.7 * (i as f64 * 2.3).cos() + 0.15;
+        let spread = 0.6 + 0.5 * (i as f64 * 1.7).sin().abs();
+        date.push(Value::DateTime((start + i) * 86_400));
+        o.push(Value::Float(round2(open)));
+        c.push(Value::Float(round2(close)));
+        h.push(Value::Float(round2(open.max(close) + spread)));
+        l.push(Value::Float(round2(open.min(close) - spread * 0.8)));
+        price = close;
+    }
+    let data = vec![
+        ("date".to_string(), date),
+        ("open".to_string(), o),
+        ("high".to_string(), h),
+        ("low".to_string(), l),
+        ("close".to_string(), c),
+    ];
+    GGPlot::new(data)
+        .aes(
+            Aes::new()
+                .x("date")
+                .open("open")
+                .high("high")
+                .low("low")
+                .close("close"),
+        )
+        .geom_candlestick()
+        .title("Candlestick")
+        .subtitle("Daily OHLC, March–April 2024")
+        .ylab("Price")
+        .theme_minimal()
+        .save_with_size(&out("candlestick"), W, H)?;
+    Ok(())
+}
+
+/// Two products compared on five attributes (`coord_radar`).
+fn radar() -> Result<(), Box<dyn std::error::Error>> {
+    let axes = ["Speed", "Power", "Range", "Value", "Comfort", "Safety"];
+    let series = [
+        ("Model A", [8.0, 6.0, 9.0, 5.0, 7.0, 8.0]),
+        ("Model B", [5.0, 9.0, 6.0, 8.0, 6.0, 7.0]),
+    ];
+    let (mut ax, mut se, mut v) = (vec![], vec![], vec![]);
+    for (name, vals) in series {
+        for (a, x) in axes.iter().zip(vals) {
+            ax.push(*a);
+            se.push(name);
+            v.push(x);
+        }
+    }
+    let df = df! { "axis" => ax, "model" => se, "score" => v }?;
+    GGPlot::new(df)
+        .aes(Aes::new().x("axis").y("score").color("model").fill("model"))
+        .geom_polygon_with(GeomPolygon {
+            alpha: 0.18,
+            line_width: 2.0,
+            ..Default::default()
+        })
+        .geom_point()
+        .scale_color_brewer(PaletteName::Set1)
+        .scale_fill_brewer(PaletteName::Set1)
+        .coord_radar()
+        .title("Radar")
+        .theme_minimal()
+        .save_with_size(&out("radar"), W, H)?;
+    Ok(())
+}
+
+/// A half-donut gauge: `geom_rect` zone bands + a needle under
+/// `coord_polar` with a 180° span.
+fn gauge() -> Result<(), Box<dyn std::error::Error>> {
+    use std::f64::consts::PI;
+    let value = 72.0;
+    let bands = df! {
+        "x0" => [0.0, 60.0, 85.0],
+        "x1" => [60.0, 85.0, 100.0],
+        "y0" => [0.62, 0.62, 0.62],
+        "y1" => [1.0, 1.0, 1.0],
+        "zone" => ["ok", "warn", "critical"],
+    }?;
+    let needle = df! { "v" => [value], "r0" => [0.0], "r1" => [0.86] }?;
+    GGPlot::new(bands)
+        .geom_rect_with(GeomRect {
+            line_width: 0.0,
+            alpha: 1.0,
+            ..Default::default()
+        })
+        .layer_aes(
+            Aes::new()
+                .xmin("x0")
+                .xmax("x1")
+                .ymin("y0")
+                .ymax("y1")
+                .fill("zone"),
+        )
+        .geom_segment_with(GeomSegment {
+            color: (40, 44, 52),
+            width: 4.0,
+            alpha: 1.0,
+        })
+        .layer_data(needle)
+        .layer_aes(Aes::new().x("v").xend("v").y("r0").yend("r1"))
+        .scale_fill_manual(vec![
+            ("ok", RGBAColor::new(0x2f, 0x9e, 0x44)),
+            ("warn", RGBAColor::new(0xf5, 0x9f, 0x00)),
+            ("critical", RGBAColor::new(0xe0, 0x31, 0x31)),
+        ])
+        .scale_x_continuous(
+            ScaleContinuous::new()
+                .with_limits(0.0, 100.0)
+                .with_expand(0.0, 0.0),
+        )
+        .scale_y_continuous(
+            ScaleContinuous::new()
+                .with_limits(0.0, 1.0)
+                .with_expand(0.0, 0.0),
+        )
+        .coord_polar_with(CoordPolar::new().with_span(-PI / 2.0, PI / 2.0))
+        .annotate(Annotation::Text {
+            label: format!("{value}%"),
+            x: 50.0,
+            y: 0.3,
+            size: 28.0,
+            color: (31, 41, 55),
+        })
+        .title("Gauge")
+        .subtitle("CPU utilisation")
+        .theme_void()
+        .legend_position(LegendPosition::None)
+        .save_with_size(&out("gauge"), W, H)?;
+    Ok(())
+}
+
+/// A year of daily activity as a calendar heatmap (`geom_calendar`).
+fn calendar() -> Result<(), Box<dyn std::error::Error>> {
+    use ggplot_rs::stat::calendar::days_from_civil;
+    let start = days_from_civil(2024, 1, 1);
+    let (mut date, mut n) = (vec![], vec![]);
+    for d in 0..366i64 {
+        let weekday = (d + 1) % 7; // 2024-01-01 is a Monday
+        let weekend = weekday == 6 || weekday == 0;
+        let season = 4.0 + 3.0 * (d as f64 / 366.0 * 2.0 * std::f64::consts::PI).sin();
+        let noise = ((d * 7919) % 13) as f64 / 3.0;
+        date.push(Value::DateTime((start + d) * 86_400));
+        n.push(Value::Float(
+            if weekend { noise * 0.4 } else { season + noise }.round(),
+        ));
+    }
+    let data = vec![("date".to_string(), date), ("commits".to_string(), n)];
+    GGPlot::new(data)
+        .aes(Aes::new().x("date").fill("commits"))
+        .geom_calendar()
+        .scale_fill_gradient(
+            RGBAColor::new(0xeb, 0xed, 0xf0),
+            RGBAColor::new(0x21, 0x6e, 0x39),
+        )
+        .title("Calendar heatmap")
+        .subtitle("Daily commits, 2024")
+        .xlab("")
+        .ylab("")
+        .theme_minimal()
+        .save_with_size(&out("calendar"), W + 260, 300)?;
     Ok(())
 }

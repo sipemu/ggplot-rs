@@ -30,13 +30,66 @@ pub fn label_percent(v: f64) -> String {
     }
 }
 
-/// Format as US dollar (e.g., 1234.5 → "$1,235").
+/// Format as US dollar with thousands separators (e.g., 1234 → "$1,234",
+/// -500 → "-$500"). Equivalent to `label_currency("$", "", ",", None)`.
 pub fn label_dollar(v: f64) -> String {
-    if v < 0.0 {
-        format!("-${}", label_comma(-v))
+    currency(v, "$", "", ",", None)
+}
+
+/// Sign-aware currency formatter (R's `scales::label_currency`): the minus sign
+/// goes *before* the prefix ("-€5", not "€-5"), thousands are grouped with
+/// `big_mark` (e.g. `","`, `"."`, `" "`, `"'"`; `""` disables grouping), and
+/// `accuracy` rounds to a multiple of it (`None` = up to two decimals, trailing
+/// zeros trimmed). The decimal mark is always `.`.
+///
+/// ```
+/// use ggplot_rs::scale::format::label_currency;
+/// let eur = label_currency("€", "", ".", Some(1.0));
+/// assert_eq!(eur(-1234567.0), "-€1.234.567");
+/// let chf = label_currency("", " CHF", "'", Some(0.01));
+/// assert_eq!(chf(9876.5), "9'876.50 CHF");
+/// ```
+pub fn label_currency(
+    prefix: &str,
+    suffix: &str,
+    big_mark: &str,
+    accuracy: Option<f64>,
+) -> impl Fn(f64) -> String + Send + Sync {
+    let prefix = prefix.to_string();
+    let suffix = suffix.to_string();
+    let big_mark = big_mark.to_string();
+    move |v: f64| currency(v, &prefix, &suffix, &big_mark, accuracy)
+}
+
+/// Shared body of [`label_currency`] / [`label_dollar`].
+fn currency(v: f64, prefix: &str, suffix: &str, big_mark: &str, accuracy: Option<f64>) -> String {
+    // Format the magnitude, then put the sign in front of the prefix. NaN and
+    // ±inf pass through as "NaN" / "inf".
+    let (_, body) = split_sign(format_accuracy(v.abs(), accuracy));
+    let sign = if v < 0.0 && !is_zero_number(&body) {
+        "-"
     } else {
-        format!("${}", label_comma(v))
+        ""
+    };
+    let body = if big_mark == "," {
+        body
+    } else {
+        body.replace(',', big_mark)
+    };
+    format!("{sign}{prefix}{body}{suffix}")
+}
+
+/// Split a leading `-` off a formatted number.
+fn split_sign(s: String) -> (&'static str, String) {
+    match s.strip_prefix('-') {
+        Some(rest) => ("-", rest.to_string()),
+        None => ("", s),
     }
+}
+
+/// True when a formatted number is (rounded to) zero, e.g. "0", "0.00".
+fn is_zero_number(s: &str) -> bool {
+    s.chars().all(|c| matches!(c, '0' | '.' | ','))
 }
 
 /// Format in scientific notation (e.g., 12345 → "1.23e4").
@@ -89,15 +142,21 @@ fn format_accuracy(v: f64, accuracy: Option<f64>) -> String {
         Some(acc) if acc > 0.0 => {
             let rounded = (v / acc).round() * acc;
             let decimals = (-acc.log10().floor()).max(0.0) as usize;
-            add_commas(&format!("{rounded:.decimals$}"))
+            let s = format!("{rounded:.decimals$}");
+            // Group only the integer part ("1234.50" → "1,234.50").
+            match s.split_once('.') {
+                Some((int_part, dec_part)) => format!("{}.{dec_part}", add_commas(int_part)),
+                None => add_commas(&s),
+            }
         }
         _ => label_comma(v),
     }
 }
 
 /// General configurable number formatter (R's `scales::label_number`).
-/// Multiplies by `scale`, rounds to `accuracy` (None = trim), and wraps in
-/// `prefix`/`suffix`.
+/// Multiplies by `scale`, rounds to `accuracy` (None = trim), groups thousands
+/// with `,`, and wraps in `prefix`/`suffix` — with the minus sign placed before
+/// the prefix (`-€5`). For a custom thousands mark use [`label_currency`].
 pub fn label_number(
     accuracy: Option<f64>,
     prefix: &str,
@@ -106,7 +165,13 @@ pub fn label_number(
 ) -> impl Fn(f64) -> String + Send + Sync {
     let prefix = prefix.to_string();
     let suffix = suffix.to_string();
-    move |v: f64| format!("{prefix}{}{suffix}", format_accuracy(v * scale, accuracy))
+    move |v: f64| {
+        // Sign-aware: "-€5", never "€-5"; a value that rounds to zero loses
+        // its sign ("€0", not "-€0").
+        let (sign, body) = split_sign(format_accuracy(v * scale, accuracy));
+        let sign = if is_zero_number(&body) { "" } else { sign };
+        format!("{sign}{prefix}{body}{suffix}")
+    }
 }
 
 /// SI-prefixed number formatter: 1_500 → "1.5k", 2.3e6 → "2.3M", 5e-4 → "500µ".
@@ -233,6 +298,39 @@ mod tests {
         assert_eq!(pct(0.25), "25%");
         let money = label_number(None, "€", "", 1.0);
         assert_eq!(money(1500.0), "€1,500");
+    }
+
+    #[test]
+    fn label_number_is_sign_aware() {
+        let eur = label_number(None, "€", "", 1.0);
+        assert_eq!(eur(-5.0), "-€5");
+        assert_eq!(eur(-1234.5), "-€1,234.5");
+        let f = label_number(Some(1.0), "€", "", 1.0);
+        assert_eq!(f(-0.2), "€0", "rounds to zero: no sign");
+        assert_eq!(f(1_234_567.0), "€1,234,567");
+        // Thousands grouping never touches the decimals.
+        let g = label_number(Some(0.01), "", "", 1.0);
+        assert_eq!(g(1234.5), "1,234.50");
+        assert_eq!(g(-98765.4321), "-98,765.43");
+    }
+
+    #[test]
+    fn label_currency_marks_and_signs() {
+        let eur = label_currency("€", "", ".", Some(1.0));
+        assert_eq!(eur(-1_234_567.0), "-€1.234.567");
+        assert_eq!(eur(0.0), "€0");
+        let chf = label_currency("", " CHF", "'", Some(0.01));
+        assert_eq!(chf(9876.5), "9'876.50 CHF");
+        assert_eq!(chf(-0.001), "0.00 CHF");
+        let plain = label_currency("$", "", "", None);
+        assert_eq!(plain(1234.5), "$1234.5");
+        let usd = label_currency("$", "", ",", None);
+        for v in [0.0, 1.0, -500.0, 1234.5, -1_000_000.0, 0.125] {
+            assert_eq!(usd(v), label_dollar(v), "label_dollar parity at {v}");
+        }
+        assert_eq!(label_dollar(-1234.0), "-$1,234");
+        assert_eq!(usd(f64::NAN), "$NaN");
+        assert_eq!(usd(f64::NEG_INFINITY), "-$inf");
     }
 
     #[test]

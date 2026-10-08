@@ -82,20 +82,16 @@ impl Scale for ScaleSizeContinuous {
             return vec![];
         }
         let range = self.max - self.min;
-        if range.abs() < f64::EPSILON {
+        if super::util::is_degenerate_range(self.min, self.max) {
             return vec![(0.5, format_number(self.min))];
         }
         let n_breaks = 4;
         let step = super::util::nice_step(range / n_breaks as f64);
         let start = (self.min / step).ceil() * step;
-        let mut breaks = Vec::new();
-        let mut v = start;
-        while v <= self.max + step * 0.001 {
-            let pos = self.map(&Value::Float(v));
-            breaks.push((pos, format_number(v)));
-            v += step;
-        }
-        breaks
+        super::util::stepped_breaks(start, self.max, step)
+            .into_iter()
+            .map(|v| (self.map(&Value::Float(v)), format_number(v)))
+            .collect()
     }
 
     fn name(&self) -> &str {

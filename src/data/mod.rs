@@ -50,7 +50,12 @@ impl Value {
         Value::DateTime(secs)
     }
 
-    /// Convert to a string for display/grouping purposes.
+    /// Convert to a string for display and discrete-scale level purposes.
+    ///
+    /// Note this is *not* injective: `Value::Na` and the string `"NA"` (and
+    /// `Float(1.0)`/`Integer(1)`/`Str("1")`) share a key. Use
+    /// [`group_key`](Self::group_key) to split rows into groups, and
+    /// [`key_str`](Self::key_str) for allocation-free lookups.
     pub fn to_group_key(&self) -> String {
         match self {
             Value::Float(f) => format!("{f}"),
@@ -63,6 +68,39 @@ impl Value {
     }
 }
 
+/// A grouping key for one value: [`Value::group_key`]. Unlike
+/// [`Value::to_group_key`] it keeps a missing value (`Na`) distinct from the
+/// literal string `"NA"`, and borrows string data instead of cloning it.
+#[derive(Clone, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
+pub enum GroupKey<'a> {
+    /// A missing value.
+    Na,
+    /// Any present value, keyed by its display string (so `Float(1.0)` and
+    /// `Integer(1)` still group together).
+    Key(std::borrow::Cow<'a, str>),
+}
+
+impl Value {
+    /// Same string as [`to_group_key`](Self::to_group_key), but borrowed for
+    /// `Str` values — use it for hot-path scale lookups.
+    pub fn key_str(&self) -> std::borrow::Cow<'_, str> {
+        match self {
+            Value::Str(s) => std::borrow::Cow::Borrowed(s.as_str()),
+            Value::Na => std::borrow::Cow::Borrowed("NA"),
+            other => std::borrow::Cow::Owned(other.to_group_key()),
+        }
+    }
+
+    /// Injective-on-missingness grouping key: `Na` never collides with the
+    /// string `"NA"`. Borrows `Str` data (no allocation).
+    pub fn group_key(&self) -> GroupKey<'_> {
+        match self {
+            Value::Na => GroupKey::Na,
+            other => GroupKey::Key(other.key_str()),
+        }
+    }
+}
+
 /// Format epoch seconds as a human-readable date/time string.
 pub fn format_epoch_secs(secs: i64) -> String {
     // Simple UTC date/time formatting without external dependencies
@@ -70,12 +108,10 @@ pub fn format_epoch_secs(secs: i64) -> String {
     const SECS_PER_HOUR: i64 = 3600;
     const SECS_PER_MINUTE: i64 = 60;
 
-    let (mut days, rem) = if secs >= 0 {
-        (secs / SECS_PER_DAY, secs % SECS_PER_DAY)
-    } else {
-        let d = (secs - SECS_PER_DAY + 1) / SECS_PER_DAY;
-        (d, secs - d * SECS_PER_DAY)
-    };
+    // Euclidean division: floor for negative timestamps, and total over the
+    // whole i64 range (no `secs - 86399` overflow at i64::MIN).
+    let mut days = secs.div_euclid(SECS_PER_DAY);
+    let rem = secs.rem_euclid(SECS_PER_DAY);
 
     let hour = rem / SECS_PER_HOUR;
     let minute = (rem % SECS_PER_HOUR) / SECS_PER_MINUTE;
@@ -111,5 +147,39 @@ impl PartialEq for Value {
             (Value::Na, Value::Na) => true,
             _ => false,
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn na_and_literal_na_have_distinct_group_keys() {
+        let na = Value::Na;
+        let lit = Value::Str("NA".to_string());
+        assert_ne!(na.group_key(), lit.group_key());
+        // Display/level keys stay "NA" for both (what an axis or legend shows).
+        assert_eq!(na.to_group_key(), "NA");
+        assert_eq!(lit.to_group_key(), "NA");
+        // Numeric types still group by value.
+        assert_eq!(Value::Float(1.0).group_key(), Value::Integer(1).group_key());
+        assert!(matches!(
+            Value::Str("x".into()).key_str(),
+            std::borrow::Cow::Borrowed("x")
+        ));
+    }
+
+    #[test]
+    fn format_epoch_secs_is_total() {
+        assert_eq!(format_epoch_secs(0), "1970-01-01");
+        assert_eq!(format_epoch_secs(-1), "1969-12-31 23:59:59");
+        assert_eq!(format_epoch_secs(-86_400), "1969-12-31");
+        assert_eq!(format_epoch_secs(951_782_400), "2000-02-29");
+        // Extremes must not overflow (they used to panic in debug builds).
+        let lo = format_epoch_secs(i64::MIN);
+        let hi = format_epoch_secs(i64::MAX);
+        assert!(lo.starts_with('-') && lo.contains(':'), "{lo}");
+        assert!(hi.contains(':'), "{hi}");
     }
 }

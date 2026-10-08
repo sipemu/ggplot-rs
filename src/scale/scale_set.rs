@@ -48,6 +48,14 @@ impl ScaleSet {
         if self.get(aes).is_some() {
             return;
         }
+        // OHLC values live on the y scale (via the geom's ymin/ymax extents);
+        // they get no scale of their own.
+        if matches!(
+            aes,
+            Aesthetic::Open | Aesthetic::High | Aesthetic::Low | Aesthetic::Close
+        ) {
+            return;
+        }
 
         let col_name = aes.col_name();
         let values = data.column(col_name);

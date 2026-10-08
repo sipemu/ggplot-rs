@@ -1,6 +1,8 @@
 //! Property-based invariants (A-grade #61). These hold for *any* input, so they
 //! catch classes of bugs point tests miss: scale monotonicity, expression
 //! totality, bin count-preservation, and render totality.
+// Uses the plotters-backed renderers (render_svg/render_png/save).
+#![cfg(feature = "plotters")]
 
 use ggplot_rs::aes::expr::eval_expression;
 use ggplot_rs::data::{DataFrame, Value};

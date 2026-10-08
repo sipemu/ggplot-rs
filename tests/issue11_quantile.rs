@@ -1,5 +1,5 @@
 //! Issue #11 — quantile regression (stat_quantile) via anofox-regression.
-#![cfg(feature = "regression")]
+#![cfg(all(feature = "regression", feature = "plotters"))]
 
 use ggplot_rs::data::{DataFrame, Value};
 use ggplot_rs::prelude::*;

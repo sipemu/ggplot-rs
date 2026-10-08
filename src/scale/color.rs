@@ -1,5 +1,6 @@
 use crate::aes::Aesthetic;
 use crate::data::Value;
+use std::collections::HashMap;
 
 use super::util::{format_number, nice_step};
 use super::Scale;
@@ -93,7 +94,13 @@ pub struct ScaleColorDiscrete {
     aesthetic: Aesthetic,
     name: String,
     levels: Vec<String>,
+    /// level → index in `levels`, so training/lookup are O(1) (many-category
+    /// fills would otherwise be quadratic). Kept in sync with `levels`.
+    level_index: HashMap<String, usize>,
     palette: Vec<RGBAColor>,
+    /// Keep levels in sorted (lexicographic) order instead of first-seen
+    /// order — see [`ScaleColorDiscrete::sorted`].
+    sorted: bool,
 }
 
 impl ScaleColorDiscrete {
@@ -102,8 +109,33 @@ impl ScaleColorDiscrete {
             aesthetic,
             name: String::new(),
             levels: Vec::new(),
+            level_index: HashMap::new(),
             palette: DEFAULT_PALETTE.to_vec(),
+            sorted: false,
         }
+    }
+
+    /// Order levels lexicographically (instead of first appearance) so a given
+    /// level always gets the same palette colour and legend position across
+    /// charts, whatever order the data arrives in — no need to pre-sort levels
+    /// and repeat a manual palette per chart.
+    pub fn sorted(mut self) -> Self {
+        self.sorted = true;
+        self.resort();
+        self
+    }
+
+    fn resort(&mut self) {
+        if !self.sorted {
+            return;
+        }
+        self.levels.sort();
+        self.level_index = self
+            .levels
+            .iter()
+            .enumerate()
+            .map(|(i, l)| (l.clone(), i))
+            .collect();
     }
 
     pub fn with_palette(mut self, colors: Vec<RGBAColor>) -> Self {
@@ -120,19 +152,38 @@ impl ScaleColorDiscrete {
     /// color regardless of which levels are present in the data — e.g. for a
     /// legend whose series can be toggled without the colors reshuffling.
     pub fn with_levels(mut self, levels: Vec<String>) -> Self {
-        self.levels = levels;
+        self.levels.clear();
+        self.level_index.clear();
+        for l in levels {
+            self.push_level(l);
+        }
+        self.resort();
         self
+    }
+
+    fn push_level(&mut self, key: String) {
+        if !self.level_index.contains_key(&key) {
+            self.level_index.insert(key.clone(), self.levels.len());
+            self.levels.push(key);
+        }
+    }
+
+    fn level_position(&self, key: &str) -> Option<usize> {
+        self.level_index.get(key).copied()
     }
 
     /// Get color for a given level index.
     pub fn color_for_index(&self, idx: usize) -> RGBAColor {
+        if self.palette.is_empty() {
+            return DEFAULT_PALETTE[idx % DEFAULT_PALETTE.len()];
+        }
         self.palette[idx % self.palette.len()]
     }
 
     /// Get color for a value.
     pub fn color_for_value(&self, value: &Value) -> RGBAColor {
-        let key = value.to_group_key();
-        let idx = self.levels.iter().position(|l| l == &key).unwrap_or(0);
+        let key = value.key_str();
+        let idx = self.level_position(&key).unwrap_or(0);
         self.color_for_index(idx)
     }
 
@@ -147,21 +198,21 @@ impl Scale for ScaleColorDiscrete {
     }
 
     fn train(&mut self, values: &[Value]) {
+        let before = self.levels.len();
         for v in values {
-            let key = v.to_group_key();
-            if !self.levels.contains(&key) {
-                self.levels.push(key);
+            let key = v.key_str();
+            if !self.level_index.contains_key(key.as_ref()) {
+                self.push_level(key.into_owned());
             }
+        }
+        if self.levels.len() != before {
+            self.resort();
         }
     }
 
     fn map(&self, value: &Value) -> f64 {
-        let key = value.to_group_key();
-        self.levels
-            .iter()
-            .position(|l| l == &key)
-            .map(|i| i as f64)
-            .unwrap_or(0.0)
+        let key = value.key_str();
+        self.level_position(&key).map(|i| i as f64).unwrap_or(0.0)
     }
 
     fn breaks(&self) -> Vec<(f64, String)> {
@@ -195,6 +246,7 @@ impl Scale for ScaleColorDiscrete {
 
     fn reset_training(&mut self) {
         self.levels.clear();
+        self.level_index.clear();
     }
 }
 
@@ -271,7 +323,7 @@ impl Scale for ScaleColorContinuous {
         }
 
         let range = self.max - self.min;
-        if range.abs() < f64::EPSILON {
+        if super::util::is_degenerate_range(self.min, self.max) {
             return vec![(0.5, format_number(self.min))];
         }
 
@@ -280,14 +332,10 @@ impl Scale for ScaleColorContinuous {
         let step = nice_step(raw_step);
 
         let start = (self.min / step).ceil() * step;
-        let mut breaks = Vec::new();
-        let mut v = start;
-        while v <= self.max + step * 0.001 {
-            let pos = self.map(&Value::Float(v));
-            breaks.push((pos, format_number(v)));
-            v += step;
-        }
-        breaks
+        super::util::stepped_breaks(start, self.max, step)
+            .into_iter()
+            .map(|v| (self.map(&Value::Float(v)), format_number(v)))
+            .collect()
     }
 
     fn name(&self) -> &str {

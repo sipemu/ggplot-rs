@@ -1,4 +1,6 @@
 //! Issue #21 — facet_grid space="free_x" proportional panel sizing.
+// Uses the plotters-backed renderers (render_svg/render_png/save).
+#![cfg(feature = "plotters")]
 use ggplot_rs::prelude::*;
 
 #[test]

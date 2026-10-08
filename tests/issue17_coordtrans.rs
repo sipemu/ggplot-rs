@@ -1,4 +1,6 @@
 //! Issue #17 — coord_trans warps the axis at draw time (stats on raw data).
+// Uses the plotters-backed renderers (render_svg/render_png/save).
+#![cfg(feature = "plotters")]
 
 use ggplot_rs::prelude::*;
 

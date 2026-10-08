@@ -108,8 +108,8 @@ pub fn ggarrange_save(
 
 /// [`ggarrange`] rendered as a single PNG. Each plot is rasterised on its own
 /// (via the plotters bitmap backend) and composited into an `ncol`-wide grid.
-/// Returns the encoded PNG bytes.
-#[cfg(not(target_arch = "wasm32"))]
+/// Returns the encoded PNG bytes. Requires the `plotters` feature (default).
+#[cfg(all(feature = "plotters", not(target_arch = "wasm32")))]
 pub fn ggarrange_png(
     plots: Vec<GGPlot>,
     ncol: usize,
@@ -142,7 +142,7 @@ pub fn ggarrange_png(
 }
 
 /// [`ggarrange_png`] that writes the composited PNG to `path`.
-#[cfg(not(target_arch = "wasm32"))]
+#[cfg(all(feature = "plotters", not(target_arch = "wasm32")))]
 pub fn ggarrange_save_png(
     plots: Vec<GGPlot>,
     ncol: usize,
@@ -174,12 +174,18 @@ mod tests {
 
     #[test]
     fn constructors_build_and_render() {
-        assert!(ggscatter(xy(), "x", "y", Some("g")).render_svg().is_ok());
-        assert!(ggline(xy(), "x", "y", None).render_svg().is_ok());
-        assert!(ggboxplot(xy(), "g", "y", Some("g")).render_svg().is_ok());
-        assert!(ggviolin(xy(), "g", "y", Some("g")).render_svg().is_ok());
-        assert!(gghistogram(xy(), "y", None).render_svg().is_ok());
-        assert!(ggdensity(xy(), "y", Some("g")).render_svg().is_ok());
+        assert!(ggscatter(xy(), "x", "y", Some("g"))
+            .render_svg_native()
+            .is_ok());
+        assert!(ggline(xy(), "x", "y", None).render_svg_native().is_ok());
+        assert!(ggboxplot(xy(), "g", "y", Some("g"))
+            .render_svg_native()
+            .is_ok());
+        assert!(ggviolin(xy(), "g", "y", Some("g"))
+            .render_svg_native()
+            .is_ok());
+        assert!(gghistogram(xy(), "y", None).render_svg_native().is_ok());
+        assert!(ggdensity(xy(), "y", Some("g")).render_svg_native().is_ok());
     }
 
     #[test]
@@ -202,7 +208,7 @@ mod tests {
     }
 
     #[test]
-    #[cfg(not(target_arch = "wasm32"))]
+    #[cfg(all(feature = "plotters", not(target_arch = "wasm32")))]
     fn ggarrange_png_composes_a_grid() {
         let plots = vec![
             ggscatter(xy(), "x", "y", None),
@@ -221,7 +227,7 @@ mod tests {
         // render), proving these are ordinary builders.
         let svg = ggscatter(xy(), "x", "y", None)
             .title("chained")
-            .render_svg()
+            .render_svg_native()
             .unwrap();
         assert!(svg.contains("chained"));
     }

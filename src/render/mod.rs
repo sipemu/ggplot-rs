@@ -5,7 +5,7 @@ pub mod layout;
 pub mod pixel_backend;
 // The plotters backend (PNG/bitmap + SVG via plotters) isn't available on wasm
 // (no bitmap/font-registration API there); the browser uses `svg_backend`.
-#[cfg(not(target_arch = "wasm32"))]
+#[cfg(all(feature = "plotters", not(target_arch = "wasm32")))]
 pub mod plotters_backend;
 pub mod renderer;
 pub mod svg_backend;

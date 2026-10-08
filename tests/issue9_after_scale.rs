@@ -1,4 +1,6 @@
 //! Issue #9 — after_scale() color derivation + stage().
+// Uses the plotters-backed renderers (render_svg/render_png/save).
+#![cfg(feature = "plotters")]
 use ggplot_rs::prelude::*;
 
 fn data() -> Vec<(String, Vec<Value>)> {

@@ -1,6 +1,7 @@
 use crate::aes::Aesthetic;
 use crate::data::Value;
 use crate::render::backend::Linetype;
+use indexmap::IndexSet;
 
 use super::Scale;
 
@@ -8,7 +9,7 @@ use super::Scale;
 #[derive(Clone, Debug)]
 pub struct ScaleLinetypeDiscrete {
     name: String,
-    levels: Vec<String>,
+    levels: IndexSet<String>,
 }
 
 impl Default for ScaleLinetypeDiscrete {
@@ -21,7 +22,7 @@ impl ScaleLinetypeDiscrete {
     pub fn new() -> Self {
         ScaleLinetypeDiscrete {
             name: String::new(),
-            levels: Vec::new(),
+            levels: IndexSet::new(),
         }
     }
 }
@@ -33,18 +34,17 @@ impl Scale for ScaleLinetypeDiscrete {
 
     fn train(&mut self, values: &[Value]) {
         for v in values {
-            let key = v.to_group_key();
-            if !self.levels.contains(&key) {
-                self.levels.push(key);
+            let key = v.key_str();
+            if !self.levels.contains(key.as_ref()) {
+                self.levels.insert(key.into_owned());
             }
         }
     }
 
     fn map(&self, value: &Value) -> f64 {
-        let key = value.to_group_key();
+        let key = value.key_str();
         self.levels
-            .iter()
-            .position(|l| l == &key)
+            .get_index_of(key.as_ref())
             .map(|i| i as f64)
             .unwrap_or(0.0)
     }
@@ -70,8 +70,8 @@ impl Scale for ScaleLinetypeDiscrete {
     }
 
     fn map_to_linetype(&self, value: &Value) -> Option<Linetype> {
-        let key = value.to_group_key();
-        let idx = self.levels.iter().position(|l| l == &key).unwrap_or(0);
+        let key = value.key_str();
+        let idx = self.levels.get_index_of(key.as_ref()).unwrap_or(0);
         Some(Linetype::ALL[idx % Linetype::ALL.len()])
     }
 

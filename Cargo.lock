@@ -1593,7 +1593,7 @@ dependencies = [
 
 [[package]]
 name = "ggplot-rs"
-version = "0.15.0"
+version = "0.16.0"
 dependencies = [
  "ab_glyph",
  "anofox-regression",
@@ -1603,7 +1603,6 @@ dependencies = [
  "criterion",
  "duckdb",
  "faer",
- "getrandom 0.2.17",
  "image",
  "indexmap",
  "plotters",
@@ -1613,6 +1612,14 @@ dependencies = [
  "serde",
  "serde_json",
  "toml",
+]
+
+[[package]]
+name = "ggplot-rs-wasm"
+version = "0.16.0"
+dependencies = [
+ "ggplot-rs",
+ "serde_json",
  "wasm-bindgen",
 ]
 

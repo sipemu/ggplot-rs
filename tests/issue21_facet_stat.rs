@@ -1,4 +1,6 @@
 //! Issue #21 — a computed stat is now estimated per facet panel, not pooled.
+// Uses the plotters-backed renderers (render_svg/render_png/save).
+#![cfg(feature = "plotters")]
 
 use ggplot_rs::prelude::*;
 

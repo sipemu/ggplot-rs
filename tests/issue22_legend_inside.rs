@@ -1,4 +1,6 @@
 //! Issue #22 — legend at arbitrary panel coordinates.
+// Uses the plotters-backed renderers (render_svg/render_png/save).
+#![cfg(feature = "plotters")]
 use ggplot_rs::prelude::*;
 
 fn data() -> Vec<(String, Vec<Value>)> {

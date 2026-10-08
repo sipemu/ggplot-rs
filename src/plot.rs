@@ -1,4 +1,4 @@
-#[cfg(not(target_arch = "wasm32"))]
+#[cfg(all(feature = "plotters", not(target_arch = "wasm32")))]
 use plotters::prelude::IntoDrawingArea;
 
 use crate::aes::Aes;
@@ -50,7 +50,7 @@ use crate::geom::violin::GeomViolin;
 use crate::geom::{Geom, GeomParams};
 use crate::position::Position;
 use crate::render::layout::PlotLayout;
-#[cfg(not(target_arch = "wasm32"))]
+#[cfg(all(feature = "plotters", not(target_arch = "wasm32")))]
 use crate::render::plotters_backend::PlottersAdapter;
 use crate::render::renderer::PlotRenderer;
 use crate::render::RenderError;
@@ -81,6 +81,9 @@ pub struct Layer {
     pub position: Box<dyn Position>,
     pub params: GeomParams,
     pub show_legend: Option<bool>,
+    /// The geom was configured explicitly (`geom_*_with(...)`), so its colours
+    /// are deliberate and the theme's `primary_color` must not override them.
+    pub explicit_style: bool,
 }
 
 /// The top-level plot specification — builder pattern.
@@ -95,10 +98,21 @@ pub struct GGPlot {
     pub(crate) facet: Facet,
     pub(crate) annotations: Vec<Annotation>,
     pub(crate) guide_legend: crate::guide::config::GuideLegend,
+    /// Warnings raised while specifying the plot (e.g. a clipped calendar
+    /// span); prepended to the build warnings.
+    pub(crate) warnings: Vec<String>,
+    /// Panel aspect ratio used when the theme sets none (helpers such as
+    /// `geom_calendar` need square cells; survives theme presets).
+    pub(crate) default_aspect_ratio: Option<f64>,
 }
 
 impl GGPlot {
     /// Create a new plot with the given data source.
+    ///
+    /// Never panics on malformed input: e.g. column-oriented data whose columns
+    /// have different lengths is padded with `NA` and reported as a
+    /// [`GGError::ValidationError`] by [`try_build`](Self::try_build) and the
+    /// `render_*`/`save*` methods.
     pub fn new(data: impl GGData) -> Self {
         GGPlot {
             data: data.into_dataframe(),
@@ -111,6 +125,8 @@ impl GGPlot {
             facet: Facet::default(),
             annotations: Vec::new(),
             guide_legend: crate::guide::config::GuideLegend::default(),
+            warnings: Vec::new(),
+            default_aspect_ratio: None,
         }
     }
 
@@ -127,7 +143,7 @@ impl GGPlot {
     }
 
     pub fn geom_point_with(self, geom: GeomPoint) -> Self {
-        self.add_geom(geom)
+        self.add_geom_with(geom)
     }
 
     pub fn geom_line(self) -> Self {
@@ -135,7 +151,7 @@ impl GGPlot {
     }
 
     pub fn geom_line_with(self, geom: GeomLine) -> Self {
-        self.add_geom(geom)
+        self.add_geom_with(geom)
     }
 
     pub fn geom_bar(self) -> Self {
@@ -143,7 +159,7 @@ impl GGPlot {
     }
 
     pub fn geom_bar_with(self, geom: GeomBar) -> Self {
-        self.add_geom(geom)
+        self.add_geom_with(geom)
     }
 
     pub fn geom_histogram(self) -> Self {
@@ -151,7 +167,7 @@ impl GGPlot {
     }
 
     pub fn geom_histogram_with(self, geom: GeomHistogram) -> Self {
-        self.add_geom(geom)
+        self.add_geom_with(geom)
     }
 
     pub fn geom_boxplot(self) -> Self {
@@ -159,7 +175,7 @@ impl GGPlot {
     }
 
     pub fn geom_boxplot_with(self, geom: GeomBoxplot) -> Self {
-        self.add_geom(geom)
+        self.add_geom_with(geom)
     }
 
     pub fn geom_smooth(self) -> Self {
@@ -167,7 +183,7 @@ impl GGPlot {
     }
 
     pub fn geom_smooth_with(self, geom: GeomSmooth) -> Self {
-        self.add_geom(geom)
+        self.add_geom_with(geom)
     }
 
     pub fn geom_col(self) -> Self {
@@ -175,7 +191,7 @@ impl GGPlot {
     }
 
     pub fn geom_col_with(self, geom: GeomCol) -> Self {
-        self.add_geom(geom)
+        self.add_geom_with(geom)
     }
 
     pub fn geom_hline(self, yintercept: f64) -> Self {
@@ -184,7 +200,7 @@ impl GGPlot {
 
     /// Add a horizontal reference line with custom styling (color/linetype/width).
     pub fn geom_hline_with(self, geom: GeomHline) -> Self {
-        self.add_geom(geom)
+        self.add_geom_with(geom)
     }
 
     pub fn geom_vline(self, xintercept: f64) -> Self {
@@ -193,7 +209,7 @@ impl GGPlot {
 
     /// Add a vertical reference line with custom styling (color/linetype/width).
     pub fn geom_vline_with(self, geom: GeomVline) -> Self {
-        self.add_geom(geom)
+        self.add_geom_with(geom)
     }
 
     pub fn geom_abline(self, slope: f64, intercept: f64) -> Self {
@@ -202,7 +218,7 @@ impl GGPlot {
 
     /// Add a slope/intercept reference line with custom styling.
     pub fn geom_abline_with(self, geom: GeomAbline) -> Self {
-        self.add_geom(geom)
+        self.add_geom_with(geom)
     }
 
     pub fn geom_text(self) -> Self {
@@ -210,7 +226,7 @@ impl GGPlot {
     }
 
     pub fn geom_text_with(self, geom: GeomText) -> Self {
-        self.add_geom(geom)
+        self.add_geom_with(geom)
     }
 
     /// Annotate with a correlation coefficient + p-value (`ggpubr::stat_cor()`).
@@ -404,7 +420,7 @@ impl GGPlot {
     }
 
     pub fn geom_label_with(self, geom: GeomLabel) -> Self {
-        self.add_geom(geom)
+        self.add_geom_with(geom)
     }
 
     pub fn geom_area(self) -> Self {
@@ -412,7 +428,7 @@ impl GGPlot {
     }
 
     pub fn geom_area_with(self, geom: GeomArea) -> Self {
-        self.add_geom(geom)
+        self.add_geom_with(geom)
     }
 
     pub fn geom_ribbon(self) -> Self {
@@ -420,7 +436,7 @@ impl GGPlot {
     }
 
     pub fn geom_ribbon_with(self, geom: GeomRibbon) -> Self {
-        self.add_geom(geom)
+        self.add_geom_with(geom)
     }
 
     pub fn geom_errorbar(self) -> Self {
@@ -428,7 +444,7 @@ impl GGPlot {
     }
 
     pub fn geom_errorbar_with(self, geom: GeomErrorbar) -> Self {
-        self.add_geom(geom)
+        self.add_geom_with(geom)
     }
 
     pub fn geom_segment(self) -> Self {
@@ -436,7 +452,7 @@ impl GGPlot {
     }
 
     pub fn geom_segment_with(self, geom: GeomSegment) -> Self {
-        self.add_geom(geom)
+        self.add_geom_with(geom)
     }
 
     pub fn geom_density(self) -> Self {
@@ -444,7 +460,7 @@ impl GGPlot {
     }
 
     pub fn geom_density_with(self, geom: GeomDensity) -> Self {
-        self.add_geom(geom)
+        self.add_geom_with(geom)
     }
 
     pub fn geom_rug(self) -> Self {
@@ -452,7 +468,7 @@ impl GGPlot {
     }
 
     pub fn geom_rug_with(self, geom: GeomRug) -> Self {
-        self.add_geom(geom)
+        self.add_geom_with(geom)
     }
 
     pub fn geom_jitter(self) -> Self {
@@ -460,7 +476,7 @@ impl GGPlot {
     }
 
     pub fn geom_jitter_with(self, geom: GeomJitter) -> Self {
-        self.add_geom(geom)
+        self.add_geom_with(geom)
     }
 
     pub fn geom_path(self) -> Self {
@@ -468,7 +484,7 @@ impl GGPlot {
     }
 
     pub fn geom_path_with(self, geom: GeomPath) -> Self {
-        self.add_geom(geom)
+        self.add_geom_with(geom)
     }
 
     /// Add a confidence-ellipse layer (default 95%) as a path per group.
@@ -506,7 +522,7 @@ impl GGPlot {
     }
 
     pub fn geom_step_with(self, geom: GeomStep) -> Self {
-        self.add_geom(geom)
+        self.add_geom_with(geom)
     }
 
     pub fn geom_freqpoly(self) -> Self {
@@ -514,7 +530,7 @@ impl GGPlot {
     }
 
     pub fn geom_freqpoly_with(self, geom: GeomFreqpoly) -> Self {
-        self.add_geom(geom)
+        self.add_geom_with(geom)
     }
 
     pub fn geom_linerange(self) -> Self {
@@ -522,7 +538,7 @@ impl GGPlot {
     }
 
     pub fn geom_linerange_with(self, geom: GeomLinerange) -> Self {
-        self.add_geom(geom)
+        self.add_geom_with(geom)
     }
 
     pub fn geom_pointrange(self) -> Self {
@@ -530,7 +546,7 @@ impl GGPlot {
     }
 
     pub fn geom_pointrange_with(self, geom: GeomPointrange) -> Self {
-        self.add_geom(geom)
+        self.add_geom_with(geom)
     }
 
     pub fn geom_crossbar(self) -> Self {
@@ -538,7 +554,7 @@ impl GGPlot {
     }
 
     pub fn geom_crossbar_with(self, geom: GeomCrossbar) -> Self {
-        self.add_geom(geom)
+        self.add_geom_with(geom)
     }
 
     pub fn geom_spoke(self) -> Self {
@@ -546,7 +562,7 @@ impl GGPlot {
     }
 
     pub fn geom_spoke_with(self, geom: GeomSpoke) -> Self {
-        self.add_geom(geom)
+        self.add_geom_with(geom)
     }
 
     pub fn geom_rect(self) -> Self {
@@ -554,7 +570,7 @@ impl GGPlot {
     }
 
     pub fn geom_rect_with(self, geom: GeomRect) -> Self {
-        self.add_geom(geom)
+        self.add_geom_with(geom)
     }
 
     pub fn geom_tile(self) -> Self {
@@ -562,7 +578,7 @@ impl GGPlot {
     }
 
     pub fn geom_tile_with(self, geom: GeomTile) -> Self {
-        self.add_geom(geom)
+        self.add_geom_with(geom)
     }
 
     /// Dense regular grid of filled cells (heatmap/raster) from x, y, fill.
@@ -571,7 +587,7 @@ impl GGPlot {
     }
 
     pub fn geom_raster_with(self, geom: crate::geom::raster::GeomRaster) -> Self {
-        self.add_geom(geom)
+        self.add_geom_with(geom)
     }
 
     pub fn geom_polygon(self) -> Self {
@@ -579,7 +595,7 @@ impl GGPlot {
     }
 
     pub fn geom_polygon_with(self, geom: GeomPolygon) -> Self {
-        self.add_geom(geom)
+        self.add_geom_with(geom)
     }
 
     /// Render simple-features geometry from a WKT `geometry` column (feature `sf`).
@@ -590,7 +606,7 @@ impl GGPlot {
 
     #[cfg(feature = "sf")]
     pub fn geom_sf_with(self, geom: crate::geom::sf::GeomSf) -> Self {
-        self.add_geom(geom)
+        self.add_geom_with(geom)
     }
 
     pub fn geom_curve(self) -> Self {
@@ -598,7 +614,7 @@ impl GGPlot {
     }
 
     pub fn geom_curve_with(self, geom: GeomCurve) -> Self {
-        self.add_geom(geom)
+        self.add_geom_with(geom)
     }
 
     pub fn geom_violin(self) -> Self {
@@ -606,7 +622,7 @@ impl GGPlot {
     }
 
     pub fn geom_violin_with(self, geom: GeomViolin) -> Self {
-        self.add_geom(geom)
+        self.add_geom_with(geom)
     }
 
     pub fn geom_dotplot(self) -> Self {
@@ -614,7 +630,7 @@ impl GGPlot {
     }
 
     pub fn geom_dotplot_with(self, geom: GeomDotplot) -> Self {
-        self.add_geom(geom)
+        self.add_geom_with(geom)
     }
 
     pub fn geom_qq(self) -> Self {
@@ -622,7 +638,7 @@ impl GGPlot {
     }
 
     pub fn geom_qq_with(self, geom: GeomQQ) -> Self {
-        self.add_geom(geom)
+        self.add_geom_with(geom)
     }
 
     pub fn geom_qq_line(self) -> Self {
@@ -630,7 +646,7 @@ impl GGPlot {
     }
 
     pub fn geom_qq_line_with(self, geom: GeomQQLine) -> Self {
-        self.add_geom(geom)
+        self.add_geom_with(geom)
     }
 
     pub fn geom_bin2d(self) -> Self {
@@ -638,7 +654,7 @@ impl GGPlot {
     }
 
     pub fn geom_bin2d_with(self, geom: GeomBin2d) -> Self {
-        self.add_geom(geom)
+        self.add_geom_with(geom)
     }
 
     pub fn geom_hex(self) -> Self {
@@ -646,7 +662,7 @@ impl GGPlot {
     }
 
     pub fn geom_hex_with(self, geom: GeomHex) -> Self {
-        self.add_geom(geom)
+        self.add_geom_with(geom)
     }
 
     pub fn geom_count(self) -> Self {
@@ -654,7 +670,7 @@ impl GGPlot {
     }
 
     pub fn geom_count_with(self, geom: GeomCount) -> Self {
-        self.add_geom(geom)
+        self.add_geom_with(geom)
     }
 
     pub fn geom_contour(self) -> Self {
@@ -662,7 +678,7 @@ impl GGPlot {
     }
 
     pub fn geom_contour_with(self, geom: GeomContour) -> Self {
-        self.add_geom(geom)
+        self.add_geom_with(geom)
     }
 
     /// Filled contour bands from gridded (x, y, z) data — draws polygons filled by
@@ -681,11 +697,137 @@ impl GGPlot {
     }
 
     pub fn geom_density2d_with(self, geom: GeomDensity2d) -> Self {
-        self.add_geom(geom)
+        self.add_geom_with(geom)
+    }
+
+    /// Candlestick chart: map `x` and `open`/`high`/`low`/`close`
+    /// (`Aes::new().x("date").open("o").high("h").low("l").close("c")`).
+    pub fn geom_candlestick(self) -> Self {
+        self.add_geom(crate::geom::candlestick::GeomCandlestick::default())
+    }
+
+    pub fn geom_candlestick_with(self, geom: crate::geom::candlestick::GeomCandlestick) -> Self {
+        self.add_geom_with(geom)
+    }
+
+    /// OHLC bar chart (high–low bar with open/close ticks); same aesthetics as
+    /// [`geom_candlestick`](Self::geom_candlestick).
+    pub fn geom_ohlc(self) -> Self {
+        self.add_geom(crate::geom::candlestick::GeomOhlc::default())
+    }
+
+    pub fn geom_ohlc_with(self, geom: crate::geom::candlestick::GeomOhlc) -> Self {
+        self.add_geom_with(geom)
+    }
+
+    /// Calendar heatmap (GitHub/ECharts style): the plot's `x` (a date —
+    /// `DateTime`, epoch seconds or `"YYYY-MM-DD"`) is laid out as week
+    /// columns × weekday rows (Sunday on top) via [`StatCalendar`], coloured
+    /// by `fill`, with month labels along x, Mon/Wed/Fri along y, month
+    /// boundary outlines and square cells. Spans over
+    /// [`MAX_CALENDAR_YEARS`] are clipped to the most recent years (with a
+    /// build warning). Uses the plot-level data and `x` mapping.
+    ///
+    /// [`StatCalendar`]: crate::stat::calendar::StatCalendar
+    /// [`MAX_CALENDAR_YEARS`]: crate::stat::calendar::MAX_CALENDAR_YEARS
+    pub fn geom_calendar(self) -> Self {
+        self.geom_calendar_with(
+            GeomTile {
+                color: (255, 255, 255),
+                line_width: 1.5,
+                ..Default::default()
+            },
+            false,
+        )
+    }
+
+    /// [`geom_calendar`](Self::geom_calendar) with a custom cell style and
+    /// optionally Monday-first weeks.
+    pub fn geom_calendar_with(mut self, tile: GeomTile, monday_first: bool) -> Self {
+        use crate::stat::calendar::{
+            day_number, month_boundaries, month_breaks, CalendarGrid, StatCalendar,
+            MAX_CALENDAR_YEARS,
+        };
+        let grid = self
+            .mapping
+            .get_mapping(&crate::aes::Aesthetic::X)
+            .and_then(|c| self.data.column(c))
+            .and_then(|col| {
+                CalendarGrid::from_days(col.iter().filter_map(day_number), monday_first)
+            });
+        let Some((grid, clipped)) = grid else {
+            // No dates: an empty calendar layer (renders an empty panel).
+            return self.add_geom_with(tile).stat(StatCalendar {
+                grid: None,
+                monday_first,
+            });
+        };
+        if clipped {
+            self.warnings.push(format!(
+                "geom_calendar: dates more than {MAX_CALENDAR_YEARS} years before the newest were dropped"
+            ));
+        }
+        let (xb, xl) = month_breaks(&grid);
+        // Rows: y = 6 - weekday; label Mon/Wed/Fri.
+        let (yb, yl) = if monday_first {
+            (vec![6.0, 4.0, 2.0], ["Mon", "Wed", "Fri"])
+        } else {
+            (vec![5.0, 3.0, 1.0], ["Mon", "Wed", "Fri"])
+        };
+        let segs = month_boundaries(&grid);
+        let col = |f: fn(&(f64, f64, f64, f64)) -> f64| -> Vec<Value> {
+            segs.iter().map(|s| Value::Float(f(s))).collect()
+        };
+        let boundaries = vec![
+            ("x".to_string(), col(|s| s.0)),
+            ("y".to_string(), col(|s| s.1)),
+            ("xend".to_string(), col(|s| s.2)),
+            ("yend".to_string(), col(|s| s.3)),
+        ];
+        self.default_aspect_ratio = Some(7.0 / grid.n_weeks().max(1) as f64);
+        let plot = self
+            .add_geom_with(tile)
+            .stat(StatCalendar {
+                grid: Some(grid),
+                monday_first,
+            })
+            .scale_x_continuous(
+                ScaleContinuous::new()
+                    .with_breaks(xb)
+                    .with_labels(xl)
+                    .with_expand(0.0, 0.0),
+            )
+            .scale_y_continuous(
+                ScaleContinuous::new()
+                    .with_breaks(yb)
+                    .with_labels(yl.iter().map(|s| s.to_string()).collect())
+                    .with_expand(0.0, 0.0),
+            );
+        if segs.is_empty() {
+            return plot;
+        }
+        plot.geom_segment_with(GeomSegment {
+            color: (120, 128, 140),
+            width: 1.2,
+            alpha: 1.0,
+        })
+        .layer_data(boundaries)
+        .layer_aes(Aes::new().x("x").y("y").xend("xend").yend("yend"))
+        .show_legend(false)
     }
 
     pub fn geom_blank(self) -> Self {
         self.add_geom(GeomBlank)
+    }
+
+    /// Add a geom configured explicitly by the caller: its colours win over
+    /// the theme's `primary_color`.
+    fn add_geom_with(self, geom: impl Geom + 'static) -> Self {
+        let mut plot = self.add_geom(geom);
+        if let Some(layer) = plot.layers.last_mut() {
+            layer.explicit_style = true;
+        }
+        plot
     }
 
     fn add_geom(mut self, geom: impl Geom + 'static) -> Self {
@@ -700,6 +842,7 @@ impl GGPlot {
             position,
             params,
             show_legend: None,
+            explicit_style: false,
         });
         self
     }
@@ -960,6 +1103,22 @@ impl GGPlot {
         let s =
             crate::scale::steps::ScaleColorSteps::new(crate::aes::Aesthetic::Fill, stops, n_bins);
         self.scale_fill(s)
+    }
+
+    /// Default discrete fill palette with levels in sorted order, so a level
+    /// keeps its colour across charts regardless of data order. For a custom
+    /// palette: `scale_fill(ScaleColorDiscrete::new(Aesthetic::Fill)
+    /// .with_palette(p).sorted())`.
+    pub fn scale_fill_discrete_sorted(self) -> Self {
+        use crate::scale::color::ScaleColorDiscrete;
+        self.scale_fill(ScaleColorDiscrete::new(crate::aes::Aesthetic::Fill).sorted())
+    }
+
+    /// Default discrete colour palette with levels in sorted order (see
+    /// [`scale_fill_discrete_sorted`](Self::scale_fill_discrete_sorted)).
+    pub fn scale_color_discrete_sorted(self) -> Self {
+        use crate::scale::color::ScaleColorDiscrete;
+        self.scale_color(ScaleColorDiscrete::new(crate::aes::Aesthetic::Color).sorted())
     }
 
     pub fn scale_fill_brewer(self, name: crate::scale::palettes::PaletteName) -> Self {
@@ -1334,6 +1493,19 @@ impl GGPlot {
         self
     }
 
+    /// Radar / spider chart coordinates: discrete `x` → spokes, `y` → distance
+    /// from the centre, straight segments, ring/spoke guides. Pair with
+    /// `geom_polygon` (closed series) and `geom_point`.
+    pub fn coord_radar(mut self) -> Self {
+        self.coord = Box::new(crate::coord::radar::CoordRadar::new());
+        self
+    }
+
+    pub fn coord_radar_with(mut self, coord: crate::coord::radar::CoordRadar) -> Self {
+        self.coord = Box::new(coord);
+        self
+    }
+
     pub fn coord_polar_with(mut self, coord: CoordPolar) -> Self {
         self.coord = Box::new(coord);
         self
@@ -1341,9 +1513,19 @@ impl GGPlot {
 
     // ─── Theme ───────────────────────────────────────────────────
 
+    /// Replace the theme. A `primary_color` set earlier is kept unless the new
+    /// theme sets its own, so preset/`primary_color` call order doesn't matter.
     pub fn theme(mut self, theme: Theme) -> Self {
-        self.theme = theme;
+        self.apply_preset(theme);
         self
+    }
+
+    fn apply_preset(&mut self, theme: Theme) {
+        let primary = self.theme.primary;
+        self.theme = theme;
+        if self.theme.primary.is_none() {
+            self.theme.primary = primary;
+        }
     }
 
     /// Rotate the x-axis tick labels by `degrees` (R's
@@ -1428,48 +1610,48 @@ impl GGPlot {
     }
 
     pub fn theme_minimal(mut self) -> Self {
-        self.theme = crate::theme::presets::theme_minimal();
+        self.apply_preset(crate::theme::presets::theme_minimal());
         self
     }
 
     pub fn theme_bw(mut self) -> Self {
-        self.theme = crate::theme::presets::theme_bw();
+        self.apply_preset(crate::theme::presets::theme_bw());
         self
     }
 
     pub fn theme_gray(mut self) -> Self {
-        self.theme = crate::theme::presets::theme_gray();
+        self.apply_preset(crate::theme::presets::theme_gray());
         self
     }
 
     pub fn theme_classic(mut self) -> Self {
-        self.theme = crate::theme::presets::theme_classic();
+        self.apply_preset(crate::theme::presets::theme_classic());
         self
     }
 
     /// Apply the publication-ready `theme_pubr()` (ggpubr style).
     pub fn theme_pubr(mut self) -> Self {
-        self.theme = crate::theme::presets::theme_pubr();
+        self.apply_preset(crate::theme::presets::theme_pubr());
         self
     }
 
     pub fn theme_linedraw(mut self) -> Self {
-        self.theme = crate::theme::presets::theme_linedraw();
+        self.apply_preset(crate::theme::presets::theme_linedraw());
         self
     }
 
     pub fn theme_light(mut self) -> Self {
-        self.theme = crate::theme::presets::theme_light();
+        self.apply_preset(crate::theme::presets::theme_light());
         self
     }
 
     pub fn theme_dark(mut self) -> Self {
-        self.theme = crate::theme::presets::theme_dark();
+        self.apply_preset(crate::theme::presets::theme_dark());
         self
     }
 
     pub fn theme_void(mut self) -> Self {
-        self.theme = crate::theme::presets::theme_void();
+        self.apply_preset(crate::theme::presets::theme_void());
         self
     }
 
@@ -1582,14 +1764,15 @@ impl GGPlot {
     }
 
     /// Build and save the plot to a file. Format determined by extension.
-    /// (Native only — wasm has no filesystem/plotters backend.)
-    #[cfg(not(target_arch = "wasm32"))]
+    /// (Requires the `plotters` feature, on by default; native only — wasm has
+    /// no filesystem/plotters backend.)
+    #[cfg(all(feature = "plotters", not(target_arch = "wasm32")))]
     pub fn save(self, path: &str) -> Result<(), GGError> {
         self.save_with_size(path, 800, 600)
     }
 
-    /// Build and save with custom dimensions. (Native only.)
-    #[cfg(not(target_arch = "wasm32"))]
+    /// Build and save with custom dimensions. (Feature `plotters`; native only.)
+    #[cfg(all(feature = "plotters", not(target_arch = "wasm32")))]
     pub fn save_with_size(self, path: &str, w: u32, h: u32) -> Result<(), GGError> {
         let (built, layout) = self.prepare(w, h)?;
 
@@ -1616,15 +1799,17 @@ impl GGPlot {
     /// Render the plot to an in-memory SVG document (default 800x600).
     ///
     /// Unlike [`save`](Self::save), this writes nothing to disk — handy for
-    /// serving charts from a web/MCP service.
-    #[cfg(not(target_arch = "wasm32"))]
+    /// serving charts from a web/MCP service. Requires the `plotters` feature
+    /// (on by default); without it use [`render_svg_native`](Self::render_svg_native).
+    #[cfg(all(feature = "plotters", not(target_arch = "wasm32")))]
     pub fn render_svg(self) -> Result<String, GGError> {
         self.render_svg_with_size(800, 600)
     }
 
     /// Render the plot to an in-memory SVG document with custom dimensions.
-    /// (Native only — on wasm use [`render_svg_native`](Self::render_svg_native).)
-    #[cfg(not(target_arch = "wasm32"))]
+    /// (Feature `plotters`; native only — on wasm or without `plotters` use
+    /// [`render_svg_native_with_size`](Self::render_svg_native_with_size).)
+    #[cfg(all(feature = "plotters", not(target_arch = "wasm32")))]
     pub fn render_svg_with_size(self, w: u32, h: u32) -> Result<String, GGError> {
         let (built, layout) = self.prepare(w, h)?;
         let mut buf = String::new();
@@ -1643,23 +1828,73 @@ impl GGPlot {
     }
 
     /// [`render_svg_native`](Self::render_svg_native) with an explicit size.
+    ///
+    /// The root `<svg>` carries `data-plot="x y w h"` (the panel rect) and the
+    /// trained position domains (`data-domain`, `data-xdomain`, `data-ydomain`,
+    /// `data-xlevels`, `data-ylevels` — see
+    /// [`root_data_attrs`](crate::render::svg_backend::root_data_attrs)).
+    /// Hoverable marks carry `data-x`, `data-series` and `data-value`.
     pub fn render_svg_native_with_size(self, w: u32, h: u32) -> Result<String, GGError> {
-        let (built, layout) = self.prepare(w, h)?;
-        let mut backend =
-            crate::render::svg_backend::SvgBackend::new(w, h, layout.plot_area.clone());
-        PlotRenderer::render(&built, &mut backend).map_err(GGError::Render)?;
-        Ok(backend.finish())
+        Ok(self.render_native(w, h)?.0.finish())
+    }
+
+    /// Like [`render_svg_native_with_size`](Self::render_svg_native_with_size),
+    /// but also returns the build warnings (rows dropped for non-finite
+    /// positions, layers whose stat produced no data, …) — see
+    /// [`BuiltPlot::warnings`](crate::build::BuiltPlot::warnings).
+    pub fn render_svg_native_with_warnings(
+        self,
+        w: u32,
+        h: u32,
+    ) -> Result<(String, Vec<String>), GGError> {
+        let (backend, warnings, _) = self.render_native(w, h)?;
+        Ok((backend.finish(), warnings))
+    }
+
+    /// Render a `w`×`h` chart as a *nested* `<svg x=.. y=.. width=.. height=..
+    /// viewBox="0 0 w h">` fragment for composition into a larger SVG (a
+    /// dashboard): no `xmlns` (inherited from the parent), positioned at
+    /// `(x, y)` in the parent's user space. No string surgery needed:
+    ///
+    /// ```ignore
+    /// let mut page = String::from(r#"<svg xmlns="http://www.w3.org/2000/svg" width="900" height="400">"#);
+    /// page += &plot_a.render_svg_native_at(0.0, 0.0, 450, 400)?;
+    /// page += &plot_b.render_svg_native_at(450.0, 0.0, 450, 400)?;
+    /// page += "</svg>";
+    /// ```
+    pub fn render_svg_native_at(self, x: f64, y: f64, w: u32, h: u32) -> Result<String, GGError> {
+        Ok(self.render_native(w, h)?.0.finish_fragment(x, y))
     }
 
     /// Like [`render_svg_native_with_size`](Self::render_svg_native_with_size),
     /// but also returns the panel rect in pixels `[x, y, w, h]` — enough to
     /// overlay a WebGL/canvas layer that draws marks in data coordinates.
     pub fn render_svg_area_with_size(self, w: u32, h: u32) -> Result<(String, [f64; 4]), GGError> {
+        let (backend, _, pa) = self.render_native(w, h)?;
+        Ok((backend.finish(), [pa.x, pa.y, pa.width, pa.height]))
+    }
+
+    /// Shared native-SVG pipeline: build, lay out, render into an
+    /// [`SvgBackend`](crate::render::svg_backend::SvgBackend) (not yet
+    /// finished), returning it with the build warnings and the panel rect.
+    fn render_native(
+        self,
+        w: u32,
+        h: u32,
+    ) -> Result<
+        (
+            crate::render::svg_backend::SvgBackend,
+            Vec<String>,
+            crate::render::Rect,
+        ),
+        GGError,
+    > {
         let (built, layout) = self.prepare(w, h)?;
         let pa = layout.plot_area.clone();
         let mut backend = crate::render::svg_backend::SvgBackend::new(w, h, pa.clone());
+        backend.set_root_attrs(crate::render::svg_backend::root_data_attrs(&built));
         PlotRenderer::render(&built, &mut backend).map_err(GGError::Render)?;
-        Ok((backend.finish(), [pa.x, pa.y, pa.width, pa.height]))
+        Ok((backend, built.warnings, pa))
     }
 
     /// Render to a raw RGBA pixel buffer via the self-contained raster
@@ -1707,15 +1942,17 @@ impl GGPlot {
     /// Render the plot to in-memory PNG bytes (default 800x600).
     ///
     /// Returns a fully-encoded PNG, ready to write to an HTTP response or
-    /// embed as a data URI — no temp files involved.
-    #[cfg(not(target_arch = "wasm32"))]
+    /// embed as a data URI — no temp files involved. Requires the `plotters`
+    /// feature (on by default); see also `render_png_raster_with_size`
+    /// (feature `canvas`).
+    #[cfg(all(feature = "plotters", not(target_arch = "wasm32")))]
     pub fn render_png(self) -> Result<Vec<u8>, GGError> {
         self.render_png_with_size(800, 600)
     }
 
-    /// Render the plot to in-memory PNG bytes with custom dimensions. (Native
-    /// only — PNG needs the plotters bitmap backend.)
-    #[cfg(not(target_arch = "wasm32"))]
+    /// Render the plot to in-memory PNG bytes with custom dimensions. (Feature
+    /// `plotters`; native only — PNG needs the plotters bitmap backend.)
+    #[cfg(all(feature = "plotters", not(target_arch = "wasm32")))]
     pub fn render_png_with_size(self, w: u32, h: u32) -> Result<Vec<u8>, GGError> {
         let (built, layout) = self.prepare(w, h)?;
 
@@ -1862,7 +2099,7 @@ impl GGPlot {
 
     /// Fill the background, render the built plot, and flush — for any plotters
     /// backend. (Native only.)
-    #[cfg(not(target_arch = "wasm32"))]
+    #[cfg(all(feature = "plotters", not(target_arch = "wasm32")))]
     fn render_into<DB>(
         area: plotters::drawing::DrawingArea<DB, plotters::coord::Shift>,
         built: &crate::build::BuiltPlot,
@@ -1881,8 +2118,9 @@ impl GGPlot {
         Ok(())
     }
 
-    /// Save with physical dimensions (inches) and DPI. (Native only.)
-    #[cfg(not(target_arch = "wasm32"))]
+    /// Save with physical dimensions (inches) and DPI. (Feature `plotters`;
+    /// native only.)
+    #[cfg(all(feature = "plotters", not(target_arch = "wasm32")))]
     pub fn ggsave(
         self,
         path: &str,

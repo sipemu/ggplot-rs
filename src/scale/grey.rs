@@ -1,5 +1,6 @@
 use crate::aes::Aesthetic;
 use crate::data::Value;
+use indexmap::IndexSet;
 
 use super::Scale;
 
@@ -12,7 +13,7 @@ pub struct ScaleColorGrey {
     name: String,
     start: f64,
     end: f64,
-    levels: Vec<String>,
+    levels: IndexSet<String>,
 }
 
 impl ScaleColorGrey {
@@ -22,7 +23,7 @@ impl ScaleColorGrey {
             name: String::new(),
             start: 0.2,
             end: 0.8,
-            levels: Vec::new(),
+            levels: IndexSet::new(),
         }
     }
 
@@ -52,18 +53,17 @@ impl Scale for ScaleColorGrey {
 
     fn train(&mut self, values: &[Value]) {
         for v in values {
-            let key = v.to_group_key();
-            if !self.levels.contains(&key) {
-                self.levels.push(key);
+            let key = v.key_str();
+            if !self.levels.contains(key.as_ref()) {
+                self.levels.insert(key.into_owned());
             }
         }
     }
 
     fn map(&self, value: &Value) -> f64 {
-        let key = value.to_group_key();
+        let key = value.key_str();
         self.levels
-            .iter()
-            .position(|l| l == &key)
+            .get_index_of(key.as_ref())
             .map(|i| i as f64)
             .unwrap_or(0.0)
     }
@@ -89,8 +89,8 @@ impl Scale for ScaleColorGrey {
     }
 
     fn map_to_color(&self, value: &Value) -> Option<(u8, u8, u8)> {
-        let key = value.to_group_key();
-        let idx = self.levels.iter().position(|l| l == &key).unwrap_or(0);
+        let key = value.key_str();
+        let idx = self.levels.get_index_of(key.as_ref()).unwrap_or(0);
         let g = self.grey_for_index(idx);
         Some((g, g, g))
     }

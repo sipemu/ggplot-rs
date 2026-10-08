@@ -19,7 +19,7 @@ impl Stat for StatBoxplot {
             return DataFrame::new();
         }
 
-        values.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
+        values.sort_by(|a, b| a.total_cmp(b));
 
         let n = values.len();
         let q1 = percentile(&values, 25.0);

@@ -1,12 +1,16 @@
 use indexmap::IndexMap;
 
-use super::Value;
+use super::{GroupKey, Value};
 
 /// Internal columnar DataFrame for data storage and manipulation.
 #[derive(Clone, Debug)]
 pub struct DataFrame {
     columns: IndexMap<String, Vec<Value>>,
     nrows: usize,
+    /// Problems found while assembling the frame (e.g. mismatched column
+    /// lengths). Reported by [`validate`](Self::validate), and turned into a
+    /// `GGError::ValidationError` when a plot using this frame is built.
+    issues: Vec<String>,
 }
 
 impl DataFrame {
@@ -15,6 +19,7 @@ impl DataFrame {
         DataFrame {
             columns: IndexMap::new(),
             nrows: 0,
+            issues: Vec::new(),
         }
     }
 
@@ -43,21 +48,67 @@ impl DataFrame {
         self.columns.contains_key(name)
     }
 
-    /// Add a column. Panics if length doesn't match existing rows (unless empty).
-    pub fn add_column(&mut self, name: String, values: Vec<Value>) {
+    /// Add (or replace) a column.
+    ///
+    /// Never panics. If the length doesn't match the existing rows, the shorter
+    /// side is padded with [`Value::Na`] and the mismatch is recorded as an
+    /// [issue](Self::issues): building or rendering a plot from this frame then
+    /// fails with `GGError::ValidationError`. Use
+    /// [`try_add_column`](Self::try_add_column) to reject the column instead.
+    pub fn add_column(&mut self, name: String, mut values: Vec<Value>) {
         if self.columns.is_empty() {
             self.nrows = values.len();
-        } else {
-            assert_eq!(
-                values.len(),
-                self.nrows,
-                "Column '{}' has {} values but DataFrame has {} rows",
-                name,
-                values.len(),
-                self.nrows
-            );
+        } else if values.len() != self.nrows {
+            self.issues
+                .push(Self::mismatch_message(&name, values.len(), self.nrows));
+            if values.len() < self.nrows {
+                values.resize(self.nrows, Value::Na);
+            } else {
+                let n = values.len();
+                for col in self.columns.values_mut() {
+                    col.resize(n, Value::Na);
+                }
+                self.nrows = n;
+            }
         }
         self.columns.insert(name, values);
+    }
+
+    /// Add (or replace) a column, rejecting a length mismatch with a
+    /// `GGError::ValidationError` (the frame is left unchanged).
+    pub fn try_add_column(
+        &mut self,
+        name: String,
+        values: Vec<Value>,
+    ) -> Result<(), crate::plot::GGError> {
+        if !self.columns.is_empty() && values.len() != self.nrows {
+            return Err(crate::plot::GGError::ValidationError(
+                Self::mismatch_message(&name, values.len(), self.nrows),
+            ));
+        }
+        self.add_column(name, values);
+        Ok(())
+    }
+
+    fn mismatch_message(name: &str, len: usize, nrows: usize) -> String {
+        format!("column '{name}' has {len} values but the data has {nrows} rows")
+    }
+
+    /// Problems recorded while assembling this frame (empty when well-formed).
+    pub fn issues(&self) -> &[String] {
+        &self.issues
+    }
+
+    /// `Ok` when the frame is well-formed, else a `GGError::ValidationError`
+    /// describing every recorded [issue](Self::issues).
+    pub fn validate(&self) -> Result<(), crate::plot::GGError> {
+        if self.issues.is_empty() {
+            Ok(())
+        } else {
+            Err(crate::plot::GGError::ValidationError(
+                self.issues.join("; "),
+            ))
+        }
     }
 
     /// Get a mutable reference to a column.
@@ -72,17 +123,16 @@ impl DataFrame {
         }
 
         // Build group keys for each row
-        let mut group_map: IndexMap<Vec<String>, Vec<usize>> = IndexMap::new();
+        // Borrowing keys (no per-row String clones for text columns); a missing
+        // value is its own group, distinct from the literal string "NA".
+        let key_cols: Vec<Option<&Vec<Value>>> =
+            keys.iter().map(|k| self.columns.get(*k)).collect();
+        let mut group_map: IndexMap<Vec<GroupKey<'_>>, Vec<usize>> = IndexMap::new();
 
         for i in 0..self.nrows {
-            let key: Vec<String> = keys
+            let key: Vec<GroupKey<'_>> = key_cols
                 .iter()
-                .map(|k| {
-                    self.columns
-                        .get(*k)
-                        .map(|col| col[i].to_group_key())
-                        .unwrap_or_else(|| "NA".to_string())
-                })
+                .map(|col| col.map_or(GroupKey::Na, |c| c[i].group_key()))
                 .collect();
             group_map.entry(key).or_default().push(i);
         }
@@ -175,7 +225,7 @@ impl DataFrame {
         indices.sort_by(|&a, &b| {
             let va = col[a].as_f64().unwrap_or(f64::NAN);
             let vb = col[b].as_f64().unwrap_or(f64::NAN);
-            va.partial_cmp(&vb).unwrap_or(std::cmp::Ordering::Equal)
+            va.total_cmp(&vb)
         });
 
         let mut df = DataFrame::new();
@@ -217,12 +267,10 @@ impl DataFrame {
             Some(c) => c,
             None => return vec![],
         };
-        let mut seen: Vec<String> = Vec::new();
+        let mut seen = std::collections::HashSet::new();
         let mut result = Vec::new();
         for v in col {
-            let key = v.to_group_key();
-            if !seen.contains(&key) {
-                seen.push(key);
+            if seen.insert(v.group_key()) {
                 result.push(v.clone());
             }
         }
@@ -293,6 +341,58 @@ impl Default for DataFrame {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn mismatched_column_lengths_pad_and_record_an_issue() {
+        let mut df = DataFrame::new();
+        df.add_column("x".into(), vec![Value::Float(1.0), Value::Float(2.0)]);
+        df.add_column("y".into(), vec![Value::Float(3.0)]);
+        assert_eq!(df.nrows(), 2);
+        assert_eq!(df.column("y").unwrap()[1], Value::Na);
+        df.add_column("z".into(), vec![Value::Float(0.0); 4]);
+        assert_eq!(df.nrows(), 4);
+        assert!(df
+            .column_names()
+            .iter()
+            .all(|c| df.column(c).unwrap().len() == 4));
+        assert_eq!(df.issues().len(), 2);
+        let err = df.validate().unwrap_err().to_string();
+        assert!(err.contains("'y'") && err.contains("'z'"), "{err}");
+
+        let mut ok = DataFrame::new();
+        ok.add_column("x".into(), vec![Value::Float(1.0)]);
+        assert!(ok.validate().is_ok());
+        assert!(ok
+            .try_add_column("y".into(), vec![Value::Na, Value::Na])
+            .is_err());
+        assert!(!ok.has_column("y"), "rejected column is not added");
+        assert!(ok.try_add_column("y".into(), vec![Value::Na]).is_ok());
+        assert!(ok.validate().is_ok());
+    }
+
+    #[test]
+    fn group_by_keeps_na_apart_from_literal_na() {
+        let mut df = DataFrame::new();
+        df.add_column(
+            "g".into(),
+            vec![
+                Value::Na,
+                Value::Str("NA".into()),
+                Value::Na,
+                Value::Str("NA".into()),
+            ],
+        );
+        df.add_column("v".into(), (0..4).map(Value::Integer).collect());
+        let groups = df.group_by(&["g"]);
+        assert_eq!(groups.len(), 2);
+        assert!(groups[0].column("g").unwrap().iter().all(Value::is_na));
+        assert!(groups[1]
+            .column("g")
+            .unwrap()
+            .iter()
+            .all(|v| v.as_str() == Some("NA")));
+        assert_eq!(df.unique_values("g").len(), 2);
+    }
 
     #[test]
     fn test_add_column_and_access() {

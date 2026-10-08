@@ -200,6 +200,15 @@ pub trait DrawBackend {
     /// Default: no-op.
     fn set_mark_axis(&mut self, _key: Option<String>) {}
 
+    /// Attach a series key (the colour / fill / group level) to subsequently
+    /// drawn marks — SVG emits it as `data-series`, so a host can highlight or
+    /// filter one series without parsing the tooltip. Default: no-op.
+    fn set_mark_series(&mut self, _series: Option<String>) {}
+
+    /// Attach the raw measured value (the unformatted y) to subsequently drawn
+    /// marks — SVG emits it as `data-value`. Default: no-op.
+    fn set_mark_value(&mut self, _value: Option<String>) {}
+
     /// Draw a point with a specific shape. Default delegates to draw_circle for Circle.
     fn draw_shape(
         &mut self,

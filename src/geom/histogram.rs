@@ -102,7 +102,13 @@ impl Geom for GeomHistogram {
                 ),
                 _ => format!("count: {cnt}"),
             };
-            backend.set_tooltip(Some(tip));
+            super::set_mark(
+                backend,
+                Some(tip),
+                data.column("x").map(|c| super::tip_value(&c[i])),
+                super::series_key(data, i),
+                super::measured_value(data, i),
+            );
 
             backend.draw_rect(
                 (left_px, top_px.min(bottom_px)),
@@ -116,7 +122,7 @@ impl Geom for GeomHistogram {
                 },
             )?;
         }
-        backend.set_tooltip(None);
+        super::clear_mark(backend);
 
         Ok(())
     }

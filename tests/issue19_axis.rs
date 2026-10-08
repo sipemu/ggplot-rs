@@ -1,4 +1,6 @@
 //! Issue #19 — per-side expansion + top axis position.
+// Uses the plotters-backed renderers (render_svg/render_png/save).
+#![cfg(feature = "plotters")]
 use ggplot_rs::prelude::*;
 
 fn data() -> Vec<(String, Vec<Value>)> {

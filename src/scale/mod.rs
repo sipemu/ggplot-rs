@@ -105,6 +105,13 @@ pub trait Scale: Send + Sync {
         None
     }
 
+    /// The data values at the panel edges (normalized 0 and 1) for a trained
+    /// continuous position scale — the limits after expansion, in the scale's
+    /// transformed space. `None` for discrete / untrained / non-position scales.
+    fn expanded_domain(&self) -> Option<(f64, f64)> {
+        None
+    }
+
     /// Whether this axis is drawn on the opposite side (x → top, y → right).
     fn axis_position_opposite(&self) -> bool {
         false

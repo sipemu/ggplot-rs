@@ -4,6 +4,8 @@
 //! so these tests build a minimal valid plot for each geom and force a render,
 //! asserting only that output is produced (`Ok` + non-empty). They intentionally
 //! do not assert pixel/text content.
+// Uses the plotters-backed renderers (render_svg/render_png/save).
+#![cfg(feature = "plotters")]
 
 use ggplot_rs::prelude::*;
 
@@ -368,8 +370,8 @@ fn distribution_geoms() {
                 size: 3.0,
                 color: (0, 0, 0),
                 alpha: 0.6,
-                width: 0.3,
-                height: 0.3,
+                width: Some(0.3),
+                height: Some(0.3),
             }),
         "jitter_with",
     );

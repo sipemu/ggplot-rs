@@ -1,6 +1,8 @@
 //! Coverage-focused integration + unit tests targeting under-covered modules:
 //! renderer, guide (legend/axis), dataframe, data::Value, scale trait defaults,
 //! position::dodge2, and a tail of geoms/scales.
+// Uses the plotters-backed renderers (render_svg/render_png/save).
+#![cfg(feature = "plotters")]
 
 use ggplot_rs::data::{DataFrame, Value};
 use ggplot_rs::position::{Position, PositionParams};
@@ -1268,10 +1270,7 @@ fn rotated_x_axis_labels() {
 
 #[test]
 fn position_jitter_compute_direct() {
-    let pos = PositionJitter {
-        width: 0.5,
-        height: 0.5,
-    };
+    let pos = PositionJitter::new(0.5, 0.5);
     let mut df = DataFrame::new();
     df.add_column(
         "x".into(),
@@ -1288,10 +1287,7 @@ fn position_jitter_compute_direct() {
     assert_eq!(pos.name(), "jitter");
 
     // height == 0 skips the y branch.
-    let no_h = PositionJitter {
-        width: 0.3,
-        height: 0.0,
-    };
+    let no_h = PositionJitter::new(0.3, 0.0).with_seed(7);
     let mut df2 = DataFrame::new();
     df2.add_column("x".into(), vec![Value::Float(5.0)]);
     df2.add_column("y".into(), vec![Value::Float(9.0)]);

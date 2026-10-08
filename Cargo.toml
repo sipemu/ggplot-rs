@@ -1,6 +1,6 @@
 [package]
 name = "ggplot-rs"
-version = "0.15.0"
+version = "0.16.0"
 edition = "2021"
 # Only the explicit [[bin]] below is a binary; src/bin/load.rs is its module.
 autobins = false
@@ -14,16 +14,20 @@ readme = "README.md"
 keywords = ["ggplot2", "plotting", "dataviz", "charts", "grammar"]
 categories = ["visualization", "science"]
 
-# `rlib` for normal crate use; `cdylib` so `wasm-pack build --features wasm`
-# can emit a browser module.
-[lib]
-crate-type = ["cdylib", "rlib"]
+# The library is a plain rlib. The browser (wasm-bindgen) bindings live in the
+# `crates/ggplot-rs-wasm` cdylib so that static / side-module consumers (e.g. an
+# emscripten DuckDB extension) aren't forced to build a cdylib.
+[workspace]
+members = [".", "crates/ggplot-rs-wasm"]
 
 [dependencies]
 # Use plotters' `ab_glyph` text backend instead of the default `ttf` (font-kit),
 # so rendering needs no system fonts / fontconfig — we register a bundled font at
 # render time. This is the default set minus `ttf`, plus `ab_glyph`.
-plotters = { version = "0.3", default-features = false, features = [
+# Optional (feature `plotters`, on by default): the plotters-backed SVG/bitmap
+# renderers (`render_svg`, `render_png`, `save`, `ggsave`, …). The native
+# `SvgBackend` path (`render_svg_native*`) never needs it.
+plotters = { version = "0.3", optional = true, default-features = false, features = [
     "bitmap_backend",
     "bitmap_encoder",
     "bitmap_gif",
@@ -38,7 +42,6 @@ plotters = { version = "0.3", default-features = false, features = [
     "ab_glyph",
 ] }
 indexmap = "2"
-rand = "0.8"
 # Optional data-source adapters. Neither is needed for the core pipeline —
 # they only provide `GGData` conversions for external frame types.
 polars = { version = "0.46", features = ["lazy"], optional = true }
@@ -51,9 +54,10 @@ faer = { version = "0.23", default-features = false, features = [
     "std",
     "linalg",
 ], optional = true }
-# In-memory PNG encoding for `render_png`. Already pulled in transitively by
-# plotters' bitmap backend, so this adds no extra compile cost.
-image = { version = "0.24", default-features = false, features = ["png"] }
+# In-memory PNG encoding (feature `png`) for `render_png`, `ggarrange_png` and
+# the canvas backend's `into_png`. Already pulled in transitively by plotters'
+# bitmap backend, so with `plotters` it adds no extra compile cost.
+image = { version = "0.24", default-features = false, features = ["png"], optional = true }
 # CLI tool (`cli` feature): arg parsing + a bundled DuckDB engine for reading
 # parquet/CSV and running SQL. Both are optional and off by default.
 clap = { version = "4", features = ["derive"], optional = true }
@@ -62,22 +66,22 @@ duckdb = { version = "1", features = ["bundled"], optional = true }
 serde = { version = "1", features = ["derive"], optional = true }
 toml = { version = "0.8", optional = true }
 serde_json = { version = "1", optional = true }
-# Browser bindings (`wasm` feature): expose plotting to JavaScript.
-wasm-bindgen = { version = "0.2", optional = true }
 # Pure-Rust glyph rasterisation for the `canvas` (raster) backend.
 ab_glyph = { version = "0.2", optional = true }
 
-# On wasm, rand's RNG seeding needs the browser crypto API (getrandom `js`).
-# Enables browser builds; ignored on every other target.
-[target.'cfg(target_arch = "wasm32")'.dependencies]
-getrandom = { version = "0.2", features = ["js"] }
-
 [features]
-# `polars` is on by default to preserve existing behaviour (prelude re-export +
-# `impl GGData for polars::DataFrame`). Downstream crates that don't want the
-# heavy polars tree can depend with `default-features = false`.
-default = ["polars"]
+# `polars` and `plotters` are on by default to preserve existing behaviour
+# (prelude re-export + `impl GGData for polars::DataFrame`; plotters-backed
+# `render_svg`/`render_png`/`save`). Downstream crates that only need the
+# self-contained SVG path (`render_svg_native*`) can depend with
+# `default-features = false` — no polars, plotters or image in the tree.
+default = ["polars", "plotters"]
 polars = ["dep:polars"]
+# plotters-backed renderers: `render_svg`, `render_png`, `save`/`save_with_size`,
+# `ggsave`, `ggarrange_png`. Implies `png`.
+plotters = ["dep:plotters", "png"]
+# PNG encoding via the `image` crate (used by `plotters` and `canvas`).
+png = ["dep:image"]
 # Zero-copy-friendly input path for Arrow-native producers (e.g. DuckDB).
 arrow = ["dep:arrow"]
 # Regression-backed stats (stat_quantile, glm smooth) via anofox-regression.
@@ -89,18 +93,20 @@ ggpubr = ["dep:anofox-statistics"]
 serde = ["dep:serde"]
 # Raster (canvas) backend: a self-contained RGBA rasteriser for large-N — fast,
 # wasm-compatible, no DOM. Renders to a pixel buffer / PNG.
-canvas = ["dep:ab_glyph"]
+canvas = ["dep:ab_glyph", "png"]
 # Spatial layer: geom_sf over simple-features geometry (self-contained WKT
 # parser — no extra dependencies).
 sf = []
 # Read GeoJSON into a plot-ready frame (geometry + properties). Adds serde_json.
 geojson = ["sf", "dep:serde_json"]
-# Browser (WASM) bindings: `crate::wasm::render_geo(spec) -> SVG`, driving the
-# plotters-free SvgBackend. Pair with DuckDB-Wasm for spatial data in the browser.
-wasm = ["sf", "dep:wasm-bindgen", "dep:serde_json"]
+# DEPRECATED alias, kept so existing `features = ["wasm"]` dependents keep
+# compiling: it now only enables `sf`. The library needs no wasm-specific code
+# (no getrandom/js) to build for wasm32; the wasm-bindgen browser exports moved
+# to the separate `ggplot-rs-wasm` crate (crates/ggplot-rs-wasm).
+wasm = ["sf"]
 # `ggplot-rs` command-line tool: plot parquet files and DuckDB SQL from the shell.
 # Includes `sf` so `--geom sf` can plot geometry from the DuckDB spatial extension.
-cli = ["dep:clap", "dep:duckdb", "serde", "dep:toml", "dep:serde_json", "sf"]
+cli = ["dep:clap", "dep:duckdb", "serde", "dep:toml", "dep:serde_json", "sf", "plotters"]
 
 # The CLI binary (built only with `--features cli`).
 [[bin]]
@@ -110,77 +116,82 @@ required-features = ["cli"]
 
 [dev-dependencies]
 criterion = "0.5"
+# Only the gallery example uses `rand` (to keep its published images stable);
+# the library itself has its own tiny seeded PRNG.
+rand = "0.8"
 proptest = "1"
 
 # Criterion benchmarks for the build/stat/render hot paths.
 [[bench]]
 name = "pipeline"
 harness = false
+required-features = ["plotters"]
 
 # All bundled examples build their input frames with the polars `df!` macro,
 # so they only compile when the `polars` feature is enabled.
 [[example]]
 name = "gallery"
-required-features = ["polars"]
+required-features = ["polars", "plotters"]
 
 # Spatial choropleth — needs the `sf` feature.
 [[example]]
 name = "spatial"
-required-features = ["sf", "polars"]
+required-features = ["sf", "polars", "plotters"]
 
-# Polars-free: builds and runs with --no-default-features too.
+# Polars-free: builds and runs with --no-default-features --features plotters.
 [[example]]
 name = "supplier_leadtime"
+required-features = ["plotters"]
 
 [[example]]
 name = "scatter"
-required-features = ["polars"]
+required-features = ["polars", "plotters"]
 
 [[example]]
 name = "histogram"
-required-features = ["polars"]
+required-features = ["polars", "plotters"]
 
 [[example]]
 name = "bar_chart"
-required-features = ["polars"]
+required-features = ["polars", "plotters"]
 
 [[example]]
 name = "annotations"
-required-features = ["polars"]
+required-features = ["polars", "plotters"]
 
 [[example]]
 name = "color_palettes"
-required-features = ["polars"]
+required-features = ["polars", "plotters"]
 
 [[example]]
 name = "continuous_color"
-required-features = ["polars"]
+required-features = ["polars", "plotters"]
 
 [[example]]
 name = "coord_flip"
-required-features = ["polars"]
+required-features = ["polars", "plotters"]
 
 [[example]]
 name = "density"
-required-features = ["polars"]
+required-features = ["polars", "plotters"]
 
 [[example]]
 name = "faceted"
-required-features = ["polars"]
+required-features = ["polars", "plotters"]
 
 [[example]]
 name = "loess_smooth"
-required-features = ["polars"]
+required-features = ["polars", "plotters"]
 
 [[example]]
 name = "log_scale"
-required-features = ["polars"]
+required-features = ["polars", "plotters"]
 
 # Polars-free (uses the internal DataFrame) so it builds without polars:
-# `cargo run --no-default-features --features regression,ggpubr --example ggpubr_gallery`
+# `cargo run --no-default-features --features regression,ggpubr,plotters --example ggpubr_gallery`
 [[example]]
 name = "ggpubr_gallery"
-required-features = ["regression", "ggpubr"]
+required-features = ["regression", "ggpubr", "plotters"]
 
 # Keep debug builds (dev, and the test profile that inherits it) free of DWARF
 # debuginfo. The polars + regression + criterion + proptest test-binary set

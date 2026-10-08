@@ -3,6 +3,8 @@
 //! Each test exercises a specific still-uncovered area identified from a line
 //! coverage report. Rendering tests assert `.render_svg().is_ok()`; pure unit
 //! tests assert on returned values.
+// Uses the plotters-backed renderers (render_svg/render_png/save).
+#![cfg(feature = "plotters")]
 
 use ggplot_rs::facet::grid::compute_grid_panels;
 use ggplot_rs::facet::wrap::compute_wrap_panels;

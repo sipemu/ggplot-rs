@@ -159,7 +159,7 @@ fn fill_polygon(buf: &mut [u8], w: usize, h: usize, pts: &[(f64, f64)], c: (u8, 
                 xs.push(ax + (yc - ay) / (by - ay) * (bx - ax));
             }
         }
-        xs.sort_by(|p, q| p.partial_cmp(q).unwrap_or(std::cmp::Ordering::Equal));
+        xs.sort_by(|p, q| p.total_cmp(q));
         for span in xs.chunks(2) {
             if let [xa, xb] = span {
                 for x in xa.round() as i32..=xb.round() as i32 {

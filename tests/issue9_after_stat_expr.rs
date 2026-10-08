@@ -1,4 +1,6 @@
 //! Issue #9 — computed after_stat aesthetics (aggregate expressions).
+// Uses the plotters-backed renderers (render_svg/render_png/save).
+#![cfg(feature = "plotters")]
 use ggplot_rs::prelude::*;
 
 #[test]
