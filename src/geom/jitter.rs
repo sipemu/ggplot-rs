@@ -17,8 +17,10 @@ pub struct GeomJitter {
     pub size: f64,
     pub color: (u8, u8, u8),
     pub alpha: f64,
-    pub width: f64,
-    pub height: f64,
+    /// Horizontal jitter (data units); `None` = 0.4 × data resolution.
+    pub width: Option<f64>,
+    /// Vertical jitter (data units); `None` = 0.4 × data resolution.
+    pub height: Option<f64>,
 }
 
 impl Default for GeomJitter {
@@ -27,8 +29,8 @@ impl Default for GeomJitter {
             size: 3.0,
             color: (0, 0, 0),
             alpha: 1.0,
-            width: 0.4,
-            height: 0.4,
+            width: None,
+            height: None,
         }
     }
 }
@@ -103,6 +105,7 @@ impl Geom for GeomJitter {
         Box::new(PositionJitter {
             width: self.width,
             height: self.height,
+            ..PositionJitter::default()
         })
     }
 

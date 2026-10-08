@@ -1603,7 +1603,6 @@ dependencies = [
  "criterion",
  "duckdb",
  "faer",
- "getrandom 0.2.17",
  "image",
  "indexmap",
  "plotters",

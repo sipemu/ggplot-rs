@@ -11,6 +11,7 @@ pub mod plot;
 pub mod position;
 pub mod prelude;
 pub mod render;
+pub(crate) mod rng;
 pub mod scale;
 #[cfg(feature = "sf")]
 pub mod spatial;

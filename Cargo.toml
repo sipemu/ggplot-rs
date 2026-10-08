@@ -38,7 +38,6 @@ plotters = { version = "0.3", default-features = false, features = [
     "ab_glyph",
 ] }
 indexmap = "2"
-rand = "0.8"
 # Optional data-source adapters. Neither is needed for the core pipeline —
 # they only provide `GGData` conversions for external frame types.
 polars = { version = "0.46", features = ["lazy"], optional = true }
@@ -66,11 +65,6 @@ serde_json = { version = "1", optional = true }
 wasm-bindgen = { version = "0.2", optional = true }
 # Pure-Rust glyph rasterisation for the `canvas` (raster) backend.
 ab_glyph = { version = "0.2", optional = true }
-
-# On wasm, rand's RNG seeding needs the browser crypto API (getrandom `js`).
-# Enables browser builds; ignored on every other target.
-[target.'cfg(target_arch = "wasm32")'.dependencies]
-getrandom = { version = "0.2", features = ["js"] }
 
 [features]
 # `polars` is on by default to preserve existing behaviour (prelude re-export +
@@ -110,6 +104,9 @@ required-features = ["cli"]
 
 [dev-dependencies]
 criterion = "0.5"
+# Only the gallery example uses `rand` (to keep its published images stable);
+# the library itself has its own tiny seeded PRNG.
+rand = "0.8"
 proptest = "1"
 
 # Criterion benchmarks for the build/stat/render hot paths.

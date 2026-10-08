@@ -92,13 +92,12 @@ impl SummaryData {
                 }
                 // Percentile bootstrap of the mean, seeded for reproducibility;
                 // centre stays the observed mean (as in Hmisc::smean.cl.boot).
-                use rand::{Rng, SeedableRng};
-                let mut rng = rand::rngs::StdRng::seed_from_u64(0x5EED_B007);
+                let mut rng = crate::rng::SplitMix64::new(0x5EED_B007);
                 let mut means = Vec::with_capacity(*b);
                 for _ in 0..*b {
                     let mut acc = 0.0;
                     for _ in 0..n {
-                        acc += values[rng.gen_range(0..n)];
+                        acc += values[rng.below(n)];
                     }
                     means.push(acc / n as f64);
                 }

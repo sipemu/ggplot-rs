@@ -368,8 +368,8 @@ fn distribution_geoms() {
                 size: 3.0,
                 color: (0, 0, 0),
                 alpha: 0.6,
-                width: 0.3,
-                height: 0.3,
+                width: Some(0.3),
+                height: Some(0.3),
             }),
         "jitter_with",
     );
