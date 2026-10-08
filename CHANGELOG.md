@@ -56,3 +56,13 @@
 - `ScaleColorDiscrete::sorted()`, `GGPlot::scale_fill_discrete_sorted()` and
   `scale_color_discrete_sorted()`: discrete colour levels in sorted order, so a
   level keeps its palette colour across charts regardless of data order.
+
+### Tiles
+
+- `geom_tile` on a continuous axis is sized by the data resolution (smallest
+  gap between distinct values, like ggplot2's `resolution()`); `width`/`height`
+  are now multiples of it (default 1 = abutting tiles). The tile extents
+  (`xmin`/`xmax`/`ymin`/`ymax`) train the scales, so edge tiles no longer spill
+  past the axes and no `with_expand(…)` workaround is needed. New
+  `Geom::setup_data()` hook (ggplot2's `setup_data`). Free facet scales also
+  train on extent columns.

@@ -801,9 +801,29 @@ impl PlotBuilder {
                     }
                 }
 
-                // Retrain on this panel's data
+                // Retrain on this panel's data, including extent columns
+                // (bars/tiles/ranges), so free scales cover whole marks.
                 for layer_data in panel_layers {
                     panel_set.train_layer(layer_data);
+                    for (cols, aes) in [
+                        (["xmin", "xmax"], Aesthetic::X),
+                        (["ymin", "ymax"], Aesthetic::Y),
+                    ] {
+                        let freed = match aes {
+                            Aesthetic::X => free_x,
+                            _ => free_y,
+                        };
+                        if !freed {
+                            continue;
+                        }
+                        for c in cols {
+                            if let (Some(vals), Some(s)) =
+                                (layer_data.column(c), panel_set.get_mut(&aes))
+                            {
+                                s.train(vals);
+                            }
+                        }
+                    }
                 }
 
                 panel_set
