@@ -116,6 +116,7 @@ pub use crate::theme::{
 pub use polars;
 
 // 0.17 statistical-graphics layers (QQ distributions/bands, step ribbons).
+pub use crate::geom::cooks::GeomCooksContour;
 pub use crate::geom::qq::GeomQQBand;
 pub use crate::geom::ribbon::GeomStepribbon;
 pub use crate::stat::qq::{QQBandType, QQDistribution, StatQQBand, StatQQDist, StatQQLineDist};

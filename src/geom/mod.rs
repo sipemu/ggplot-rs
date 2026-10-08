@@ -7,6 +7,7 @@ pub mod bracket;
 pub mod candlestick;
 pub mod col;
 pub mod contour;
+pub mod cooks;
 pub mod count;
 pub mod crossbar;
 pub mod curve;

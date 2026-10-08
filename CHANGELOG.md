@@ -49,6 +49,14 @@ All notable changes to this project are documented here. The format follows
   ggplot2 4.0 and qqplotr 0.0.7 to 1e-9 (`tests/qq_dist_r.rs`,
   `validation/generate_diagnostics.R`). QQ points now carry `data-x` /
   `data-value` / tooltips; `geom_qq_line` draws one line per group.
+- **Cook's-distance contours (U4).** `GGPlot::stat_cooks_contour(p, levels)`
+  / `geom_cooks_contour_with(GeomCooksContour)` draw R's `plot.lm(which = 5)`
+  contours `±√(level · p · (1 − h) / h)` on a residuals-vs-leverage panel:
+  dashed, clipped to the panel (geometrically — the native SVG has no clip
+  paths), labelled with the level, in every facet panel, optionally limited
+  to `with_h_range(lo, hi)`; they train no scale. Helpers
+  `geom::cooks::{cooks_contour_y, cooks_distance}`. Checked against R
+  (`tests/cooks_contour_r.rs`).
 - `ggplot_rs::stat::distribution`: dependency-free `qnorm` (AS 241), `dnorm`,
   `pt` / `qt` / `dt` (any `p`, any `df`) and `ln_gamma`, available in every
   feature configuration (the existing `stat::dist::qt` still returns the
