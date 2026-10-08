@@ -60,6 +60,10 @@ use crate::scale::Scale;
 use crate::stat::Stat;
 use crate::theme::Theme;
 
+// Builder methods for the 0.17 statistical-graphics layers (QQ, step ribbons,
+// ECDF bands, Cook's contours, horizontal error bars).
+mod stat_layers;
+
 /// Labels for the plot.
 #[derive(Clone, Debug, Default)]
 pub struct Labels {

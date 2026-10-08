@@ -372,8 +372,9 @@ fn stat_qq_and_qqline_compute() {
     let out_line = line.compute_group(&df_y(&sample), &scales);
     assert_eq!(out_line.nrows(), 2);
 
-    // n < 4 => QQLine empty.
-    assert_eq!(line.compute_group(&df_y(&[1.0, 2.0]), &scales).nrows(), 0);
+    // n < 2 => QQLine empty; two values already define the quartile line.
+    assert_eq!(line.compute_group(&df_y(&[1.0]), &scales).nrows(), 0);
+    assert_eq!(line.compute_group(&df_y(&[1.0, 2.0]), &scales).nrows(), 2);
     // Small-sample ppoints branch (n <= 10) for QQ.
     assert_eq!(
         qq.compute_group(&df_y(&[1.0, 2.0, 3.0]), &scales).nrows(),

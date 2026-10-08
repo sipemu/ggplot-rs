@@ -989,13 +989,16 @@ fn stat_qq_ecdf_edge_cases() {
     nox.add_column("z".into(), vec![Value::Float(1.0)]);
     assert_eq!(StatQQ.compute_group(&nox, &scales).nrows(), 0);
 
-    // QQLine with < 4 values returns empty.
+    // QQLine needs >= 2 values (as ggplot2); 3 values give a line.
     let mut few = DataFrame::new();
     few.add_column(
         "y".into(),
         vec![Value::Float(1.0), Value::Float(2.0), Value::Float(3.0)],
     );
-    assert_eq!(StatQQLine.compute_group(&few, &scales).nrows(), 0);
+    assert_eq!(StatQQLine.compute_group(&few, &scales).nrows(), 2);
+    let mut one = DataFrame::new();
+    one.add_column("y".into(), vec![Value::Float(1.0)]);
+    assert_eq!(StatQQLine.compute_group(&one, &scales).nrows(), 0);
 
     // Normal QQ / QQLine with grouping carryover.
     let mut df = DataFrame::new();

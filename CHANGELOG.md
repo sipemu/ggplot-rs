@@ -19,6 +19,10 @@ All notable changes to this project are documented here. The format follows
   `inherit.aes = FALSE`): a plot-level `color` no longer leaks into
   `geom_hline`. New `Geom::inherit_aes()` (default `true`) controls this.
 
+- `StatQQ` / `StatQQLine` use the exact normal quantile in every build (they
+  used the Abramowitz–Stegun approximation, |error| ≈ 4.5e-4, without
+  `regression`), and `StatQQLine` needs 2 sample values instead of 4.
+
 ### Added
 
 - **Data-mapped reference lines (U1).** `Aes::{xintercept, yintercept, slope,
@@ -32,6 +36,25 @@ All notable changes to this project are documented here. The format follows
   between categories (1-based, as in ggplot2) without becoming a level, and a
   reference line added before a discrete layer no longer forces a continuous
   scale. `GeomHline::mapped()`, `GeomVline::mapped()`, `GeomAbline::mapped()`.
+- **QQ plots against several distributions, with confidence bands (U2).**
+  `QQDistribution::{Normal { mean, sd }, StudentT { df }, Exponential { rate },
+  HalfNormal { sd }}` (ggplot2's `distribution` + `dparams`; constructors
+  `normal()`, `t(df)`, `exponential()`, `half_normal()`), `StatQQDist`,
+  `StatQQLineDist` (line through the `line_p` quartiles over the range of the
+  theoretical quantiles; also emits `slope`/`intercept`) and `StatQQBand`
+  (qqplotr's `stat_qq_band`: `QQBandType::Pointwise` normal-theory envelope or
+  `QQBandType::Ks` DKW band, `level`), drawn by the new `GeomQQBand`. Builder
+  methods `GGPlot::{stat_qq(dist), stat_qq_line(dist), stat_qq_band(band),
+  geom_qq_band(), geom_qq_band_with(geom, band)}`. Validated against
+  ggplot2 4.0 and qqplotr 0.0.7 to 1e-9 (`tests/qq_dist_r.rs`,
+  `validation/generate_diagnostics.R`). QQ points now carry `data-x` /
+  `data-value` / tooltips; `geom_qq_line` draws one line per group.
+- `ggplot_rs::stat::distribution`: dependency-free `qnorm` (AS 241), `dnorm`,
+  `pt` / `qt` / `dt` (any `p`, any `df`) and `ln_gamma`, available in every
+  feature configuration (the existing `stat::dist::qt` still returns the
+  normal 0.975 quantile without `regression`).
+- `geom_ribbon` draws one band per group (group / colour / fill) with a
+  mapped `fill`, instead of a single polygon through every row.
 - The native SVG backend draws every `PointShape` (square, triangle, diamond,
   `+`, `×`) instead of falling back to circles; `+`/`×` are one stroked
   `<path>` per point, so they keep their `data-*` hover attributes.
