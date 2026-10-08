@@ -14,19 +14,18 @@ impl Stat for StatCount {
             None => return DataFrame::new(),
         };
 
-        // Count unique x values
-        let mut counts: Vec<(String, usize)> = Vec::new();
+        // Count unique x values (first-seen order; O(1) per row, borrowed keys).
+        let mut counts: indexmap::IndexMap<std::borrow::Cow<'_, str>, usize> =
+            indexmap::IndexMap::new();
         for v in x_col {
-            let key = v.to_group_key();
-            if let Some(entry) = counts.iter_mut().find(|(k, _)| k == &key) {
-                entry.1 += 1;
-            } else {
-                counts.push((key, 1));
-            }
+            *counts.entry(v.key_str()).or_insert(0) += 1;
         }
 
         let mut result = DataFrame::new();
-        let x_values: Vec<Value> = counts.iter().map(|(k, _)| Value::Str(k.clone())).collect();
+        let x_values: Vec<Value> = counts
+            .iter()
+            .map(|(k, _)| Value::Str(k.to_string()))
+            .collect();
 
         // Try to preserve original value types
         let first_x = x_col.first();
@@ -36,7 +35,7 @@ impl Stat for StatCount {
                 .map(|(k, _)| {
                     k.parse::<f64>()
                         .map(Value::Float)
-                        .unwrap_or_else(|_| Value::Str(k.clone()))
+                        .unwrap_or_else(|_| Value::Str(k.to_string()))
                 })
                 .collect()
         } else {

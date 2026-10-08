@@ -72,6 +72,21 @@ All notable changes to this project are documented here. The format follows
   integer-spaced data keeps ±0.4, finely spaced continuous data is no longer
   smeared by a fixed ±0.4 data units.
 
+### Performance
+
+- `stat_density` switches to a binned estimator (linear binning onto a grid
+  with spacing ≤ bw/50 + a kernel table truncated at ±8 bw) for groups with
+  ≥ 2048 values: O(n + 512·window) instead of O(n·512) kernel evaluations,
+  within ~2e-5 of the exact estimate relative to the peak. Smaller groups use
+  the exact sum, unchanged.
+- Layers without their own data borrow the plot data instead of cloning the
+  whole frame per layer.
+- Discrete scale training/lookups, `stat_count`, `position_stack` and
+  `position_fill` use borrowed keys and hash lookups instead of allocating a
+  `String` per value and scanning the distinct x values linearly per row
+  (O(n·k) → O(n)).
+- `DataFrame::group_by` builds borrowed keys (no per-row `String` clones).
+
 ### Fixed
 
 - Empty manual scales (`scale_color_manual(vec![])`, `scale_fill_manual`,
@@ -81,7 +96,6 @@ All notable changes to this project are documented here. The format follows
 - `stat_binhex` / `geom_hex` output order is deterministic (row-major) instead
   of following `HashMap` iteration order, so identical data renders identical
   SVG.
-- Discrete scale training/lookups no longer allocate a `String` per value.
 
 - `label_number` / `label_currency` with an `accuracy` that keeps decimals no
   longer inserts thousands marks into the fractional part

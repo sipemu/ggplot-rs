@@ -388,7 +388,9 @@ impl PlotBuilder {
         } = layer;
 
         // Step 1: Resolve data — use layer data if provided, else plot data
-        let source_data = layer_data.unwrap_or_else(|| plot_data.clone());
+        // Borrow the plot data when the layer has none of its own (no per-layer
+        // full-frame clone; `resolve_mappings` copies only the columns it needs).
+        let source_data = layer_data.as_ref().unwrap_or(plot_data);
 
         // Step 2: Merge mappings — layer overrides plot-level
         let merged_mapping = plot_mapping.merge(&layer_mapping);
@@ -404,7 +406,7 @@ impl PlotBuilder {
         }
 
         // Step 3: Evaluate aes — rename columns to canonical names
-        let mut working_data = resolve_mappings(&source_data, &merged_mapping);
+        let mut working_data = resolve_mappings(source_data, &merged_mapping);
 
         // Remember which columns the user actually supplied (pre-stat). A required
         // aesthetic is satisfied if it was present here OR is synthesized by the
