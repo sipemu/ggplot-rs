@@ -161,6 +161,46 @@ pub fn nice_step(raw: f64) -> f64 {
 }
 
 /// Format a number nicely, removing trailing zeros.
+/// Format a set of break values together: like [`format_number`] (integers
+/// verbatim, otherwise up to 2 decimals, trailing zeros trimmed), but with as
+/// many extra decimals as needed so that distinct breaks get distinct labels
+/// and no non-zero break prints as "0" — e.g. breaks 0.990/0.992/0.994 read
+/// "0.99, 0.992, 0.994" instead of "0.99, 0.99, 0.99", and a log tick at 0.001
+/// no longer reads "0". Output is unchanged whenever 2 decimals suffice.
+pub fn format_numbers(values: &[f64]) -> Vec<String> {
+    fn fmt(v: f64, decimals: usize) -> String {
+        if v == v.round() && v.abs() < 1e10 {
+            return format!("{}", v as i64);
+        }
+        let s = format!("{v:.decimals$}");
+        let s = s.trim_end_matches('0').trim_end_matches('.');
+        if s == "-0" {
+            "0".to_string()
+        } else {
+            s.to_string()
+        }
+    }
+    let ok = |labels: &[String]| {
+        let distinct = values
+            .iter()
+            .zip(labels)
+            .all(|(a, la)| values.iter().zip(labels).all(|(b, lb)| a == b || la != lb));
+        let nonzero = values
+            .iter()
+            .zip(labels)
+            .all(|(v, l)| *v == 0.0 || l != "0");
+        distinct && nonzero
+    };
+    let mut labels = Vec::new();
+    for decimals in 2..=12 {
+        labels = values.iter().map(|&v| fmt(v, decimals)).collect();
+        if ok(&labels) {
+            break;
+        }
+    }
+    labels
+}
+
 pub fn format_number(v: f64) -> String {
     if v == v.round() && v.abs() < 1e10 {
         format!("{}", v as i64)

@@ -252,14 +252,24 @@ impl Scale for ScaleContinuous {
         // range. Labels show the original (inverse-transformed) value.
         let (emin, emax) = self.expanded_range();
         let tol = (emax - emin).abs() * 1e-9;
-        extended_breaks(self.min, self.max, 5)
+        let breaks: Vec<f64> = extended_breaks(self.min, self.max, 5)
             .into_iter()
             .filter(|&v| v >= emin - tol && v <= emax + tol)
-            .map(|v| {
-                let pos = self.map(&Value::Float(v));
-                let label = self.format_label(self.scale_transform.inverse(v));
-                (pos, label)
-            })
+            .collect();
+        let shown: Vec<f64> = breaks
+            .iter()
+            .map(|&v| self.scale_transform.inverse(v))
+            .collect();
+        // Without a custom formatter, label the breaks jointly so neighbours
+        // stay distinguishable on narrow ranges.
+        let labels: Vec<String> = match &self.label_formatter {
+            Some(f) => shown.iter().map(|&v| f(v)).collect(),
+            None => super::util::format_numbers(&shown),
+        };
+        breaks
+            .iter()
+            .zip(labels)
+            .map(|(&v, label)| (self.map(&Value::Float(v)), label))
             .collect()
     }
 

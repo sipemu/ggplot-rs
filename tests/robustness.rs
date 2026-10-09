@@ -194,3 +194,42 @@ fn continuous_bars_do_not_overlap() {
     }
     assert!(spans[0].1 > 4.0, "bars too thin: {}", spans[0].1);
 }
+
+/// Breaks on a narrow range get enough decimals to be distinguishable
+/// (they used to all read "0.99"), and unchanged output where 2 decimals do.
+#[test]
+fn narrow_range_axis_labels_are_distinct() {
+    use ggplot_rs::scale::util::format_numbers;
+    assert_eq!(
+        format_numbers(&[0.99, 0.992, 0.994, 0.996]),
+        ["0.99", "0.992", "0.994", "0.996"]
+    );
+    assert_eq!(
+        format_numbers(&[0.0, 2.5, 5.0, 7.5]),
+        ["0", "2.5", "5", "7.5"]
+    );
+    assert_eq!(
+        format_numbers(&[0.001, 0.01, 0.1, 1.0]),
+        ["0.001", "0.01", "0.1", "1"]
+    );
+    assert_eq!(format_numbers(&[-0.0001, 0.0]), ["-0.0001", "0"]);
+
+    let svg = GGPlot::new(vec![
+        col("x", floats(&[1.0, 2.0, 3.0])),
+        col("y", floats(&[0.9905, 0.9921, 0.9938])),
+    ])
+    .aes(Aes::new().x("x").y("y"))
+    .geom_point()
+    .render_svg_native_with_size(300, 200)
+    .expect("render");
+    let texts: Vec<&str> = svg
+        .split("<text")
+        .skip(1)
+        .filter_map(|t| t.split('>').nth(1)?.split('<').next())
+        .filter(|t| t.starts_with("0.99"))
+        .collect();
+    let mut unique = texts.clone();
+    unique.sort();
+    unique.dedup();
+    assert!(texts.len() >= 2 && unique.len() == texts.len(), "{texts:?}");
+}
