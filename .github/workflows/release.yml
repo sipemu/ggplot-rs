@@ -21,7 +21,9 @@ jobs:
 
       - uses: dtolnay/rust-toolchain@stable
 
-      - uses: Swatinem/rust-cache@v2
+      # No rust-cache here: its post step scans target/package/* left by
+      # `cargo publish` and fails the job (ENOENT on tests/target) *after* a
+      # successful upload. A once-per-release build doesn't need a cache.
 
       - name: Verify tag matches Cargo.toml version
         run: |
