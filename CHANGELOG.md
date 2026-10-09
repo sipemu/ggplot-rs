@@ -3,6 +3,17 @@
 All notable changes to this project are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.17.1] — 2026-10-09
+
+### Fixed
+
+- Continuous axis and legend breaks are labelled jointly
+  (`scale::util::format_numbers`): on narrow ranges neighbouring breaks get
+  enough decimals to stay distinct (`0.99, 0.992, 0.994` instead of
+  `0.99, 0.99, 0.99`), and a non-zero break never prints as `0` (log ticks at
+  `0.001`). Labels are unchanged wherever two decimals already suffice;
+  custom `label_*` formatters are unaffected.
+
 ## [0.17.0] — 2026-10-08
 
 ### Breaking changes

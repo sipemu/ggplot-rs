@@ -88,9 +88,12 @@ impl Scale for ScaleSizeContinuous {
         let n_breaks = 4;
         let step = super::util::nice_step(range / n_breaks as f64);
         let start = (self.min / step).ceil() * step;
-        super::util::stepped_breaks(start, self.max, step)
-            .into_iter()
-            .map(|v| (self.map(&Value::Float(v)), format_number(v)))
+        let values = super::util::stepped_breaks(start, self.max, step);
+        let labels = super::util::format_numbers(&values);
+        values
+            .iter()
+            .zip(labels)
+            .map(|(&v, l)| (self.map(&Value::Float(v)), l))
             .collect()
     }
 
