@@ -108,6 +108,8 @@ pub struct GGPlot {
     /// Panel aspect ratio used when the theme sets none (helpers such as
     /// `geom_calendar` need square cells; survives theme presets).
     pub(crate) default_aspect_ratio: Option<f64>,
+    /// Plot-wide default locale for axis / legend labels ([`GGPlot::locale`]).
+    pub(crate) locale: Option<crate::locale::Locale>,
 }
 
 impl GGPlot {
@@ -131,6 +133,7 @@ impl GGPlot {
             guide_legend: crate::guide::config::GuideLegend::default(),
             warnings: Vec::new(),
             default_aspect_ratio: None,
+            locale: None,
         }
     }
 
@@ -1938,6 +1941,33 @@ impl GGPlot {
     /// Add a segment annotation between data coordinates.
     pub fn annotate_segment(self, x: f64, y: f64, xend: f64, yend: f64) -> Self {
         self.annotate(Annotation::segment(x, y, xend, yend))
+    }
+
+    /// Default [`Locale`](crate::locale::Locale) for the plot's axis and
+    /// legend labels: every continuous position / colour / size / alpha scale
+    /// labels its default breaks with the locale's decimal and thousands marks
+    /// (`1.000`, `2,5` in de-DE), and date/datetime scales use its month names
+    /// and date formats (`Okt. 2026`, `15. Okt. 2026`). A scale's own
+    /// `with_locale` and custom `label_*` formatters take precedence.
+    /// Without this call labels are unchanged (`.` decimal mark, no grouping,
+    /// ISO dates).
+    ///
+    /// ```
+    /// use ggplot_rs::prelude::*;
+    /// let svg = GGPlot::new(vec![
+    ///         ("x".to_string(), vec![Value::Float(0.0), Value::Float(3000.0)]),
+    ///         ("y".to_string(), vec![Value::Float(0.5), Value::Float(2.5)]),
+    ///     ])
+    ///     .aes(Aes::new().x("x").y("y"))
+    ///     .geom_point()
+    ///     .locale(Locale::from_tag("de-DE"))
+    ///     .render_svg_native()
+    ///     .unwrap();
+    /// assert!(svg.contains(">1.000<") && svg.contains(">1,5<"));
+    /// ```
+    pub fn locale(mut self, locale: crate::locale::Locale) -> Self {
+        self.locale = Some(locale);
+        self
     }
 
     // ─── Build and Render ────────────────────────────────────────

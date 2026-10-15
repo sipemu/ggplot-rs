@@ -251,6 +251,24 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 - **Discrete**: automatic categorical mapping
 - **Color**: discrete palettes (Viridis, Brewer Set1/Dark2, etc.), continuous gradients, diverging gradient2, binned/stepped scales (`scale_color_steps`/`fermenter`), manual color assignment
 - **Shape & Linetype**: discrete mapping for point shapes and line styles
+- **Locale-aware labels**: `GGPlot::locale(Locale::from_tag("de-DE"))` renders default axis and legend labels with the locale's marks (`1.000`, `2,5`) and date axes with its month names (`Okt. 2026`, `15. Okt. 2026`); presets `en_us`, `en_gb`, `de_de`, `fr_fr`. Without it, output is unchanged.
+
+```rust
+use ggplot_rs::prelude::*;
+
+let de = Locale::from_tag("de-DE");
+assert_eq!(label_currency_locale(&de, Some(0.01))(1234.5), "1.234,50 €");
+assert_eq!(label_currency_locale(&Locale::en_us(), Some(0.01))(1234.5), "$1,234.50");
+assert_eq!(label_percent_locale(&de, None)(0.123), "12,3 %");
+assert_eq!(label_number_marks(Some(0.1), "", " kg", 1.0, ",", ".")(1234.56), "1.234,6 kg");
+
+// Plot-wide: German number marks on every default axis/legend, German month names.
+let plot = GGPlot::new(df)
+    .aes(Aes::new().x("date").y("revenue"))
+    .geom_line()
+    .scale_y_continuous(ScaleContinuous::new().with_label_formatter(label_currency_locale(&de, None)))
+    .locale(de);
+```
 
 ### Coordinates
 

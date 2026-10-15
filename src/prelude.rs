@@ -51,6 +51,7 @@ pub use crate::ggpubr::{
 #[cfg(all(feature = "plotters", not(target_arch = "wasm32")))]
 pub use crate::ggpubr::{ggarrange_png, ggarrange_save_png};
 pub use crate::guide::config::GuideLegend;
+pub use crate::locale::{CurrencyPosition, Locale};
 pub use crate::plot::{GGError, GGPlot, Labels};
 pub use crate::position::dodge::PositionDodge;
 pub use crate::position::dodge2::PositionDodge2;
@@ -67,8 +68,10 @@ pub use crate::scale::continuous::ScaleContinuous;
 pub use crate::scale::datetime::ScaleDateTime;
 pub use crate::scale::discrete::ScaleDiscrete;
 pub use crate::scale::format::{
-    label_bytes, label_comma, label_currency, label_dollar, label_number, label_ordinal,
-    label_percent, label_scientific, label_si,
+    label_bytes, label_comma, label_comma_locale, label_comma_marks, label_currency,
+    label_currency_locale, label_currency_marks, label_dollar, label_number, label_number_locale,
+    label_number_marks, label_ordinal, label_percent, label_percent_locale, label_percent_marks,
+    label_scientific, label_si,
 };
 pub use crate::scale::gradient::ScaleColorGradient2;
 pub use crate::scale::gradient_n::ScaleColorGradientN;

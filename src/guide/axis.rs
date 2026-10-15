@@ -328,9 +328,14 @@ pub fn draw_sec_y_axis(
 
         if theme.axis_text_y.visible {
             // Parse the primary label back to a number, transform it
-            let sec_label = if let Ok(v) = label.parse::<f64>() {
+            let locale = primary_scale.locale();
+            let parsed = match locale {
+                Some(l) => l.parse_number(label),
+                None => label.parse::<f64>().ok(),
+            };
+            let sec_label = if let Some(v) = parsed {
                 let transformed = sec_axis.transform_value(v);
-                crate::scale::util::format_number(transformed)
+                crate::scale::util::format_number_opt(transformed, locale)
             } else {
                 label.clone()
             };

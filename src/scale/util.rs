@@ -209,3 +209,78 @@ pub fn format_number(v: f64) -> String {
         s.trim_end_matches('0').trim_end_matches('.').to_string()
     }
 }
+
+/// [`format_numbers`] rendered with the marks of `locale`: the same number of
+/// decimals is chosen (so distinct breaks keep distinct labels), then the
+/// labels get the locale's decimal mark and thousands grouping —
+/// `[1000, 1500]` reads `"1.000", "1.500"` in de-DE.
+pub fn format_numbers_locale(values: &[f64], locale: &crate::locale::Locale) -> Vec<String> {
+    format_numbers(values)
+        .into_iter()
+        .map(|s| locale.localize_number(&s))
+        .collect()
+}
+
+/// [`format_number`] rendered with the marks of `locale`.
+pub fn format_number_locale(v: f64, locale: &crate::locale::Locale) -> String {
+    locale.localize_number(&format_number(v))
+}
+
+/// [`format_numbers`] with an optional locale (`None` = default marks).
+pub(crate) fn format_numbers_opt(
+    values: &[f64],
+    locale: Option<&crate::locale::Locale>,
+) -> Vec<String> {
+    match locale {
+        Some(l) => format_numbers_locale(values, l),
+        None => format_numbers(values),
+    }
+}
+
+/// [`format_number`] with an optional locale (`None` = default marks).
+pub(crate) fn format_number_opt(v: f64, locale: Option<&crate::locale::Locale>) -> String {
+    match locale {
+        Some(l) => format_number_locale(v, l),
+        None => format_number(v),
+    }
+}
+
+#[cfg(test)]
+mod locale_tests {
+    use super::*;
+    use crate::locale::Locale;
+
+    #[test]
+    fn joint_labels_keep_distinctness_with_locale_marks() {
+        let de = Locale::de_de();
+        assert_eq!(
+            format_numbers_locale(&[0.99, 0.992, 0.994], &de),
+            ["0,99", "0,992", "0,994"]
+        );
+        assert_eq!(
+            format_numbers_locale(&[0.0, 1000.0, 2000.0, 3000.0], &de),
+            ["0", "1.000", "2.000", "3.000"]
+        );
+        assert_eq!(
+            format_numbers_locale(&[-1500.5, 0.0, 1500.5], &de),
+            ["-1.500,5", "0", "1.500,5"]
+        );
+        assert_eq!(
+            format_numbers_locale(&[1000.0, 1000.001, 1000.002], &de),
+            ["1.000", "1.000,001", "1.000,002"]
+        );
+        assert_eq!(
+            format_numbers_locale(&[0.001, 0.01, 0.1], &Locale::fr_fr()),
+            ["0,001", "0,01", "0,1"]
+        );
+        let us = Locale::en_us();
+        assert_eq!(
+            format_numbers_locale(&[0.0, 2500.0, 5000.0], &us),
+            ["0", "2,500", "5,000"]
+        );
+        assert_eq!(format_number_locale(1234.5678, &de), "1.234,57");
+        // No locale: unchanged default output.
+        assert_eq!(format_numbers_opt(&[0.0, 1000.0], None), ["0", "1000"]);
+        assert_eq!(format_number_opt(1234.5, None), "1234.5");
+    }
+}

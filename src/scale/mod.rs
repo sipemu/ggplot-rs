@@ -88,6 +88,18 @@ pub trait Scale: Send + Sync {
         None
     }
 
+    /// Adopt a plot-level default [`Locale`](crate::locale::Locale) for the
+    /// default break labels (number marks, month names, date formats), unless
+    /// the scale already has its own. Called by the plot builder when
+    /// [`GGPlot::locale`](crate::GGPlot::locale) is set. Default: ignored
+    /// (scales without numeric/date labels).
+    fn set_default_locale(&mut self, _locale: &crate::locale::Locale) {}
+
+    /// The locale this scale's default labels are rendered with, if any.
+    fn locale(&self) -> Option<&crate::locale::Locale> {
+        None
+    }
+
     /// Override the trained domain limits (used by coord_cartesian zoom).
     fn set_limits(&mut self, _min: f64, _max: f64) {
         // Default no-op. Continuous scales override this.

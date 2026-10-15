@@ -30,6 +30,14 @@ impl ScaleSet {
         self.scales.push(scale);
     }
 
+    /// Give every scale the plot-level default locale (scales with their own
+    /// locale keep it; scales without numeric/date labels ignore it).
+    pub fn set_default_locale(&mut self, locale: &crate::locale::Locale) {
+        for s in &mut self.scales {
+            s.set_default_locale(locale);
+        }
+    }
+
     /// Get a scale for a specific aesthetic.
     pub fn get(&self, aes: &Aesthetic) -> Option<&dyn Scale> {
         self.scales

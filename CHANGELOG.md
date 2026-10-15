@@ -3,6 +3,44 @@
 All notable changes to this project are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.18.0] — 2026-10-15
+
+Minor bump: new public API, no breaking changes. Without a locale every label
+is byte-identical to 0.17.1.
+
+### Added — locale-aware number and date labels
+
+- `ggplot_rs::locale::Locale` (re-exported as `ggplot_rs::Locale`, in the
+  prelude and in `ggplot_rs::format`): decimal mark, thousands mark, minimum
+  grouping digits, currency symbol + placement (`CurrencyPosition`) + spacing,
+  percent suffix, short/long month and weekday names, date / month / time
+  formats. Presets `Locale::en_us()`, `en_gb()`, `de_de()`, `fr_fr()`;
+  `Locale::from_tag("de-DE")` parses BCP-47 / POSIX tags (`de_DE.UTF-8`,
+  `en-GB`, …) and falls back to en-US (`try_from_tag` returns `None`
+  instead); `FromStr`, `Default` (en-US). Helpers: `localize_number`,
+  `parse_number`, `format_number`, `strftime`, `format_datetime`,
+  `currency_affixes`, `with_decimal_mark` / `with_big_mark` /
+  `with_min_grouping_digits` / `with_currency`.
+- Formatters with explicit marks: `label_number_marks`, `label_comma_marks`,
+  `label_percent_marks`, `label_currency_marks`; and in a locale's
+  conventions: `label_number_locale`, `label_comma_locale`,
+  `label_percent_locale`, `label_currency_locale` (de-DE `1.234,50 €`,
+  en-US `$1,234.50`, en-GB `£1,234.50`, fr-FR `1 234,50 €`; de-DE / fr-FR
+  percent `12,3 %`).
+- `format::format_value_locale`, `scale::util::format_numbers_locale` /
+  `format_number_locale` (joint break labelling keeps its distinct-labels
+  logic, rendered with the locale's marks).
+- `GGPlot::locale(Locale)`: plot-wide default for continuous position,
+  colour, size and alpha scales (axis ticks and legends, e.g. `1.000` /
+  `0,5`), secondary axes, and date/datetime scales (`Okt. 2026` for monthly
+  breaks, `15. Okt. 2026` for daily ones, localised `%b %B %a %A`).
+  `ScaleContinuous::with_locale` / `ScaleDateTime::with_locale` set it per
+  scale (and win over the plot locale); custom `label_*` formatters win over
+  both.
+- `Scale::set_default_locale` / `Scale::locale` (default methods, no-op /
+  `None`) and `ScaleSet::set_default_locale`.
+- strftime subset gained `%a %A` (weekday) and `%-d %-m` (unpadded).
+
 ## [0.17.1] — 2026-10-09
 
 ### Fixed
