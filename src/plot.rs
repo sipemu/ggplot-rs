@@ -939,8 +939,8 @@ impl GGPlot {
     /// optionally Monday-first weeks.
     pub fn geom_calendar_with(mut self, tile: GeomTile, monday_first: bool) -> Self {
         use crate::stat::calendar::{
-            day_number, month_boundaries, month_breaks, CalendarGrid, StatCalendar,
-            MAX_CALENDAR_YEARS,
+            day_number, month_boundaries, month_breaks, month_breaks_localized, weekday_labels,
+            CalendarGrid, StatCalendar, MAX_CALENDAR_YEARS,
         };
         let grid = self
             .mapping
@@ -961,12 +961,12 @@ impl GGPlot {
                 "geom_calendar: dates more than {MAX_CALENDAR_YEARS} years before the newest were dropped"
             ));
         }
-        let (xb, xl) = month_breaks(&grid);
+        let (xb, _) = month_breaks(&grid);
         // Rows: y = 6 - weekday; label Mon/Wed/Fri.
-        let (yb, yl) = if monday_first {
-            (vec![6.0, 4.0, 2.0], ["Mon", "Wed", "Fri"])
+        let yb = if monday_first {
+            vec![6.0, 4.0, 2.0]
         } else {
-            (vec![5.0, 3.0, 1.0], ["Mon", "Wed", "Fri"])
+            vec![5.0, 3.0, 1.0]
         };
         let segs = month_boundaries(&grid);
         let col = |f: fn(&(f64, f64, f64, f64)) -> f64| -> Vec<Value> {
@@ -988,26 +988,24 @@ impl GGPlot {
             .scale_x_continuous(
                 ScaleContinuous::new()
                     .with_breaks(xb)
-                    .with_labels(xl)
+                    // Month / weekday names follow the plot locale.
+                    .with_localized_labels(move |l| month_breaks_localized(&grid, l).1)
                     .with_expand(0.0, 0.0),
             )
             .scale_y_continuous(
                 ScaleContinuous::new()
                     .with_breaks(yb)
-                    .with_labels(yl.iter().map(|s| s.to_string()).collect())
+                    .with_localized_labels(weekday_labels)
                     .with_expand(0.0, 0.0),
             );
         if segs.is_empty() {
             return plot;
         }
-        plot.geom_segment_with(GeomSegment {
-            color: (120, 128, 140),
-            width: 1.2,
-            alpha: 1.0,
-        })
-        .layer_data(boundaries)
-        .layer_aes(Aes::new().x("x").y("y").xend("xend").yend("yend"))
-        .show_legend(false)
+        // Styled by the theme's `calendar_month_border` at draw time.
+        plot.add_geom_with(crate::geom::segment::GeomCalendarBorder)
+            .layer_data(boundaries)
+            .layer_aes(Aes::new().x("x").y("y").xend("xend").yend("yend"))
+            .show_legend(false)
     }
 
     pub fn geom_blank(self) -> Self {

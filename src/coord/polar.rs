@@ -19,6 +19,10 @@ pub struct CoordPolar {
     /// Angle swept by the full theta range, in radians (default `2π`). Set via
     /// [`CoordPolar::with_span`] for partial arcs such as gauges.
     pub span: f64,
+    /// Pad the discrete axis like a cartesian band (default `true`). With
+    /// `false`, `width = 1` bars fill their band edge to edge, so a
+    /// `theta = "y"` pie reaches the centre (ggplot2's `coord_radial(expand =)`).
+    pub expand: bool,
 }
 
 impl CoordPolar {
@@ -29,6 +33,7 @@ impl CoordPolar {
             direction: 1.0,
             inner_radius: 0.0,
             span: std::f64::consts::TAU,
+            expand: true,
         }
     }
 
@@ -80,6 +85,14 @@ impl CoordPolar {
             b = (b.0.min(x), b.1.max(x), b.2.min(y), b.3.max(y));
         }
         b
+    }
+
+    /// Pad the discrete axis (`true`, default) or not (`false`): with `false`
+    /// and `width = 1` bars, a `theta = "y"` pie is solid at the centre. A
+    /// donut ([`inner_radius`](Self::inner_radius)) keeps its hole either way.
+    pub fn expand(mut self, expand: bool) -> Self {
+        self.expand = expand;
+        self
     }
 
     /// Set the inner radius (fraction of outer, `0.0`..`1.0`) to punch a donut hole.
@@ -147,6 +160,10 @@ impl Coord for CoordPolar {
 
     fn gridlines(&self) -> bool {
         false
+    }
+
+    fn discrete_expand(&self) -> bool {
+        self.expand
     }
 
     fn is_flipped(&self) -> bool {

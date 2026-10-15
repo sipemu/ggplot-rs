@@ -74,4 +74,11 @@ pub trait Coord: Send + Sync {
     /// `coord_radar` anchors the radius at 0 and counts its spokes). Default:
     /// no-op.
     fn train_scales(&mut self, _scales: &mut crate::scale::ScaleSet) {}
+
+    /// Whether bars on a discrete axis keep the band padding (10 % of the
+    /// panel split across the ends). `coord_polar().expand(false)` turns it
+    /// off so a full-width pie closes at the centre. Default true.
+    fn discrete_expand(&self) -> bool {
+        true
+    }
 }

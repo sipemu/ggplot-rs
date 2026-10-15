@@ -139,6 +139,12 @@ pub struct Theme {
     pub tag_position: TagPosition,
     /// Legend key layout direction; `None` = auto from `legend_position`.
     pub legend_direction: Option<LegendDirection>,
+    /// Month outlines of `geom_calendar`; `ElementLine::blank()` hides them.
+    pub calendar_month_border: ElementLine,
+    /// Frame around a continuous colourbar. `None` keeps the default
+    /// (`legend_key.color`, else dark grey, 0.5 wide); `ElementLine::blank()`
+    /// hides it.
+    pub legend_bar_border: Option<ElementLine>,
 }
 
 impl Theme {
@@ -378,6 +384,27 @@ impl Theme {
         self
     }
 
+    /// The effective colourbar frame: [`legend_bar_border`](Self::legend_bar_border),
+    /// else `legend_key.color` (dark grey when unset), 0.5 wide.
+    pub fn legend_bar_border_line(&self) -> ElementLine {
+        self.legend_bar_border.clone().unwrap_or(ElementLine {
+            color: self.legend_key.color.unwrap_or((50, 50, 50)),
+            width: 0.5,
+            visible: true,
+            linetype: crate::render::backend::Linetype::Solid,
+        })
+    }
+
+    pub fn set_calendar_month_border(mut self, el: ElementLine) -> Self {
+        self.calendar_month_border = el;
+        self
+    }
+
+    pub fn set_legend_bar_border(mut self, el: Option<ElementLine>) -> Self {
+        self.legend_bar_border = el;
+        self
+    }
+
     pub fn set_legend_background(mut self, el: ElementRect) -> Self {
         self.legend_background = el;
         self
@@ -478,6 +505,12 @@ impl Theme {
         if let Some(v) = upd.panel_border {
             self.panel_border = v;
         }
+        if let Some(v) = upd.calendar_month_border {
+            self.calendar_month_border = v;
+        }
+        if let Some(v) = upd.legend_bar_border {
+            self.legend_bar_border = Some(v);
+        }
         if let Some(v) = upd.plot_background {
             self.plot_background = v;
         }
@@ -524,6 +557,8 @@ pub struct ThemeUpdate {
     pub panel_grid_major: Option<ElementLine>,
     pub panel_grid_minor: Option<ElementLine>,
     pub panel_border: Option<ElementLine>,
+    pub calendar_month_border: Option<ElementLine>,
+    pub legend_bar_border: Option<ElementLine>,
     pub plot_background: Option<ElementRect>,
     pub legend_position: Option<LegendPosition>,
     pub legend_title: Option<ElementText>,
