@@ -115,6 +115,7 @@ impl PlotBuilder {
             guide_legend,
             warnings: plot_warnings,
             default_aspect_ratio,
+            locale,
         } = plot;
         let mut theme = theme;
         if theme.aspect_ratio.is_none() {
@@ -236,6 +237,12 @@ impl PlotBuilder {
                 }
                 scale_set.add(Box::new(modified));
             }
+        }
+
+        // Plot-level locale for default break labels (before panel scales are
+        // cloned from the base set, so free facets inherit it).
+        if let Some(locale) = &locale {
+            scale_set.set_default_locale(locale);
         }
 
         // Compute facet panels

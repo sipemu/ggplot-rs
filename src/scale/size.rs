@@ -1,7 +1,6 @@
 use crate::aes::Aesthetic;
 use crate::data::Value;
 
-use super::util::format_number;
 use super::Scale;
 
 /// Continuous size scale — maps data values to a point radius range.
@@ -13,6 +12,8 @@ pub struct ScaleSizeContinuous {
     trained: bool,
     /// Output range in pixels: (min_radius, max_radius).
     range: (f64, f64),
+    /// Locale for the default break labels (`None` = default marks).
+    locale: Option<crate::locale::Locale>,
 }
 
 impl ScaleSizeContinuous {
@@ -23,6 +24,7 @@ impl ScaleSizeContinuous {
             max: f64::NEG_INFINITY,
             trained: false,
             range: (1.0, 6.0),
+            locale: None,
         }
     }
 
@@ -44,6 +46,16 @@ impl Default for ScaleSizeContinuous {
 }
 
 impl Scale for ScaleSizeContinuous {
+    fn set_default_locale(&mut self, locale: &crate::locale::Locale) {
+        if self.locale.is_none() {
+            self.locale = Some(locale.clone());
+        }
+    }
+
+    fn locale(&self) -> Option<&crate::locale::Locale> {
+        self.locale.as_ref()
+    }
+
     fn aesthetic(&self) -> Aesthetic {
         Aesthetic::Size
     }
@@ -83,13 +95,16 @@ impl Scale for ScaleSizeContinuous {
         }
         let range = self.max - self.min;
         if super::util::is_degenerate_range(self.min, self.max) {
-            return vec![(0.5, format_number(self.min))];
+            return vec![(
+                0.5,
+                super::util::format_number_opt(self.min, self.locale.as_ref()),
+            )];
         }
         let n_breaks = 4;
         let step = super::util::nice_step(range / n_breaks as f64);
         let start = (self.min / step).ceil() * step;
         let values = super::util::stepped_breaks(start, self.max, step);
-        let labels = super::util::format_numbers(&values);
+        let labels = super::util::format_numbers_opt(&values, self.locale.as_ref());
         values
             .iter()
             .zip(labels)

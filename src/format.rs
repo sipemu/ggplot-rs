@@ -7,9 +7,12 @@
 
 use crate::data::Value;
 
+pub use crate::locale::{CurrencyPosition, Locale};
 pub use crate::scale::format::{
-    label_bytes, label_comma, label_currency, label_dollar, label_number, label_ordinal,
-    label_percent, label_scientific, label_si, LabelFormatter,
+    label_bytes, label_comma, label_comma_locale, label_comma_marks, label_currency,
+    label_currency_locale, label_currency_marks, label_dollar, label_number, label_number_locale,
+    label_number_marks, label_ordinal, label_percent, label_percent_locale, label_percent_marks,
+    label_scientific, label_si, LabelFormatter,
 };
 
 /// Format one data value for display (tooltips, data labels):
@@ -40,6 +43,24 @@ pub fn format_value(v: &Value) -> String {
     }
 }
 
+/// [`format_value`] in the conventions of `locale`: numbers get its decimal
+/// and thousands marks, datetimes its date format and month names.
+///
+/// ```
+/// use ggplot_rs::data::Value;
+/// use ggplot_rs::format::{format_value_locale, Locale};
+/// let de = Locale::de_de();
+/// assert_eq!(format_value_locale(&Value::Float(1234.56789), &de), "1.234,568");
+/// assert_eq!(format_value_locale(&Value::DateTime(1_792_022_400), &de), "15. Okt. 2026");
+/// ```
+pub fn format_value_locale(v: &Value, locale: &Locale) -> String {
+    match v {
+        Value::DateTime(secs) => locale.format_datetime(*secs),
+        Value::Str(_) | Value::Bool(_) | Value::Na => format_value(v),
+        _ => locale.localize_number(&format_value(v)),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -53,5 +74,22 @@ mod tests {
         assert_eq!(format_value(&Value::Float(0.12345)), "0.123");
         assert_eq!(format_value(&Value::DateTime(3_661)), "1970-01-01 01:01:01");
         assert_eq!(format_value(&Value::Na), "");
+    }
+
+    #[test]
+    fn formats_each_variant_with_locale() {
+        let de = Locale::de_de();
+        assert_eq!(format_value_locale(&Value::Str("1.5".into()), &de), "1.5");
+        assert_eq!(format_value_locale(&Value::Integer(-4200), &de), "-4.200");
+        assert_eq!(format_value_locale(&Value::Float(0.5), &de), "0,5");
+        assert_eq!(format_value_locale(&Value::Na, &de), "");
+        assert_eq!(
+            format_value_locale(&Value::DateTime(1_792_022_400), &Locale::en_us()),
+            "Oct 15, 2026"
+        );
+        assert_eq!(
+            format_value_locale(&Value::Float(1234.5), &Locale::en_us()),
+            "1,234.5"
+        );
     }
 }

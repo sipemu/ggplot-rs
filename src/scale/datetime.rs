@@ -23,6 +23,8 @@ pub struct ScaleDateTime {
     expand: (f64, f64),
     date_breaks: Option<DateBreak>,
     date_labels: Option<String>,
+    /// Locale for month/weekday names and default date formats.
+    locale: Option<crate::locale::Locale>,
 }
 
 /// Decomposed UTC date/time.
@@ -99,14 +101,40 @@ const MONTHS_LONG: [&str; 12] = [
     "November",
     "December",
 ];
+const DAYS_SHORT: [&str; 7] = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+const DAYS_LONG: [&str; 7] = [
+    "Sunday",
+    "Monday",
+    "Tuesday",
+    "Wednesday",
+    "Thursday",
+    "Friday",
+    "Saturday",
+];
 
 /// Format a timestamp with a strftime-style subset:
-/// `%Y %y %m %b %B %d %e %H %M %S %%`.
+/// `%Y %y %m %-m %b %B %d %-d %e %a %A %H %M %S %%`.
+#[cfg(test)]
 fn strftime(secs: f64, fmt: &str) -> String {
+    strftime_locale(secs, fmt, None)
+}
+
+/// [`strftime`] with the month / weekday names of `locale` (English without).
+pub(crate) fn strftime_locale(
+    secs: f64,
+    fmt: &str,
+    locale: Option<&crate::locale::Locale>,
+) -> String {
     let p = civil_from_secs(secs as i64);
     let mi = (p.month.clamp(1, 12) - 1) as usize;
+    // 1970-01-01 was a Thursday (index 4, Sunday = 0).
+    let wd = ((secs as i64).div_euclid(86_400) + 4).rem_euclid(7) as usize;
+    let month_short = locale.map_or(MONTHS_SHORT[mi], |l| l.months_short[mi].as_str());
+    let month_long = locale.map_or(MONTHS_LONG[mi], |l| l.months_long[mi].as_str());
+    let day_short = locale.map_or(DAYS_SHORT[wd], |l| l.days_short[wd].as_str());
+    let day_long = locale.map_or(DAYS_LONG[wd], |l| l.days_long[wd].as_str());
     let mut out = String::new();
-    let mut chars = fmt.chars();
+    let mut chars = fmt.chars().peekable();
     while let Some(c) = chars.next() {
         if c != '%' {
             out.push(c);
@@ -116,14 +144,21 @@ fn strftime(secs: f64, fmt: &str) -> String {
             Some('Y') => out.push_str(&format!("{:04}", p.year)),
             Some('y') => out.push_str(&format!("{:02}", p.year.rem_euclid(100))),
             Some('m') => out.push_str(&format!("{:02}", p.month)),
-            Some('b') => out.push_str(MONTHS_SHORT[mi]),
-            Some('B') => out.push_str(MONTHS_LONG[mi]),
+            Some('b') => out.push_str(month_short),
+            Some('B') => out.push_str(month_long),
+            Some('a') => out.push_str(day_short),
+            Some('A') => out.push_str(day_long),
             Some('d') => out.push_str(&format!("{:02}", p.day)),
             Some('e') => out.push_str(&format!("{:2}", p.day)),
             Some('H') => out.push_str(&format!("{:02}", p.hour)),
             Some('M') => out.push_str(&format!("{:02}", p.minute)),
             Some('S') => out.push_str(&format!("{:02}", p.second)),
             Some('%') => out.push('%'),
+            // glibc's "no padding" flag: %-d, %-m.
+            Some('-') if matches!(chars.peek(), Some('d' | 'm')) => match chars.next() {
+                Some('d') => out.push_str(&p.day.to_string()),
+                _ => out.push_str(&p.month.to_string()),
+            },
             Some(other) => {
                 out.push('%');
                 out.push(other);
@@ -168,6 +203,7 @@ impl ScaleDateTime {
             expand: (0.05, 0.0),
             date_breaks: None,
             date_labels: None,
+            locale: None,
         }
     }
 
@@ -189,16 +225,36 @@ impl ScaleDateTime {
     }
 
     /// strftime-style label format, e.g. `"%b %Y"` or `"%Y-%m-%d"`.
-    /// Supported: `%Y %y %m %b %B %d %e %H %M %S %%`.
+    /// Supported: `%Y %y %m %-m %b %B %d %-d %e %a %A %H %M %S %%`; month and
+    /// weekday names follow the scale's locale (English without one).
     pub fn with_date_labels(mut self, fmt: &str) -> Self {
         self.date_labels = Some(fmt.to_string());
         self
     }
 
+    /// Localise month / weekday names and the default date labels: with
+    /// de-DE, monthly breaks read `Okt. 2026` (instead of `2026-10`) and daily
+    /// breaks `15. Okt. 2026` (instead of `2026-10-15`). Overrides the plot
+    /// locale ([`GGPlot::locale`](crate::GGPlot::locale)).
+    pub fn with_locale(mut self, locale: crate::locale::Locale) -> Self {
+        self.locale = Some(locale);
+        self
+    }
+
     fn label(&self, secs: f64, step: f64) -> String {
-        match &self.date_labels {
-            Some(fmt) => strftime(secs, fmt),
-            None => Self::format_datetime(secs, step),
+        match (&self.date_labels, &self.locale) {
+            (Some(fmt), loc) => strftime_locale(secs, fmt, loc.as_ref()),
+            (None, Some(loc)) => loc.format_datetime(secs as i64),
+            (None, None) => Self::format_datetime(secs, step),
+        }
+    }
+
+    /// Default label of an auto month-step break (`2026-10`, or the locale's
+    /// [`month_format`](crate::locale::Locale::month_format)).
+    fn month_label(&self, y: i64, m: u32, secs: f64) -> String {
+        match &self.locale {
+            Some(loc) => strftime_locale(secs, &loc.month_format, Some(loc)),
+            None => format!("{y:04}-{m:02}"),
         }
     }
 
@@ -273,6 +329,16 @@ impl Default for ScaleDateTime {
 }
 
 impl Scale for ScaleDateTime {
+    fn set_default_locale(&mut self, locale: &crate::locale::Locale) {
+        if self.locale.is_none() {
+            self.locale = Some(locale.clone());
+        }
+    }
+
+    fn locale(&self) -> Option<&crate::locale::Locale> {
+        self.locale.as_ref()
+    }
+
     fn aesthetic(&self) -> Aesthetic {
         self.aesthetic.clone()
     }
@@ -426,7 +492,7 @@ impl Scale for ScaleDateTime {
                 if secs > emax + 1.0 || guard > 10_000 {
                     break;
                 }
-                breaks.push((self.map(&Value::Float(secs)), format!("{y:04}-{m:02}")));
+                breaks.push((self.map(&Value::Float(secs)), self.month_label(y, m, secs)));
                 tm += n;
                 guard += 1;
             }
@@ -505,6 +571,60 @@ mod tests {
         assert_eq!(strftime(s, "%b %Y"), "Mar 2021");
         assert_eq!(strftime(s, "%B"), "March");
         assert_eq!(strftime(s, "100%%"), "100%");
+    }
+
+    #[test]
+    fn strftime_weekdays_and_unpadded() {
+        let s = 1_615_766_400.0; // 2021-03-15 00:00, a Monday
+        assert_eq!(strftime(s, "%a %A"), "Mon Monday");
+        assert_eq!(strftime(s - 86_400.0 * 10.0, "%-d.%-m. %d"), "5.3. 05");
+        assert_eq!(strftime(s, "%-x"), "%-x");
+        assert_eq!(strftime(-86_400.0, "%a"), "Wed"); // 1969-12-31
+    }
+
+    #[test]
+    fn locale_month_and_day_labels() {
+        let de = crate::locale::Locale::de_de();
+        // Auto monthly breaks: "Okt. 2026" instead of "2026-10".
+        let mut s = ScaleDateTime::new().with_locale(de.clone());
+        s.set_limits(
+            secs_from_civil(2026, 7, 1) as f64,
+            secs_from_civil(2027, 2, 1) as f64,
+        );
+        let labels: Vec<String> = s.breaks().into_iter().map(|(_, l)| l).collect();
+        assert!(labels.contains(&"Okt. 2026".to_string()), "{labels:?}");
+        assert!(labels.contains(&"Jan. 2027".to_string()), "{labels:?}");
+        // Same scale without locale: unchanged ISO labels.
+        let mut plain = ScaleDateTime::new();
+        plain.set_limits(
+            secs_from_civil(2026, 7, 1) as f64,
+            secs_from_civil(2027, 2, 1) as f64,
+        );
+        let labels: Vec<String> = plain.breaks().into_iter().map(|(_, l)| l).collect();
+        assert!(labels.contains(&"2026-10".to_string()), "{labels:?}");
+        // Explicit format: localized names.
+        let mut f = ScaleDateTime::new()
+            .with_date_labels("%B")
+            .with_date_breaks("1 month");
+        f.set_default_locale(&de);
+        f.set_limits(
+            secs_from_civil(2026, 2, 20) as f64,
+            secs_from_civil(2026, 4, 2) as f64,
+        );
+        let labels: Vec<String> = f.breaks().into_iter().map(|(_, l)| l).collect();
+        assert_eq!(labels, ["März", "April"]);
+        // Day-level default labels.
+        let mut d = ScaleDateTime::new().with_locale(de);
+        d.set_limits(
+            secs_from_civil(2026, 10, 12) as f64,
+            secs_from_civil(2026, 10, 16) as f64,
+        );
+        let labels: Vec<String> = d.breaks().into_iter().map(|(_, l)| l).collect();
+        assert!(labels.contains(&"15. Okt. 2026".to_string()), "{labels:?}");
+        // A scale's own locale beats the plot default.
+        let mut own = ScaleDateTime::new().with_locale(crate::locale::Locale::fr_fr());
+        own.set_default_locale(&crate::locale::Locale::de_de());
+        assert_eq!(own.locale().unwrap().tag, "fr-FR");
     }
 
     #[test]

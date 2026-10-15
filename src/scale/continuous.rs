@@ -4,7 +4,7 @@ use crate::data::Value;
 use super::format::LabelFormatter;
 use super::sec_axis::SecAxis;
 use super::transform::ScaleTransform;
-use super::util::{extended_breaks, format_number};
+use super::util::extended_breaks;
 use super::Scale;
 
 /// Continuous linear scale.
@@ -26,6 +26,8 @@ pub struct ScaleContinuous {
     custom_labels: Option<Vec<String>>,
     pub(crate) sec_axis: Option<SecAxis>,
     label_formatter: Option<LabelFormatter>,
+    /// Locale for the default labels (`None` = default marks).
+    locale: Option<crate::locale::Locale>,
 }
 
 impl ScaleContinuous {
@@ -44,6 +46,7 @@ impl ScaleContinuous {
             custom_labels: None,
             sec_axis: None,
             label_formatter: None,
+            locale: None,
         }
     }
 
@@ -118,6 +121,15 @@ impl ScaleContinuous {
         self
     }
 
+    /// Render the default break labels with `locale`'s decimal and thousands
+    /// marks (`1.000`, `2,5` in de-DE). Overrides the plot locale
+    /// ([`GGPlot::locale`](crate::GGPlot::locale)); a custom
+    /// [`with_label_formatter`](Self::with_label_formatter) still wins.
+    pub fn with_locale(mut self, locale: crate::locale::Locale) -> Self {
+        self.locale = Some(locale);
+        self
+    }
+
     /// Add a secondary axis with a transformation function.
     pub fn with_sec_axis(mut self, sec: SecAxis) -> Self {
         self.sec_axis = Some(sec);
@@ -133,7 +145,7 @@ impl ScaleContinuous {
         if let Some(f) = &self.label_formatter {
             f(v)
         } else {
-            format_number(v)
+            super::util::format_number_opt(v, self.locale.as_ref())
         }
     }
 
@@ -156,6 +168,16 @@ impl Default for ScaleContinuous {
 }
 
 impl Scale for ScaleContinuous {
+    fn set_default_locale(&mut self, locale: &crate::locale::Locale) {
+        if self.locale.is_none() {
+            self.locale = Some(locale.clone());
+        }
+    }
+
+    fn locale(&self) -> Option<&crate::locale::Locale> {
+        self.locale.as_ref()
+    }
+
     fn aesthetic(&self) -> Aesthetic {
         self.aesthetic.clone()
     }
@@ -264,7 +286,7 @@ impl Scale for ScaleContinuous {
         // stay distinguishable on narrow ranges.
         let labels: Vec<String> = match &self.label_formatter {
             Some(f) => shown.iter().map(|&v| f(v)).collect(),
-            None => super::util::format_numbers(&shown),
+            None => super::util::format_numbers_opt(&shown, self.locale.as_ref()),
         };
         breaks
             .iter()

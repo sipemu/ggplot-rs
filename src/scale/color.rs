@@ -2,7 +2,7 @@ use crate::aes::Aesthetic;
 use crate::data::Value;
 use std::collections::HashMap;
 
-use super::util::{format_number, nice_step};
+use super::util::nice_step;
 use super::Scale;
 
 /// RGBA color representation.
@@ -259,6 +259,8 @@ pub struct ScaleColorContinuous {
     high: RGBAColor,
     min: f64,
     max: f64,
+    /// Locale for the default break labels (`None` = default marks).
+    locale: Option<crate::locale::Locale>,
 }
 
 impl ScaleColorContinuous {
@@ -270,6 +272,7 @@ impl ScaleColorContinuous {
             high: RGBAColor::new(255, 0, 0),
             min: f64::INFINITY,
             max: f64::NEG_INFINITY,
+            locale: None,
         }
     }
 
@@ -285,6 +288,16 @@ impl ScaleColorContinuous {
 }
 
 impl Scale for ScaleColorContinuous {
+    fn set_default_locale(&mut self, locale: &crate::locale::Locale) {
+        if self.locale.is_none() {
+            self.locale = Some(locale.clone());
+        }
+    }
+
+    fn locale(&self) -> Option<&crate::locale::Locale> {
+        self.locale.as_ref()
+    }
+
     fn aesthetic(&self) -> Aesthetic {
         self.aesthetic.clone()
     }
@@ -324,7 +337,10 @@ impl Scale for ScaleColorContinuous {
 
         let range = self.max - self.min;
         if super::util::is_degenerate_range(self.min, self.max) {
-            return vec![(0.5, format_number(self.min))];
+            return vec![(
+                0.5,
+                super::util::format_number_opt(self.min, self.locale.as_ref()),
+            )];
         }
 
         let n_breaks = 5;
@@ -333,7 +349,7 @@ impl Scale for ScaleColorContinuous {
 
         let start = (self.min / step).ceil() * step;
         let values = super::util::stepped_breaks(start, self.max, step);
-        let labels = super::util::format_numbers(&values);
+        let labels = super::util::format_numbers_opt(&values, self.locale.as_ref());
         values
             .iter()
             .zip(labels)

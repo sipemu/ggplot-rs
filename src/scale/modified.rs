@@ -57,6 +57,12 @@ impl Scale for ScaleColorModified {
     fn breaks(&self) -> Vec<(f64, String)> {
         self.inner.breaks()
     }
+    fn set_default_locale(&mut self, locale: &crate::locale::Locale) {
+        self.inner.set_default_locale(locale)
+    }
+    fn locale(&self) -> Option<&crate::locale::Locale> {
+        self.inner.locale()
+    }
     fn name(&self) -> &str {
         self.inner.name()
     }
