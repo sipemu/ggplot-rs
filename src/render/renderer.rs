@@ -121,13 +121,16 @@ impl PlotRenderer {
         // A layer whose data is empty (no input rows, or a stat that produced
         // nothing) simply draws nothing.
         for layer in built.layers.iter().filter(|l| l.data.nrows() > 0) {
-            layer.geom.draw(
+            backend.set_mark_geom(Some(layer.geom.name()));
+            let drawn = layer.geom.draw(
                 &layer.data,
                 built.coord.as_ref(),
                 &built.scales,
                 theme,
                 backend,
-            )?;
+            );
+            backend.set_mark_geom(None);
+            drawn?;
         }
 
         // 5b. Gridlines on top of the data (R's panel.ontop).
@@ -560,13 +563,17 @@ impl PlotRenderer {
                             inner: backend,
                             panel_rect: panel_rect.clone(),
                         };
-                        built.layers[li].geom.draw(
+                        let geom = &built.layers[li].geom;
+                        panel_backend.set_mark_geom(Some(geom.name()));
+                        let drawn = geom.draw(
                             layer_data,
                             built.coord.as_ref(),
                             panel_scale_set,
                             theme,
                             &mut panel_backend,
-                        )?;
+                        );
+                        panel_backend.set_mark_geom(None);
+                        drawn?;
                     }
                 }
             }
@@ -827,6 +834,9 @@ impl<'a> DrawBackend for PanelBackendAdapter<'a> {
     }
     fn set_mark_value(&mut self, value: Option<String>) {
         self.inner.set_mark_value(value)
+    }
+    fn set_mark_geom(&mut self, geom: Option<&str>) {
+        self.inner.set_mark_geom(geom)
     }
     fn warn(&mut self, message: String) {
         self.inner.warn(message)

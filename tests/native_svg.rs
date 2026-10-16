@@ -171,3 +171,82 @@ fn mismatched_column_lengths_are_a_validation_error_not_a_panic() {
         .render_svg_native();
     assert!(matches!(r, Err(GGError::ValidationError(_))), "{r:?}");
 }
+
+/// Every `<tag …>` start tag in `svg` whose name is `tag`.
+fn tags<'a>(svg: &'a str, tag: &str) -> Vec<&'a str> {
+    let open = format!("<{tag} ");
+    svg.match_indices(&open)
+        .map(|(i, _)| {
+            let rest = &svg[i..];
+            &rest[..rest.find('>').map_or(rest.len(), |e| e + 1)]
+        })
+        .collect()
+}
+
+#[test]
+fn data_marks_carry_a_stable_class() {
+    let cases: Vec<(&str, GGPlot, &str, &str)> = vec![
+        ("point", xy().geom_point(), "circle", "gg-point"),
+        ("line", xy().geom_line(), "polyline", "gg-line"),
+        ("path", xy().geom_path(), "polyline", "gg-line"),
+        ("step", xy().geom_step(), "polyline", "gg-line"),
+        ("area", xy().geom_area(), "polygon", "gg-band"),
+        ("smooth", xy().geom_smooth(), "polygon", "gg-band"),
+        ("col", gy().geom_col(), "rect", "gg-bar"),
+        (
+            "bar",
+            GGPlot::new(data()).aes(Aes::new().x("g")).geom_bar(),
+            "rect",
+            "gg-bar",
+        ),
+        (
+            "text",
+            GGPlot::new(data())
+                .aes(Aes::new().x("x").y("y").label("g"))
+                .geom_text(),
+            "text",
+            "gg-text",
+        ),
+    ];
+    for (geom, plot, tag, class) in cases {
+        let svg = check(plot, geom);
+        let want = format!("class=\"gg-mark {class}\"");
+        assert!(
+            tags(&svg, tag).iter().any(|t| t.contains(&want)),
+            "{geom}: no <{tag}> carries {want}"
+        );
+        assert!(
+            svg.contains(&format!("data-geom=\"{geom}\"")),
+            "{geom}: data-geom missing"
+        );
+    }
+}
+
+#[test]
+fn grid_axes_and_legends_carry_no_mark_class() {
+    // Lines + legend (colour) + facets: every mark-classed element must come
+    // from a layer, so the grid polylines, axis text and legend keys stay bare.
+    for plot in [
+        xy().geom_line(),
+        GGPlot::new(data())
+            .aes(Aes::new().x("x").y("y").color("g"))
+            .geom_line(),
+        xy().geom_line().facet_wrap("g", None),
+    ] {
+        let svg = check(plot, "line");
+        let lines = tags(&svg, "polyline");
+        let bare: Vec<_> = lines.iter().filter(|t| !t.contains("gg-mark")).collect();
+        assert!(!bare.is_empty(), "grid lines are drawn");
+        assert!(
+            lines
+                .iter()
+                .any(|t| t.contains("class=\"gg-mark gg-line\"")),
+            "the data line is classed"
+        );
+        // Without a text layer, no text element is a data mark.
+        assert!(!svg.contains("gg-text"), "axis/legend text is unclassed");
+        // A line layer draws no rects: backgrounds, strips and legend keys
+        // stay unclassed.
+        assert!(tags(&svg, "rect").iter().all(|t| !t.contains("gg-mark")));
+    }
+}

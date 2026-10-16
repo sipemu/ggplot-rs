@@ -11,6 +11,12 @@ is unchanged, except that a calendar under a plot locale now uses it.
 
 ### Added
 
+- SVG data marks carry a stable class: every element a layer draws gets
+  `class="gg-mark gg-<kind>"` (`gg-point`, `gg-line`, `gg-band`, `gg-bar`,
+  `gg-text`, by primitive) and `data-geom="<geom name>"`, so a host can select
+  marks without matching grid lines, axes or legends, which stay unclassed
+  (#121). New `DrawBackend::set_mark_geom` hook (default no-op).
+
 - `CoordPolar::expand(bool)` (default `true`) and the `Coord::discrete_expand`
   hook: with `expand(false)` bars on a discrete axis are not band-padded, so a
   `theta = "y"` pie with `width = 1` bars is solid at the centre (#117). A
