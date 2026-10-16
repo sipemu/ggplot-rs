@@ -222,6 +222,13 @@ pub trait DrawBackend {
     /// marks — SVG emits it as `data-value`. Default: no-op.
     fn set_mark_value(&mut self, _value: Option<String>) {}
 
+    /// Tag subsequently drawn elements as data marks of the named geom (the
+    /// layer's `Geom::name`) until cleared with `None`. SVG emits
+    /// `class="gg-mark gg-<kind>"` (kind from the primitive: `point`, `line`,
+    /// `band`, `bar`, `text`) plus `data-geom`, so a host can select data
+    /// marks without matching axes, grid lines or legends. Default: no-op.
+    fn set_mark_geom(&mut self, _geom: Option<&str>) {}
+
     /// Report a non-fatal problem found while drawing (e.g. labels a repel
     /// layout had to drop). Backends that collect warnings (the native SVG
     /// backend) append it to the render warnings. Default: ignored.

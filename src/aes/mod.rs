@@ -386,8 +386,10 @@ impl Aes {
 /// `set_mark_attrs` dedup — reserved so a user mapping can never collide and
 /// produce a duplicate attribute. `"part"` is `DrawBackend::set_mark_part`
 /// (arrowheads: `data-part="arrow"`), written directly in `push_mark`, not
-/// through the built-ins list `set_mark_attrs` dedups against.
-const RESERVED_DATA_ATTR_NAMES: &[&str] = &["part"];
+/// through the built-ins list `set_mark_attrs` dedups against. `"geom"` is
+/// `SvgBackend::mark_class`'s `data-geom="<layer geom>"`, written the same
+/// way, always last, alongside the `gg-mark` class.
+const RESERVED_DATA_ATTR_NAMES: &[&str] = &["part", "geom"];
 
 /// `[a-z0-9][a-z0-9-]*`, excluding [`RESERVED_DATA_ATTR_NAMES`] — a valid,
 /// non-colliding HTML custom-data-attribute suffix.

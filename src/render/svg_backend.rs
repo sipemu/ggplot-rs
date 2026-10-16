@@ -26,6 +26,8 @@ pub struct SvgBackend {
     value_key: Option<String>,
     mark_part: Option<String>,
     mark_attrs: Vec<(String, String)>,
+    /// Geom of the layer being drawn (see [`DrawBackend::set_mark_geom`]).
+    mark_geom: Option<String>,
     root_attrs: Vec<(String, String)>,
     warnings: Vec<String>,
     /// Emit the root `data-plot` panel rect (off for composite pages, whose
@@ -50,6 +52,7 @@ impl SvgBackend {
             value_key: None,
             mark_part: None,
             mark_attrs: Vec::new(),
+            mark_geom: None,
             root_attrs: Vec::new(),
             warnings: Vec::new(),
             plot_attr: true,
@@ -84,9 +87,23 @@ impl SvgBackend {
         std::mem::take(&mut self.warnings)
     }
 
+    /// ` class="gg-mark gg-<kind>" data-geom="<geom>"` while a layer's geom is
+    /// drawing; empty for axes, grid lines, legends and backgrounds.
+    fn mark_class(&self, kind: &str) -> String {
+        match &self.mark_geom {
+            Some(g) => format!(" class=\"gg-mark gg-{kind}\" data-geom=\"{}\"", escape(g)),
+            None => String::new(),
+        }
+    }
+
     /// Emit `<tag attrs/>`, or `<tag attrs data-…><title>tip</title></tag>`
     /// when a tooltip / mark metadata is set (native SVG hover + host grouping).
-    fn push_mark(&mut self, tag: &str, attrs: &str) {
+    ///
+    /// `kind` is the data-mark class suffix (see [`Self::mark_class`]) used
+    /// when no mark part is set. While a mark part *is* set (e.g. an
+    /// arrowhead), the part name is the effective kind instead — an
+    /// arrowhead gets `gg-mark gg-arrow`, not its parent's `gg-band`/`gg-line`.
+    fn push_mark(&mut self, tag: &str, kind: &str, attrs: &str) {
         // Built-ins first, then user `data-*` attrs — re-validated here as
         // defence in depth even though `geom::set_row_extras` already
         // derives them only from validated `data_attr` mappings, because
@@ -132,6 +149,12 @@ impl SvgBackend {
         if self.mark_part.is_some() {
             data.push_str(" aria-hidden=\"true\"");
         }
+        // The class goes last so existing attribute sequences stay
+        // byte-identical. Exactly one `class` attribute is ever written here
+        // (no `data_attr` mapping can be named bare `class` — see
+        // `is_valid_mark_attr_name` — so nothing in `pairs` can collide with it).
+        let effective_kind: &str = self.mark_part.as_deref().unwrap_or(kind);
+        data.push_str(&self.mark_class(effective_kind));
         let mark = if self.mark_part.is_some() {
             format!("<{tag} {attrs}{data}/>")
         } else {
@@ -367,6 +390,10 @@ impl DrawBackend for SvgBackend {
         self.value_key = value;
     }
 
+    fn set_mark_geom(&mut self, geom: Option<&str>) {
+        self.mark_geom = geom.map(str::to_string);
+    }
+
     fn warn(&mut self, message: String) {
         self.warnings.push(message);
     }
@@ -394,7 +421,7 @@ impl DrawBackend for SvgBackend {
             rgb(style.color),
             finite_or(style.alpha, 1.0)
         );
-        self.push_mark("circle", &attrs);
+        self.push_mark("circle", "point", &attrs);
         Ok(())
     }
 
@@ -435,15 +462,15 @@ impl DrawBackend for SvgBackend {
                     (cx + r, cy + r),
                     (cx - r, cy + r),
                 ]);
-                self.push_mark("polygon", &a);
+                self.push_mark("polygon", "point", &a);
             }
             PointShape::Triangle => {
                 let a = poly(&[(cx, cy - r), (cx + r, cy + r), (cx - r, cy + r)]);
-                self.push_mark("polygon", &a);
+                self.push_mark("polygon", "point", &a);
             }
             PointShape::Diamond => {
                 let a = poly(&[(cx, cy - r), (cx + r, cy), (cx, cy + r), (cx - r, cy)]);
-                self.push_mark("polygon", &a);
+                self.push_mark("polygon", "point", &a);
             }
             PointShape::Plus | PointShape::Cross => {
                 let d = if style.shape == PointShape::Plus {
@@ -472,7 +499,7 @@ impl DrawBackend for SvgBackend {
                      stroke-opacity=\"{alpha:.3}\"",
                     (r / 2.5).clamp(1.0, 3.0)
                 );
-                self.push_mark("path", &a);
+                self.push_mark("path", "point", &a);
             }
         }
         Ok(())
@@ -511,7 +538,7 @@ impl DrawBackend for SvgBackend {
             dash,
             linecap
         );
-        self.push_mark("polyline", &attrs);
+        self.push_mark("polyline", "line", &attrs);
         Ok(())
     }
 
@@ -562,7 +589,7 @@ impl DrawBackend for SvgBackend {
             dash,
             linecap
         );
-        self.push_mark("path", &attrs);
+        self.push_mark("path", "line", &attrs);
         Ok(())
     }
 
@@ -585,7 +612,7 @@ impl DrawBackend for SvgBackend {
             finite_or(style.alpha, 1.0),
             finite_or(style.stroke_width, 0.0)
         );
-        self.push_mark("rect", &attrs);
+        self.push_mark("rect", "bar", &attrs);
         Ok(())
     }
 
@@ -602,7 +629,7 @@ impl DrawBackend for SvgBackend {
             finite_or(style.alpha, 1.0),
             finite_or(style.stroke_width, 0.0)
         );
-        self.push_mark("polygon", &attrs);
+        self.push_mark("polygon", "band", &attrs);
         Ok(())
     }
 
@@ -637,9 +664,10 @@ impl DrawBackend for SvgBackend {
         } else {
             String::new()
         };
+        let class = self.mark_class("text");
         self.body.push_str(&format!(
             "<text x=\"{x:.2}\" y=\"{y:.2}\" font-size=\"{:.2}\" text-anchor=\"{anchor}\" \
-             dominant-baseline=\"middle\" font-family=\"{family}\"{weight}{fstyle} fill=\"{}\"{transform}>{}</text>",
+             dominant-baseline=\"middle\" font-family=\"{family}\"{weight}{fstyle} fill=\"{}\"{transform}{class}>{}</text>",
             finite_or(style.size, 12.0),
             rgb(style.color),
             escape(text)

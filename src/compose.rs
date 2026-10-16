@@ -935,6 +935,9 @@ impl DrawBackend for Measure<'_> {
     fn warn(&mut self, m: String) {
         self.inner.warn(m)
     }
+    fn set_mark_geom(&mut self, geom: Option<&str>) {
+        self.inner.set_mark_geom(geom)
+    }
     fn set_mark_part(&mut self, part: Option<&str>) {
         self.inner.set_mark_part(part)
     }

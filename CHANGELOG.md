@@ -3,6 +3,21 @@
 All notable changes to this project are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.21.0] — Unreleased
+
+### Added
+
+- SVG data marks carry a stable class: every element a layer draws gets
+  `class="gg-mark gg-<kind>"` (`gg-point`, `gg-line`, `gg-band`, `gg-bar`,
+  `gg-text`, by primitive) and `data-geom="<geom name>"`, so a host can select
+  marks without matching grid lines, axes or legends, which stay unclassed
+  (#121). While a mark part is set (e.g. an arrow head), the part is the
+  effective kind, so arrow heads carry `gg-mark gg-arrow` rather than their
+  parent's `gg-band`/`gg-line`. `data-geom` on reference lines reads `hline`,
+  `vline` or `abline`. New `DrawBackend::set_mark_geom` hook (default no-op),
+  forwarded by `compose::Measure` as well as the panel backend adapter, so
+  `PlotGrid` marks are classed too.
+
 ## [0.20.0] — 2026-10-20
 
 Minor bump: new public API (arrows, linewidth, hex binning in data units,
