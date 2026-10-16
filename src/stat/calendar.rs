@@ -219,6 +219,18 @@ const MONTHS: [&str; 12] = [
 /// month's first day. Over two years, only Januaries are labelled (with the
 /// year); a multi-year range adds the year to each January.
 pub fn month_breaks(grid: &CalendarGrid) -> (Vec<f64>, Vec<String>) {
+    month_breaks_localized(grid, None)
+}
+
+/// [`month_breaks`] with month names from `locale` (`None` = English).
+pub fn month_breaks_localized(
+    grid: &CalendarGrid,
+    locale: Option<&crate::locale::Locale>,
+) -> (Vec<f64>, Vec<String>) {
+    let name = |m: u32| match locale {
+        Some(l) => l.months_short[(m - 1) as usize].clone(),
+        None => MONTHS[(m - 1) as usize].to_string(),
+    };
     let starts = month_starts(grid);
     let (y0, _, _) = civil_from_days(grid.first_day);
     let (y1, _, _) = civil_from_days(grid.last_day);
@@ -233,12 +245,22 @@ pub fn month_breaks(grid: &CalendarGrid) -> (Vec<f64>, Vec<String>) {
         labels.push(if many {
             y.to_string()
         } else if y0 != y1 && m == 1 {
-            format!("{} {y}", MONTHS[0])
+            format!("{} {y}", name(1))
         } else {
-            MONTHS[(m - 1) as usize].to_string()
+            name(m)
         });
     }
     (breaks, labels)
+}
+
+/// Weekday row labels (Monday, Wednesday, Friday) from `locale`'s
+/// abbreviations (`None` = English).
+pub fn weekday_labels(locale: Option<&crate::locale::Locale>) -> Vec<String> {
+    match locale {
+        // `days_short` is Sunday-first.
+        Some(l) => [1, 3, 5].iter().map(|&d| l.days_short[d].clone()).collect(),
+        None => ["Mon", "Wed", "Fri"].map(String::from).to_vec(),
+    }
 }
 
 /// First days of each month intersecting the grid (the first visible day for

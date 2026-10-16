@@ -3,6 +3,34 @@
 All notable changes to this project are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.19.0] — unreleased
+
+Minor bump: new public API. `Theme` and `ThemeUpdate` gain two fields, so a
+struct literal without `..Default::default()` needs them added. Default output
+is unchanged, except that a calendar under a plot locale now uses it.
+
+### Added
+
+- `CoordPolar::expand(bool)` (default `true`) and the `Coord::discrete_expand`
+  hook: with `expand(false)` bars on a discrete axis are not band-padded, so a
+  `theta = "y"` pie with `width = 1` bars is solid at the centre (#117). A
+  donut (`inner_radius`) keeps its hole.
+- `Theme::calendar_month_border` (`geom_calendar`'s month outlines, default
+  grey 1.2) and `Theme::legend_bar_border` (the continuous colourbar frame;
+  `None` keeps the `legend_key.color` / dark-grey default), with
+  `set_calendar_month_border` / `set_legend_bar_border` /
+  `legend_bar_border_line`, `ThemeUpdate` fields and theme-config keys.
+  `ElementLine::blank()` hides either (#118).
+- `ScaleContinuous::with_localized_labels` (+ `LocalizedLabels`): custom-break
+  labels resolved against the scale/plot locale;
+  `stat::calendar::month_breaks_localized` and `weekday_labels`.
+
+### Fixed
+
+- `geom_calendar` weekday and month labels follow `GGPlot::locale` (de-DE
+  `Mo.`/`Mi.`/`Fr.`, `Jan.`/`Feb.`/`März`; fr-FR likewise), whether the
+  locale is set before or after the geom (#119).
+
 ## [0.18.0] — 2026-10-15
 
 Minor bump: new public API, no breaking changes. Without a locale every label

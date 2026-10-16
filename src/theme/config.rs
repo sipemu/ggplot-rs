@@ -56,6 +56,8 @@ pub struct ThemeConfig {
     pub panel_grid_major: Option<LineCfg>,
     pub panel_grid_minor: Option<LineCfg>,
     pub panel_border: Option<LineCfg>,
+    pub calendar_month_border: Option<LineCfg>,
+    pub legend_bar_border: Option<LineCfg>,
 
     pub panel_background: Option<RectCfg>,
     pub plot_background: Option<RectCfg>,
@@ -135,6 +137,12 @@ impl ThemeConfig {
         line(&self.panel_grid_major, &mut t.panel_grid_major)?;
         line(&self.panel_grid_minor, &mut t.panel_grid_minor)?;
         line(&self.panel_border, &mut t.panel_border)?;
+        line(&self.calendar_month_border, &mut t.calendar_month_border)?;
+        if self.legend_bar_border.is_some() {
+            let mut el = t.legend_bar_border_line();
+            line(&self.legend_bar_border, &mut el)?;
+            t.legend_bar_border = Some(el);
+        }
 
         rect(&self.panel_background, &mut t.panel_background);
         rect(&self.plot_background, &mut t.plot_background);

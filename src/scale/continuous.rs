@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 use crate::aes::Aesthetic;
 use crate::data::Value;
 
@@ -6,6 +8,9 @@ use super::sec_axis::SecAxis;
 use super::transform::ScaleTransform;
 use super::util::extended_breaks;
 use super::Scale;
+
+/// Locale-dependent break labels ([`ScaleContinuous::with_localized_labels`]).
+pub type LocalizedLabels = Arc<dyn Fn(Option<&crate::locale::Locale>) -> Vec<String> + Send + Sync>;
 
 /// Continuous linear scale.
 #[derive(Clone)]
@@ -24,6 +29,8 @@ pub struct ScaleContinuous {
     pub(crate) scale_transform: ScaleTransform,
     custom_breaks: Option<Vec<f64>>,
     custom_labels: Option<Vec<String>>,
+    /// Labels for `custom_breaks` resolved against the scale's locale.
+    localized_labels: Option<LocalizedLabels>,
     pub(crate) sec_axis: Option<SecAxis>,
     label_formatter: Option<LabelFormatter>,
     /// Locale for the default labels (`None` = default marks).
@@ -44,6 +51,7 @@ impl ScaleContinuous {
             scale_transform: ScaleTransform::Identity,
             custom_breaks: None,
             custom_labels: None,
+            localized_labels: None,
             sec_axis: None,
             label_formatter: None,
             locale: None,
@@ -82,6 +90,18 @@ impl ScaleContinuous {
     /// Set custom labels for breaks. Must match the number of breaks.
     pub fn with_labels(mut self, labels: Vec<String>) -> Self {
         self.custom_labels = Some(labels);
+        self
+    }
+
+    /// Labels for the custom breaks that depend on the locale (month or
+    /// weekday names): `f` gets the scale's locale — the plot's
+    /// [`GGPlot::locale`](crate::plot::GGPlot::locale) unless set on the
+    /// scale — or `None`. Takes precedence over [`with_labels`](Self::with_labels).
+    pub fn with_localized_labels<F>(mut self, f: F) -> Self
+    where
+        F: Fn(Option<&crate::locale::Locale>) -> Vec<String> + Send + Sync + 'static,
+    {
+        self.localized_labels = Some(Arc::new(f));
         self
     }
 
@@ -246,12 +266,17 @@ impl Scale for ScaleContinuous {
 
         // Use custom breaks if provided
         if let Some(ref custom) = self.custom_breaks {
+            let localized = self
+                .localized_labels
+                .as_ref()
+                .map(|f| f(self.locale.as_ref()));
+            let custom_labels = localized.as_ref().or(self.custom_labels.as_ref());
             return custom
                 .iter()
                 .enumerate()
                 .map(|(i, &v)| {
                     let pos = self.map(&Value::Float(v));
-                    let label = if let Some(ref labels) = self.custom_labels {
+                    let label = if let Some(labels) = custom_labels {
                         labels
                             .get(i)
                             .cloned()

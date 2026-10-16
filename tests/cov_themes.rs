@@ -224,6 +224,8 @@ fn theme_update_render() {
         plot_background: Some(ElementRect::default()),
         legend_position: Some(LegendPosition::Bottom),
         legend_title: Some(ElementText::default()),
+        calendar_month_border: Some(ElementLine::blank()),
+        legend_bar_border: Some(ElementLine::default()),
         legend_text: Some(ElementText::default()),
         legend_background: Some(ElementRect::default()),
         strip_text: Some(ElementText::default()),

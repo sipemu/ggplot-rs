@@ -98,7 +98,8 @@ impl Geom for GeomCol {
         // allocates every level label, which made many-category charts O(n²)).
         let half_width = if x_is_discrete {
             let n_breaks = x_scale.map(|s| s.breaks().len()).unwrap_or(1);
-            self.width / (n_breaks.max(1) as f64 * 1.1) / 2.0
+            let pad = if coord.discrete_expand() { 1.1 } else { 1.0 };
+            self.width / (n_breaks.max(1) as f64 * pad) / 2.0
         } else {
             super::continuous_bar_half_width(
                 x_col.iter().filter_map(|v| x_scale.map(|s| s.map(v))),

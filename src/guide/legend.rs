@@ -449,22 +449,26 @@ fn draw_continuous_legend_at(
     }
 
     // Draw border
+    // (Ticks reuse its colour and width even when the frame is hidden.)
+    let border = theme.legend_bar_border_line();
     let border_style = LineStyle {
-        color: theme.legend_key.color.unwrap_or((50, 50, 50)),
-        width: 0.5,
+        color: border.color,
+        width: border.width,
         alpha: 1.0,
-        linetype: Linetype::Solid,
+        linetype: border.linetype,
     };
-    backend.draw_line(
-        &[
-            (legend_x, bar_top),
-            (legend_x + bar_width, bar_top),
-            (legend_x + bar_width, bar_top + bar_height),
-            (legend_x, bar_top + bar_height),
-            (legend_x, bar_top),
-        ],
-        &border_style,
-    )?;
+    if border.visible {
+        backend.draw_line(
+            &[
+                (legend_x, bar_top),
+                (legend_x + bar_width, bar_top),
+                (legend_x + bar_width, bar_top + bar_height),
+                (legend_x, bar_top + bar_height),
+                (legend_x, bar_top),
+            ],
+            &border_style,
+        )?;
+    }
 
     // Draw tick marks and labels
     let tick_len = 3.0;

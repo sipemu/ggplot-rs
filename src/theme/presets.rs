@@ -182,6 +182,13 @@ pub fn theme_gray_base(base_size: f64) -> Theme {
         title_position: crate::theme::TitlePosition::Panel,
         tag_position: crate::theme::TagPosition::TopLeft,
         legend_direction: None,
+        calendar_month_border: ElementLine {
+            color: (120, 128, 140),
+            width: 1.2,
+            visible: true,
+            linetype: crate::render::backend::Linetype::Solid,
+        },
+        legend_bar_border: None,
     }
 }
 
@@ -583,5 +590,12 @@ pub fn theme_void_base(base_size: f64) -> Theme {
         title_position: crate::theme::TitlePosition::Panel,
         tag_position: crate::theme::TagPosition::TopLeft,
         legend_direction: None,
+        calendar_month_border: ElementLine {
+            color: (120, 128, 140),
+            width: 1.2,
+            visible: true,
+            linetype: crate::render::backend::Linetype::Solid,
+        },
+        legend_bar_border: None,
     }
 }

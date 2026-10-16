@@ -104,3 +104,46 @@ impl Geom for GeomSegment {
         self.color = color;
     }
 }
+
+/// `geom_calendar`'s month outlines: segments styled at draw time by the
+/// theme's [`calendar_month_border`](Theme::calendar_month_border), so a theme
+/// set after the calendar still applies (a blank element hides them).
+pub(crate) struct GeomCalendarBorder;
+
+impl Geom for GeomCalendarBorder {
+    fn draw(
+        &self,
+        data: &DataFrame,
+        coord: &dyn Coord,
+        scales: &ScaleSet,
+        theme: &Theme,
+        backend: &mut dyn DrawBackend,
+    ) -> Result<(), RenderError> {
+        let el = &theme.calendar_month_border;
+        if !el.visible {
+            return Ok(());
+        }
+        GeomSegment {
+            color: el.color,
+            width: el.width,
+            alpha: 1.0,
+        }
+        .draw(data, coord, scales, theme, backend)
+    }
+
+    fn required_aes(&self) -> Vec<Aesthetic> {
+        GeomSegment::default().required_aes()
+    }
+    fn default_stat(&self) -> Box<dyn Stat> {
+        Box::new(StatIdentity)
+    }
+    fn default_position(&self) -> Box<dyn Position> {
+        Box::new(PositionIdentity)
+    }
+    fn default_params(&self) -> GeomParams {
+        GeomParams::default()
+    }
+    fn name(&self) -> &str {
+        "segment"
+    }
+}

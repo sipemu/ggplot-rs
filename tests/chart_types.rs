@@ -6,11 +6,16 @@ use std::f64::consts::PI;
 use ggplot_rs::aes::Aes;
 use ggplot_rs::coord::polar::CoordPolar;
 use ggplot_rs::data::Value;
+use ggplot_rs::geom::col::GeomCol;
 use ggplot_rs::geom::polygon::GeomPolygon;
 use ggplot_rs::geom::rect::GeomRect;
 use ggplot_rs::geom::segment::GeomSegment;
+use ggplot_rs::locale::Locale;
+use ggplot_rs::position::stack::PositionStack;
 use ggplot_rs::scale::continuous::ScaleContinuous;
 use ggplot_rs::stat::calendar::{days_from_civil, MAX_CALENDAR_YEARS};
+use ggplot_rs::theme::elements::ElementLine;
+use ggplot_rs::theme::Theme;
 use ggplot_rs::GGPlot;
 
 fn floats(v: &[f64]) -> Vec<Value> {
@@ -401,4 +406,159 @@ fn calendar_without_dates_renders_empty() {
         .render_svg_native_with_size(400, 200)
         .unwrap();
     assert!(svg.contains("Empty"));
+}
+
+// ─── theme-styled calendar / colourbar borders, localized labels, solid pie ──
+
+fn calendar_svg(f: impl FnOnce(GGPlot) -> GGPlot) -> String {
+    let start = days_from_civil(2024, 1, 1);
+    let days: Vec<i64> = (start..start + 90).collect();
+    let plot = GGPlot::new(calendar_data(&days))
+        .aes(Aes::new().x("date").fill("n"))
+        .geom_calendar();
+    f(plot).render_svg_native_with_warnings(700, 300).unwrap().0
+}
+
+#[test]
+fn calendar_month_border_follows_theme() {
+    // Default outline colour unchanged.
+    assert!(calendar_svg(|p| p).contains("stroke=\"#78808C\""));
+    // Themed colour, applied even though the theme is set after the geom.
+    let svg = calendar_svg(|p| {
+        p.theme(Theme::default().set_calendar_month_border(ElementLine {
+            color: (10, 20, 30),
+            width: 2.0,
+            ..Default::default()
+        }))
+    });
+    assert!(svg.contains("stroke=\"#0A141E\""));
+    assert!(!svg.contains("stroke=\"#78808C\""));
+    // Blank hides the outlines.
+    let svg =
+        calendar_svg(|p| p.theme(Theme::default().set_calendar_month_border(ElementLine::blank())));
+    assert!(!svg.contains("stroke=\"#78808C\""));
+}
+
+#[test]
+fn colourbar_border_follows_theme() {
+    // Default frame: dark grey (no legend_key colour in theme_gray).
+    let default = calendar_svg(|p| p);
+    let frames = |svg: &str, hex: &str| svg.matches(&format!("stroke=\"{hex}\"")).count();
+    assert!(frames(&default, "#323232") > 0);
+    let svg = calendar_svg(|p| {
+        p.theme(Theme::default().set_legend_bar_border(Some(ElementLine {
+            color: (200, 0, 0),
+            width: 1.0,
+            ..Default::default()
+        })))
+    });
+    assert!(frames(&svg, "#C80000") > 0);
+    assert_eq!(frames(&svg, "#323232"), 0);
+    // Blank: the frame goes, the tick marks stay.
+    let hidden = calendar_svg(|p| {
+        p.theme(Theme::default().set_legend_bar_border(Some(ElementLine::blank())))
+    });
+    assert_eq!(
+        hidden.matches("<polyline").count() + 1,
+        default.matches("<polyline").count()
+    );
+}
+
+#[test]
+fn calendar_labels_follow_locale() {
+    let de = calendar_svg(|p| p.locale(Locale::from_tag("de-DE")));
+    for l in [">Jan.<", ">Feb.<", ">März<", ">Mo.<", ">Mi.<", ">Fr.<"] {
+        assert!(de.contains(l), "de: missing {l}");
+    }
+    assert!(!de.contains(">Mon<") && !de.contains(">Wed<"));
+    // Locale set before the calendar works too.
+    let start = days_from_civil(2024, 1, 1);
+    let days: Vec<i64> = (start..start + 90).collect();
+    let fr = GGPlot::new(calendar_data(&days))
+        .locale(Locale::from_tag("fr-FR"))
+        .aes(Aes::new().x("date").fill("n"))
+        .geom_calendar()
+        .render_svg_native_with_warnings(700, 300)
+        .unwrap()
+        .0;
+    let l = Locale::fr_fr();
+    for want in [
+        &l.months_short[0],
+        &l.months_short[2],
+        &l.days_short[1],
+        &l.days_short[5],
+    ] {
+        assert!(fr.contains(&format!(">{want}<")), "fr: missing {want}");
+    }
+    // No locale: English, unchanged.
+    let en = calendar_svg(|p| p);
+    for l in [">Jan<", ">Mar<", ">Mon<", ">Fri<"] {
+        assert!(en.contains(l), "en: missing {l}");
+    }
+}
+
+/// Smallest distance from the pie centre to any sector vertex, in px.
+fn pie_hole(expand: bool, inner: f64) -> f64 {
+    let d = frame(vec![
+        ("x", vec![Value::Str(String::new()); 3]),
+        ("y", floats(&[3.0, 2.0, 5.0])),
+        (
+            "g",
+            ["a", "b", "c"]
+                .iter()
+                .map(|s| Value::Str(s.to_string()))
+                .collect(),
+        ),
+    ]);
+    let svg = GGPlot::new(d)
+        .aes(Aes::new().x("x").y("y").fill("g"))
+        .geom_col_with(GeomCol {
+            width: 1.0,
+            ..Default::default()
+        })
+        .position(PositionStack)
+        .scale_y_continuous(ScaleContinuous::new().with_expand(0.0, 0.0))
+        .coord_polar_with(
+            CoordPolar::new()
+                .theta("y")
+                .inner_radius(inner)
+                .expand(expand),
+        )
+        .render_svg_native_with_warnings(400, 400)
+        .unwrap()
+        .0;
+    let pts: Vec<(f64, f64)> = svg
+        .split("<polygon points=\"")
+        .skip(1)
+        .flat_map(|t| {
+            t[..t.find('"').unwrap()]
+                .split_whitespace()
+                .map(|p| {
+                    let (x, y) = p.split_once(',').unwrap();
+                    (x.parse().unwrap(), y.parse().unwrap())
+                })
+                .collect::<Vec<_>>()
+        })
+        .collect();
+    assert!(!pts.is_empty());
+    let (x0, x1) = pts
+        .iter()
+        .fold((f64::MAX, f64::MIN), |a, p| (a.0.min(p.0), a.1.max(p.0)));
+    let (y0, y1) = pts
+        .iter()
+        .fold((f64::MAX, f64::MIN), |a, p| (a.0.min(p.1), a.1.max(p.1)));
+    let c = ((x0 + x1) / 2.0, (y0 + y1) / 2.0);
+    pts.iter()
+        .map(|p| ((p.0 - c.0).powi(2) + (p.1 - c.1).powi(2)).sqrt())
+        .fold(f64::MAX, f64::min)
+}
+
+#[test]
+fn polar_expand_false_closes_the_pie_centre() {
+    // Default: the discrete band padding leaves a hole.
+    assert!(pie_hole(true, 0.0) > 2.0);
+    // expand(false) + width 1: the sectors meet at the centre.
+    assert!(pie_hole(false, 0.0) < 0.5, "{}", pie_hole(false, 0.0));
+    // A donut keeps its hole.
+    assert!(pie_hole(false, 0.5) > 20.0);
 }
