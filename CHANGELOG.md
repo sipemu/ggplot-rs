@@ -3,7 +3,83 @@
 All notable changes to this project are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
-## [0.19.0] — unreleased
+## [0.20.0] — 2026-10-20
+
+Minor bump: new public API (arrows, linewidth, hex binning in data units,
+interactive aesthetics). `LineStyle` gains a `lineend` field, and
+`GeomSegment`/`GeomCurve`/`GeomPath`/`GeomLine` gain `arrow`/`lineend` fields,
+so struct literals without `..Default::default()` need them added.
+`StatBinHex`'s fields and output columns are not back-compat with 0.19.0's.
+Default output is otherwise unchanged, except hexbin cell geometry, curve
+rendering (a native quadratic Bézier `<path>` instead of a flattened
+polyline), and `theme_void`'s axis ticks reserving no layout space (already
+true on `main`, carried over here).
+
+### Added
+
+- `LineEnd { Butt, Round, Square }` and `LineStyle::lineend`; `DrawBackend`
+  gains a default `draw_quadratic(p0, ctrl, p1, style)`, overridden by the
+  SVG backend to emit a native `<path d="M.. Q..">`.
+- `src/geom/arrow.rs`: `Arrow` (grid's `arrow()`: `angle`, `length`, `ends`,
+  `kind`, plus the `position`/`length_per_linewidth` extensions) via the
+  `arrow()` builder. `GeomSegment`/`GeomCurve`/`GeomPath`/`GeomLine` gain
+  `arrow`/`lineend` fields and `.arrow() .lineend() .linewidth()` builders
+  (curve also `.curvature() .ncp()`); segment and curve honour per-row
+  mapped `linetype` and `alpha` (previously ignored).
+- `Aesthetic::Linewidth` ("linewidth") with `Aes::linewidth()` /
+  `Aes::after_stat_linewidth()`; `src/scale/linewidth.rs`'s
+  `ScaleLinewidthContinuous` (range, limits/squish, transform, breaks,
+  labels, locale); `GGPlot::scale_linewidth()`; a legend key drawn as a
+  horizontal line of the mapped width. Segment/curve read it per row;
+  path/line per point, drawing segment-by-segment when it varies within a
+  group.
+- `StatBinHex` rewritten onto a fixed pointy-top hex lattice
+  (`src/stat/binhex::HexLattice`; cube-rounded point assignment, `locate()`,
+  deterministic `binwidth`/`origin` rules) instead of floor-binned
+  staggered rectangles anchored at the data minimum. New output columns:
+  `count, density, ncount, ndensity, width, height, n, q, r` (`fill`
+  stays as `count`, back-compat). `GeomHex` draws each hexagon's vertices
+  in data space (from `width`/`height`, falling back to the data's
+  resolution) and projects each individually — correct under any coord,
+  including `coord_sf`.
+- `src/scale/identity.rs`: `ScaleColorIdentity` reads `#RRGGBB`/`#RGB` hex
+  strings directly, with no legend; `GGPlot::scale_colour_identity()` /
+  `scale_color_identity()` / `scale_fill_identity()`.
+- Interactive aesthetics: `Aesthetic::Tooltip` (`Aes::tooltip(col)`, a
+  custom `<title>`) and `Aesthetic::DataAttr` (`Aes::data_attr(name, col)`,
+  a custom `data-<name>` attribute; `name` must match `[a-z0-9][a-z0-9-]*`).
+  `DrawBackend::set_mark_attrs`/`set_mark_part` (the latter also used by
+  arrowheads: `data-part="arrow" aria-hidden="true"`, no `<title>`). A user
+  attr replaces a built-in of the same name rather than duplicating it.
+- `CoordSf::xlim`/`ylim` (zoom, no filtering) and `expand(bool)`, via a new
+  default `Scale::set_expand(mult, add)`; `GGPlot::coord_sf_with(CoordSf)`
+  and `svg_root_data(bool)` (default `true`; off omits `data-plot`/
+  `data-domain`/etc from the root `<svg>`) — for a consumer overlaying a
+  rendered fragment on its own basemap.
+
+### Changed
+
+- Hexbin cell geometry: `StatBinHex` no longer floor-bins staggered
+  rectangles anchored at the data minimum, so cell positions differ from
+  0.19.0 (deterministic, but not reproducible against old output). See
+  "Added" above.
+- `geom_curve` draws a native quadratic Bézier `<path d="M.. Q..">`
+  instead of a flattened `<polyline>`; `ncp` is now ignored by SVG
+  (documented) since a single control point fully determines the curve.
+- `theme_void`'s `axis_ticks_length: 0.0` (blank ticks reserve no layout
+  space) — already the case on `main`; carried over, not a new change here.
+
+### Breaking
+
+- `LineStyle` gains `lineend: LineEnd`; `GeomSegment`, `GeomCurve`,
+  `GeomPath`, `GeomLine` gain `arrow: Option<Arrow>` and
+  `lineend: LineEnd`; `StatBinHex`'s fields and output columns are not
+  back-compat with 0.19.0. Struct literals need `..Default::default()`.
+- `Aesthetic` gains `Linewidth`, `Tooltip` and `DataAttr(String)`
+  variants — an exhaustive match on `Aesthetic` needs a catch-all or the
+  new arms.
+
+## [0.19.0] — 2026-10-16
 
 Minor bump: new public API. `Theme` and `ThemeUpdate` gain two fields, so a
 struct literal without `..Default::default()` needs them added. Default output

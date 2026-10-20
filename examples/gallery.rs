@@ -71,6 +71,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     density()?;
     contour_filled()?;
     hexbin()?;
+    flows()?;
     heatmap()?;
     jitter()?;
     ribbon()?;
@@ -356,6 +357,67 @@ fn hexbin() -> Result<(), Box<dyn std::error::Error>> {
         .title("Hex Binning")
         .theme_minimal()
         .save_with_size(&out("hexbin"), W, H)?;
+    Ok(())
+}
+
+/// Directed flows between cities: curved arrows (B1-2/B1-3), sized by
+/// `scale_linewidth` (B1-4) and coloured by `scale_colour_identity` (B1-6) —
+/// the overlay style `anofox-visualization` draws on top of a basemap
+/// (#308).
+fn flows() -> Result<(), Box<dyn std::error::Error>> {
+    let cities = df! {
+        "x" => [0.0, 4.0, 2.0, 6.0, 1.0],
+        "y" => [0.0, 1.0, 4.0, 3.5, 3.0],
+        "name" => ["Berlin", "Warsaw", "Oslo", "Helsinki", "Copenhagen"],
+    }?;
+    let flows = df! {
+        "x" => [0.0, 4.0, 2.0, 1.0],
+        "y" => [0.0, 1.0, 4.0, 3.0],
+        "xend" => [4.0, 2.0, 6.0, 0.0],
+        "yend" => [1.0, 4.0, 3.5, 0.0],
+        "size" => [12.0, 4.0, 7.0, 2.5],
+        "trend" => ["#2f9e44", "#e03131", "#2f9e44", "#e03131"],
+    }?;
+
+    let mut theme = theme_minimal();
+    theme.axis_text_x.visible = false;
+    theme.axis_text_y.visible = false;
+
+    GGPlot::new(flows)
+        .aes(
+            Aes::new()
+                .x("x")
+                .y("y")
+                .xend("xend")
+                .yend("yend")
+                .color("trend")
+                .linewidth("size"),
+        )
+        .geom_curve_with(
+            GeomCurve::default()
+                .curvature(0.2)
+                .lineend(LineEnd::Round)
+                .arrow(
+                    arrow()
+                        .closed()
+                        .angle(26.565)
+                        .length(5.0)
+                        .length_per_linewidth(2.2)
+                        .position(0.85),
+                ),
+        )
+        .geom_point_with(GeomPoint {
+            size: 5.0,
+            color: (40, 44, 52),
+            alpha: 1.0,
+        })
+        .layer_data(cities)
+        .layer_aes(Aes::new().x("x").y("y"))
+        .scale_colour_identity()
+        .scale_linewidth(ScaleLinewidthContinuous::new().with_range(0.75, 8.0))
+        .title("Flows Between Cities")
+        .theme(theme)
+        .save_with_size(&out("flows"), W, H)?;
     Ok(())
 }
 

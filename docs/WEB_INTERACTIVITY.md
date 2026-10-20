@@ -70,3 +70,57 @@ highlight *generically* instead of via bespoke per-demo code.
   reported in place, never blanks the page.
 - **Verify natively.** Every rendering change is checked with a native
   `render_svg_native`/raster snapshot before it ships to the browser.
+
+## Mark attribute contract (0.20.0)
+
+Every drawn mark on the native SVG backend carries a small, predictable set of
+`data-*` attributes and (usually) a `<title>` hover tooltip — the substrate the
+JS runtime above hit-tests and reads from, without per-chart glue code.
+
+**Built-in, set by the geom:**
+
+- `data-x` — the row's x-axis key (for axis-pointer-style grouping).
+- `data-series` — the row's colour/fill/group level.
+- `data-value` — the row's raw (unformatted) measured value.
+- `<title>` — a geom-computed hover tooltip (e.g. `"(2.1, 4.3)"`, `"group:
+  12.4"`).
+
+**`data-part` — sub-marks of a larger geom.** A decorative sub-mark (so far,
+only an arrowhead on segment/curve/path/line — `arrow()`) carries
+`data-part="arrow"` and `aria-hidden="true"`, and never a `<title>`: the
+parent mark already carries the semantic tooltip, and assistive tech should
+skip the decoration. `[data-part="arrow"]` is a stable CSS/JS selector for
+styling or excluding these sub-marks.
+
+**`Aes::tooltip(col)` — override the tooltip.** Maps a column to the mark's
+`<title>`, replacing whatever the geom would have computed. Escaped like any
+other text. Dropped by a computing stat (e.g. `stat_bin`) unless the stat is
+`StatIdentity`, since the column isn't part of its output — the same rule as
+`linetype`/`alpha`.
+
+**`Aes::data_attr(name, col)` — a custom `data-*` attribute.** Maps a column
+to `data-<name>` on the mark. `name` must match `[a-z0-9][a-z0-9-]*`
+(lowercase alphanumerics and hyphens, like a real HTML dataset key); an
+invalid name is skipped with a build warning rather than failing the render.
+A `data_attr` with the same name as a built-in (`data-x`, `data-series`,
+`data-value`) **replaces** it — an element never carries the same attribute
+name twice.
+
+```rust
+GGPlot::new(flows)
+    .aes(Aes::new().x("x").y("y").xend("xend").yend("yend")
+        .tooltip("label")
+        .data_attr("orig", "origin_city")
+        .data_attr("row", "id"))
+    .geom_curve_with(GeomCurve::default().arrow(arrow().closed()))
+    .render_svg_native_with_size(800, 600)?;
+```
+
+renders e.g. `<path d="M.. Q.." data-x="…" data-series="…" data-orig="Berlin"
+data-row="42"><title>Berlin → Warsaw</title></path>`, with its arrowhead as
+`<polygon data-orig="Berlin" data-row="42" data-part="arrow"
+aria-hidden="true"/>` (no `<title>`).
+
+**Layers that map neither `tooltip` nor any `data_attr` render byte-identical
+output** — the mark-attribute machinery (`geom::set_row_extras`) is a no-op
+when the built data has neither column.
