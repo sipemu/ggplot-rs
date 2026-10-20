@@ -1,17 +1,17 @@
 use crate::aes::Aesthetic;
 use crate::coord::Coord;
 use crate::data::DataFrame;
-use crate::geom::arrow::{draw_heads, heads, Arrow};
+use crate::geom::arrow::Arrow;
 use crate::position::identity::PositionIdentity;
 use crate::position::Position;
-use crate::render::backend::{DrawBackend, LineEnd, LineStyle, Linetype};
+use crate::render::backend::{DrawBackend, LineEnd, Linetype};
 use crate::render::RenderError;
 use crate::scale::ScaleSet;
 use crate::stat::identity::StatIdentity;
 use crate::stat::Stat;
 use crate::theme::Theme;
 
-use super::{Geom, GeomParams};
+use super::{draw_polyline_with_linewidth, Geom, GeomParams};
 
 /// Path geometry — connects points in row order (no x-sort).
 pub struct GeomPath {
@@ -82,6 +82,7 @@ impl Geom for GeomPath {
             .ok_or(RenderError::MissingAesthetic("y".into()))?;
         let color_col = data.column("color");
         let linetype_col = data.column("linetype");
+        let linewidth_col = data.column("linewidth");
 
         let plot_area = backend.plot_area();
         let x_scale = scales.get(&Aesthetic::X);
@@ -116,23 +117,26 @@ impl Geom for GeomPath {
                         coord.transform((nx, ny), &plot_area)
                     })
                     .collect();
+                let widths: Vec<f64> = indices
+                    .iter()
+                    .map(|&i| {
+                        linewidth_col
+                            .and_then(|lc| scales.map_linewidth(&lc[i]))
+                            .unwrap_or(self.width)
+                    })
+                    .collect();
 
-                if points.len() >= 2 {
-                    backend.draw_line(
-                        &points,
-                        &LineStyle {
-                            color: line_color,
-                            alpha: self.alpha,
-                            width: self.width,
-                            linetype: lt,
-                            lineend: self.lineend,
-                        },
-                    )?;
-                    if let Some(arrow) = &self.arrow {
-                        let hs = heads(&points, arrow, self.width);
-                        draw_heads(backend, &hs, arrow, line_color, self.alpha, self.width)?;
-                    }
-                }
+                draw_polyline_with_linewidth(
+                    backend,
+                    &points,
+                    &widths,
+                    line_color,
+                    self.alpha,
+                    lt,
+                    self.lineend,
+                    self.arrow.as_ref(),
+                    self.width,
+                )?;
             }
         } else {
             let lt = linetype_col
@@ -152,23 +156,25 @@ impl Geom for GeomPath {
                     coord.transform((nx, ny), &plot_area)
                 })
                 .collect();
+            let widths: Vec<f64> = (0..data.nrows())
+                .map(|i| {
+                    linewidth_col
+                        .and_then(|lc| scales.map_linewidth(&lc[i]))
+                        .unwrap_or(self.width)
+                })
+                .collect();
 
-            if points.len() >= 2 {
-                backend.draw_line(
-                    &points,
-                    &LineStyle {
-                        color: self.color,
-                        alpha: self.alpha,
-                        width: self.width,
-                        linetype: lt,
-                        lineend: self.lineend,
-                    },
-                )?;
-                if let Some(arrow) = &self.arrow {
-                    let hs = heads(&points, arrow, self.width);
-                    draw_heads(backend, &hs, arrow, self.color, self.alpha, self.width)?;
-                }
-            }
+            draw_polyline_with_linewidth(
+                backend,
+                &points,
+                &widths,
+                self.color,
+                self.alpha,
+                lt,
+                self.lineend,
+                self.arrow.as_ref(),
+                self.width,
+            )?;
         }
 
         Ok(())

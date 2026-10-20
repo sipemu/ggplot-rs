@@ -16,6 +16,7 @@ const LEGEND_AESTHETICS: &[Aesthetic] = &[
     Aesthetic::Linetype,
     Aesthetic::Size,
     Aesthetic::Alpha,
+    Aesthetic::Linewidth,
 ];
 
 /// Draw all legends for the plot.
@@ -224,7 +225,7 @@ fn draw_discrete_legend_at(
 
     // Horizontal legends lay keys left-to-right; vertical ones stack downward.
     let mut cur_x = legend_x;
-    for (i, (_, label)) in breaks.iter().enumerate() {
+    for (i, (pos, label)) in breaks.iter().enumerate() {
         let x = if is_horizontal { cur_x } else { legend_x };
         let y = if is_horizontal {
             items_y
@@ -321,6 +322,23 @@ fn draw_discrete_legend_at(
                         stroke_width: 0.0,
                         alpha,
                         clip: false,
+                    },
+                )?;
+            }
+            Aesthetic::Linewidth => {
+                // A horizontal line of the mapped width, capped at the key
+                // height. Uses the break's own [0,1] fraction (not a
+                // round-trip through the label text — see
+                // `Scale::map_fraction_to_size`).
+                let width = scale.map_fraction_to_size(*pos).unwrap_or(1.0);
+                backend.draw_line(
+                    &[(x + 2.0, center_y), (x + swatch_size - 2.0, center_y)],
+                    &LineStyle {
+                        color: (50, 50, 50),
+                        width: width.min(swatch_size),
+                        alpha: 1.0,
+                        linetype: Linetype::Solid,
+                        ..Default::default()
                     },
                 )?;
             }

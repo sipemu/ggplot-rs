@@ -25,6 +25,8 @@ pub enum Aesthetic {
     Yend,
     Angle,
     Radius,
+    /// Stroke width for segment/curve/path/line (R's `linewidth`).
+    Linewidth,
     /// Financial OHLC aesthetics (`geom_candlestick` / `geom_ohlc`); they
     /// share the y position scale.
     Open,
@@ -63,6 +65,7 @@ impl Aesthetic {
             Aesthetic::Yend => "yend",
             Aesthetic::Angle => "angle",
             Aesthetic::Radius => "radius",
+            Aesthetic::Linewidth => "linewidth",
             Aesthetic::Open => "open",
             Aesthetic::High => "high",
             Aesthetic::Low => "low",
@@ -231,6 +234,10 @@ impl Aes {
     pub fn linetype(self, col: &str) -> Self {
         self.push(col, Aesthetic::Linetype)
     }
+    /// Stroke width for segment/curve/path/line (R's `linewidth`).
+    pub fn linewidth(self, col: &str) -> Self {
+        self.push(col, Aesthetic::Linewidth)
+    }
     /// Opening price (`geom_candlestick` / `geom_ohlc`).
     pub fn open(self, col: &str) -> Self {
         self.push(col, Aesthetic::Open)
@@ -296,6 +303,11 @@ impl Aes {
     /// Map a stat-computed column to the alpha aesthetic.
     pub fn after_stat_alpha(self, col: &str) -> Self {
         self.push_after_stat(col, Aesthetic::Alpha)
+    }
+
+    /// Map a stat-computed column to the linewidth aesthetic.
+    pub fn after_stat_linewidth(self, col: &str) -> Self {
+        self.push_after_stat(col, Aesthetic::Linewidth)
     }
 
     /// Get the column mapped to a specific aesthetic.

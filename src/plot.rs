@@ -1383,6 +1383,11 @@ impl GGPlot {
         self
     }
 
+    pub fn scale_linewidth(mut self, s: crate::scale::linewidth::ScaleLinewidthContinuous) -> Self {
+        self.scales.push(Box::new(s));
+        self
+    }
+
     pub fn xlim(self, min: f64, max: f64) -> Self {
         self.scale_x_continuous(ScaleContinuous::new().with_limits(min, max))
     }

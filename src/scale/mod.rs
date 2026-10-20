@@ -9,6 +9,7 @@ pub mod gradient_n;
 pub mod grey;
 pub mod linetype;
 pub mod linetype_manual;
+pub mod linewidth;
 pub mod manual;
 pub mod modified;
 pub mod palettes;
@@ -127,6 +128,16 @@ pub trait Scale: Send + Sync {
     /// Whether this axis is drawn on the opposite side (x → top, y → right).
     fn axis_position_opposite(&self) -> bool {
         false
+    }
+
+    /// Map an already-computed `[0, 1]` scale fraction (as returned
+    /// alongside each label by [`breaks`](Self::breaks)) directly to an
+    /// output size, bypassing the round trip through [`map`](Self::map) — a
+    /// discrete-style legend key only has the break's rendered *label*, not
+    /// its original data value, so a continuous scale can't recover the
+    /// fraction by re-mapping the label text. Default: `None`.
+    fn map_fraction_to_size(&self, _fraction: f64) -> Option<f64> {
+        None
     }
 
     /// Clone this scale into a boxed trait object.

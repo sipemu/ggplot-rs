@@ -133,6 +133,7 @@ impl Geom for GeomCurve {
         let color_col = data.column("color");
         let linetype_col = data.column("linetype");
         let alpha_col = data.column("alpha");
+        let linewidth_col = data.column("linewidth");
 
         let plot_area = backend.plot_area();
         let x_scale = scales.get(&Aesthetic::X);
@@ -158,6 +159,9 @@ impl Geom for GeomCurve {
                 .and_then(|ac| scales.map_alpha(&ac[i]).or_else(|| ac[i].as_f64()))
                 .filter(|a| a.is_finite())
                 .unwrap_or(self.alpha);
+            let width = linewidth_col
+                .and_then(|lc| scales.map_linewidth(&lc[i]))
+                .unwrap_or(self.width);
 
             backend.draw_quadratic(
                 p0,
@@ -166,7 +170,7 @@ impl Geom for GeomCurve {
                 &LineStyle {
                     color: line_color,
                     alpha,
-                    width: self.width,
+                    width,
                     linetype: lt,
                     lineend: self.lineend,
                 },
@@ -174,8 +178,8 @@ impl Geom for GeomCurve {
 
             if let Some(arrow) = &self.arrow {
                 let path = Self::flatten(p0, ctrl, p2, 64);
-                let hs = heads(&path, arrow, self.width);
-                draw_heads(backend, &hs, arrow, line_color, alpha, self.width)?;
+                let hs = heads(&path, arrow, width);
+                draw_heads(backend, &hs, arrow, line_color, alpha, width)?;
             }
         }
 

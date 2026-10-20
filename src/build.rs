@@ -936,6 +936,7 @@ impl PlotBuilder {
             Aesthetic::Linetype,
             Aesthetic::Size,
             Aesthetic::Alpha,
+            Aesthetic::Linewidth,
         ];
         let mut suppressed = HashSet::new();
         for aes in &legend_aes {
