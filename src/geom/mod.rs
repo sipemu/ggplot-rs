@@ -1,4 +1,5 @@
 pub mod area;
+pub mod arrow;
 pub mod bar;
 pub mod bin2d;
 pub mod blank;
@@ -212,4 +213,113 @@ pub(crate) fn set_mark(
 /// Clear all per-mark metadata after a geom has drawn its marks.
 pub(crate) fn clear_mark(backend: &mut dyn DrawBackend) {
     set_mark(backend, None, None, None, None);
+}
+
+/// Apply one row's interactive aesthetics (B1-7: `Aes::tooltip`,
+/// `Aes::data_attr`) to the backend.
+///
+/// A validated `Aes::tooltip` mapping replaces the geom's own `<title>`
+/// (call the geom's own `set_mark(...)` *before* this, so a custom tooltip
+/// wins) for *every* row — including when this row's value is NA, which
+/// explicitly resets the tooltip to `None` (no `<title>` at all, even if
+/// the geom has its own default): once `Aes::tooltip` is mapped, it owns
+/// the tooltip for the whole layer, the same row-by-row way `color` or
+/// `size` would. It never inherits an earlier row's. It's read from
+/// [`crate::aes::TOOLTIP_INTERNAL_NAME`], not a plain `"tooltip"` column
+/// name, so an unrelated raw source column literally called `"tooltip"`
+/// can never drive every mark's hover title (the same class of bug fixed
+/// for `data_attr` below). `set_tooltip` is only called at all when that
+/// internal column exists, so layers that never map `Aes::tooltip` don't
+/// touch whatever the geom already set.
+///
+/// Every validated `data_attr` column becomes a `data-<name>` attribute.
+/// These are stored under [`crate::aes::DATA_ATTR_INTERNAL_PREFIX`] rather
+/// than scanned by a `"data-"` name prefix: a raw source column that merely
+/// happens to be named like a data attribute (e.g. a SQL alias) was never
+/// validated and must never reach `push_mark` (see
+/// `aes::validated_data_attr_internal_name`, and `aes::mapping`'s defensive
+/// drop of any raw column that could forge an internal name).
+/// `set_mark_attrs` is *always* called, even with an empty list, so a row
+/// with no attrs doesn't inherit an earlier row's.
+pub(crate) fn set_row_extras(backend: &mut dyn DrawBackend, data: &DataFrame, row: usize) {
+    if let Some(col) = data.column(crate::aes::TOOLTIP_INTERNAL_NAME) {
+        let tip = col.get(row).filter(|v| !v.is_na()).map(tip_value);
+        backend.set_tooltip(tip);
+    }
+    let mut attrs = Vec::new();
+    for name in data.column_names() {
+        if let Some(target) = name.strip_prefix(crate::aes::DATA_ATTR_INTERNAL_PREFIX) {
+            if let Some(v) = data.column(name).and_then(|c| c.get(row)) {
+                if !v.is_na() {
+                    attrs.push((target.to_string(), tip_value(v)));
+                }
+            }
+        }
+    }
+    backend.set_mark_attrs(attrs);
+}
+
+/// Clear interactive-aesthetic attributes *and* the tooltip after a layer
+/// finishes drawing, so neither leaks into a later layer, an annotation, or
+/// the legend's own background/key marks (which share the same backend
+/// instance for the rest of the render).
+pub(crate) fn clear_row_extras(backend: &mut dyn DrawBackend) {
+    backend.set_tooltip(None);
+    backend.set_mark_attrs(Vec::new());
+}
+
+/// Draw one group's polyline (path/line), honouring a per-point `linewidth`.
+/// A constant width draws one polyline (byte-identical to the pre-linewidth
+/// behaviour); a varying width falls back to drawing segment-by-segment,
+/// since a single stroked polyline can't vary its width along its length.
+/// An optional arrowhead is drawn once per polyline, using the width at its
+/// last point (closest to where a default `ends(Last)` head sits).
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn draw_polyline_with_linewidth(
+    backend: &mut dyn DrawBackend,
+    points: &[(f64, f64)],
+    widths: &[f64],
+    color: (u8, u8, u8),
+    alpha: f64,
+    linetype: crate::render::backend::Linetype,
+    lineend: crate::render::backend::LineEnd,
+    arrow: Option<&crate::geom::arrow::Arrow>,
+    fallback_width: f64,
+) -> Result<(), RenderError> {
+    if points.len() < 2 {
+        return Ok(());
+    }
+    let w0 = widths.first().copied().unwrap_or(fallback_width);
+    let varies = widths.len() == points.len() && widths.iter().any(|&w| (w - w0).abs() > 1e-9);
+    if varies {
+        for i in 0..points.len() - 1 {
+            backend.draw_line(
+                &points[i..=i + 1],
+                &crate::render::backend::LineStyle {
+                    color,
+                    alpha,
+                    width: widths[i],
+                    linetype,
+                    lineend,
+                },
+            )?;
+        }
+    } else {
+        backend.draw_line(
+            points,
+            &crate::render::backend::LineStyle {
+                color,
+                alpha,
+                width: w0,
+                linetype,
+                lineend,
+            },
+        )?;
+    }
+    if let Some(arrow) = arrow {
+        let resolved_width = widths.last().copied().unwrap_or(fallback_width);
+        let hs = crate::geom::arrow::heads(points, arrow, resolved_width);
+        crate::geom::arrow::draw_heads(backend, &hs, arrow, color, alpha, resolved_width)?;
+    }
+    Ok(())
 }

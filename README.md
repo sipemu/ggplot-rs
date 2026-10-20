@@ -88,6 +88,10 @@ choropleth needs the `sf` feature; drop it for the rest).
   </tr>
   <tr>
     <td align="center">
+      <img src="assets/gallery/flows.png" width="260" alt="Flows between cities"><br>
+      <sub>Directed flows · <code>geom_curve</code> + <code>arrow()</code></sub>
+    </td>
+    <td align="center">
       <img src="assets/gallery/ribbon.png" width="260" alt="Ribbon"><br>
       <sub>Confidence band · <code>geom_ribbon</code></sub>
     </td>
@@ -95,6 +99,8 @@ choropleth needs the `sf` feature; drop it for the rest).
       <img src="assets/gallery/area.png" width="260" alt="Stacked area"><br>
       <sub>Stacked area · <code>geom_area</code></sub>
     </td>
+  </tr>
+  <tr>
     <td align="center">
       <img src="assets/gallery/facet.png" width="260" alt="Facet wrap"><br>
       <sub>Small multiples · <code>facet_wrap</code></sub>

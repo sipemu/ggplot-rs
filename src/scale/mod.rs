@@ -7,8 +7,10 @@ pub mod format;
 pub mod gradient;
 pub mod gradient_n;
 pub mod grey;
+pub mod identity;
 pub mod linetype;
 pub mod linetype_manual;
+pub mod linewidth;
 pub mod manual;
 pub mod modified;
 pub mod palettes;
@@ -129,9 +131,65 @@ pub trait Scale: Send + Sync {
         false
     }
 
+    /// Set the expansion multiplier/additive constant (R's `expand =
+    /// c(mult, add)`), applied symmetrically to both ends. Used by
+    /// `CoordSf::train_scales` (`expand(false)` passes `(0.0, 0.0)`) to pin
+    /// an explicit `xlim`/`ylim` to the panel exactly. Default: no-op
+    /// (discrete / non-position scales have no expansion to set).
+    fn set_expand(&mut self, _mult: f64, _add: f64) {}
+
+    /// Map an already-computed `[0, 1]` scale fraction (as returned
+    /// alongside each label by [`breaks`](Self::breaks)) directly to an
+    /// output size, bypassing the round trip through [`map`](Self::map) — a
+    /// discrete-style legend key only has the break's rendered *label*, not
+    /// its original data value, so a continuous scale can't recover the
+    /// fraction by re-mapping the label text. Default: `None`.
+    fn map_fraction_to_size(&self, _fraction: f64) -> Option<f64> {
+        None
+    }
+
     /// Clone this scale into a boxed trait object.
     fn clone_box(&self) -> Box<dyn Scale>;
 
     /// Reset training state so the scale can be retrained on new data.
     fn reset_training(&mut self) {}
+
+    /// Validate this scale's configuration once training is complete (e.g.
+    /// a transform undefined at the domain's own limits) and push a
+    /// human-readable warning for each problem found. Called once per scale
+    /// after the final training pass, with the plot's warnings sink —
+    /// `map`/`map_to_size` run per mark at draw time and have no such
+    /// access, so a scale-level problem must be reported here instead.
+    /// Default: no-op.
+    fn validate(&self, _warnings: &mut Vec<String>) {}
+}
+
+#[cfg(test)]
+mod default_trait_method_tests {
+    use super::Scale;
+    use crate::aes::Aesthetic;
+    use crate::data::Value;
+
+    /// Scales that don't override `set_expand`/`map_fraction_to_size`
+    /// (e.g. an identity scale, which has no expansion or numeric output
+    /// at all) get the documented no-op/`None` defaults rather than a
+    /// missing-method compile error.
+    #[test]
+    fn set_expand_and_map_fraction_to_size_defaults_are_harmless() {
+        let mut scale = crate::scale::identity::ScaleColorIdentity::new(Aesthetic::Color);
+        // No panic, no effect — there's no expansion concept for a
+        // colour-identity scale.
+        scale.set_expand(0.1, 5.0);
+        assert_eq!(scale.map_fraction_to_size(0.5), None);
+        // validate() is also a no-op default; an identity scale never has
+        // anything to warn about.
+        let mut warnings = Vec::new();
+        scale.validate(&mut warnings);
+        assert!(warnings.is_empty());
+        // The scale is otherwise unaffected.
+        assert_eq!(
+            scale.map_to_color(&Value::Str("#FFFFFF".into())),
+            Some((255, 255, 255))
+        );
+    }
 }

@@ -868,6 +868,18 @@ impl DrawBackend for Measure<'_> {
         }
         self.inner.draw_line(pts, style)
     }
+    fn draw_quadratic(
+        &mut self,
+        p0: (f64, f64),
+        ctrl: (f64, f64),
+        p1: (f64, f64),
+        style: &LineStyle,
+    ) -> Result<(), RenderError> {
+        self.grow(p0.0, p0.1, p0.0, p0.1);
+        self.grow(ctrl.0, ctrl.1, ctrl.0, ctrl.1);
+        self.grow(p1.0, p1.1, p1.0, p1.1);
+        self.inner.draw_quadratic(p0, ctrl, p1, style)
+    }
     fn draw_rect(
         &mut self,
         a: (f64, f64),
@@ -922,6 +934,12 @@ impl DrawBackend for Measure<'_> {
     }
     fn warn(&mut self, m: String) {
         self.inner.warn(m)
+    }
+    fn set_mark_part(&mut self, part: Option<&str>) {
+        self.inner.set_mark_part(part)
+    }
+    fn set_mark_attrs(&mut self, attrs: Vec<(String, String)>) {
+        self.inner.set_mark_attrs(attrs)
     }
 }
 
@@ -1009,5 +1027,43 @@ mod tests {
         assert_eq!(t, vec![(0.0, 45.0), (55.0, 45.0)]);
         let t = tracks(&[], 3, 30.0, 100.0);
         assert!(t.iter().all(|(p, s)| p.is_finite() && *s == 0.0));
+    }
+
+    /// `Measure` (the legend bbox pre-pass) forwards every `DrawBackend`
+    /// method to its inner backend and grows its tracked extent to include
+    /// a quadratic curve's control points — not just straight lines/shapes.
+    #[test]
+    fn measure_forwards_draw_quadratic_and_mark_metadata_and_grows_its_extent() {
+        let pa = Rect {
+            x: 0.0,
+            y: 0.0,
+            width: 100.0,
+            height: 100.0,
+        };
+        let mut backend = SvgBackend::new(100, 100, pa.clone());
+        let mut meas = Measure::new(&mut backend, pa);
+
+        assert!(meas.extent().is_none());
+
+        meas.set_mark_part(Some("arrow"));
+        meas.set_mark_attrs(vec![("data-x".to_string(), "v".to_string())]);
+        meas.draw_quadratic(
+            (10.0, 20.0),
+            (90.0, 5.0),
+            (50.0, 80.0),
+            &LineStyle::default(),
+        )
+        .unwrap();
+        meas.set_mark_part(None);
+        meas.set_mark_attrs(Vec::new());
+
+        let (x0, y0, x1, y1) = meas.extent().expect("extent after drawing");
+        assert_eq!((x0, y0, x1, y1), (10.0, 5.0, 90.0, 80.0));
+
+        // The marks actually reached the inner SvgBackend (data-part and
+        // the data_attr both appear in its output).
+        let svg = backend.finish();
+        assert!(svg.contains("data-part=\"arrow\""));
+        assert!(svg.contains("data-x=\"v\""));
     }
 }

@@ -93,6 +93,7 @@ impl Geom for GeomContour {
                         alpha: self.alpha,
                         width: self.width,
                         linetype: Linetype::Solid,
+                        ..Default::default()
                     },
                 )?;
 

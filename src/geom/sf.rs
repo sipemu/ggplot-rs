@@ -209,6 +209,7 @@ impl GeomSf {
                 alpha: self.alpha,
                 width: self.line_width.max(1.0),
                 linetype: Linetype::Solid,
+                ..Default::default()
             },
         )
     }
@@ -303,9 +304,12 @@ impl Geom for GeomSf {
                 (None, Some(f)) => Some(f),
                 (None, None) => None,
             });
+            super::set_row_extras(backend, data, i);
             self.draw_geometry(&g, &project, fill, color, backend)?;
         }
         backend.set_tooltip(None);
+        super::clear_mark(backend);
+        super::clear_row_extras(backend);
         Ok(())
     }
 

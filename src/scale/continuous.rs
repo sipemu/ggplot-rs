@@ -342,6 +342,10 @@ impl Scale for ScaleContinuous {
         self.trained = true;
     }
 
+    fn set_expand(&mut self, mult: f64, add: f64) {
+        self.expand = (mult, add, mult, add);
+    }
+
     fn filter_limits(&self) -> Option<(f64, f64)> {
         if self.filter_oob && self.trained {
             Some((self.min, self.max))

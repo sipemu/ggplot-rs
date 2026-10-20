@@ -116,6 +116,7 @@ impl PlotBuilder {
             warnings: plot_warnings,
             default_aspect_ratio,
             locale,
+            svg_root_data: _,
         } = plot;
         let mut theme = theme;
         if theme.aspect_ratio.is_none() {
@@ -172,6 +173,14 @@ impl PlotBuilder {
                     train_intercepts(scale, values);
                 }
             }
+        }
+
+        // Validate each scale's final configuration (e.g. a transform
+        // undefined at its own domain limits) now that training is done —
+        // `map`/`map_to_size` run per mark at draw time and have no
+        // warnings sink of their own.
+        for scale in scale_set.iter() {
+            scale.validate(&mut warnings);
         }
 
         // An empty plot (no layers, or only layers without data) still gets a
@@ -565,7 +574,7 @@ impl PlotBuilder {
         }
 
         // Step 3: Evaluate aes — rename columns to canonical names
-        let mut working_data = resolve_mappings(source_data, &merged_mapping);
+        let mut working_data = resolve_mappings(source_data, &merged_mapping, warnings);
 
         // Remember which columns the user actually supplied (pre-stat). A required
         // aesthetic is satisfied if it was present here OR is synthesized by the
@@ -635,6 +644,11 @@ impl PlotBuilder {
         }
         let input_rows = working_data.nrows();
 
+        // Validate the stat's own configuration once per layer (e.g.
+        // `StatBinHex::binwidth` — a problem with fixed parameters, not
+        // with the data), before it runs per-group below.
+        stat.validate(warnings);
+
         // Step 6: Compute statistics. Group by aesthetic groups AND the facet
         // variables, so a computed stat (density/histogram/…) is estimated per
         // panel rather than on pooled data; the facet column is then re-attached
@@ -676,7 +690,7 @@ impl PlotBuilder {
         };
 
         // Step 6a: Apply after_stat() mappings (rename stat-computed columns)
-        apply_after_stat(&mut working_data, &merged_mapping);
+        apply_after_stat(&mut working_data, &merged_mapping, warnings);
 
         // Stat output can contain NaN (e.g. a fit on degenerate input): drop
         // those rows too, so nothing non-finite reaches a geom.
@@ -936,6 +950,7 @@ impl PlotBuilder {
             Aesthetic::Linetype,
             Aesthetic::Size,
             Aesthetic::Alpha,
+            Aesthetic::Linewidth,
         ];
         let mut suppressed = HashSet::new();
         for aes in &legend_aes {

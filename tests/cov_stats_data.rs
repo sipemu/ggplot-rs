@@ -400,10 +400,7 @@ fn stat_bin2d_and_binhex_compute() {
         .sum();
     assert_eq!(total2 as u64, 36);
 
-    let bh = ggplot_rs::stat::binhex::StatBinHex {
-        bins_x: 4,
-        bins_y: 4,
-    };
+    let bh = ggplot_rs::stat::binhex::StatBinHex::new().bins_xy(4, 4);
     let outh = bh.compute_group(&grid, &scales);
     let totalh: f64 = outh
         .column("fill")

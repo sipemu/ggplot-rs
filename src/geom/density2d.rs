@@ -111,6 +111,7 @@ impl Geom for GeomDensity2d {
                         alpha: self.alpha,
                         width: self.width,
                         linetype: Linetype::Solid,
+                        ..Default::default()
                     },
                 )?;
 

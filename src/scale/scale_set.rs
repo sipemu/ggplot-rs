@@ -7,6 +7,7 @@ use crate::scale::continuous::ScaleContinuous;
 use crate::scale::datetime::ScaleDateTime;
 use crate::scale::discrete::ScaleDiscrete;
 use crate::scale::linetype::ScaleLinetypeDiscrete;
+use crate::scale::linewidth::ScaleLinewidthContinuous;
 use crate::scale::shape::ScaleShapeDiscrete;
 use crate::scale::size::ScaleSizeContinuous;
 
@@ -72,6 +73,10 @@ impl ScaleSet {
                 // continuous scale onto a discrete axis).
                 | Aesthetic::Xintercept
                 | Aesthetic::Yintercept
+                // Interactive aesthetics carry their value straight through
+                // to the mark's attributes — no visual mapping, no legend.
+                | Aesthetic::Tooltip
+                | Aesthetic::DataAttr(_)
         ) {
             return;
         }
@@ -109,6 +114,10 @@ impl ScaleSet {
             }
             Aesthetic::Size => {
                 let scale = ScaleSizeContinuous::new();
+                self.scales.push(Box::new(scale));
+            }
+            Aesthetic::Linewidth => {
+                let scale = ScaleLinewidthContinuous::new();
                 self.scales.push(Box::new(scale));
             }
             Aesthetic::Alpha => {
@@ -172,6 +181,12 @@ impl ScaleSet {
     pub fn map_alpha(&self, value: &Value) -> Option<f64> {
         self.get(&Aesthetic::Alpha)
             .and_then(|s| s.map_to_alpha(value))
+    }
+
+    /// Map a value to a stroke width through the linewidth scale.
+    pub fn map_linewidth(&self, value: &Value) -> Option<f64> {
+        self.get(&Aesthetic::Linewidth)
+            .and_then(|s| s.map_to_size(value))
     }
 
     /// Override the domain limits for a scale (used by coord_cartesian zoom).

@@ -118,6 +118,7 @@ impl Geom for GeomCooksContour {
             alpha: self.alpha,
             width: self.width,
             linetype: self.linetype,
+            ..Default::default()
         };
         for &level in self.levels.iter().filter(|l| l.is_finite() && **l > 0.0) {
             let label = super::tip_value(&Value::Float(level));

@@ -25,6 +25,21 @@ pub enum Aesthetic {
     Yend,
     Angle,
     Radius,
+    /// Stroke width for segment/curve/path/line (R's `linewidth`).
+    Linewidth,
+    /// A custom `<title>` hover tooltip, replacing the geom's own. Routed
+    /// through [`crate::aes::TOOLTIP_INTERNAL_NAME`] in `resolve_mappings`,
+    /// the same way `DataAttr` is, so an unrelated raw column literally
+    /// named `"tooltip"` can never be mistaken for a mapped one.
+    Tooltip,
+    /// A custom `data-<name>` attribute on the mark. The `String` is the
+    /// full attribute name (`"data-<name>"`). [`Aes::data_attr`] validates
+    /// `name` against `[a-z0-9][a-z0-9-]*` (excluding reserved names) before
+    /// constructing this; a `DataAttr` built directly — bypassing that
+    /// builder — is re-validated in `resolve_mappings`
+    /// (`aes::validated_data_attr_internal_name`), the single authoritative
+    /// gate regardless of how the mapping was created.
+    DataAttr(String),
     /// Financial OHLC aesthetics (`geom_candlestick` / `geom_ohlc`); they
     /// share the y position scale.
     Open,
@@ -63,6 +78,9 @@ impl Aesthetic {
             Aesthetic::Yend => "yend",
             Aesthetic::Angle => "angle",
             Aesthetic::Radius => "radius",
+            Aesthetic::Linewidth => "linewidth",
+            Aesthetic::Tooltip => "tooltip",
+            Aesthetic::DataAttr(name) => name,
             Aesthetic::Open => "open",
             Aesthetic::High => "high",
             Aesthetic::Low => "low",
@@ -108,6 +126,10 @@ pub struct Aes {
     pub mappings: Vec<AesMapping>,
     /// Post-scale color derivations (`after_scale`).
     pub after_scale: Vec<AfterScaleSpec>,
+    /// Non-fatal build warnings (e.g. an invalid [`data_attr`](Self::data_attr)
+    /// name), merged into [`GGPlot`](crate::plot::GGPlot)'s warnings by
+    /// `aes()`/`layer_aes()`.
+    pub(crate) warnings: Vec<String>,
 }
 
 impl Aes {
@@ -231,6 +253,40 @@ impl Aes {
     pub fn linetype(self, col: &str) -> Self {
         self.push(col, Aesthetic::Linetype)
     }
+    /// Stroke width for segment/curve/path/line (R's `linewidth`).
+    pub fn linewidth(self, col: &str) -> Self {
+        self.push(col, Aesthetic::Linewidth)
+    }
+
+    /// A custom `<title>` hover tooltip from `col`, replacing the geom's
+    /// own. `ensure_scale` skips it (no scale, no legend): computing stats
+    /// drop the column (identity-stat layers keep it), as `linetype`/`alpha`
+    /// do.
+    pub fn tooltip(self, col: &str) -> Self {
+        self.push(col, Aesthetic::Tooltip)
+    }
+
+    /// A custom `data-<name>` attribute on the mark, from `col`. `name` must
+    /// match `[a-z0-9][a-z0-9-]*` and not be a name ggplot-rs itself writes
+    /// via another mechanism (currently just `"part"` — see
+    /// `DrawBackend::set_mark_part`); an invalid or reserved name is skipped
+    /// with a build warning (surfaced via
+    /// [`GGPlot::aes`](crate::plot::GGPlot::aes) / `layer_aes`). A user attr
+    /// replaces a built-in of the same name (`data-x`, `data-series`,
+    /// `data-value`) — never duplicated.
+    pub fn data_attr(mut self, name: &str, col: &str) -> Self {
+        if !is_valid_data_attr_name(name) {
+            let reason = if RESERVED_DATA_ATTR_NAMES.contains(&name) {
+                "reserved (written by ggplot-rs itself)"
+            } else {
+                "invalid (must match [a-z0-9][a-z0-9-]*)"
+            };
+            self.warnings
+                .push(format!("aes: data_attr name {name:?} is {reason}; skipped"));
+            return self;
+        }
+        self.push(col, Aesthetic::DataAttr(format!("data-{name}")))
+    }
     /// Opening price (`geom_candlestick` / `geom_ohlc`).
     pub fn open(self, col: &str) -> Self {
         self.push(col, Aesthetic::Open)
@@ -298,6 +354,11 @@ impl Aes {
         self.push_after_stat(col, Aesthetic::Alpha)
     }
 
+    /// Map a stat-computed column to the linewidth aesthetic.
+    pub fn after_stat_linewidth(self, col: &str) -> Self {
+        self.push_after_stat(col, Aesthetic::Linewidth)
+    }
+
     /// Get the column mapped to a specific aesthetic.
     pub fn get_mapping(&self, aes: &Aesthetic) -> Option<&str> {
         self.mappings
@@ -316,6 +377,147 @@ impl Aes {
                 .retain(|existing| existing.aesthetic != m.aesthetic);
             result.mappings.push(m.clone());
         }
+        result.warnings.extend(other.warnings.iter().cloned());
         result
+    }
+}
+
+/// Names ggplot-rs itself writes via a mechanism other than `data_attr`'s
+/// `set_mark_attrs` dedup — reserved so a user mapping can never collide and
+/// produce a duplicate attribute. `"part"` is `DrawBackend::set_mark_part`
+/// (arrowheads: `data-part="arrow"`), written directly in `push_mark`, not
+/// through the built-ins list `set_mark_attrs` dedups against.
+const RESERVED_DATA_ATTR_NAMES: &[&str] = &["part"];
+
+/// `[a-z0-9][a-z0-9-]*`, excluding [`RESERVED_DATA_ATTR_NAMES`] — a valid,
+/// non-colliding HTML custom-data-attribute suffix.
+pub(crate) fn is_valid_data_attr_name(name: &str) -> bool {
+    if RESERVED_DATA_ATTR_NAMES.contains(&name) {
+        return false;
+    }
+    let mut chars = name.chars();
+    match chars.next() {
+        Some(c) if c.is_ascii_lowercase() || c.is_ascii_digit() => {}
+        _ => return false,
+    }
+    chars.all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '-')
+}
+
+/// Internal storage namespace for validated interactive-aesthetic columns
+/// (`data_attr`, `tooltip`) in the built DataFrame. Starts with a NUL byte,
+/// which can't appear in any column name `resolve_mappings` carries over
+/// from a caller's raw source data: that loop explicitly drops a raw column
+/// whose name contains a NUL (or this prefix) rather than carrying it
+/// through unchanged — see its doc. So in practice no caller-supplied
+/// column collides with a name under this prefix, but the real guarantee is
+/// that drop, not merely that a legitimate column "wouldn't" be named this
+/// way (`GGPlot::new` accepts any `String`, including one with a NUL byte
+/// in it, deliberately crafted to collide).
+pub(crate) const INTERNAL_PREFIX: &str = "\u{0}ggplot-rs:";
+
+/// Internal storage prefix for validated `data_attr` columns — see
+/// [`INTERNAL_PREFIX`]. `geom::set_row_extras` looks for *only* this
+/// prefix instead of scanning for anything that merely looks like a
+/// `data-*` column, which would also match an unrelated raw source column
+/// a caller never mapped through `Aes::data_attr` (the injection this
+/// guards against: see `validated_data_attr_internal_name`).
+pub(crate) const DATA_ATTR_INTERNAL_PREFIX: &str = "\u{0}ggplot-rs:data-attr:";
+
+/// Internal storage name for a validated `Aes::tooltip` mapping — see
+/// [`INTERNAL_PREFIX`]. Without this, an unmapped raw column literally
+/// named `"tooltip"` would drive every mark's hover title (the same class
+/// of bug `DATA_ATTR_INTERNAL_PREFIX` fixes for `data_attr`); routing it
+/// through the same internal-prefix scheme closes that for tooltips too.
+pub(crate) const TOOLTIP_INTERNAL_NAME: &str = "\u{0}ggplot-rs:tooltip";
+
+/// Validate a `data_attr` mapping's target (`"data-<name>"`, as stored in
+/// [`Aesthetic::DataAttr`]) and, if valid, return the internal column name
+/// it should be written under. This is the single authoritative gate: it
+/// runs in `resolve_mappings` regardless of *how* the `DataAttr` mapping was
+/// created — the validated `Aes::data_attr` builder, or a `DataAttr`
+/// constructed directly and pushed into the public `Aes.mappings` field,
+/// bypassing the builder's own check.
+pub(crate) fn validated_data_attr_internal_name(data_attr_target: &str) -> Option<String> {
+    let suffix = data_attr_target.strip_prefix("data-")?;
+    if is_valid_data_attr_name(suffix) {
+        Some(format!("{DATA_ATTR_INTERNAL_PREFIX}{data_attr_target}"))
+    } else {
+        None
+    }
+}
+
+#[cfg(test)]
+mod data_attr_name_tests {
+    use super::{is_valid_data_attr_name, validated_data_attr_internal_name};
+
+    #[test]
+    fn accepts_lowercase_alnum_and_hyphen() {
+        for ok in ["x", "row", "data-ish", "a1", "0a", "fvalue"] {
+            assert!(is_valid_data_attr_name(ok), "{ok} should be valid");
+        }
+    }
+
+    #[test]
+    fn rejects_empty_uppercase_and_other_punctuation() {
+        for bad in ["", "-x", "X", "a_b", "a.b", "a b", "déjà"] {
+            assert!(!is_valid_data_attr_name(bad), "{bad} should be invalid");
+        }
+    }
+
+    #[test]
+    fn rejects_the_reserved_part_name() {
+        assert!(!is_valid_data_attr_name("part"));
+        assert_eq!(validated_data_attr_internal_name("data-part"), None);
+    }
+
+    #[test]
+    fn rejects_a_malformed_injection_attempt_even_with_the_data_prefix() {
+        // Space, `=`, parens: none of these are legal in the suffix.
+        assert_eq!(
+            validated_data_attr_internal_name("data-a onmouseover=alert(1) b"),
+            None
+        );
+    }
+
+    #[test]
+    fn valid_target_maps_to_the_internal_prefix_plus_itself() {
+        let internal = validated_data_attr_internal_name("data-orig").unwrap();
+        assert!(internal.starts_with(super::DATA_ATTR_INTERNAL_PREFIX));
+        assert!(internal.ends_with("data-orig"));
+    }
+}
+
+#[cfg(test)]
+mod aesthetic_and_aes_tests {
+    use super::{Aes, Aesthetic};
+
+    /// `col_name()` for `Tooltip`/`DataAttr` is never actually used for
+    /// storage (both are special-cased in `aes::mapping`), but it should
+    /// still return a sane, documented fallback for a direct caller.
+    #[test]
+    fn col_name_for_tooltip_and_data_attr() {
+        assert_eq!(Aesthetic::Tooltip.col_name(), "tooltip");
+        assert_eq!(
+            Aesthetic::DataAttr("data-orig".to_string()).col_name(),
+            "data-orig"
+        );
+    }
+
+    #[test]
+    fn data_attr_warning_text_distinguishes_invalid_from_reserved() {
+        let invalid = Aes::new().data_attr("Not Valid!", "col");
+        assert_eq!(invalid.warnings.len(), 1);
+        assert!(invalid.warnings[0].contains("invalid"));
+        assert!(!invalid.warnings[0].contains("reserved"));
+
+        let reserved = Aes::new().data_attr("part", "col");
+        assert_eq!(reserved.warnings.len(), 1);
+        assert!(reserved.warnings[0].contains("reserved"));
+    }
+
+    #[test]
+    fn after_stat_linewidth_maps_a_stat_computed_column() {
+        let aes = Aes::new().after_stat_linewidth("weight");
+        assert_eq!(aes.get_mapping(&Aesthetic::Linewidth), Some("weight"));
     }
 }

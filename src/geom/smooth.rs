@@ -166,6 +166,7 @@ impl Geom for GeomSmooth {
                             alpha: 1.0,
                             width: self.line_width,
                             linetype: Linetype::Solid,
+                            ..Default::default()
                         },
                     )?;
                     draw_hover_marks(
@@ -228,6 +229,7 @@ impl Geom for GeomSmooth {
                         alpha: 1.0,
                         width: self.line_width,
                         linetype: Linetype::Solid,
+                        ..Default::default()
                     },
                 )?;
                 let rows: Vec<usize> = (0..data.nrows()).collect();

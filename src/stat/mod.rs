@@ -58,6 +58,15 @@ pub trait Stat: Send + Sync {
 
     /// Name for debug/display.
     fn name(&self) -> &str;
+
+    /// Validate the stat's own fixed configuration (not the data) and push
+    /// a human-readable warning for each problem found — e.g.
+    /// `StatBinHex::binwidth` being NaN, zero or negative. Called once per
+    /// layer, before [`compute_group`](Self::compute_group) runs (which has
+    /// no warnings channel of its own: the per-group call only sees
+    /// `&DataFrame` and `&ScaleSet`, not the plot's warnings sink). Default:
+    /// no-op.
+    fn validate(&self, _warnings: &mut Vec<String>) {}
 }
 
 /// R's `bw.nrd0`: Silverman's rule of thumb, `0.9 · min(sd, IQR/1.34) · n^-0.2`,

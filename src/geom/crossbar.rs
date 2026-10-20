@@ -98,6 +98,7 @@ impl Geom for GeomCrossbar {
                     alpha: self.alpha,
                     width: self.line_width * 1.5,
                     linetype: Linetype::Solid,
+                    ..Default::default()
                 },
             )?;
         }

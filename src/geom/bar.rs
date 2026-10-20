@@ -114,6 +114,7 @@ impl Geom for GeomBar {
                 None => v.clone(),
             });
             super::set_mark(backend, tip, Some(super::tip_value(&x_col[i])), series, raw);
+            super::set_row_extras(backend, data, i);
 
             if coord.is_polar() {
                 let points = super::col::polar_sector(
@@ -136,6 +137,7 @@ impl Geom for GeomBar {
             }
         }
         super::clear_mark(backend);
+        super::clear_row_extras(backend);
 
         Ok(())
     }

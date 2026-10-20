@@ -60,6 +60,7 @@ pub fn draw_x_axis(
                 width: axis_line.width,
                 alpha: 1.0,
                 linetype: axis_line.linetype,
+                ..Default::default()
             },
         )?;
     }
@@ -77,6 +78,7 @@ pub fn draw_x_axis(
                     width: axis_ticks.width,
                     alpha: 1.0,
                     linetype: axis_ticks.linetype,
+                    ..Default::default()
                 },
             )?;
         }
@@ -129,6 +131,7 @@ pub fn draw_x_axis(
                     width: axis_ticks.width,
                     alpha: 1.0,
                     linetype: axis_ticks.linetype,
+                    ..Default::default()
                 },
             )?;
         }
@@ -194,6 +197,7 @@ pub fn draw_y_axis(
                 width: axis_line.width,
                 alpha: 1.0,
                 linetype: axis_line.linetype,
+                ..Default::default()
             },
         )?;
     }
@@ -210,6 +214,7 @@ pub fn draw_y_axis(
                     width: axis_ticks.width,
                     alpha: 1.0,
                     linetype: axis_ticks.linetype,
+                    ..Default::default()
                 },
             )?;
         }
@@ -246,6 +251,7 @@ pub fn draw_y_axis(
                     width: axis_ticks.width,
                     alpha: 1.0,
                     linetype: axis_ticks.linetype,
+                    ..Default::default()
                 },
             )?;
         }
@@ -306,6 +312,7 @@ pub fn draw_sec_y_axis(
                 width: axis_line.width,
                 alpha: 1.0,
                 linetype: axis_line.linetype,
+                ..Default::default()
             },
         )?;
     }
@@ -322,6 +329,7 @@ pub fn draw_sec_y_axis(
                     width: axis_ticks.width,
                     alpha: 1.0,
                     linetype: axis_ticks.linetype,
+                    ..Default::default()
                 },
             )?;
         }
@@ -426,6 +434,7 @@ pub fn draw_gridlines(
                     width: minor_x.width,
                     alpha: 1.0,
                     linetype: minor_x.linetype,
+                    ..Default::default()
                 },
             )?;
         }
@@ -442,6 +451,7 @@ pub fn draw_gridlines(
                     width: minor_y.width,
                     alpha: 1.0,
                     linetype: minor_y.linetype,
+                    ..Default::default()
                 },
             )?;
         }
@@ -458,6 +468,7 @@ pub fn draw_gridlines(
                     width: major_x.width,
                     alpha: 1.0,
                     linetype: major_x.linetype,
+                    ..Default::default()
                 },
             )?;
         }
@@ -474,6 +485,7 @@ pub fn draw_gridlines(
                     width: major_y.width,
                     alpha: 1.0,
                     linetype: major_y.linetype,
+                    ..Default::default()
                 },
             )?;
         }

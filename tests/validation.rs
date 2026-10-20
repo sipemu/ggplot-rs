@@ -397,10 +397,7 @@ fn test_stat_binhex_vs_r() {
     let input = DataFrame::from_csv("validation/fixtures/data/bin2d_input.csv").unwrap();
     let expected = DataFrame::from_csv("validation/fixtures/stat_binhex.csv").unwrap();
 
-    let stat = ggplot_rs::stat::binhex::StatBinHex {
-        bins_x: 5,
-        bins_y: 5,
-    };
+    let stat = ggplot_rs::stat::binhex::StatBinHex::new().bins_xy(5, 5);
     let scales = ScaleSet::new();
     let result = stat.compute_group(&input, &scales);
 

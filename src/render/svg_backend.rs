@@ -5,7 +5,8 @@
 //! (text is `<text>` with font attributes the viewer renders).
 
 use super::backend::{
-    DrawBackend, FontFace, LineStyle, PointShape, PointStyle, RectStyle, TextAnchor, TextStyle,
+    DrawBackend, FontFace, LineEnd, LineStyle, PointShape, PointStyle, RectStyle, TextAnchor,
+    TextStyle,
 };
 use super::{Rect, RenderError};
 
@@ -23,6 +24,8 @@ pub struct SvgBackend {
     axis_key: Option<String>,
     series_key: Option<String>,
     value_key: Option<String>,
+    mark_part: Option<String>,
+    mark_attrs: Vec<(String, String)>,
     root_attrs: Vec<(String, String)>,
     warnings: Vec<String>,
     /// Emit the root `data-plot` panel rect (off for composite pages, whose
@@ -45,6 +48,8 @@ impl SvgBackend {
             axis_key: None,
             series_key: None,
             value_key: None,
+            mark_part: None,
+            mark_attrs: Vec::new(),
             root_attrs: Vec::new(),
             warnings: Vec::new(),
             plot_attr: true,
@@ -82,19 +87,58 @@ impl SvgBackend {
     /// Emit `<tag attrs/>`, or `<tag attrs data-…><title>tip</title></tag>`
     /// when a tooltip / mark metadata is set (native SVG hover + host grouping).
     fn push_mark(&mut self, tag: &str, attrs: &str) {
-        let mut data = String::new();
+        // Built-ins first, then user `data-*` attrs — re-validated here as
+        // defence in depth even though `geom::set_row_extras` already
+        // derives them only from validated `data_attr` mappings, because
+        // `set_mark_attrs` is a public `DrawBackend` method any caller could
+        // invoke directly. A later entry with the same name replaces an
+        // earlier one rather than duplicating it — including `mark_part`'s
+        // own `data-part`, added last, so it always wins over anything a
+        // caller supplied under that name (an element never carries the
+        // same attribute twice, which is an XML parse error).
+        let mut pairs: Vec<(String, String)> = Vec::new();
         for (name, val) in [
             ("data-x", &self.axis_key),
             ("data-series", &self.series_key),
             ("data-value", &self.value_key),
         ] {
             if let Some(v) = val {
-                data.push_str(&format!(" {name}=\"{}\"", escape(v)));
+                pairs.push((name.to_string(), v.clone()));
             }
         }
-        let mark = match &self.tooltip {
-            Some(t) => format!("<{tag} {attrs}{data}><title>{}</title></{tag}>", escape(t)),
-            None => format!("<{tag} {attrs}{data}/>"),
+        for (name, val) in &self.mark_attrs {
+            if !is_valid_mark_attr_name(name) {
+                continue;
+            }
+            match pairs.iter_mut().find(|(n, _)| n == name) {
+                Some(existing) => existing.1 = val.clone(),
+                None => pairs.push((name.clone(), val.clone())),
+            }
+        }
+        // A mark part (e.g. an arrowhead) is decorative: no `<title>`, but it
+        // still carries `data-part` plus `aria-hidden` so assistive tech
+        // skips it (the parent mark already carries the semantic tooltip).
+        // Routed through the same dedup as the other attrs.
+        if let Some(part) = &self.mark_part {
+            match pairs.iter_mut().find(|(n, _)| n == "data-part") {
+                Some(existing) => existing.1 = part.clone(),
+                None => pairs.push(("data-part".to_string(), part.clone())),
+            }
+        }
+        let mut data = String::new();
+        for (name, val) in &pairs {
+            data.push_str(&format!(" {name}=\"{}\"", escape(val)));
+        }
+        if self.mark_part.is_some() {
+            data.push_str(" aria-hidden=\"true\"");
+        }
+        let mark = if self.mark_part.is_some() {
+            format!("<{tag} {attrs}{data}/>")
+        } else {
+            match &self.tooltip {
+                Some(t) => format!("<{tag} {attrs}{data}><title>{}</title></{tag}>", escape(t)),
+                None => format!("<{tag} {attrs}{data}/>"),
+            }
         };
         self.body.push_str(&mark);
     }
@@ -244,6 +288,20 @@ fn json_string(s: &str) -> String {
     out
 }
 
+/// Defence-in-depth gate for `push_mark`'s `mark_attrs`: `^data-[a-z0-9][a-z0-9-]*$`.
+/// `geom::set_row_extras` only ever supplies already-validated names, but
+/// `set_mark_attrs` is a public `DrawBackend` method any caller (a custom
+/// `Geom` impl, or misuse from outside the crate) could invoke directly with
+/// an arbitrary string, so this is checked again right before it reaches
+/// the wire — never trust a single validation layer for attribute-name
+/// injection.
+fn is_valid_mark_attr_name(name: &str) -> bool {
+    match name.strip_prefix("data-") {
+        Some(suffix) => crate::aes::is_valid_data_attr_name(suffix),
+        None => false,
+    }
+}
+
 fn rgb((r, g, b): (u8, u8, u8)) -> String {
     format!("#{r:02X}{g:02X}{b:02X}")
 }
@@ -311,6 +369,14 @@ impl DrawBackend for SvgBackend {
 
     fn warn(&mut self, message: String) {
         self.warnings.push(message);
+    }
+
+    fn set_mark_part(&mut self, part: Option<&str>) {
+        self.mark_part = part.map(|s| s.to_string());
+    }
+
+    fn set_mark_attrs(&mut self, attrs: Vec<(String, String)>) {
+        self.mark_attrs = attrs;
     }
 
     fn draw_circle(
@@ -429,15 +495,74 @@ impl DrawBackend for SvgBackend {
             s if s.is_empty() => String::new(),
             s => format!(" stroke-dasharray=\"{s}\""),
         };
+        // `Butt` is SVG's own default: omitting the attribute keeps default
+        // output byte-identical.
+        let linecap = match style.lineend {
+            LineEnd::Butt => "",
+            LineEnd::Round => " stroke-linecap=\"round\"",
+            LineEnd::Square => " stroke-linecap=\"square\"",
+        };
         let attrs = format!(
-            "points=\"{}\" fill=\"none\" stroke=\"{}\" stroke-width=\"{:.2}\" stroke-opacity=\"{:.3}\"{}",
+            "points=\"{}\" fill=\"none\" stroke=\"{}\" stroke-width=\"{:.2}\" stroke-opacity=\"{:.3}\"{}{}",
             points(&pts),
             rgb(style.color),
             finite_or(style.width, 1.0),
             finite_or(style.alpha, 1.0),
-            dash
+            dash,
+            linecap
         );
         self.push_mark("polyline", &attrs);
+        Ok(())
+    }
+
+    /// Emit a native `<path d="M.. Q..">` quadratic Bézier (one real curve
+    /// instead of a flattened polyline). Non-finite input draws nothing.
+    fn draw_quadratic(
+        &mut self,
+        p0: (f64, f64),
+        ctrl: (f64, f64),
+        p1: (f64, f64),
+        style: &LineStyle,
+    ) -> Result<(), RenderError> {
+        if !(p0.0.is_finite()
+            && p0.1.is_finite()
+            && ctrl.0.is_finite()
+            && ctrl.1.is_finite()
+            && p1.0.is_finite()
+            && p1.1.is_finite())
+        {
+            return Ok(());
+        }
+        let dash = match style
+            .linetype
+            .pattern()
+            .iter()
+            .flat_map(|(d, g)| [*d, *g])
+            .map(|v| format!("{v}"))
+            .collect::<Vec<_>>()
+            .join(",")
+        {
+            s if s.is_empty() => String::new(),
+            s => format!(" stroke-dasharray=\"{s}\""),
+        };
+        let linecap = match style.lineend {
+            LineEnd::Butt => "",
+            LineEnd::Round => " stroke-linecap=\"round\"",
+            LineEnd::Square => " stroke-linecap=\"square\"",
+        };
+        let d = format!(
+            "M{:.2} {:.2} Q{:.2} {:.2} {:.2} {:.2}",
+            p0.0, p0.1, ctrl.0, ctrl.1, p1.0, p1.1
+        );
+        let attrs = format!(
+            "d=\"{d}\" fill=\"none\" stroke=\"{}\" stroke-width=\"{:.2}\" stroke-opacity=\"{:.3}\"{}{}",
+            rgb(style.color),
+            finite_or(style.width, 1.0),
+            finite_or(style.alpha, 1.0),
+            dash,
+            linecap
+        );
+        self.push_mark("path", &attrs);
         Ok(())
     }
 
@@ -520,5 +645,113 @@ impl DrawBackend for SvgBackend {
             escape(text)
         ));
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::render::Rect;
+
+    fn backend() -> SvgBackend {
+        SvgBackend::new(
+            100,
+            100,
+            Rect {
+                x: 0.0,
+                y: 0.0,
+                width: 100.0,
+                height: 100.0,
+            },
+        )
+    }
+
+    #[test]
+    fn draw_quadratic_emits_a_path_with_m_and_q() {
+        let mut b = backend();
+        b.draw_quadratic((0.0, 0.0), (10.0, 20.0), (20.0, 0.0), &LineStyle::default())
+            .unwrap();
+        let svg = b.finish();
+        assert!(svg.contains("<path"));
+        assert!(svg.contains("d=\"M0.00 0.00 Q10.00 20.00 20.00 0.00\""));
+        assert!(!svg.contains("NaN"));
+        assert!(!svg.contains("inf"));
+    }
+
+    #[test]
+    fn draw_quadratic_drops_non_finite_input() {
+        let mut b = backend();
+        b.draw_quadratic(
+            (f64::NAN, 0.0),
+            (10.0, 20.0),
+            (20.0, 0.0),
+            &LineStyle::default(),
+        )
+        .unwrap();
+        b.draw_quadratic(
+            (0.0, 0.0),
+            (f64::INFINITY, 20.0),
+            (20.0, 0.0),
+            &LineStyle::default(),
+        )
+        .unwrap();
+        let svg = b.finish();
+        assert!(!svg.contains("<path"));
+    }
+
+    #[test]
+    fn draw_line_omits_linecap_by_default_but_writes_it_when_set() {
+        let mut b = backend();
+        b.draw_line(&[(0.0, 0.0), (10.0, 10.0)], &LineStyle::default())
+            .unwrap();
+        let svg = b.finish();
+        assert!(!svg.contains("stroke-linecap"));
+
+        let mut b2 = backend();
+        let style = LineStyle {
+            lineend: LineEnd::Round,
+            ..Default::default()
+        };
+        b2.draw_line(&[(0.0, 0.0), (10.0, 10.0)], &style).unwrap();
+        let svg2 = b2.finish();
+        assert!(svg2.contains("stroke-linecap=\"round\""));
+    }
+
+    #[test]
+    fn square_linecap_is_written_on_both_draw_line_and_draw_quadratic() {
+        let style = LineStyle {
+            lineend: LineEnd::Square,
+            ..Default::default()
+        };
+        let mut b = backend();
+        b.draw_line(&[(0.0, 0.0), (10.0, 10.0)], &style).unwrap();
+        assert!(b.finish().contains("stroke-linecap=\"square\""));
+
+        let mut b2 = backend();
+        b2.draw_quadratic((0.0, 0.0), (5.0, 10.0), (10.0, 0.0), &style)
+            .unwrap();
+        assert!(b2.finish().contains("stroke-linecap=\"square\""));
+    }
+
+    /// `push_mark`'s defence-in-depth gate: even if an invalid name reaches
+    /// `set_mark_attrs` directly (bypassing `Aes::data_attr`'s own
+    /// validation — `set_mark_attrs` is a public `DrawBackend` method any
+    /// caller could invoke), it's dropped before it reaches the wire.
+    #[test]
+    fn set_mark_attrs_defence_in_depth_drops_invalid_names() {
+        let mut b = backend();
+        b.set_mark_attrs(vec![
+            ("not-data-prefixed".to_string(), "x".to_string()),
+            ("data-".to_string(), "x".to_string()), // empty suffix
+            ("data-Upper".to_string(), "x".to_string()), // uppercase
+            ("data-ok".to_string(), "valid".to_string()), // the one legitimate entry
+        ]);
+        b.draw_circle((1.0, 1.0), 1.0, &PointStyle::default())
+            .unwrap();
+        let svg = b.finish();
+        assert!(!svg.contains("not-data-prefixed"));
+        assert!(!svg.contains("data-Upper"));
+        assert!(!svg.contains("data-=\""));
+        assert!(svg.contains("data-ok=\"valid\""));
     }
 }

@@ -82,6 +82,7 @@ impl Geom for GeomPointrange {
                     alpha: self.alpha,
                     width: self.width,
                     linetype: Linetype::Solid,
+                    ..Default::default()
                 },
             )?;
 

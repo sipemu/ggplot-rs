@@ -724,6 +724,7 @@ fn draw_repel(
                 },
                 alpha,
                 linetype: Linetype::Solid,
+                ..Default::default()
             },
         )?;
     }

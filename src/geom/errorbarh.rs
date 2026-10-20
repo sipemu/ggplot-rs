@@ -76,6 +76,7 @@ impl Geom for GeomErrorbarh {
                 alpha: self.alpha,
                 width: self.width,
                 linetype: Linetype::Solid,
+                ..Default::default()
             };
             let series = super::series_key(data, i);
             let range = format!(
