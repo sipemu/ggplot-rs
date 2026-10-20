@@ -117,6 +117,8 @@ impl PlotBuilder {
             default_aspect_ratio,
             locale,
             svg_root_data: _,
+            root_attrs: _,
+            svg_warnings_attr: _,
         } = plot;
         let mut theme = theme;
         if theme.aspect_ratio.is_none() {

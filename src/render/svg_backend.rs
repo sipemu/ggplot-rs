@@ -66,6 +66,17 @@ impl SvgBackend {
         self.root_attrs = attrs;
     }
 
+    /// Append extra attributes to the root `<svg>` element, after any
+    /// already set by [`set_root_attrs`](Self::set_root_attrs) (e.g. the
+    /// `data-domain` family from [`root_data_attrs`]). Unlike
+    /// `set_root_attrs`, this does not replace what is already there.
+    /// Callers (`GGPlot::svg_attr`/`PlotGrid::svg_attr`, via
+    /// [`validate_root_attrs`]) are responsible for name validation and
+    /// collision checks; this just appends. Values are escaped on output.
+    pub fn extend_root_attrs(&mut self, attrs: Vec<(String, String)>) {
+        self.root_attrs.extend(attrs);
+    }
+
     /// Omit the root `data-plot` attribute (composite pages).
     pub(crate) fn without_plot_attr(&mut self) {
         self.plot_attr = false;
@@ -357,6 +368,66 @@ fn json_string(s: &str) -> String {
     }
     out.push('"');
     out
+}
+
+/// Allow-listed root-level attribute names for `GGPlot::svg_attr`/
+/// `PlotGrid::svg_attr`: the fixed names `role`, `id`, `class`, `lang`, or
+/// `data-*`/`aria-*` with the same charset-restricted suffix `data_attr`
+/// uses (`^[a-z0-9][a-z0-9-]*$`, excluding the reserved `part`/`geom`
+/// suffixes — irrelevant at the root, but no reason to special-case them
+/// out). Anything else is rejected.
+fn is_allowed_root_attr_name(name: &str) -> bool {
+    matches!(name, "role" | "id" | "class" | "lang")
+        || name
+            .strip_prefix("data-")
+            .is_some_and(crate::aes::is_valid_data_attr_name)
+        || name
+            .strip_prefix("aria-")
+            .is_some_and(crate::aes::is_valid_data_attr_name)
+}
+
+/// Validate and filter a caller's requested root `<svg>` attributes
+/// (`GGPlot::svg_attr`/`PlotGrid::svg_attr`), checked centrally here and
+/// used by both callers rather than re-implemented per type. A name outside
+/// [`is_allowed_root_attr_name`]'s allow-list, or one already present in
+/// `existing` (what ggplot-rs itself is about to write to the same root —
+/// e.g. `data-plot`/`data-domain`/`data-grid`, or `data-warnings` when
+/// `svg_warnings_attr` is also on), is dropped with a warning instead of
+/// silently overwriting or duplicating it. `label` names the caller
+/// (`"plot"`/`"grid"`) in the warning text.
+pub(crate) fn validate_root_attrs(
+    requested: &[(String, String)],
+    existing: &[(String, String)],
+    label: &str,
+    warnings: &mut Vec<String>,
+) -> Vec<(String, String)> {
+    let mut used: Vec<&str> = existing.iter().map(|(k, _)| k.as_str()).collect();
+    let mut out = Vec::new();
+    for (name, value) in requested {
+        if !is_allowed_root_attr_name(name) {
+            warnings.push(format!(
+                "{label}: svg_attr(\"{name}\") is not on the allow-list (data-*, aria-*, role, id, class, lang) — ignored"
+            ));
+            continue;
+        }
+        if used.contains(&name.as_str()) {
+            warnings.push(format!(
+                "{label}: svg_attr(\"{name}\") collides with an attribute ggplot-rs already writes to the root — ignored"
+            ));
+            continue;
+        }
+        used.push(name.as_str());
+        out.push((name.clone(), value.clone()));
+    }
+    out
+}
+
+/// `["warning one", "warning two"]` — a minimal hand-rolled JSON array of
+/// strings for `svg_warnings_attr` (no serde dependency, kept out of the
+/// `sf`-feature dependency tree — see [`json_string`]).
+pub(crate) fn warnings_json(warnings: &[String]) -> String {
+    let items: Vec<String> = warnings.iter().map(|w| json_string(w)).collect();
+    format!("[{}]", items.join(","))
 }
 
 /// Defence-in-depth gate for `push_mark`'s `mark_attrs`: `^data-[a-z0-9][a-z0-9-]*$`.

@@ -183,6 +183,14 @@ pub struct PlotGrid {
     spacing: f64,
     theme: Theme,
     op: Option<Op>,
+    /// Extra root `<svg>` attributes requested via [`PlotGrid::svg_attr`]/
+    /// [`PlotGrid::svg_attrs`], validated and applied at render time.
+    root_attrs: Vec<(String, String)>,
+    /// Whether to emit a `data-warnings` JSON array of the panels'
+    /// combined build warnings on the root `<svg>`
+    /// ([`PlotGrid::svg_warnings_attr`]). Default off; byte-identical
+    /// output when off.
+    svg_warnings_attr: bool,
 }
 
 impl Default for PlotGrid {
@@ -205,6 +213,8 @@ impl Default for PlotGrid {
             spacing: 0.0,
             theme: Theme::default(),
             op: None,
+            root_attrs: Vec::new(),
+            svg_warnings_attr: false,
         }
     }
 }
@@ -323,6 +333,31 @@ impl PlotGrid {
         self
     }
 
+    /// Add one extra attribute to the root `<svg>` element — see
+    /// [`GGPlot::svg_attr`](crate::plot::GGPlot::svg_attr), same allow-list
+    /// (`data-*`, `aria-*`, `role`, `id`, `class`, `lang`) and the same
+    /// "ignored with a warning" rule for anything else or a collision with
+    /// what ggplot-rs already writes (`data-grid`, or `data-warnings` when
+    /// [`svg_warnings_attr`](Self::svg_warnings_attr) is also on).
+    pub fn svg_attr(mut self, name: impl Into<String>, value: impl Into<String>) -> Self {
+        self.root_attrs.push((name.into(), value.into()));
+        self
+    }
+
+    /// [`svg_attr`](Self::svg_attr) for several attributes at once.
+    pub fn svg_attrs(mut self, attrs: impl IntoIterator<Item = (String, String)>) -> Self {
+        self.root_attrs.extend(attrs);
+        self
+    }
+
+    /// Emit a `data-warnings` attribute on the root `<svg>` — a JSON array
+    /// of every panel's combined build warnings, `[]` when there are none.
+    /// Default off, and omitted entirely when off.
+    pub fn svg_warnings_attr(mut self, on: bool) -> Self {
+        self.svg_warnings_attr = on;
+        self
+    }
+
     /// Number of cells (plots, nested grids and spacers).
     pub fn len(&self) -> usize {
         self.cells.len()
@@ -368,6 +403,8 @@ impl PlotGrid {
         theme.resolve_inheritance();
         let collect = self.collect_legends;
         let legend_pos = self.legend_position;
+        let root_attrs = self.root_attrs.clone();
+        let svg_warnings_attr = self.svg_warnings_attr;
 
         // Phase 1 (size-independent): build every plot, assign tags and
         // capture legends to collect.
@@ -394,7 +431,8 @@ impl PlotGrid {
         let mut page = SvgBackend::new(w, h, full.clone());
         page.without_plot_attr();
         let (rows, cols) = prepared.dims();
-        page.set_root_attrs(vec![("data-grid".into(), format!("{rows} {cols}"))]);
+        let data_grid_attr = ("data-grid".to_string(), format!("{rows} {cols}"));
+        page.set_root_attrs(vec![data_grid_attr.clone()]);
         if let Some(fill) = theme
             .plot_background
             .fill
@@ -449,6 +487,24 @@ impl PlotGrid {
         // Phase 3: render cells into their rects.
         let mut warnings = Vec::new();
         render_prepared(prepared, &body, &mut page, &mut warnings)?;
+
+        let mut reserved = vec![data_grid_attr];
+        if svg_warnings_attr {
+            reserved.push(("data-warnings".to_string(), String::new()));
+        }
+        let extra = crate::render::svg_backend::validate_root_attrs(
+            &root_attrs,
+            &reserved,
+            "grid",
+            &mut warnings,
+        );
+        page.extend_root_attrs(extra);
+        if svg_warnings_attr {
+            page.extend_root_attrs(vec![(
+                "data-warnings".to_string(),
+                crate::render::svg_backend::warnings_json(&warnings),
+            )]);
+        }
         Ok((page, warnings))
     }
 }
