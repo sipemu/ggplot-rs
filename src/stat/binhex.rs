@@ -149,13 +149,12 @@ impl StatBinHex {
             }
             // NaN, zero or negative: using it as-is would produce a
             // degenerate (every point in one cell) or non-finite (NaN
-            // centres/vertices) lattice with no visible diagnosis — fall
-            // back to the range/bins lattice instead of staying silent.
-            eprintln!(
-                "ggplot-rs: StatBinHex::binwidth({w}, {h}) must be finite and \
-                 positive; falling back to bins({}, {})",
-                self.bins_x, self.bins_y
-            );
+            // centres/vertices) lattice — fall back to the range/bins
+            // lattice instead. `validate()` (called once per layer, with
+            // access to the plot's warnings channel — `compute_group`/
+            // `lattice` have none) reports this; `lattice` itself stays
+            // silent so it's safe to call from a test or a consumer
+            // without a `GGPlot` build around it.
         }
         let (x_min, x_max) = minmax(xs);
         let (y_min, y_max) = minmax(ys);
@@ -305,6 +304,18 @@ impl Stat for StatBinHex {
 
     fn name(&self) -> &str {
         "binhex"
+    }
+
+    fn validate(&self, warnings: &mut Vec<String>) {
+        if let Some((w, h)) = self.binwidth {
+            if !(w.is_finite() && w > 0.0 && h.is_finite() && h > 0.0) {
+                warnings.push(format!(
+                    "stat_binhex: binwidth({w}, {h}) must be finite and positive; \
+                     falling back to bins({}, {})",
+                    self.bins_x, self.bins_y
+                ));
+            }
+        }
     }
 }
 
@@ -616,5 +627,44 @@ mod tests {
                 .sum();
             assert_eq!(total, 100.0);
         }
+    }
+
+    /// Review R-4: the invalid-binwidth diagnostic goes through `Stat::validate`
+    /// (called once per layer at build time, routed to `GGPlot`'s own
+    /// warnings channel) instead of `eprintln!`, which is lost on wasm and
+    /// isn't visible to a library caller at all.
+    #[test]
+    fn invalid_binwidth_warns_via_stat_validate() {
+        let stat = StatBinHex::new().binwidth(f64::NAN, 1.0);
+        let mut warnings = Vec::new();
+        Stat::validate(&stat, &mut warnings);
+        assert_eq!(warnings.len(), 1);
+        assert!(warnings[0].contains("binwidth"));
+
+        let valid = StatBinHex::new().binwidth(1.0, 1.0);
+        let mut warnings2 = Vec::new();
+        Stat::validate(&valid, &mut warnings2);
+        assert!(warnings2.is_empty());
+    }
+
+    /// End-to-end: the warning reaches `GGPlot`'s own warnings channel.
+    #[test]
+    fn invalid_binwidth_warning_reaches_the_plot_warnings() {
+        use crate::prelude::*;
+
+        let (_svg, warnings) = GGPlot::new(vec![
+            ("x".into(), vec![Value::Float(0.0), Value::Float(1.0)]),
+            ("y".into(), vec![Value::Float(0.0), Value::Float(1.0)]),
+        ])
+        .aes(Aes::new().x("x").y("y"))
+        .geom_hex()
+        .stat(StatBinHex::new().binwidth(0.0, 0.0))
+        .render_svg_native_with_warnings(300, 300)
+        .unwrap();
+
+        assert!(
+            warnings.iter().any(|w| w.contains("binwidth")),
+            "{warnings:?}"
+        );
     }
 }

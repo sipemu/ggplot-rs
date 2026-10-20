@@ -1,17 +1,50 @@
-use crate::aes::{validated_data_attr_internal_name, Aes, Aesthetic, MappingStage};
+use crate::aes::{
+    validated_data_attr_internal_name, Aes, Aesthetic, MappingStage, INTERNAL_PREFIX,
+    TOOLTIP_INTERNAL_NAME,
+};
 use crate::data::DataFrame;
+
+/// The internal column name a mapping should be stored under, or `None` if
+/// it's invalid/reserved (in which case a warning was already pushed).
+/// Shared by [`resolve_mappings`] and [`apply_after_stat`] so `DataAttr` and
+/// `Tooltip` get exactly the same validation and routing regardless of
+/// which build stage (before/after stat) created the mapping.
+fn target_column(aesthetic: &Aesthetic, warnings: &mut Vec<String>) -> Option<String> {
+    match aesthetic {
+        Aesthetic::DataAttr(target) => match validated_data_attr_internal_name(target) {
+            Some(internal) => Some(internal),
+            None => {
+                warnings.push(format!(
+                    "aes: data_attr target {target:?} is invalid or reserved; skipped"
+                ));
+                None
+            }
+        },
+        // A `Tooltip` mapping is stored under its own internal name, not the
+        // plain `"tooltip"` an unrelated raw source column could also be
+        // named — the same class of bug `DataAttr`'s internal prefix fixes.
+        Aesthetic::Tooltip => Some(TOOLTIP_INTERNAL_NAME.to_string()),
+        other => Some(other.col_name().to_string()),
+    }
+}
 
 /// Evaluate aesthetic mappings: extract columns from source data
 /// and rename them to canonical aesthetic names (x, y, color, etc.).
 /// Only resolves BeforeStat mappings.
 ///
-/// A `DataAttr` mapping's target is re-validated here (see
-/// `validated_data_attr_internal_name`) regardless of how it was built,
-/// and stored under an internal, non-colliding column name — not the plain
-/// `"data-<name>"` a caller's own unrelated raw data column could also be
-/// named. `geom::set_row_extras` only reads that internal prefix, so it
-/// never mistakes an incidental raw `data-*` column for a validated one.
-/// An invalid or reserved target is dropped with a warning.
+/// A `DataAttr`/`Tooltip` mapping's target is re-validated and routed to an
+/// internal, non-colliding column name here (see [`target_column`]),
+/// regardless of how the mapping was built. `geom::set_row_extras` only
+/// reads those internal names, so it never mistakes an incidental raw
+/// column of the same plain name (`"tooltip"`, or `"data-<name>"`) for a
+/// validated one — and a raw source column is never carried through under
+/// an internal name either: any column whose name contains a NUL byte (or,
+/// redundantly, the internal prefix itself — the NUL check already covers
+/// it, since the prefix starts with one, but a future internal scheme might
+/// not) is dropped outright by the carry-over loop below, rather than
+/// copied through unchanged. Without that, a caller could still *forge* an
+/// internal name directly (`GGPlot::new` accepts any `String` column name,
+/// NUL byte included) and have it misread as a validated attribute.
 pub fn resolve_mappings(data: &DataFrame, mapping: &Aes, warnings: &mut Vec<String>) -> DataFrame {
     let mut result = DataFrame::new();
     let nrows = data.nrows();
@@ -24,17 +57,8 @@ pub fn resolve_mappings(data: &DataFrame, mapping: &Aes, warnings: &mut Vec<Stri
         if m.stage != MappingStage::BeforeStat {
             continue;
         }
-        let col_name = match &m.aesthetic {
-            Aesthetic::DataAttr(target) => match validated_data_attr_internal_name(target) {
-                Some(internal) => internal,
-                None => {
-                    warnings.push(format!(
-                        "aes: data_attr target {target:?} is invalid or reserved; skipped"
-                    ));
-                    continue;
-                }
-            },
-            other => other.col_name().to_string(),
+        let Some(col_name) = target_column(&m.aesthetic, warnings) else {
+            continue;
         };
         if let Some(values) = data.column(&m.column) {
             result.add_column(col_name, values.to_vec());
@@ -45,8 +69,13 @@ pub fn resolve_mappings(data: &DataFrame, mapping: &Aes, warnings: &mut Vec<Stri
         }
     }
 
-    // Also carry over any columns that already have canonical names and aren't mapped
+    // Also carry over any columns that already have canonical names and
+    // aren't mapped — except one that could forge an internal name (see
+    // this function's doc).
     for name in data.column_names() {
+        if is_forged_internal_name(name) {
+            continue;
+        }
         if !result.has_column(name) {
             // Keep original columns available for stats that need them
             if let Some(values) = data.column(name) {
@@ -60,27 +89,27 @@ pub fn resolve_mappings(data: &DataFrame, mapping: &Aes, warnings: &mut Vec<Stri
     result
 }
 
-/// Apply after_stat mappings: rename stat-computed columns to canonical aesthetic names.
-/// Called after the stat step in the build pipeline. `DataAttr` targets are
-/// validated the same way as in [`resolve_mappings`] (a `DataAttr` mapping
-/// built directly and pushed with `MappingStage::AfterStat` is obscure but
-/// not impossible, so it gets the same gate).
+/// A raw column name that could be mistaken for — or collide with — an
+/// internal column written by `target_column` (NUL byte, or the internal
+/// prefix text itself, which always contains a NUL but is checked
+/// explicitly too in case that ever changes).
+fn is_forged_internal_name(name: &str) -> bool {
+    name.contains('\0') || name.contains(INTERNAL_PREFIX)
+}
+
+/// Apply after_stat mappings: rename stat-computed columns to canonical
+/// aesthetic names. Called after the stat step in the build pipeline.
+/// `DataAttr`/`Tooltip` targets are validated and routed the same way as in
+/// [`resolve_mappings`] (built directly and pushed with
+/// `MappingStage::AfterStat` is obscure but not impossible, so it gets the
+/// same gate).
 pub fn apply_after_stat(data: &mut DataFrame, mapping: &Aes, warnings: &mut Vec<String>) {
     for m in &mapping.mappings {
         if m.stage != MappingStage::AfterStat {
             continue;
         }
-        let target = match &m.aesthetic {
-            Aesthetic::DataAttr(target) => match validated_data_attr_internal_name(target) {
-                Some(internal) => internal,
-                None => {
-                    warnings.push(format!(
-                        "aes: data_attr target {target:?} is invalid or reserved; skipped"
-                    ));
-                    continue;
-                }
-            },
-            other => other.col_name().to_string(),
+        let Some(target) = target_column(&m.aesthetic, warnings) else {
+            continue;
         };
         let source = &m.column;
 

@@ -124,17 +124,46 @@ impl ScaleLinewidthContinuous {
         }
     }
 
-    /// Normalized fraction in `[0, 1]`, ggplot2's order: transform the value
-    /// *and* the (untransformed) limits, then rescale over the transformed
-    /// range — not the other way around. Transforming an already-rescaled
-    /// `[0, 1]` fraction (the previous, incorrect implementation) collapses
-    /// most transforms: e.g. `Log10`/`Reverse`/`Exp` of values near 0 and 1
-    /// all land near the same couple of outputs, regardless of the input.
-    /// The transformed limits are sorted ascending before rescaling, so a
+    /// Whether the configured transform is undefined somewhere in
+    /// `[min, max]` itself — e.g. `Log10` with a limit `<= 0` (common: a
+    /// flow-count column that legitimately contains 0, or an explicit
+    /// `with_limits(0, vmax)`). When this is true, no value in the domain
+    /// has a well-defined fraction under this transform; `validate()`
+    /// reports it once per scale, and `map_to_size` returns `None` for
+    /// every value (falling back to the geom's own width) rather than
+    /// guessing.
+    fn domain_transform_is_broken(&self) -> bool {
+        if !self.trained || !self.min.is_finite() || !self.max.is_finite() {
+            return false;
+        }
+        let t_min = self.scale_transform.apply(self.min);
+        let t_max = self.scale_transform.apply(self.max);
+        !t_min.is_finite() || !t_max.is_finite()
+    }
+
+    /// Normalized fraction in `[0, 1]`, ggplot2's order: squish the value to
+    /// the domain, *then* transform both it and the (untransformed) limits,
+    /// then rescale over the transformed range — not the other way around.
+    /// Transforming an already-rescaled `[0, 1]` fraction (an earlier,
+    /// incorrect implementation) collapses most transforms: e.g.
+    /// `Log10`/`Reverse`/`Exp` of values near 0 and 1 all land near the same
+    /// couple of outputs, regardless of the input. Squishing *before* the
+    /// transform (rather than transforming the raw value) means an
+    /// ordinary out-of-limits value — e.g. `v = 0` under `Log10` with
+    /// `limits(1, 100)`, which is outside the domain but the domain itself
+    /// is fine — still squishes to the nearest end (here, the minimum
+    /// width) instead of landing on an undefined `Log10(0)`. The
+    /// transformed limits are sorted ascending before rescaling, so a
     /// transform that reverses order (`Reverse`, or `Reciprocal` on
     /// positive limits) still produces the expected result: the domain
     /// minimum gets the *larger* output, since its transformed value is the
     /// larger of the two transformed limits.
+    ///
+    /// Returns `0.5` (not NaN) when [`domain_transform_is_broken`](Self::domain_transform_is_broken)
+    /// — this keeps callers that need a finite `[0, 1]` position regardless
+    /// (e.g. a legend key's x/y) from ever seeing NaN; `map_to_size` makes
+    /// its own, separate check and returns `None` in that case instead of
+    /// this placeholder.
     fn fraction(&self, value: &Value) -> f64 {
         let f = match value.as_f64() {
             Some(f) => f,
@@ -146,12 +175,17 @@ impl ScaleLinewidthContinuous {
         if !self.trained || !self.min.is_finite() || !self.max.is_finite() {
             return 0.5;
         }
+        if self.domain_transform_is_broken() {
+            return 0.5;
+        }
+        let (dom_lo, dom_hi) = (self.min.min(self.max), self.min.max(self.max));
+        let clamped = f.clamp(dom_lo, dom_hi);
         let t_min = self.scale_transform.apply(self.min);
         let t_max = self.scale_transform.apply(self.max);
-        let t_v = self.scale_transform.apply(f);
+        let t_v = self.scale_transform.apply(clamped);
         let (lo, hi) = (t_min.min(t_max), t_min.max(t_max));
         let range = hi - lo;
-        if !t_v.is_finite() || !range.is_finite() || range.abs() < f64::EPSILON {
+        if !t_v.is_finite() || range.abs() < f64::EPSILON {
             return 0.5;
         }
         ((t_v - lo) / range).clamp(0.0, 1.0)
@@ -253,6 +287,14 @@ impl Scale for ScaleLinewidthContinuous {
         if !f.is_finite() {
             return None;
         }
+        // The transform is undefined somewhere in the domain itself (e.g.
+        // Log10 with a limit <= 0): no well-defined width for *any* value,
+        // so every row falls back to the geom's own width too, instead of
+        // the previous behaviour of silently reporting the midpoint width.
+        // `validate()` reports this once per scale, at build time.
+        if self.domain_transform_is_broken() {
+            return None;
+        }
         let t = self.fraction(value);
         let (lo, hi) = self.range;
         Some(lo + t * (hi - lo))
@@ -280,6 +322,17 @@ impl Scale for ScaleLinewidthContinuous {
             self.min = f64::INFINITY;
             self.max = f64::NEG_INFINITY;
             self.trained = false;
+        }
+    }
+
+    fn validate(&self, warnings: &mut Vec<String>) {
+        if self.domain_transform_is_broken() {
+            warnings.push(format!(
+                "scale_linewidth: {:?} is undefined at the domain limits ({}, {}); \
+                 every row falls back to the geom's own linewidth instead of a mapped size \
+                 (ggplot2's equivalent: NA plus a warning)",
+                self.scale_transform, self.min, self.max
+            ));
         }
     }
 }
@@ -394,5 +447,104 @@ mod tests {
         assert_eq!(scale.map_to_size(&Value::Str("x".into())), None);
         assert_eq!(scale.map_to_size(&Value::Float(f64::NAN)), None);
         assert_eq!(scale.map_to_size(&Value::Float(f64::INFINITY)), None);
+    }
+
+    // ─── Review R-2: a transform undefined somewhere in the domain (e.g.
+    // Log10 with a limit <= 0) must map every value to None (falls back to
+    // the geom's own width) and warn once, instead of the previous
+    // behaviour of silently reporting the midpoint width. An ordinary
+    // out-of-limits value, when the domain itself is fine, still squishes
+    // to the nearest end. ───
+
+    #[test]
+    fn log10_with_a_zero_lower_limit_maps_every_value_to_none_and_warns() {
+        let scale = ScaleLinewidthContinuous::new()
+            .with_range(1.0, 6.0)
+            .with_transform(ScaleTransform::Log10)
+            .with_limits(0.0, 100.0);
+        for v in [0.0, 1.0, 50.0, 100.0] {
+            assert_eq!(
+                scale.map_to_size(&Value::Float(v)),
+                None,
+                "v={v} should map to None, not the midpoint width"
+            );
+        }
+        let mut warnings = Vec::new();
+        scale.validate(&mut warnings);
+        assert_eq!(warnings.len(), 1, "{warnings:?}");
+        assert!(warnings[0].contains("Log10"));
+    }
+
+    #[test]
+    fn a_value_trained_to_zero_breaks_log10_the_same_way() {
+        // The domain minimum comes from training on data that legitimately
+        // contains 0 (e.g. a flow count), not an explicit `with_limits`.
+        let mut scale = ScaleLinewidthContinuous::new()
+            .with_range(1.0, 6.0)
+            .with_transform(ScaleTransform::Log10);
+        scale.train(&[Value::Float(0.0), Value::Float(100.0)]);
+        assert_eq!(scale.map_to_size(&Value::Float(50.0)), None);
+        let mut warnings = Vec::new();
+        scale.validate(&mut warnings);
+        assert_eq!(warnings.len(), 1);
+    }
+
+    #[test]
+    fn out_of_limits_value_squishes_to_the_nearest_end_even_under_log10() {
+        // The domain (1, 100) is fine for Log10; v=0 is simply outside it,
+        // like any other oob value — squish to the minimum, not None.
+        let scale = ScaleLinewidthContinuous::new()
+            .with_range(1.0, 6.0)
+            .with_transform(ScaleTransform::Log10)
+            .with_limits(1.0, 100.0);
+        assert_eq!(scale.map_to_size(&Value::Float(0.0)), Some(1.0));
+        assert_eq!(scale.map_to_size(&Value::Float(-50.0)), Some(1.0));
+        assert_eq!(scale.map_to_size(&Value::Float(1000.0)), Some(6.0));
+
+        let mut warnings = Vec::new();
+        scale.validate(&mut warnings);
+        assert!(
+            warnings.is_empty(),
+            "a fine domain shouldn't warn: {warnings:?}"
+        );
+    }
+
+    #[test]
+    fn fraction_stays_finite_even_when_the_domain_transform_is_broken() {
+        // Legend/axis-style callers need a finite [0,1] position regardless.
+        let scale = ScaleLinewidthContinuous::new()
+            .with_transform(ScaleTransform::Log10)
+            .with_limits(0.0, 100.0);
+        let t = scale.map(&Value::Float(50.0));
+        assert!(t.is_finite());
+    }
+
+    /// End-to-end: the warning reaches `GGPlot`'s own warnings channel, not
+    /// just the scale's own `validate()`.
+    #[test]
+    fn broken_domain_transform_warning_reaches_the_plot_warnings() {
+        use crate::prelude::*;
+
+        let (_svg, warnings) = GGPlot::new(vec![
+            ("x".into(), vec![Value::Float(0.0), Value::Float(1.0)]),
+            ("y".into(), vec![Value::Float(0.0), Value::Float(1.0)]),
+            ("xend".into(), vec![Value::Float(0.5), Value::Float(1.5)]),
+            ("yend".into(), vec![Value::Float(0.5), Value::Float(1.5)]),
+            ("size".into(), vec![Value::Float(0.0), Value::Float(100.0)]),
+        ])
+        .aes(
+            Aes::new()
+                .x("x")
+                .y("y")
+                .xend("xend")
+                .yend("yend")
+                .linewidth("size"),
+        )
+        .geom_segment()
+        .scale_linewidth(ScaleLinewidthContinuous::new().with_transform(ScaleTransform::Log10))
+        .render_svg_native_with_warnings(200, 200)
+        .unwrap();
+
+        assert!(warnings.iter().any(|w| w.contains("Log10")), "{warnings:?}");
     }
 }

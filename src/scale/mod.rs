@@ -153,4 +153,13 @@ pub trait Scale: Send + Sync {
 
     /// Reset training state so the scale can be retrained on new data.
     fn reset_training(&mut self) {}
+
+    /// Validate this scale's configuration once training is complete (e.g.
+    /// a transform undefined at the domain's own limits) and push a
+    /// human-readable warning for each problem found. Called once per scale
+    /// after the final training pass, with the plot's warnings sink —
+    /// `map`/`map_to_size` run per mark at draw time and have no such
+    /// access, so a scale-level problem must be reported here instead.
+    /// Default: no-op.
+    fn validate(&self, _warnings: &mut Vec<String>) {}
 }

@@ -80,6 +80,15 @@ polyline).
   that names every field explicitly — `Aes { mappings, after_scale }`,
   without `..Default::default()` — no longer compiles (E0451, "field
   `warnings` of struct `Aes` is private"); add `..Default::default()`.
+- `ggplot_rs::aes::{resolve_mappings, apply_after_stat}` (public
+  re-exports of `aes::mapping`'s functions) gain a `&mut Vec<String>`
+  warnings parameter: `resolve_mappings(data, mapping)` →
+  `resolve_mappings(data, mapping, warnings)`, same for
+  `apply_after_stat`. Needed so a `data_attr`/`tooltip` mapping that
+  turns out invalid or reserved at this stage (not just at
+  `Aes::data_attr` build time — e.g. one constructed by pushing
+  directly into `Aes.mappings`) can still report a warning instead of
+  resolving silently.
 
 ## [0.19.0] — 2026-10-16
 

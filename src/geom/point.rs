@@ -293,4 +293,60 @@ mod interactive_aes_tests {
         assert!(svg.contains("<title>T1</title>"));
         assert!(svg.contains("<title>T2</title>"));
     }
+
+    /// Review R-1 (blocking): an unmapped raw column literally named
+    /// `"tooltip"` must not drive tooltips — the same class of bug fixed
+    /// for `data_attr`, now also fixed for `Aes::tooltip`'s own plain name.
+    #[test]
+    fn a_raw_column_named_tooltip_with_no_mapping_sets_no_tooltips() {
+        let with_raw_tooltip_col = GGPlot::new(vec![
+            ("x".into(), vec![Value::Float(0.0), Value::Float(1.0)]),
+            ("y".into(), vec![Value::Float(0.0), Value::Float(1.0)]),
+            (
+                "tooltip".into(),
+                vec![Value::Str("sneaky 1".into()), Value::Str("sneaky 2".into())],
+            ),
+        ])
+        .aes(Aes::new().x("x").y("y")) // no Aes::tooltip mapping
+        .geom_point()
+        .render_svg_native_with_size(200, 200)
+        .unwrap();
+        assert!(!with_raw_tooltip_col.contains("sneaky"));
+
+        // Same dataset, without the raw column, for a baseline title count.
+        let without = GGPlot::new(vec![
+            ("x".into(), vec![Value::Float(0.0), Value::Float(1.0)]),
+            ("y".into(), vec![Value::Float(0.0), Value::Float(1.0)]),
+        ])
+        .aes(Aes::new().x("x").y("y"))
+        .geom_point()
+        .render_svg_native_with_size(200, 200)
+        .unwrap();
+        // geom_point's own default title is "(x, y)", present either way —
+        // the raw "tooltip" column changed nothing about it.
+        let title_count = |s: &str| s.matches("<title>").count();
+        assert_eq!(title_count(&with_raw_tooltip_col), title_count(&without));
+    }
+
+    /// Review R-3 (low): a raw column that tries to *forge* the internal
+    /// `data_attr`/`tooltip` storage name directly (NUL byte included —
+    /// `GGPlot::new` accepts any `String`) is dropped by `resolve_mappings`,
+    /// not carried through and misread as a validated attribute.
+    #[test]
+    fn a_raw_column_forging_the_internal_prefix_is_dropped() {
+        let forged_data_attr = format!("{}data-spoof", crate::aes::DATA_ATTR_INTERNAL_PREFIX);
+        let forged_tooltip = crate::aes::TOOLTIP_INTERNAL_NAME.to_string();
+        let svg = GGPlot::new(vec![
+            ("x".into(), vec![Value::Float(0.0)]),
+            ("y".into(), vec![Value::Float(0.0)]),
+            (forged_data_attr, vec![Value::Str("evil".into())]),
+            (forged_tooltip, vec![Value::Str("evil tip".into())]),
+        ])
+        .aes(Aes::new().x("x").y("y"))
+        .geom_point()
+        .render_svg_native_with_size(200, 200)
+        .unwrap();
+        assert!(!svg.contains("data-spoof"));
+        assert!(!svg.contains("evil"));
+    }
 }

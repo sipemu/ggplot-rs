@@ -109,6 +109,7 @@ impl Geom for GeomHistogram {
                 super::series_key(data, i),
                 super::measured_value(data, i),
             );
+            super::set_row_extras(backend, data, i);
 
             backend.draw_rect(
                 (left_px, top_px.min(bottom_px)),
@@ -123,6 +124,7 @@ impl Geom for GeomHistogram {
             )?;
         }
         super::clear_mark(backend);
+        super::clear_row_extras(backend);
 
         Ok(())
     }
@@ -160,5 +162,38 @@ impl Geom for GeomHistogram {
 
     fn set_series_color(&mut self, color: (u8, u8, u8)) {
         self.fill = color;
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::aes::{AesMapping, Aesthetic, MappingStage};
+    use crate::data::Value;
+    use crate::prelude::*;
+
+    /// Review R-7 (nit): an after_stat `data_attr` on a histogram — there's
+    /// no builder for it (`Aes::data_attr` only maps BeforeStat), so this
+    /// manually constructs the mapping, the same way a caller reaching for
+    /// R's `stage()`-equivalent would have to. It must actually work (the
+    /// underlying gap was `GeomHistogram` never calling
+    /// `geom::set_row_extras` at all, not anything specific to after_stat).
+    #[test]
+    fn after_stat_data_attr_works_on_a_histogram() {
+        let n = 50;
+        let x: Vec<Value> = (0..n).map(|i| Value::Float(i as f64 * 0.2)).collect();
+        let mut aes = Aes::new().x("x");
+        aes.mappings.push(AesMapping {
+            column: "count".to_string(),
+            aesthetic: Aesthetic::DataAttr("data-n".to_string()),
+            stage: MappingStage::AfterStat,
+        });
+
+        let svg = GGPlot::new(vec![("x".into(), x)])
+            .aes(aes)
+            .geom_histogram()
+            .render_svg_native_with_size(400, 300)
+            .unwrap();
+
+        assert!(svg.contains("data-n=\""));
     }
 }

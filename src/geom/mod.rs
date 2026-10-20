@@ -218,25 +218,31 @@ pub(crate) fn clear_mark(backend: &mut dyn DrawBackend) {
 /// Apply one row's interactive aesthetics (B1-7: `Aes::tooltip`,
 /// `Aes::data_attr`) to the backend.
 ///
-/// A mapped `tooltip` column replaces the geom's own `<title>` (call the
-/// geom's own `set_mark(...)` *before* this, so a custom tooltip wins); when
-/// the column exists but this row's value is NA, the tooltip is explicitly
-/// reset to `None` — never inheriting an earlier row's — covering geoms with
-/// no title of their own. `set_tooltip` is only called at all when the
-/// `tooltip` column exists, so layers that never map it don't touch
-/// whatever the geom already set.
+/// A validated `Aes::tooltip` mapping replaces the geom's own `<title>`
+/// (call the geom's own `set_mark(...)` *before* this, so a custom tooltip
+/// wins) for *every* row — including when this row's value is NA, which
+/// explicitly resets the tooltip to `None` (no `<title>` at all, even if
+/// the geom has its own default): once `Aes::tooltip` is mapped, it owns
+/// the tooltip for the whole layer, the same row-by-row way `color` or
+/// `size` would. It never inherits an earlier row's. It's read from
+/// [`crate::aes::TOOLTIP_INTERNAL_NAME`], not a plain `"tooltip"` column
+/// name, so an unrelated raw source column literally called `"tooltip"`
+/// can never drive every mark's hover title (the same class of bug fixed
+/// for `data_attr` below). `set_tooltip` is only called at all when that
+/// internal column exists, so layers that never map `Aes::tooltip` don't
+/// touch whatever the geom already set.
 ///
 /// Every validated `data_attr` column becomes a `data-<name>` attribute.
-/// These are stored under [`crate::aes::DATA_ATTR_INTERNAL_PREFIX`] — an
-/// internal name no caller-supplied column can produce through the public
-/// API — rather than scanned by a `"data-"` name prefix: a raw source
-/// column that merely happens to be named like a data attribute (e.g. a SQL
-/// alias) was never validated and must never reach `push_mark` (see
-/// `aes::validated_data_attr_internal_name`). `set_mark_attrs` is *always*
-/// called, even with an empty list, so a row with no attrs doesn't inherit
-/// an earlier row's.
+/// These are stored under [`crate::aes::DATA_ATTR_INTERNAL_PREFIX`] rather
+/// than scanned by a `"data-"` name prefix: a raw source column that merely
+/// happens to be named like a data attribute (e.g. a SQL alias) was never
+/// validated and must never reach `push_mark` (see
+/// `aes::validated_data_attr_internal_name`, and `aes::mapping`'s defensive
+/// drop of any raw column that could forge an internal name).
+/// `set_mark_attrs` is *always* called, even with an empty list, so a row
+/// with no attrs doesn't inherit an earlier row's.
 pub(crate) fn set_row_extras(backend: &mut dyn DrawBackend, data: &DataFrame, row: usize) {
-    if let Some(col) = data.column("tooltip") {
+    if let Some(col) = data.column(crate::aes::TOOLTIP_INTERNAL_NAME) {
         let tip = col.get(row).filter(|v| !v.is_na()).map(tip_value);
         backend.set_tooltip(tip);
     }

@@ -27,7 +27,10 @@ pub enum Aesthetic {
     Radius,
     /// Stroke width for segment/curve/path/line (R's `linewidth`).
     Linewidth,
-    /// A custom `<title>` hover tooltip, replacing the geom's own.
+    /// A custom `<title>` hover tooltip, replacing the geom's own. Routed
+    /// through [`crate::aes::TOOLTIP_INTERNAL_NAME`] in `resolve_mappings`,
+    /// the same way `DataAttr` is, so an unrelated raw column literally
+    /// named `"tooltip"` can never be mistaken for a mapped one.
     Tooltip,
     /// A custom `data-<name>` attribute on the mark. The `String` is the
     /// full attribute name (`"data-<name>"`). [`Aes::data_attr`] validates
@@ -400,16 +403,32 @@ pub(crate) fn is_valid_data_attr_name(name: &str) -> bool {
     chars.all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '-')
 }
 
-/// Internal storage prefix for validated `data_attr` columns in the built
-/// DataFrame. Reserved: no column name a caller can produce through the
-/// public API collides with it (it isn't a legal data-attr target itself,
-/// and isn't a plain column name any aesthetic resolves to), so
-/// `geom::set_row_extras` can look for *only* this prefix instead of
-/// scanning for anything that merely looks like a `data-*` column — which
-/// would also match an unrelated raw source column a caller never mapped
-/// through `Aes::data_attr` (the injection this guards against: see
-/// `validated_data_attr_internal_name`).
+/// Internal storage namespace for validated interactive-aesthetic columns
+/// (`data_attr`, `tooltip`) in the built DataFrame. Starts with a NUL byte,
+/// which can't appear in any column name `resolve_mappings` carries over
+/// from a caller's raw source data: that loop explicitly drops a raw column
+/// whose name contains a NUL (or this prefix) rather than carrying it
+/// through unchanged — see its doc. So in practice no caller-supplied
+/// column collides with a name under this prefix, but the real guarantee is
+/// that drop, not merely that a legitimate column "wouldn't" be named this
+/// way (`GGPlot::new` accepts any `String`, including one with a NUL byte
+/// in it, deliberately crafted to collide).
+pub(crate) const INTERNAL_PREFIX: &str = "\u{0}ggplot-rs:";
+
+/// Internal storage prefix for validated `data_attr` columns — see
+/// [`INTERNAL_PREFIX`]. `geom::set_row_extras` looks for *only* this
+/// prefix instead of scanning for anything that merely looks like a
+/// `data-*` column, which would also match an unrelated raw source column
+/// a caller never mapped through `Aes::data_attr` (the injection this
+/// guards against: see `validated_data_attr_internal_name`).
 pub(crate) const DATA_ATTR_INTERNAL_PREFIX: &str = "\u{0}ggplot-rs:data-attr:";
+
+/// Internal storage name for a validated `Aes::tooltip` mapping — see
+/// [`INTERNAL_PREFIX`]. Without this, an unmapped raw column literally
+/// named `"tooltip"` would drive every mark's hover title (the same class
+/// of bug `DATA_ATTR_INTERNAL_PREFIX` fixes for `data_attr`); routing it
+/// through the same internal-prefix scheme closes that for tooltips too.
+pub(crate) const TOOLTIP_INTERNAL_NAME: &str = "\u{0}ggplot-rs:tooltip";
 
 /// Validate a `data_attr` mapping's target (`"data-<name>"`, as stored in
 /// [`Aesthetic::DataAttr`]) and, if valid, return the internal column name

@@ -175,6 +175,14 @@ impl PlotBuilder {
             }
         }
 
+        // Validate each scale's final configuration (e.g. a transform
+        // undefined at its own domain limits) now that training is done —
+        // `map`/`map_to_size` run per mark at draw time and have no
+        // warnings sink of their own.
+        for scale in scale_set.iter() {
+            scale.validate(&mut warnings);
+        }
+
         // An empty plot (no layers, or only layers without data) still gets a
         // panel with axes: make sure both position scales exist. They stay
         // untrained, so they draw no breaks and map everything to the centre.
@@ -635,6 +643,11 @@ impl PlotBuilder {
             ));
         }
         let input_rows = working_data.nrows();
+
+        // Validate the stat's own configuration once per layer (e.g.
+        // `StatBinHex::binwidth` — a problem with fixed parameters, not
+        // with the data), before it runs per-group below.
+        stat.validate(warnings);
 
         // Step 6: Compute statistics. Group by aesthetic groups AND the facet
         // variables, so a computed stat (density/histogram/…) is estimated per
