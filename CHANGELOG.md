@@ -46,13 +46,11 @@ guarded by `tests/default_output_022.rs`.
   `lower`/`middle`/`upper`/`outliers`): a raw column of that name is
   dropped right after `resolve_mappings` unless the aesthetic was
   actually mapped, so a column that merely happens to share the name
-  (e.g. a SQL alias) can't be mistaken for a mapped one. `lower`/`middle`/
-  `upper`/`outliers` themselves are dropped this way for *every* geom, not
-  just `geom_boxplot` (review #158 re-review, HIGH): these four names are
-  also in `POSITION_COLS`/`Y_FAMILY`/the stat_aes y-training list, and
-  without this, an unmapped column of one of these names on an unrelated
-  layer (e.g. a forecast's confidence-bound columns on a plain
-  `geom_line`) could drop finite rows or stretch the y domain.
+  (e.g. a SQL alias) can't be mistaken for a mapped one, and so a raw
+  `lower` is never drawn as a boxplot hinge. Scoped to `GeomBoxplot`
+  alone — see the `Value::Na`/non-finite drop bullet under "Changed" for
+  how an unmapped `lower`/`middle`/`upper` on any *other* geom is handled
+  without removing it from the data (review #158's final check).
 - `Geom::validate_layer(pre_stat_columns, stat_name)` (default no-op):
   stat-dependent validation beyond `required_aes`. Under
   `stat = "identity"`, `geom_boxplot` requires `lower`/`middle`/`upper`/
@@ -113,10 +111,27 @@ guarded by `tests/default_output_022.rs`.
   discrete category values) is now dropped with the standard "removed N
   row(s) containing non-finite values" warning, the same as `Float(NaN)`
   already was — previously it silently mapped to 0 with no warning
-  (review #158 finding 4). The new `lower`/`middle`/`upper` columns also
-  drop a non-numeric, non-`Na` value (a stray string) the same way,
-  since they have no legitimate discrete use. A plot whose position data
-  has no `Na` is unaffected.
+  (review #158 finding 4). This applies to every geom that uses one of
+  these columns, not just `geom_boxplot`: e.g. `geom_errorbar`/
+  `geom_pointrange`/`geom_ribbon` with a `Value::Na` `ymin` now drop that
+  row with a warning instead of silently drawing it from 0 — matching
+  ggplot2, which has always dropped a missing aesthetic's row this way.
+  The new `lower`/`middle`/`upper` columns also drop a non-numeric,
+  non-`Na` value (a stray string) the same way, since they have no
+  legitimate discrete use. A plot whose position data has no `Na` is
+  unaffected.
+- `lower`/`middle`/`upper` are excluded from the above `Value::Na`/non-
+  finite drop, the pre-stat y-scale transform, and the y-scale training
+  *when the layer never mapped the corresponding aesthetic* — a raw,
+  unmapped column under one of these names (e.g. a forecast's confidence-
+  bound columns on a plain `geom_line`) is otherwise left completely
+  untouched in the layer's data, so a `tooltip("{lower}")` placeholder or
+  a `facet_wrap("upper")` on it still works, exactly as any other
+  unmapped column would (review #158's final check — round 3's universal
+  drop of these names from the data for every geom was itself a
+  regression on both of those). `geom_boxplot`'s own hinges — mapped
+  under `stat = "identity"`, or computed fresh by its default stat — are
+  unaffected either way.
 
 ### Breaking
 

@@ -566,6 +566,34 @@ fn forecast_shaped_unmapped_wide_lower_upper_values_do_not_stretch_y() {
     );
 }
 
+/// Regression for review #158's final check: round 3's universal
+/// `MAPPED_ONLY_COLS` drop removed a raw, unmapped `upper` column from the
+/// layer's data entirely — so `facet_wrap("upper")` on a forecast-shaped
+/// plot found no such column by the time faceting ran, and rendered a
+/// single, unfaceted panel instead of splitting on it. The column must
+/// stay in the data (it's just excluded from the position/non-finite/
+/// training concerns the other two tests above cover), so a plain
+/// `facet_wrap` on it works exactly like any other unmapped column.
+#[test]
+fn facet_wrap_on_an_unmapped_upper_column_still_splits_into_two_panels() {
+    let built = GGPlot::new(frame(vec![
+        ("x", floats(&[0.0, 1.0, 2.0, 3.0])),
+        ("y", floats(&[10.0, 11.0, 10.5, 11.5])),
+        ("upper", strs(&["A", "A", "B", "B"])),
+    ]))
+    .aes(Aes::new().x("x").y("y"))
+    .geom_line()
+    .geom_point()
+    .facet_wrap("upper", None)
+    .build();
+    assert_eq!(
+        built.panels.len(),
+        2,
+        "facet_wrap(\"upper\") must still split into 2 panels: {:?}",
+        built.panels.iter().map(|p| &p.label).collect::<Vec<_>>()
+    );
+}
+
 /// Render helper that also extracts `data-ydomain="y0 y1"` (the trained y
 /// range actually used to position marks).
 fn render_with_ydomain(plot: GGPlot, w: u32, h: u32) -> (String, (f64, f64)) {

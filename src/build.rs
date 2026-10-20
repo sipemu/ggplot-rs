@@ -58,20 +58,6 @@ impl BuiltPlot {
     }
 }
 
-/// Column names that are only ever treated as position/y-family/trained
-/// data when the corresponding aesthetic was actually mapped on *this*
-/// layer — regardless of which geom it is (review #158 re-review, HIGH).
-/// `D3`'s per-geom `Geom::mapped_only_columns()` hook still exists for a
-/// geom-specific name, but `lower`/`middle`/`upper`/`outliers` are
-/// universal: ggplot2 extension aesthetics, not raw-column conventions
-/// any geom should read unprompted. An unmapped raw column with one of
-/// these names (e.g. a forecast's confidence-bound columns, never mapped
-/// on a plain `geom_line`/`geom_point` layer) is dropped right after
-/// `resolve_mappings`, before it could otherwise reach `POSITION_COLS`'s
-/// non-finite scan, `Y_FAMILY`'s scale transform, or the stat_aes
-/// training list below.
-const MAPPED_ONLY_COLS: &[&str] = &["lower", "middle", "upper", "outliers"];
-
 /// Columns holding *position* values: rows with non-finite values here are
 /// dropped before stats (and again after, for stat output).
 const POSITION_COLS: &[&str] = &[
@@ -440,10 +426,23 @@ impl PlotBuilder {
     /// `data` as a non-finite pixel position, which `DrawBackend::draw_line`
     /// splits the polyline on, instead of being spliced out and silently
     /// joining the finite points across the gap.
-    fn drop_non_finite(data: &mut DataFrame, allow_infinite: bool, keep_as_break: bool) -> usize {
+    /// `exclude`: column names to skip entirely this call — `lower`/
+    /// `middle`/`upper` present in the raw data but not mapped as that
+    /// aesthetic on this layer (review #158's final check: these must
+    /// never cost an unrelated geom its rows; see `raw_unmapped` at the
+    /// call site).
+    fn drop_non_finite(
+        data: &mut DataFrame,
+        allow_infinite: bool,
+        keep_as_break: bool,
+        exclude: &[&str],
+    ) -> usize {
         let n = data.nrows();
         let mut keep = vec![true; n];
         for col in POSITION_COLS {
+            if exclude.contains(col) {
+                continue;
+            }
             if let Some(values) = data.column(col) {
                 // Several position columns are legitimately discrete
                 // (`Value::Str`) in this codebase — not just `x`/`y`, e.g.
@@ -745,27 +744,28 @@ impl PlotBuilder {
         // D3 (B3-5): drop a "mapped-only" column (e.g. `lower`/`middle`/
         // `upper`/`outliers` for the boxplot) unless the user actually
         // mapped that aesthetic — so a raw column that merely happens to
-        // share the name (a SQL alias, say) is never mistaken for one.
+        // share the name (a SQL alias, say) is never mistaken for one, and
+        // so a raw `lower` is never drawn as a boxplot hinge on
+        // `geom_boxplot` itself.
         //
-        // This runs for *every* geom, not just `GeomBoxplot` (whose own
-        // `mapped_only_columns()` lists the same four names) — review
-        // #158's re-review, HIGH: `lower`/`middle`/`upper` are in
-        // `POSITION_COLS`/`Y_FAMILY`/the stat_aes training list
-        // unconditionally, so a `geom_line`/`geom_point` layer over
-        // forecast-shaped data with unmapped `lower`/`upper` confidence-
-        // bound columns (NULL on the history rows) lost its history rows
-        // to the non-finite-value drop and had its y domain stretched by
-        // the unmapped bounds — this must never happen unless the layer's
-        // own geom actually reads those aesthetics. Since this drop runs
-        // once, right after `resolve_mappings` and before the stat runs,
-        // it has no effect on `StatBoxplot`'s own post-stat `lower`/
-        // `middle`/`upper`/`outliers` output (produced fresh, after this
-        // point, under the column's plain canonical name) — the default
-        // (non-identity) boxplot path is unaffected.
-        for col in MAPPED_ONLY_COLS
-            .iter()
-            .chain(geom.mapped_only_columns().iter())
-        {
+        // Review #158's *final check* found that making this drop
+        // universal (every geom, round 3's `MAPPED_ONLY_COLS`) was itself
+        // a regression: it removed the raw `lower`/`middle`/`upper`/
+        // `outliers` columns from a layer's data entirely, so a forecast
+        // chart's `tooltip("{y} [{lower}, {upper}]")` on an unmapped
+        // `geom_line` rendered `[, ]` instead of the actual bounds, and
+        // `facet_wrap("upper")` on an unmapped column silently rendered
+        // unfaceted. ggplot2 never drops a raw data column just because
+        // its name matches an unused extension aesthetic — it only ever
+        // special-cases `lower`/`middle`/`upper`/`outliers` for
+        // `geom_boxplot`'s own hinges, so this drop goes back to being
+        // scoped to `geom.mapped_only_columns()` alone (empty by default,
+        // `GeomBoxplot` returns the four names). The narrower position/
+        // non-finite/y-scale-training concerns from the *previous*
+        // re-review (the forecast y-domain-stretch/row-drop regression)
+        // are instead handled per layer below (`raw_unmapped`), without
+        // ever removing the columns from `working_data`.
+        for col in geom.mapped_only_columns() {
             let is_mapped = merged_mapping
                 .mappings
                 .iter()
@@ -774,6 +774,33 @@ impl PlotBuilder {
                 working_data.remove_column(col);
             }
         }
+
+        // `lower`/`middle`/`upper` present in the raw (pre-stat) data under
+        // their canonical name, but *not* actually mapped as that
+        // aesthetic on this layer — e.g. a forecast's confidence-bound
+        // columns, never mapped on a plain `geom_line`/`geom_point` layer.
+        // These stay in `working_data` (see above), but mustn't be treated
+        // as position data a geom never asked for: excluded below from the
+        // non-finite/NA position drop, the `Y_FAMILY` pre-stat scale
+        // transform, and the y-scale training.
+        //
+        // Computed once, right here (before the stat runs), so it reflects
+        // only what the *raw* data actually had under these names.
+        // `GeomBoxplot`'s own default (non-identity) stat produces *fresh*
+        // `lower`/`middle`/`upper` columns later (not present yet, so never
+        // in this set) — those stay subject to all three, unaffected; an
+        // identity-stat boxplot has them mapped (required by
+        // `validate_layer` below), so they're not in this set either.
+        let raw_unmapped: Vec<&'static str> = ["lower", "middle", "upper"]
+            .into_iter()
+            .filter(|col| {
+                working_data.has_column(col)
+                    && !merged_mapping
+                        .mappings
+                        .iter()
+                        .any(|m| m.aesthetic.col_name() == *col)
+            })
+            .collect();
 
         // Remember which columns the user actually supplied (pre-stat). A required
         // aesthetic is satisfied if it was present here OR is synthesized by the
@@ -804,7 +831,16 @@ impl PlotBuilder {
             let aes = scale.aesthetic();
             let cols: Vec<&str> = match aes {
                 Aesthetic::X => X_FAMILY.to_vec(),
-                Aesthetic::Y => Y_FAMILY.to_vec(),
+                // `lower`/`middle`/`upper` present but unmapped (raw
+                // forecast-shaped passthrough columns, say) are not
+                // position data this layer's geom reads, so a log/sqrt/…
+                // y-scale transform must not touch them (review #158's
+                // final check).
+                Aesthetic::Y => Y_FAMILY
+                    .iter()
+                    .copied()
+                    .filter(|c| !raw_unmapped.contains(c))
+                    .collect(),
                 _ => vec![aes.col_name()],
             };
             for col_name in cols {
@@ -846,6 +882,7 @@ impl PlotBuilder {
             &mut working_data,
             geom.allows_infinite(),
             geom.keeps_na_as_break(),
+            &raw_unmapped,
         );
         if removed > 0 {
             warnings.push(format!(
@@ -904,11 +941,17 @@ impl PlotBuilder {
         apply_after_stat(&mut working_data, &merged_mapping, warnings);
 
         // Stat output can contain NaN (e.g. a fit on degenerate input): drop
-        // those rows too, so nothing non-finite reaches a geom.
+        // those rows too, so nothing non-finite reaches a geom. `raw_unmapped`
+        // was computed pre-stat, so a passthrough stat (e.g. `StatIdentity`
+        // under `geom_line`/`geom_point`) still excludes the same raw,
+        // unmapped `lower`/`middle`/`upper` here as it did above; a stat
+        // that *produces* these fresh (`StatBoxplot`'s default, non-identity
+        // path) was never in that set, since they didn't exist pre-stat.
         let removed = Self::drop_non_finite(
             &mut working_data,
             geom.allows_infinite(),
             geom.keeps_na_as_break(),
+            &raw_unmapped,
         );
         if removed > 0 {
             warnings.push(format!(
@@ -986,8 +1029,12 @@ impl PlotBuilder {
             (crate::aes::BOXPLOT_YMIN_FINAL, Aesthetic::Y),
             (crate::aes::BOXPLOT_YMAX_FINAL, Aesthetic::Y),
         ];
+        // `raw_unmapped` (a raw, unmapped `lower`/`middle`/`upper` passthrough
+        // column) never trains or gets a scale here — only a layer that
+        // actually mapped (or whose stat computed) that name does (review
+        // #158's final check).
         for (col, aes) in &stat_aes {
-            if working_data.has_column(col) {
+            if working_data.has_column(col) && !raw_unmapped.contains(col) {
                 scale_set.ensure_scale(aes, &working_data);
             }
         }
@@ -1021,7 +1068,7 @@ impl PlotBuilder {
         // make sure position scales exist for any extent columns it added.
         geom.setup_data(&mut working_data, warnings);
         for (col, aes) in &stat_aes {
-            if working_data.has_column(col) {
+            if working_data.has_column(col) && !raw_unmapped.contains(col) {
                 scale_set.ensure_scale(aes, &working_data);
             }
         }
@@ -1038,7 +1085,12 @@ impl PlotBuilder {
         // Step 8b: Positional scales also need to see stat-computed extent columns
         // (e.g. boxplot/errorbar/pointrange emit ymin/ymax but no "y"). Without
         // this the Y (or X) scale would never train on the range and collapse.
+        // Same `raw_unmapped` exclusion as Step 6b/7b above: an unmapped
+        // raw `lower`/`middle`/`upper` must never stretch the y domain.
         for (col, aes) in &stat_aes {
+            if raw_unmapped.contains(col) {
+                continue;
+            }
             if let Some(values) = working_data.column(col) {
                 if let Some(scale) = scale_set.get_mut(aes) {
                     scale.train(values);
