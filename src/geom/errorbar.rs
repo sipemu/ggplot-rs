@@ -63,6 +63,7 @@ impl Geom for GeomErrorbar {
 
         let xm = super::support::XMapper::new(data, scales);
         let color_col = data.column("color");
+        let dodge_n_col = data.column(crate::position::DODGE_N_COL);
         for i in 0..data.nrows() {
             let nx = xm.map(&x_col[i], i);
             let ny_min = y_scale.map(|s| s.map(&ymin_col[i])).unwrap_or(0.0);
@@ -77,7 +78,16 @@ impl Geom for GeomErrorbar {
 
             // One connected polyline per bar — cap, bar, cap — transformed
             // point by point so it is correct under coord_flip too.
-            let c = self.cap_width;
+            // B3-7 (allowed #8): a discrete `position_dodge` shrinks the
+            // cap by the dodge group count, so caps from adjacent groups
+            // don't visually overlap — same idea as the bar/point offset
+            // `XMapper` already applies.
+            let dodge_n = dodge_n_col
+                .and_then(|c| c.get(i))
+                .and_then(|v| v.as_f64())
+                .filter(|v| v.is_finite() && *v > 0.0)
+                .unwrap_or(1.0);
+            let c = self.cap_width / dodge_n;
             let t = |p: (f64, f64)| coord.transform(p, &plot_area);
             super::support::mark_interval(
                 backend,

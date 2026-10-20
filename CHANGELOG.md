@@ -45,6 +45,9 @@ guarded by `tests/default_output_022.rs`.
   same `XMapper` bar/col/point/errorbar/… already use (#148). A plot that
   dodges text/labels on a discrete x axis renders differently; text/
   labels without a dodge are unaffected.
+- `geom_errorbar`'s whisker caps shrink by the dodge group count under a
+  discrete `position_dodge`, so caps from adjacent groups no longer
+  visually overlap (#151). An un-dodged errorbar is unaffected.
 
 ### Breaking
 
