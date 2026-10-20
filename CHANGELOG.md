@@ -3,6 +3,18 @@
 All notable changes to this project are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.22.0] — unreleased
+
+Minor bump: layout and stats (upstream batch 2). Default output stays
+byte-identical except for the deliberate changes under "Changed", each
+guarded by `tests/default_output_022.rs`.
+
+### Added
+
+### Changed
+
+### Breaking
+
 ## [0.21.1] — 2026-10-20
 
 Patch bump: additive and bug fixes only, no API break. Default output is
