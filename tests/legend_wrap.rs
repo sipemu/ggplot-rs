@@ -203,24 +203,41 @@ fn vertical_legend_with_explicit_ncol_two() {
     assert!(svg.contains(">Group 01<"));
     assert!(svg.contains(">Group 04<"));
     assert!(
-        max_text_x(&svg) <= 500.0,
-        "max text x {} exceeds the 500px canvas",
-        max_text_x(&svg)
+        max_text_right_edge(&svg) <= 500.0,
+        "max text right edge {} exceeds the 500px canvas",
+        max_text_right_edge(&svg)
     );
 }
 
-/// The max `x="..."` of any `<text>` element.
-fn max_text_x(svg: &str) -> f64 {
+/// The max visual right edge of any `<text>` element — `x` plus the
+/// rendered label's width for `text-anchor="start"` (every label and
+/// legend entry in this codebase), half for `"middle"`, or just `x` for
+/// `"end"`. Checking `x` alone (review #158's second re-review caught
+/// this: the original finding-3 test did exactly that) is meaningless for
+/// a `start`-anchored label, since its glyphs extend *rightward* from
+/// `x` — a passing "x <= canvas width" assertion there proves nothing.
+fn max_text_right_edge(svg: &str) -> f64 {
     svg.match_indices("<text ")
         .filter_map(|(start, _)| {
             let tag_end = svg[start..].find('>').map(|e| start + e)?;
+            let close = svg[tag_end..].find("</text>").map(|e| tag_end + e)?;
             let tag = &svg[start..tag_end];
-            tag.split("x=\"")
+            let label = &svg[tag_end + 1..close];
+            let x: f64 = tag.split("x=\"").nth(1)?.split('"').next()?.parse().ok()?;
+            let size: f64 = tag
+                .split("font-size=\"")
                 .nth(1)?
                 .split('"')
                 .next()?
-                .parse::<f64>()
-                .ok()
+                .parse()
+                .ok()?;
+            let anchor = tag.split("text-anchor=\"").nth(1)?.split('"').next()?;
+            let w = ggplot_rs::render::text::text_width(label, size);
+            Some(match anchor {
+                "start" => x + w,
+                "middle" => x + w / 2.0,
+                _ => x,
+            })
         })
         .fold(0.0_f64, f64::max)
 }
@@ -229,11 +246,16 @@ fn max_text_x(svg: &str) -> f64 {
 /// band was sized for exactly one column, so `ncol(2)`'s second column ran
 /// off the canvas with long-enough labels (the reviewer's repro: 8 labels
 /// ~27 chars at 640×400 put the second column at x≈687, past the 640px
-/// SVG). The layout must now reserve `(cols - 1) * col_pitch` extra band
-/// width for an explicit multi-column vertical grid.
+/// SVG). The layout now reserves `(cols - 1) * col_pitch` extra band
+/// width for an explicit multi-column vertical grid — enough for labels
+/// of this length (short enough that the *first* column's own, separate,
+/// pre-existing width estimate — a fixed `legend_text.size * 6`, 6
+/// characters' worth, unrelated to B3-2 — is still adequate; see
+/// `vertical_legend_ncol_grid_too_wide_for_the_canvas_warns` below for a
+/// label length where it genuinely isn't, even after reservation).
 #[test]
 fn vertical_legend_ncol_two_with_long_labels_stays_on_canvas() {
-    let data = groups_with_labels(8, |i| format!("Moderately Long Group Label {}", i + 1));
+    let data = groups_with_labels(8, |i| format!("Group Label {}", i + 1));
     let svg = render(
         GGPlot::new(data)
             .aes(Aes::new().x("x").y("y").color("g"))
@@ -242,10 +264,33 @@ fn vertical_legend_ncol_two_with_long_labels_stays_on_canvas() {
         640,
         400,
     );
-    let max_x = max_text_x(&svg);
+    let max_x = max_text_right_edge(&svg);
     assert!(
         max_x <= 640.0,
-        "max text x {max_x} exceeds the 640px canvas"
+        "max text right edge {max_x} exceeds the 640px canvas"
+    );
+}
+
+/// Regression for review #158's second re-review (LOW): when a vertical
+/// multi-column grid is simply too wide for the canvas — many columns,
+/// long labels, a narrow chart — even after reserving `(cols - 1) *
+/// col_pitch`, it still runs off the canvas; the build must warn about
+/// it rather than silently clip.
+#[test]
+fn vertical_legend_ncol_grid_too_wide_for_the_canvas_warns() {
+    let data = groups_with_labels(12, |i| format!("A Very Long Group Label Number {}", i + 1));
+    let (svg, warnings) = GGPlot::new(data)
+        .aes(Aes::new().x("x").y("y").color("g"))
+        .geom_point()
+        .guides(GuideLegend::new().with_ncol(4))
+        .render_svg_native_with_warnings(300, 400)
+        .unwrap();
+    assert!(!svg.contains("NaN"), "{svg}");
+    assert!(
+        warnings
+            .iter()
+            .any(|w| w.contains("legend") && w.contains("doesn't fit")),
+        "{warnings:?}"
     );
 }
 

@@ -46,7 +46,13 @@ guarded by `tests/default_output_022.rs`.
   `lower`/`middle`/`upper`/`outliers`): a raw column of that name is
   dropped right after `resolve_mappings` unless the aesthetic was
   actually mapped, so a column that merely happens to share the name
-  (e.g. a SQL alias) can't be mistaken for a mapped one.
+  (e.g. a SQL alias) can't be mistaken for a mapped one. `lower`/`middle`/
+  `upper`/`outliers` themselves are dropped this way for *every* geom, not
+  just `geom_boxplot` (review #158 re-review, HIGH): these four names are
+  also in `POSITION_COLS`/`Y_FAMILY`/the stat_aes y-training list, and
+  without this, an unmapped column of one of these names on an unrelated
+  layer (e.g. a forecast's confidence-bound columns on a plain
+  `geom_line`) could drop finite rows or stretch the y domain.
 - `Geom::validate_layer(pre_stat_columns, stat_name)` (default no-op):
   stat-dependent validation beyond `required_aes`. Under
   `stat = "identity"`, `geom_boxplot` requires `lower`/`middle`/`upper`/
@@ -63,11 +69,19 @@ guarded by `tests/default_output_022.rs`.
   dropped rather than drawn off-page. A plot whose outer labels already
   fit is unaffected (`tests/axis_label_fit.rs`;
   `default_output_022`'s `wide_axis` case, re-blessed when the Reserve
-  formula bug — finding 1 below — was fixed).
+  formula bug — finding 1 below — was fixed). The total reservation is
+  now capped so the panel can never start beyond the canvas or shrink
+  past its own minimum width (review #158's second re-review, LOW): a
+  single, centred break whose label is wider than the whole canvas falls
+  back to `Shift`'s draw-time adjustment for whatever still overflows
+  past the cap (`tests/axis_label_fit.rs`).
 - A single horizontal legend that overflows its one-line layout now
   auto-wraps to more rows instead of running off the panel (allowed #3,
   D7); beyond `max_rows` it ends in a trailing "+N more" with a build
-  warning. A legend that already fits on one line is unaffected.
+  warning. A legend that already fits on one line is unaffected. A
+  vertical `ncol` legend grid that still overflows the canvas after its
+  width is reserved now also gets a build warning (review #158's second
+  re-review, LOW; `tests/legend_wrap.rs`).
 - Tooltip-template placeholders for every position column
   (`xmin`/`xmax`/`xend`/`ymin`/`ymax`/`yend`/`lower`/`middle`/`upper`,
   D9 allowed #7) are now formatted through the x/y scale, the same as the

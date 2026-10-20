@@ -2620,6 +2620,31 @@ impl GGPlot {
                         } else if deficit_right > 0.0 {
                             extras.right += deficit_right / p_last.max(0.05);
                         }
+                        // Cap the total reservation so the panel can never
+                        // start beyond the canvas or be squeezed past the
+                        // same minimum width `compute_with_extras` already
+                        // floors it to (review #158's second re-review,
+                        // LOW): a single, centred break whose label is
+                        // wider than the whole canvas has `p_first ==
+                        // p_last == 0.5`, so both `eL` and `eR` grow by
+                        // roughly the same (large) deficit independently,
+                        // and together they could place `plot_x` past `w`
+                        // entirely. Past this cap, Reserve simply stops
+                        // growing and `draw_x_axis`'s own draw-time shift
+                        // — which always runs for Reserve, the same as for
+                        // `Shift` — takes over for whatever's still
+                        // outside, exactly as D6 already documents.
+                        const MIN_PANEL_WIDTH: f64 = 50.0;
+                        let cap = (w as f64 - MIN_PANEL_WIDTH).max(0.0);
+                        if extras.left + extras.right > cap {
+                            let scale = if extras.left + extras.right > 0.0 {
+                                cap / (extras.left + extras.right)
+                            } else {
+                                0.0
+                            };
+                            extras.left *= scale;
+                            extras.right *= scale;
+                        }
                     }
                 }
             }
@@ -2686,6 +2711,59 @@ impl GGPlot {
                             // a no-op there).
                             extras.legend_extra_width =
                                 plan.cols.saturating_sub(1) as f64 * plan.col_pitch;
+                            // Review #158's second re-review, LOW: warn
+                            // when a vertical multi-column grid still runs
+                            // off the canvas even after reserving the
+                            // extra width above — e.g. the grid is simply
+                            // too wide for this chart (many columns, long
+                            // labels, a narrow canvas). Measures each
+                            // entry's own actual rendered right edge
+                            // (swatch + spacing + that label's text width)
+                            // rather than `cols * col_pitch` (the worst-
+                            // case upper bound every column *could* need,
+                            // which over-warns whenever the columns' real
+                            // labels are shorter than the single widest
+                            // one `col_pitch` is sized from).
+                            if !is_horizontal && plan.cols > 1 {
+                                let final_layout = PlotLayout::compute_with_extras(
+                                    w as f64,
+                                    h as f64,
+                                    &built.theme,
+                                    has_title,
+                                    has_subtitle,
+                                    has_caption,
+                                    has_legend,
+                                    x_axis_top,
+                                    y_label_width,
+                                    x_label_height,
+                                    extras,
+                                );
+                                let (legend_x_final, _, _) = crate::guide::legend::legend_position(
+                                    &built.theme,
+                                    &final_layout.plot_area,
+                                );
+                                let swatch_and_gap =
+                                    built.theme.legend_key_width + built.theme.legend_spacing;
+                                let text_size = built.theme.legend_text.size;
+                                let legend_right_edge = plan
+                                    .entries
+                                    .iter()
+                                    .map(|e| {
+                                        let label = &breaks[e.break_idx].1;
+                                        legend_x_final
+                                            + e.x_offset
+                                            + swatch_and_gap
+                                            + crate::render::text::text_width(label, text_size)
+                                    })
+                                    .fold(0.0_f64, f64::max);
+                                if legend_right_edge > w as f64 {
+                                    built.warnings.push(format!(
+                                        "legend: the {}-column grid still doesn't fit the {w}px chart (needs about {} px)",
+                                        plan.cols,
+                                        legend_right_edge.ceil() as i64
+                                    ));
+                                }
+                            }
                             if let Some(ov) = &plan.overflow {
                                 let n = breaks.len();
                                 let shown = n - ov.dropped;

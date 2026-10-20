@@ -500,6 +500,72 @@ fn raw_ymin_final_column_does_not_leak_into_an_unrelated_geoms_y_domain() {
     );
 }
 
+/// Regression for review #158's re-review (HIGH): `lower`/`middle`/`upper`
+/// landed in `POSITION_COLS`/`Y_FAMILY`/the stat_aes training list
+/// unconditionally — not just for `geom_boxplot` — so a plain `geom_line`/
+/// `geom_point` layer over forecast-shaped data with unmapped `lower`/
+/// `upper` confidence-bound columns (`Na` on the history rows, as in the
+/// reviewer's repro) lost its history rows to the non-finite-value drop.
+/// All 6 history points must survive, with no warning, and the y domain
+/// must reflect only the mapped `y` data — not the unmapped bounds.
+#[test]
+fn forecast_shaped_unmapped_lower_upper_columns_do_not_affect_a_plain_line() {
+    let y = [10.0, 9.9, 11.2, 10.5, 12.1, 11.8];
+    let n = y.len();
+    let (svg, warnings) = GGPlot::new(frame(vec![
+        ("x", floats(&(0..n).map(|i| i as f64).collect::<Vec<_>>())),
+        ("y", floats(&y)),
+        ("lower", vec![Value::Na; n]),
+        ("upper", vec![Value::Na; n]),
+    ]))
+    .aes(Aes::new().x("x").y("y"))
+    .geom_line()
+    .geom_point()
+    .render_svg_native_with_warnings(300, 200)
+    .unwrap();
+    assert!(warnings.is_empty(), "{warnings:?}");
+    assert_eq!(
+        svg.matches("<circle ").count(),
+        n,
+        "all {n} history points must survive: {svg}"
+    );
+    let dom = svg
+        .split("data-ydomain=\"")
+        .nth(1)
+        .and_then(|r| r.split('"').next())
+        .unwrap();
+    let hi: f64 = dom.split(' ').nth(1).unwrap().parse().unwrap();
+    assert!(
+        hi < 20.0,
+        "the y domain must reflect only the mapped y data (9.9-12.1-ish), not a stretch: {dom}"
+    );
+}
+
+/// The same, with unmapped `lower`/`upper` holding real (not `Na`) but
+/// wildly out-of-range values — the y domain must still come from the
+/// mapped `y` column alone, not be stretched by the unmapped bounds.
+#[test]
+fn forecast_shaped_unmapped_wide_lower_upper_values_do_not_stretch_y() {
+    let y = [10.0, 10.5, 11.0, 11.5, 12.0];
+    let n = y.len();
+    let (_, domain) = render_with_ydomain(
+        GGPlot::new(frame(vec![
+            ("x", floats(&(0..n).map(|i| i as f64).collect::<Vec<_>>())),
+            ("y", floats(&y)),
+            ("lower", floats(&vec![-100.0; n])),
+            ("upper", floats(&vec![500.0; n])),
+        ]))
+        .aes(Aes::new().x("x").y("y"))
+        .geom_line(),
+        300,
+        200,
+    );
+    assert!(
+        domain.0 > -20.0 && domain.1 < 30.0,
+        "unmapped lower=-100/upper=500 must not stretch y from ~9.9-12.1: {domain:?}"
+    );
+}
+
 /// Render helper that also extracts `data-ydomain="y0 y1"` (the trained y
 /// range actually used to position marks).
 fn render_with_ydomain(plot: GGPlot, w: u32, h: u32) -> (String, (f64, f64)) {

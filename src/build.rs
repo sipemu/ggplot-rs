@@ -58,6 +58,20 @@ impl BuiltPlot {
     }
 }
 
+/// Column names that are only ever treated as position/y-family/trained
+/// data when the corresponding aesthetic was actually mapped on *this*
+/// layer — regardless of which geom it is (review #158 re-review, HIGH).
+/// `D3`'s per-geom `Geom::mapped_only_columns()` hook still exists for a
+/// geom-specific name, but `lower`/`middle`/`upper`/`outliers` are
+/// universal: ggplot2 extension aesthetics, not raw-column conventions
+/// any geom should read unprompted. An unmapped raw column with one of
+/// these names (e.g. a forecast's confidence-bound columns, never mapped
+/// on a plain `geom_line`/`geom_point` layer) is dropped right after
+/// `resolve_mappings`, before it could otherwise reach `POSITION_COLS`'s
+/// non-finite scan, `Y_FAMILY`'s scale transform, or the stat_aes
+/// training list below.
+const MAPPED_ONLY_COLS: &[&str] = &["lower", "middle", "upper", "outliers"];
+
 /// Columns holding *position* values: rows with non-finite values here are
 /// dropped before stats (and again after, for stat output).
 const POSITION_COLS: &[&str] = &[
@@ -732,7 +746,26 @@ impl PlotBuilder {
         // `upper`/`outliers` for the boxplot) unless the user actually
         // mapped that aesthetic — so a raw column that merely happens to
         // share the name (a SQL alias, say) is never mistaken for one.
-        for col in geom.mapped_only_columns() {
+        //
+        // This runs for *every* geom, not just `GeomBoxplot` (whose own
+        // `mapped_only_columns()` lists the same four names) — review
+        // #158's re-review, HIGH: `lower`/`middle`/`upper` are in
+        // `POSITION_COLS`/`Y_FAMILY`/the stat_aes training list
+        // unconditionally, so a `geom_line`/`geom_point` layer over
+        // forecast-shaped data with unmapped `lower`/`upper` confidence-
+        // bound columns (NULL on the history rows) lost its history rows
+        // to the non-finite-value drop and had its y domain stretched by
+        // the unmapped bounds — this must never happen unless the layer's
+        // own geom actually reads those aesthetics. Since this drop runs
+        // once, right after `resolve_mappings` and before the stat runs,
+        // it has no effect on `StatBoxplot`'s own post-stat `lower`/
+        // `middle`/`upper`/`outliers` output (produced fresh, after this
+        // point, under the column's plain canonical name) — the default
+        // (non-identity) boxplot path is unaffected.
+        for col in MAPPED_ONLY_COLS
+            .iter()
+            .chain(geom.mapped_only_columns().iter())
+        {
             let is_mapped = merged_mapping
                 .mappings
                 .iter()

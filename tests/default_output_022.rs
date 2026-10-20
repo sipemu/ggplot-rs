@@ -77,6 +77,35 @@ fn band_data() -> Cols {
     ]
 }
 
+/// Forecast-shaped: `y`/`ymin`/`ymax` are mapped (the actual ribbon band),
+/// plus unmapped `lower`/`upper` (alternate confidence bounds, far outside
+/// `ymin`/`ymax` — if these ever leaked into the position/y-family/
+/// training pipeline the way they would have before review #158's
+/// re-review fix, this case's hash would change) and an unmapped string
+/// `model` column (pure metadata, never touched). Regression case for
+/// that fix: this must stay byte-identical to a 0.21.1 render of just the
+/// mapped x/y/ymin/ymax columns, since none of this plot's behaviour is a
+/// 0.22 feature.
+fn forecast_band_data() -> Cols {
+    let n = 20;
+    let x: Vec<f64> = (0..n).map(|i| i as f64).collect();
+    let y: Vec<f64> = x.iter().map(|v| (v * 0.4).sin() * 2.0 + 5.0).collect();
+    let ymin: Vec<f64> = y.iter().map(|v| v - 1.0).collect();
+    let ymax: Vec<f64> = y.iter().map(|v| v + 1.0).collect();
+    let lower: Vec<f64> = vec![-100.0; n];
+    let upper: Vec<f64> = vec![500.0; n];
+    let model: Vec<&str> = vec!["arima"; n];
+    vec![
+        ("x".into(), f(&x)),
+        ("y".into(), f(&y)),
+        ("ymin".into(), f(&ymin)),
+        ("ymax".into(), f(&ymax)),
+        ("lower".into(), f(&lower)),
+        ("upper".into(), f(&upper)),
+        ("model".into(), s(&model)),
+    ]
+}
+
 fn seg_data() -> Cols {
     vec![
         ("x".into(), f(&[0.0, 1.0, 2.0])),
@@ -258,7 +287,7 @@ fn expected() -> Vec<(&'static str, u64)> {
         ("histogram", 0x509a73b585ca7049),
         ("boxplot", 0x1e4e90592a30f608),
         ("area", 0xacba2a5cebd1c91b),
-        ("ribbon", 0x7bf3af705d10271f),
+        ("ribbon", 0xd64eb7a91d469399),
         ("step", 0x4cceadf6cd3d5452),
         ("density", 0x055db381e3b7d8e5),
         ("tile", 0x873b1d2d936ab090),
@@ -370,9 +399,11 @@ fn default_output_is_byte_identical_to_v0_21_0() {
         (
             "ribbon",
             hash_svg(
-                GGPlot::new(band_data())
-                    .aes(Aes::new().x("x").ymin("ymin").ymax("ymax"))
-                    .geom_ribbon(),
+                GGPlot::new(forecast_band_data())
+                    .aes(Aes::new().x("x").y("y").ymin("ymin").ymax("ymax"))
+                    .geom_ribbon()
+                    .geom_line()
+                    .geom_point(),
                 480,
                 320,
                 "ribbon",

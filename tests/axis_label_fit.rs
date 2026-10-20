@@ -259,3 +259,35 @@ fn reserve_stays_sane_on_the_280_and_500_px_cases() {
         );
     }
 }
+
+/// Regression for review #158's second re-review (LOW): a single, centred
+/// discrete break whose label is wider than the whole canvas has
+/// `p_first == p_last == 0.5`, the degenerate case where `eL`/`eR` grow
+/// independently and could together push `plot_x` past the canvas
+/// entirely. The reservation must now cap out and let `draw_x_axis`'s own
+/// draw-time shift (the same fallback `Shift` always uses) take over —
+/// never produce a NaN, a negative/zero panel, or a panel that starts
+/// beyond the canvas.
+#[test]
+fn reserve_caps_out_for_a_single_centred_break_wider_than_the_canvas() {
+    let data = vec![
+        (
+            "x".to_string(),
+            vec![Value::Str(
+                "An Absurdly Long Single Category Label Far Wider Than The Canvas".into(),
+            )],
+        ),
+        ("y".to_string(), vec![Value::Float(5.0)]),
+    ];
+    let (svg, area) = GGPlot::new(data)
+        .aes(Aes::new().x("x").y("y"))
+        .geom_col()
+        .render_svg_area_with_size(200, 150)
+        .unwrap();
+    assert!(!svg.contains("NaN"), "{svg}");
+    assert!(
+        (0.0..200.0).contains(&area[0]),
+        "panel must start on-canvas: {area:?}"
+    );
+    assert!(area[2] >= 1.0, "panel width must stay positive: {area:?}");
+}
