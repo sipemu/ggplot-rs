@@ -3,6 +3,52 @@
 All notable changes to this project are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.21.1] — 2026-10-20
+
+Patch bump: additive and bug fixes only, no API break. Default output is
+byte-identical (`ElementGeom` unset, as before).
+
+### Fixed
+
+- `element_geom` (`ink`/`paper`) now covers every other geom that hard-codes
+  a black/`(50, 50, 50)`/white default, following 0.21.0's
+  `Geom::apply_element_geom` pattern (gated on `explicit_style`, so an
+  explicit `geom_*_with(...)` colour is untouched even when it equals the
+  default): `GeomSegment`, `GeomCurve`, the reference lines (`GeomHline`/
+  `GeomVline`/`GeomAbline`), `GeomErrorbar`/`GeomErrorbarh`/`GeomLinerange`/
+  `GeomPointrange`, `GeomStep`, the outline colours of `GeomRect`/`GeomTile`/
+  `GeomBar`/`GeomCol`/`GeomPolygon`/`GeomViolin`/`GeomDensity`/`GeomArea`/
+  `GeomCount`/`GeomHex`/`GeomContour`/`GeomHistogram`/`GeomDensity2d`/
+  `GeomBin2d`/`GeomSf` (feature `sf`), `GeomCrossbar` (outline + fill),
+  `GeomTextRepel`, `GeomLabelRepel` (outline + fill), `GeomSpoke`, `GeomRug`,
+  `GeomBracket`, `GeomJitter`, `GeomQQ`, `GeomCensorMarks` and
+  `GeomFreqpoly`. `apply_element_geom` is still a no-op for: `GeomDotplot`'s
+  `color` field (dead config — only `fill` is ever painted); `GeomQQLine`'s
+  red default and `GeomCandlestick`/`GeomOhlc`'s green/red `up`/`down`
+  (deliberate semantic colours, not neutral); `GeomQQBand`'s mid-grey
+  `(153, 153, 153)` fill (doesn't match `ink`'s black/`(50, 50, 50)` line
+  check or `paper`'s white-fill check — extending `ElementGeom` to a grey
+  band is a bigger change, left for a follow-up); and `GeomCalendarBorder`,
+  which already reads its colour from the dedicated
+  `Theme::calendar_month_border` element rather than a hard-coded default.
+  Closes #142.
+- The discrete-style legend key for a continuous `Size` or `Alpha` aesthetic
+  no longer collapses every key to the scale's minimum. `draw_discrete_
+  legend_at` only had each break's rendered *label* (a `Value::Str`), not
+  its original data value, and `ScaleSizeContinuous`/`ScaleAlphaContinuous`'s
+  `map_to_size`/`map_to_alpha` can't parse a label string back to a number,
+  so every key silently reported the scale's own fallback. 0.20 (#131) hit
+  the same bug for `Linewidth` and fixed it with `Scale::map_fraction_to_
+  size(fraction) -> Option<f64>`, taking the break's own `[0, 1]` fraction
+  (already computed by `breaks()`) directly instead of round-tripping
+  through the label. `ScaleSizeContinuous` now implements that same method,
+  and the new `Scale::map_fraction_to_alpha(fraction) -> Option<f64>`
+  (default `None`) does the equivalent for `ScaleAlphaContinuous` — alpha
+  isn't a "size", so it gets its own trait method rather than reusing
+  `map_fraction_to_size`. `draw_discrete_legend_at`'s `Size`/`Alpha` arms
+  use the new methods (falling back to the old label round-trip for any
+  other scale assigned to those aesthetics). Closes #132.
+
 ## [0.21.0] — 2026-10-20
 
 Minor bump: the SVG mark contract. Default output is byte-identical except
