@@ -251,6 +251,10 @@ impl Geom for GeomTile {
         "tile"
     }
 
+    fn consumes_tooltips(&self) -> bool {
+        true
+    }
+
     fn setup_data(&self, data: &mut DataFrame) {
         add_extents(data, "x", "xmin", "xmax", self.width);
         add_extents(data, "y", "ymin", "ymax", self.height);

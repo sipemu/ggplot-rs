@@ -161,3 +161,73 @@ fn a_fixed_domain_tile_plot_colours_a_correlation_matrix_correctly() {
     assert!(svg.contains("fill=\"#FF0000\""), "{svg}");
     assert!(svg.contains("fill=\"#0000FF\""), "{svg}");
 }
+
+#[test]
+fn inverted_limits_do_not_panic_and_censor_everything() {
+    // Review PR#141 finding 6 (LOW), plus a defensive fix: lo > hi has no
+    // valid in-bounds region at all, so every value is treated as
+    // censored regardless of Oob — including under Squish, which would
+    // otherwise hit f64::clamp's "min > max" panic.
+    let squish = ScaleColorContinuous::new(Aesthetic::Fill)
+        .with_colors(RGBAColor::new(0, 0, 255), RGBAColor::new(255, 0, 0))
+        .with_limits(5.0, 1.0)
+        .with_oob(Oob::Squish);
+    assert_eq!(squish.map_to_color(&c(3.0)), Some((127, 127, 127)));
+
+    let censor = ScaleColorContinuous::new(Aesthetic::Fill)
+        .with_colors(RGBAColor::new(0, 0, 255), RGBAColor::new(255, 0, 0))
+        .with_limits(5.0, 1.0);
+    assert_eq!(censor.map_to_color(&c(3.0)), Some((127, 127, 127)));
+}
+
+#[test]
+fn inverted_limits_warn_on_all_three_gradient_scales() {
+    let data = frame(vec![
+        ("x", floats(&[1.0])),
+        ("y", floats(&[1.0])),
+        ("v", floats(&[1.0])),
+    ]);
+
+    let (_, warnings) = GGPlot::new(data.clone())
+        .aes(Aes::new().x("x").y("y").fill("v"))
+        .geom_point()
+        .scale_fill(ScaleColorContinuous::new(Aesthetic::Fill).with_limits(5.0, 1.0))
+        .render_svg_native_with_warnings(300, 200)
+        .unwrap();
+    assert!(
+        warnings.iter().any(|w| w.contains("lo > hi")),
+        "ScaleColorContinuous: {warnings:?}"
+    );
+
+    let (_, warnings) = GGPlot::new(data.clone())
+        .aes(Aes::new().x("x").y("y").fill("v"))
+        .geom_point()
+        .scale_fill(ScaleColorGradient2::new(Aesthetic::Fill).with_limits(5.0, 1.0))
+        .render_svg_native_with_warnings(300, 200)
+        .unwrap();
+    assert!(
+        warnings.iter().any(|w| w.contains("lo > hi")),
+        "ScaleColorGradient2: {warnings:?}"
+    );
+
+    let (_, warnings) = GGPlot::new(data)
+        .aes(Aes::new().x("x").y("y").fill("v"))
+        .geom_point()
+        .scale_fill(
+            ScaleColorGradientN::new(Aesthetic::Fill, vec![(0.0, RGBAColor::new(0, 0, 0))])
+                .with_limits(5.0, 1.0),
+        )
+        .render_svg_native_with_warnings(300, 200)
+        .unwrap();
+    assert!(
+        warnings.iter().any(|w| w.contains("lo > hi")),
+        "ScaleColorGradientN: {warnings:?}"
+    );
+}
+
+fn frame(cols: Vec<(&str, Vec<Value>)>) -> Vec<(String, Vec<Value>)> {
+    cols.into_iter().map(|(k, v)| (k.to_string(), v)).collect()
+}
+fn floats(v: &[f64]) -> Vec<Value> {
+    v.iter().map(|&f| Value::Float(f)).collect()
+}

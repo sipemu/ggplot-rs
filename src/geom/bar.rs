@@ -169,6 +169,10 @@ impl Geom for GeomBar {
         "bar"
     }
 
+    fn consumes_tooltips(&self) -> bool {
+        true
+    }
+
     fn include_zero_baseline(&self) -> bool {
         true
     }

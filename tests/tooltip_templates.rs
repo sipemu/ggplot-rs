@@ -145,3 +145,38 @@ fn a_placeholder_for_an_na_value_renders_empty() {
     assert!(svg.contains("<title>[]</title>"), "{svg}");
     assert!(svg.contains("<title>[b]</title>"), "{svg}");
 }
+
+#[test]
+fn a_template_on_a_geom_that_ignores_tooltips_warns() {
+    // Review PR#141 finding 6 (LOW): tooltip() on a geom that never reads
+    // the tooltip column (e.g. geom_area) silently did nothing.
+    let data = frame(vec![("x", floats(&[1.0, 2.0])), ("y", floats(&[1.0, 2.0]))]);
+    let (svg, warnings) = GGPlot::new(data)
+        .aes(Aes::new().x("x").y("y"))
+        .geom_area()
+        .tooltip("{y}")
+        .render_svg_native_with_warnings(300, 200)
+        .unwrap();
+    assert!(!svg.contains("<title>"), "{svg}");
+    assert!(
+        warnings
+            .iter()
+            .any(|w| w.contains("tooltip") && w.contains("no effect")),
+        "{warnings:?}"
+    );
+}
+
+#[test]
+fn a_template_on_a_geom_that_reads_tooltips_does_not_warn() {
+    let data = frame(vec![("x", floats(&[1.0])), ("y", floats(&[2.0]))]);
+    let (_, warnings) = GGPlot::new(data)
+        .aes(Aes::new().x("x").y("y"))
+        .geom_point()
+        .tooltip("{y}")
+        .render_svg_native_with_warnings(300, 200)
+        .unwrap();
+    assert!(
+        !warnings.iter().any(|w| w.contains("tooltip")),
+        "{warnings:?}"
+    );
+}

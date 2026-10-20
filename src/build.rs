@@ -931,6 +931,15 @@ impl PlotBuilder {
         // uses — so it replaces the geom's default `<title>` the same way,
         // with no further geom-level plumbing.
         if let Some(template) = &tooltip_template {
+            // Review PR#141 finding 6 (LOW): a template on a geom that
+            // never reads that internal column (`set_row_extras`) did
+            // nothing, silently — e.g. `geom_area`/`geom_boxplot`/
+            // `geom_ribbon`.
+            if !geom.consumes_tooltips() {
+                warnings.push(format!(
+                    "{geom_label}: tooltip(\"{template}\") has no effect — this geom doesn't read tooltips"
+                ));
+            }
             let rendered: Vec<crate::data::Value> = (0..working_data.nrows())
                 .map(|i| {
                     crate::data::Value::Str(render_tooltip_template(

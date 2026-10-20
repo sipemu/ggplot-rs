@@ -217,3 +217,21 @@ fn an_x_tooltip_template_on_a_datetime_scale_with_date_labels_uses_that_format()
         .unwrap();
     assert!(svg.contains("<title>12.10.2026</title>"), "{svg}");
 }
+
+#[test]
+fn plotgrid_cells_honour_their_own_svg_formatted_values() {
+    // Review PR#141 finding 6 (LOW): PlotGrid never carried the flag
+    // through to a cell's own backend, so data-fvalue/data-fx never
+    // appeared inside a grid even when the cell's GGPlot asked for them.
+    let data = frame(vec![("x", floats(&[1.0])), ("y", floats(&[1234.5]))]);
+    let on = GGPlot::new(data.clone())
+        .aes(Aes::new().x("x").y("y"))
+        .geom_point()
+        .svg_formatted_values(true);
+    let off = GGPlot::new(data).aes(Aes::new().x("x").y("y")).geom_point();
+    let svg = (on | off).render_svg_native_with_size(600, 300).unwrap();
+    assert!(svg.contains("data-fvalue="), "{svg}");
+    // Only the cell that asked for it gets the attribute: exactly one
+    // occurrence, not one per cell.
+    assert_eq!(svg.matches("data-fvalue=").count(), 1, "{svg}");
+}

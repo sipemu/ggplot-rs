@@ -541,6 +541,14 @@ struct PreparedPlot {
     built: crate::build::BuiltPlot,
     meta: RenderMeta,
     panel: String,
+    /// The cell's own `GGPlot::svg_formatted_values` setting (review
+    /// PR#141 finding 6, LOW): `build_for_render` consumes the `GGPlot`
+    /// and discards this field (it only matters at render time, and
+    /// `PlotGrid` builds its cells independently of
+    /// `GGPlot::render_native`, the only place that previously read it),
+    /// so it has to be captured here and carried to the cell's own
+    /// backend in `render_prepared`.
+    svg_formatted_values: bool,
 }
 
 enum Prepared {
@@ -639,6 +647,7 @@ fn prepare_plot(mut plot: GGPlot, ctx: &mut PrepCtx) -> Result<PreparedPlot, GGE
     if collect.is_some() {
         plot.theme.legend_position = LegendPosition::None;
     }
+    let svg_formatted_values = plot.svg_formatted_values;
     let (built, mut meta) = plot.build_for_render()?;
     if let Some(pos) = collect {
         meta.has_legend = false;
@@ -648,7 +657,12 @@ fn prepare_plot(mut plot: GGPlot, ctx: &mut PrepCtx) -> Result<PreparedPlot, GGE
             }
         }
     }
-    Ok(PreparedPlot { built, meta, panel })
+    Ok(PreparedPlot {
+        built,
+        meta,
+        panel,
+        svg_formatted_values,
+    })
 }
 
 /// Draw a built plot's legend in isolation, measuring its extent.
@@ -776,6 +790,7 @@ fn render_prepared(
                 mut built,
                 meta,
                 panel,
+                svg_formatted_values,
             } = *p;
             let (cw, ch) = (
                 area.width.floor().max(1.0) as u32,
@@ -783,6 +798,7 @@ fn render_prepared(
             );
             let layout = GGPlot::layout_built(&mut built, &meta, cw, ch);
             let mut backend = SvgBackend::new(cw, ch, layout.plot_area.clone());
+            backend.set_formatted_values(svg_formatted_values);
             let mut attrs = root_data_attrs(&built);
             attrs.push(("data-panel".into(), panel.clone()));
             backend.set_root_attrs(attrs);

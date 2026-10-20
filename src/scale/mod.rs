@@ -56,11 +56,20 @@ pub(crate) const DEFAULT_NA_VALUE: (u8, u8, u8) = (127, 127, 127);
 /// [`Oob`] policy, for `map_to_color` on the gradient scales. `limits: None`
 /// (the default — domain from trained data) never rejects a value: this
 /// only has an effect once `with_limits` is set. Returns `None` exactly
-/// when the value is outside fixed limits under [`Oob::Censor`].
+/// when the value is outside fixed limits under [`Oob::Censor`] (the
+/// caller then uses `na_value`) — including when `lo > hi` (inverted
+/// limits, e.g. a `with_limits` typo): there is no value that satisfies
+/// `lo <= f <= hi` then, so every value is "outside", and treating it as
+/// unconditionally censored — regardless of the configured `Oob` — avoids
+/// `f64::clamp`'s `min > max` panic that `Oob::Squish` would otherwise hit.
+/// `Scale::validate` warns about this separately.
 pub(crate) fn resolve_oob(f: f64, limits: Option<(f64, f64)>, oob: Oob) -> Option<f64> {
     let Some((lo, hi)) = limits else {
         return Some(f);
     };
+    if lo > hi {
+        return None;
+    }
     if f < lo || f > hi {
         match oob {
             Oob::Squish => Some(f.clamp(lo, hi)),

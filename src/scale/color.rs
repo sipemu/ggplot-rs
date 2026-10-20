@@ -461,6 +461,16 @@ impl Scale for ScaleColorContinuous {
         self.min = f64::INFINITY;
         self.max = f64::NEG_INFINITY;
     }
+
+    fn validate(&self, warnings: &mut Vec<String>) {
+        if let Some((lo, hi)) = self.limits {
+            if lo > hi {
+                warnings.push(format!(
+                    "scale_color/fill_gradient: with_limits({lo}, {hi}) has lo > hi; every value maps to na_value"
+                ));
+            }
+        }
+    }
 }
 
 #[cfg(test)]

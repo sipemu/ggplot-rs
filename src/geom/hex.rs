@@ -181,6 +181,10 @@ impl Geom for GeomHex {
     fn name(&self) -> &str {
         "hex"
     }
+
+    fn consumes_tooltips(&self) -> bool {
+        true
+    }
 }
 
 #[cfg(test)]

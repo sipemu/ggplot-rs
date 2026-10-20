@@ -92,6 +92,32 @@ fn a_name_ggplot_rs_already_writes_is_ignored_not_overwritten() {
 }
 
 #[test]
+fn a_second_svg_attr_call_for_the_same_name_blames_the_caller_not_ggplot_rs() {
+    // Review PR#141 nit #9: a *second* svg_attr("class", ...) collides with
+    // the caller's own earlier call, not with something ggplot-rs itself
+    // writes to the root — the warning text must say so, distinctly from
+    // `a_name_ggplot_rs_already_writes_is_ignored_not_overwritten` above.
+    let (svg, warnings) = base_plot()
+        .svg_attr("class", "first")
+        .svg_attr("class", "second")
+        .render_svg_native_with_warnings(300, 200)
+        .unwrap();
+    assert_eq!(root_attr(&svg, "class"), Some("first"));
+    assert!(
+        warnings
+            .iter()
+            .any(|w| w.contains("class") && w.contains("already set by an earlier svg_attr")),
+        "{warnings:?}"
+    );
+    assert!(
+        !warnings
+            .iter()
+            .any(|w| w.contains("class") && w.contains("ggplot-rs already writes")),
+        "must not blame ggplot-rs for the caller's own duplicate: {warnings:?}"
+    );
+}
+
+#[test]
 fn values_are_escaped() {
     let svg = base_plot()
         .svg_attr("data-note", "<script>\"&'")

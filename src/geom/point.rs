@@ -72,6 +72,10 @@ impl Geom for GeomPoint {
         "point"
     }
 
+    fn consumes_tooltips(&self) -> bool {
+        true
+    }
+
     fn apply_element_geom(&mut self, el: &crate::theme::elements::ElementGeom) {
         if let (true, Some(ink)) = (self.color == (0, 0, 0), el.ink) {
             self.color = ink;

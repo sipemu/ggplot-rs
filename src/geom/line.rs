@@ -242,6 +242,10 @@ impl Geom for GeomLine {
         "line"
     }
 
+    fn consumes_tooltips(&self) -> bool {
+        true
+    }
+
     fn keeps_na_as_break(&self) -> bool {
         true
     }

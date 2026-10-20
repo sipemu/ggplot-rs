@@ -214,6 +214,10 @@ impl Geom for GeomCurve {
         "curve"
     }
 
+    fn consumes_tooltips(&self) -> bool {
+        true
+    }
+
     fn set_series_color(&mut self, color: (u8, u8, u8)) {
         self.color = color;
     }

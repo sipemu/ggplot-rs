@@ -163,6 +163,10 @@ impl Geom for GeomHistogram {
         "histogram"
     }
 
+    fn consumes_tooltips(&self) -> bool {
+        true
+    }
+
     fn include_zero_baseline(&self) -> bool {
         true
     }

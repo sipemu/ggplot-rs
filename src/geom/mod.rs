@@ -149,6 +149,20 @@ pub trait Geom: Send + Sync {
         false
     }
 
+    /// Whether this geom calls [`set_row_extras`] (so it reads
+    /// [`Aes::tooltip`](crate::aes::Aes::tooltip) and
+    /// [`Aes::data_attr`](crate::aes::Aes::data_attr), and a
+    /// [`GGPlot::tooltip`](crate::plot::GGPlot::tooltip) template on it has
+    /// a visible effect). Default false; the build pipeline warns when a
+    /// `tooltip()` template is set on a layer whose geom returns false
+    /// here (review PR#141 finding 6, LOW: a template silently did nothing
+    /// on e.g. `geom_area`/`geom_boxplot`/`geom_ribbon`). Point, segment,
+    /// curve, path, line, hex, polygon, sf, rect/tile and col/bar/
+    /// histogram return true.
+    fn consumes_tooltips(&self) -> bool {
+        false
+    }
+
     /// Geom-specific data preparation after the stat and position steps but
     /// before scale training (ggplot2's `GeomX$setup_data`) — e.g. a tile adds
     /// its `xmin`/`xmax`/`ymin`/`ymax` extents so continuous scales train on

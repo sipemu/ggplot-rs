@@ -431,7 +431,8 @@ pub(crate) fn validate_root_attrs(
     label: &str,
     warnings: &mut Vec<String>,
 ) -> Vec<(String, String)> {
-    let mut used: Vec<&str> = existing.iter().map(|(k, _)| k.as_str()).collect();
+    let built_in: Vec<&str> = existing.iter().map(|(k, _)| k.as_str()).collect();
+    let mut used: Vec<&str> = built_in.clone();
     let mut out = Vec::new();
     for (name, value) in requested {
         if !is_allowed_root_attr_name(name) {
@@ -441,9 +442,19 @@ pub(crate) fn validate_root_attrs(
             continue;
         }
         if used.contains(&name.as_str()) {
-            warnings.push(format!(
-                "{label}: svg_attr(\"{name}\") collides with an attribute ggplot-rs already writes to the root — ignored"
-            ));
+            // Review PR#141 nit #9: distinguish an actual collision with
+            // something ggplot-rs itself writes (`data-plot`, `data-grid`,
+            // …) from a *second* `svg_attr` call for the same name — the
+            // latter is the caller's own earlier value, not ggplot-rs's.
+            if built_in.contains(&name.as_str()) {
+                warnings.push(format!(
+                    "{label}: svg_attr(\"{name}\") collides with an attribute ggplot-rs already writes to the root — ignored"
+                ));
+            } else {
+                warnings.push(format!(
+                    "{label}: svg_attr(\"{name}\") was already set by an earlier svg_attr call — ignored"
+                ));
+            }
             continue;
         }
         used.push(name.as_str());

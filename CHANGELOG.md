@@ -93,6 +93,11 @@ honouring a theme/geom font family it previously ignored. `Layer` and
   (`NA`) or non-finite value, and a value censored by `Oob::Censor`, all
   render in `na_value` instead of a bare `None` the geom silently papers
   over with its own unrelated default colour.
+- New default `Geom::consumes_tooltips` hook (default `false`; the 13
+  geoms that actually read a per-row tooltip — bar/col/histogram/hex/
+  line/path/point/polygon/rect/sf/segment/curve/tile — return `true`):
+  `GGPlot::tooltip(template)` on a layer whose geom ignores tooltips now
+  pushes a build warning instead of silently having no effect.
 
 ### Fixed
 
@@ -107,6 +112,23 @@ honouring a theme/geom font family it previously ignored. `Layer` and
   also un-breaks `data-fx` on a datetime x with `with_date_labels` set: it
   was suppressed as "equal to `data-x`" because the un-formatted ISO
   fallback happened to be the only thing compared.
+- `PlotGrid` cells each honour their own `svg_formatted_values` flag
+  (previously only a top-level `GGPlot::render_svg_native*` call applied
+  it; a plot composed into a grid lost `data-fvalue`/`data-fx` even with
+  the flag set on that cell).
+- `ScaleColorContinuous`/`ScaleColorGradient2`/`ScaleColorGradientN`'s
+  `with_limits(lo, hi)` with `lo > hi` (e.g. a typo) no longer panics
+  under `Oob::Squish` (`f64::clamp` panics when `min > max`) — every
+  value is treated as censored (`na_value`) regardless of the configured
+  `Oob`, same as `Oob::Censor` already did, and `Scale::validate` now
+  pushes a build warning naming the inverted limits.
+- The root/`PlotGrid` `svg_attr` collision warning now distinguishes a
+  name ggplot-rs itself writes (`data-plot`, `data-grid`, …) from a
+  *second* `svg_attr`/`svg_attrs` call for the same name — the latter
+  previously said "collides with an attribute ggplot-rs already writes
+  to the root", which wrongly blamed ggplot-rs for the caller's own
+  earlier call; it now says "was already set by an earlier svg_attr
+  call".
 
 ### Changed
 
