@@ -5,7 +5,8 @@
 //! (text is `<text>` with font attributes the viewer renders).
 
 use super::backend::{
-    DrawBackend, FontFace, LineStyle, PointShape, PointStyle, RectStyle, TextAnchor, TextStyle,
+    DrawBackend, FontFace, LineEnd, LineStyle, PointShape, PointStyle, RectStyle, TextAnchor,
+    TextStyle,
 };
 use super::{Rect, RenderError};
 
@@ -429,15 +430,74 @@ impl DrawBackend for SvgBackend {
             s if s.is_empty() => String::new(),
             s => format!(" stroke-dasharray=\"{s}\""),
         };
+        // `Butt` is SVG's own default: omitting the attribute keeps default
+        // output byte-identical.
+        let linecap = match style.lineend {
+            LineEnd::Butt => "",
+            LineEnd::Round => " stroke-linecap=\"round\"",
+            LineEnd::Square => " stroke-linecap=\"square\"",
+        };
         let attrs = format!(
-            "points=\"{}\" fill=\"none\" stroke=\"{}\" stroke-width=\"{:.2}\" stroke-opacity=\"{:.3}\"{}",
+            "points=\"{}\" fill=\"none\" stroke=\"{}\" stroke-width=\"{:.2}\" stroke-opacity=\"{:.3}\"{}{}",
             points(&pts),
             rgb(style.color),
             finite_or(style.width, 1.0),
             finite_or(style.alpha, 1.0),
-            dash
+            dash,
+            linecap
         );
         self.push_mark("polyline", &attrs);
+        Ok(())
+    }
+
+    /// Emit a native `<path d="M.. Q..">` quadratic Bézier (one real curve
+    /// instead of a flattened polyline). Non-finite input draws nothing.
+    fn draw_quadratic(
+        &mut self,
+        p0: (f64, f64),
+        ctrl: (f64, f64),
+        p1: (f64, f64),
+        style: &LineStyle,
+    ) -> Result<(), RenderError> {
+        if !(p0.0.is_finite()
+            && p0.1.is_finite()
+            && ctrl.0.is_finite()
+            && ctrl.1.is_finite()
+            && p1.0.is_finite()
+            && p1.1.is_finite())
+        {
+            return Ok(());
+        }
+        let dash = match style
+            .linetype
+            .pattern()
+            .iter()
+            .flat_map(|(d, g)| [*d, *g])
+            .map(|v| format!("{v}"))
+            .collect::<Vec<_>>()
+            .join(",")
+        {
+            s if s.is_empty() => String::new(),
+            s => format!(" stroke-dasharray=\"{s}\""),
+        };
+        let linecap = match style.lineend {
+            LineEnd::Butt => "",
+            LineEnd::Round => " stroke-linecap=\"round\"",
+            LineEnd::Square => " stroke-linecap=\"square\"",
+        };
+        let d = format!(
+            "M{:.2} {:.2} Q{:.2} {:.2} {:.2} {:.2}",
+            p0.0, p0.1, ctrl.0, ctrl.1, p1.0, p1.1
+        );
+        let attrs = format!(
+            "d=\"{d}\" fill=\"none\" stroke=\"{}\" stroke-width=\"{:.2}\" stroke-opacity=\"{:.3}\"{}{}",
+            rgb(style.color),
+            finite_or(style.width, 1.0),
+            finite_or(style.alpha, 1.0),
+            dash,
+            linecap
+        );
+        self.push_mark("path", &attrs);
         Ok(())
     }
 
@@ -520,5 +580,75 @@ impl DrawBackend for SvgBackend {
             escape(text)
         ));
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::render::Rect;
+
+    fn backend() -> SvgBackend {
+        SvgBackend::new(
+            100,
+            100,
+            Rect {
+                x: 0.0,
+                y: 0.0,
+                width: 100.0,
+                height: 100.0,
+            },
+        )
+    }
+
+    #[test]
+    fn draw_quadratic_emits_a_path_with_m_and_q() {
+        let mut b = backend();
+        b.draw_quadratic((0.0, 0.0), (10.0, 20.0), (20.0, 0.0), &LineStyle::default())
+            .unwrap();
+        let svg = b.finish();
+        assert!(svg.contains("<path"));
+        assert!(svg.contains("d=\"M0.00 0.00 Q10.00 20.00 20.00 0.00\""));
+        assert!(!svg.contains("NaN"));
+        assert!(!svg.contains("inf"));
+    }
+
+    #[test]
+    fn draw_quadratic_drops_non_finite_input() {
+        let mut b = backend();
+        b.draw_quadratic(
+            (f64::NAN, 0.0),
+            (10.0, 20.0),
+            (20.0, 0.0),
+            &LineStyle::default(),
+        )
+        .unwrap();
+        b.draw_quadratic(
+            (0.0, 0.0),
+            (f64::INFINITY, 20.0),
+            (20.0, 0.0),
+            &LineStyle::default(),
+        )
+        .unwrap();
+        let svg = b.finish();
+        assert!(!svg.contains("<path"));
+    }
+
+    #[test]
+    fn draw_line_omits_linecap_by_default_but_writes_it_when_set() {
+        let mut b = backend();
+        b.draw_line(&[(0.0, 0.0), (10.0, 10.0)], &LineStyle::default())
+            .unwrap();
+        let svg = b.finish();
+        assert!(!svg.contains("stroke-linecap"));
+
+        let mut b2 = backend();
+        let style = LineStyle {
+            lineend: LineEnd::Round,
+            ..Default::default()
+        };
+        b2.draw_line(&[(0.0, 0.0), (10.0, 10.0)], &style).unwrap();
+        let svg2 = b2.finish();
+        assert!(svg2.contains("stroke-linecap=\"round\""));
     }
 }

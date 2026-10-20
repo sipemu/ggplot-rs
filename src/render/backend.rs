@@ -78,6 +78,17 @@ impl Default for PointStyle {
     }
 }
 
+/// Line cap style (R grid's `lineend`), applied to the stroked ends of a
+/// polyline/path. `Butt` is SVG's own default, so it is written on the wire
+/// only when it differs (byte-identical default output).
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
+pub enum LineEnd {
+    #[default]
+    Butt,
+    Round,
+    Square,
+}
+
 /// Style for drawing lines.
 #[derive(Clone, Debug)]
 pub struct LineStyle {
@@ -85,6 +96,7 @@ pub struct LineStyle {
     pub alpha: f64,
     pub width: f64,
     pub linetype: Linetype,
+    pub lineend: LineEnd,
 }
 
 impl Default for LineStyle {
@@ -94,6 +106,7 @@ impl Default for LineStyle {
             alpha: 1.0,
             width: 1.0,
             linetype: Linetype::Solid,
+            lineend: LineEnd::Butt,
         }
     }
 }
@@ -228,5 +241,140 @@ pub trait DrawBackend {
                 self.draw_circle(center, radius, style)
             }
         }
+    }
+
+    /// Draw a quadratic Bézier curve from `p0` to `p1` with control point
+    /// `ctrl`, in pixel space. The default implementation flattens the curve
+    /// to 32 line segments and draws it with [`draw_line`](Self::draw_line);
+    /// backends that support real curves (SVG) should override this.
+    /// Non-finite input draws nothing.
+    fn draw_quadratic(
+        &mut self,
+        p0: (f64, f64),
+        ctrl: (f64, f64),
+        p1: (f64, f64),
+        style: &LineStyle,
+    ) -> Result<(), RenderError> {
+        if !(p0.0.is_finite()
+            && p0.1.is_finite()
+            && ctrl.0.is_finite()
+            && ctrl.1.is_finite()
+            && p1.0.is_finite()
+            && p1.1.is_finite())
+        {
+            return Ok(());
+        }
+        const STEPS: usize = 32;
+        let mut pts = Vec::with_capacity(STEPS + 1);
+        for i in 0..=STEPS {
+            let t = i as f64 / STEPS as f64;
+            let one_minus_t = 1.0 - t;
+            let x =
+                one_minus_t * one_minus_t * p0.0 + 2.0 * one_minus_t * t * ctrl.0 + t * t * p1.0;
+            let y =
+                one_minus_t * one_minus_t * p0.1 + 2.0 * one_minus_t * t * ctrl.1 + t * t * p1.1;
+            pts.push((x, y));
+        }
+        self.draw_line(&pts, style)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::render::{Rect, RenderError};
+    use std::cell::RefCell;
+
+    /// A minimal backend that does not override `draw_quadratic`, to exercise
+    /// the trait's default flattening implementation.
+    struct RecordingBackend {
+        lines: RefCell<Vec<Vec<(f64, f64)>>>,
+    }
+
+    impl DrawBackend for RecordingBackend {
+        fn draw_circle(
+            &mut self,
+            _center: (f64, f64),
+            _radius: f64,
+            _style: &PointStyle,
+        ) -> Result<(), RenderError> {
+            Ok(())
+        }
+        fn draw_line(
+            &mut self,
+            points: &[(f64, f64)],
+            _style: &LineStyle,
+        ) -> Result<(), RenderError> {
+            self.lines.borrow_mut().push(points.to_vec());
+            Ok(())
+        }
+        fn draw_rect(
+            &mut self,
+            _top_left: (f64, f64),
+            _bottom_right: (f64, f64),
+            _style: &RectStyle,
+        ) -> Result<(), RenderError> {
+            Ok(())
+        }
+        fn draw_text(
+            &mut self,
+            _text: &str,
+            _pos: (f64, f64),
+            _style: &TextStyle,
+        ) -> Result<(), RenderError> {
+            Ok(())
+        }
+        fn draw_polygon(
+            &mut self,
+            _points: &[(f64, f64)],
+            _style: &RectStyle,
+        ) -> Result<(), RenderError> {
+            Ok(())
+        }
+        fn plot_area(&self) -> Rect {
+            Rect {
+                x: 0.0,
+                y: 0.0,
+                width: 100.0,
+                height: 100.0,
+            }
+        }
+        fn total_area(&self) -> Rect {
+            self.plot_area()
+        }
+    }
+
+    #[test]
+    fn default_draw_quadratic_flattens_to_33_points() {
+        let mut b = RecordingBackend {
+            lines: RefCell::new(Vec::new()),
+        };
+        b.draw_quadratic((0.0, 0.0), (5.0, 10.0), (10.0, 0.0), &LineStyle::default())
+            .unwrap();
+        let lines = b.lines.borrow();
+        assert_eq!(lines.len(), 1);
+        assert_eq!(lines[0].len(), 33);
+        assert_eq!(lines[0][0], (0.0, 0.0));
+        assert_eq!(lines[0][32], (10.0, 0.0));
+        // Midpoint of a quadratic Bézier at t=0.5 is the average of the
+        // endpoints and the control point, each weighted 1/4, 1/2, 1/4.
+        let mid = lines[0][16];
+        assert!((mid.0 - 5.0).abs() < 1e-9);
+        assert!((mid.1 - 5.0).abs() < 1e-9);
+    }
+
+    #[test]
+    fn default_draw_quadratic_drops_non_finite() {
+        let mut b = RecordingBackend {
+            lines: RefCell::new(Vec::new()),
+        };
+        b.draw_quadratic(
+            (f64::NAN, 0.0),
+            (5.0, 10.0),
+            (10.0, 0.0),
+            &LineStyle::default(),
+        )
+        .unwrap();
+        assert!(b.lines.borrow().is_empty());
     }
 }

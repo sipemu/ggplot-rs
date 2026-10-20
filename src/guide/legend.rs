@@ -292,6 +292,7 @@ fn draw_discrete_legend_at(
                         width: 1.5,
                         alpha: 1.0,
                         linetype: lt,
+                        ..Default::default()
                     },
                 )?;
             }
@@ -456,6 +457,7 @@ fn draw_continuous_legend_at(
         width: border.width,
         alpha: 1.0,
         linetype: border.linetype,
+        ..Default::default()
     };
     if border.visible {
         backend.draw_line(

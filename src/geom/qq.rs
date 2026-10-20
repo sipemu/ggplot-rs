@@ -182,6 +182,7 @@ impl Geom for GeomQQLine {
                         alpha: self.alpha,
                         width: self.width,
                         linetype: Linetype::Dashed,
+                        ..Default::default()
                     },
                 )?;
             }

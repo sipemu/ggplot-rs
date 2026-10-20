@@ -52,6 +52,7 @@ impl Geom for GeomRug {
             alpha: self.alpha,
             width: 0.5,
             linetype: Linetype::Solid,
+            ..Default::default()
         };
 
         let len = self.length;

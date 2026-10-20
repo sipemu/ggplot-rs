@@ -33,6 +33,7 @@ pub fn draw_radar_guides(
             width: grid.width,
             alpha: 1.0,
             linetype: grid.linetype,
+            ..Default::default()
         };
         for (ny, _) in &y_breaks {
             if !(0.0..=1.0 + 1e-9).contains(ny) {
@@ -55,6 +56,7 @@ pub fn draw_radar_guides(
             width: spoke.width,
             alpha: 1.0,
             linetype: spoke.linetype,
+            ..Default::default()
         };
         for (p, _) in &x_breaks {
             backend.draw_line(&[centre, coord.transform((*p, 1.0), area)], &style)?;

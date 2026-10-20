@@ -89,6 +89,7 @@ impl Geom for GeomPath {
                             alpha: self.alpha,
                             width: self.width,
                             linetype: lt,
+                            ..Default::default()
                         },
                     )?;
                 }
@@ -120,6 +121,7 @@ impl Geom for GeomPath {
                         alpha: self.alpha,
                         width: self.width,
                         linetype: lt,
+                        ..Default::default()
                     },
                 )?;
             }

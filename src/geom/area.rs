@@ -133,6 +133,7 @@ impl Geom for GeomArea {
                         alpha: 1.0,
                         width: self.line_width,
                         linetype: Linetype::Solid,
+                        ..Default::default()
                     },
                 )?;
             }

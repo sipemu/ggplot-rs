@@ -209,6 +209,7 @@ impl GeomSf {
                 alpha: self.alpha,
                 width: self.line_width.max(1.0),
                 linetype: Linetype::Solid,
+                ..Default::default()
             },
         )
     }

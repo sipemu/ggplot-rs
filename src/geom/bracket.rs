@@ -114,6 +114,7 @@ impl Geom for GeomBracket {
                     alpha: 1.0,
                     width: self.line_width,
                     linetype: Linetype::Solid,
+                    ..Default::default()
                 },
             )?;
             super::clear_mark(backend);

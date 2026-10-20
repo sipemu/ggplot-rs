@@ -120,6 +120,7 @@ impl Geom for GeomStep {
                         alpha: self.alpha,
                         width: self.width,
                         linetype,
+                        ..Default::default()
                     },
                 )?;
             }

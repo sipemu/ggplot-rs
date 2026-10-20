@@ -58,6 +58,7 @@ impl Geom for GeomErrorbar {
             alpha: self.alpha,
             width: self.width,
             linetype: Linetype::Solid,
+            ..Default::default()
         };
 
         let xm = super::support::XMapper::new(data, scales);

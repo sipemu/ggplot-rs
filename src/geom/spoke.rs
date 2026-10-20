@@ -92,6 +92,7 @@ impl Geom for GeomSpoke {
                     alpha: self.alpha,
                     width: self.width,
                     linetype: Linetype::Solid,
+                    ..Default::default()
                 },
             )?;
         }

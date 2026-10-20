@@ -121,6 +121,7 @@ impl Geom for GeomBoxplot {
                     width: 2.0,
                     alpha: 1.0,
                     linetype: Linetype::Solid,
+                    ..Default::default()
                 },
             )?;
 
@@ -134,6 +135,7 @@ impl Geom for GeomBoxplot {
                     width: 1.0,
                     alpha: 1.0,
                     linetype: Linetype::Solid,
+                    ..Default::default()
                 },
             )?;
             // Lower whisker cap
@@ -146,6 +148,7 @@ impl Geom for GeomBoxplot {
                     width: 1.0,
                     alpha: 1.0,
                     linetype: Linetype::Solid,
+                    ..Default::default()
                 },
             )?;
 
@@ -158,6 +161,7 @@ impl Geom for GeomBoxplot {
                     width: 1.0,
                     alpha: 1.0,
                     linetype: Linetype::Solid,
+                    ..Default::default()
                 },
             )?;
             // Upper whisker cap
@@ -170,6 +174,7 @@ impl Geom for GeomBoxplot {
                     width: 1.0,
                     alpha: 1.0,
                     linetype: Linetype::Solid,
+                    ..Default::default()
                 },
             )?;
 

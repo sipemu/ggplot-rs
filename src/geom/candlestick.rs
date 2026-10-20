@@ -193,6 +193,7 @@ impl Geom for GeomCandlestick {
                     alpha: self.alpha,
                     width: self.line_width,
                     linetype: Linetype::Solid,
+                    ..Default::default()
                 },
             )?;
             let (x0, y0) = coord.transform((p.nx - half, p.open.max(p.close)), &area);
@@ -249,6 +250,7 @@ impl Geom for GeomOhlc {
                 alpha: self.alpha,
                 width: self.line_width,
                 linetype: Linetype::Solid,
+                ..Default::default()
             };
             let t = |x: f64, y: f64| coord.transform((x, y), &area);
             b.draw_line(&[t(p.nx, p.low), t(p.nx, p.high)], &style)?;

@@ -74,6 +74,7 @@ impl Geom for GeomLinerange {
                     alpha: self.alpha,
                     width: self.width,
                     linetype: Linetype::Solid,
+                    ..Default::default()
                 },
             )?;
         }

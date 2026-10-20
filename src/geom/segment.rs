@@ -76,6 +76,7 @@ impl Geom for GeomSegment {
                     alpha: self.alpha,
                     width: self.width,
                     linetype: Linetype::Solid,
+                    ..Default::default()
                 },
             )?;
         }

@@ -102,6 +102,7 @@ impl Geom for GeomLine {
                             alpha: self.alpha,
                             width: self.width,
                             linetype: lt,
+                            ..Default::default()
                         },
                     )?;
                 }
@@ -144,6 +145,7 @@ impl Geom for GeomLine {
                         alpha: self.alpha,
                         width: self.width,
                         linetype: lt,
+                        ..Default::default()
                     },
                 )?;
             }

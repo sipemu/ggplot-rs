@@ -868,6 +868,18 @@ impl DrawBackend for Measure<'_> {
         }
         self.inner.draw_line(pts, style)
     }
+    fn draw_quadratic(
+        &mut self,
+        p0: (f64, f64),
+        ctrl: (f64, f64),
+        p1: (f64, f64),
+        style: &LineStyle,
+    ) -> Result<(), RenderError> {
+        self.grow(p0.0, p0.1, p0.0, p0.1);
+        self.grow(ctrl.0, ctrl.1, ctrl.0, ctrl.1);
+        self.grow(p1.0, p1.1, p1.0, p1.1);
+        self.inner.draw_quadratic(p0, ctrl, p1, style)
+    }
     fn draw_rect(
         &mut self,
         a: (f64, f64),

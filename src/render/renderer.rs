@@ -70,6 +70,7 @@ impl PlotRenderer {
                 width: theme.panel_border.width,
                 alpha: 1.0,
                 linetype: Linetype::Solid,
+                ..Default::default()
             };
             let x0 = plot_area.x;
             let y0 = plot_area.y;
@@ -507,6 +508,7 @@ impl PlotRenderer {
                     width: theme.panel_border.width,
                     alpha: 1.0,
                     linetype: Linetype::Solid,
+                    ..Default::default()
                 };
                 let x0 = panel_rect.x;
                 let y0 = panel_rect.y;
@@ -751,6 +753,7 @@ impl PlotRenderer {
                             alpha: 1.0,
                             width: *width,
                             linetype: Linetype::Solid,
+                            ..Default::default()
                         },
                     )?;
                 }
@@ -781,6 +784,15 @@ impl<'a> DrawBackend for PanelBackendAdapter<'a> {
         style: &crate::render::backend::LineStyle,
     ) -> Result<(), RenderError> {
         self.inner.draw_line(points, style)
+    }
+    fn draw_quadratic(
+        &mut self,
+        p0: (f64, f64),
+        ctrl: (f64, f64),
+        p1: (f64, f64),
+        style: &crate::render::backend::LineStyle,
+    ) -> Result<(), RenderError> {
+        self.inner.draw_quadratic(p0, ctrl, p1, style)
     }
     fn draw_rect(
         &mut self,

@@ -59,6 +59,7 @@ fn row_style(
         alpha,
         width,
         linetype,
+        ..Default::default()
     }
 }
 
@@ -155,6 +156,7 @@ impl Geom for GeomHline {
                     alpha: self.alpha,
                     width: self.width,
                     linetype: self.linetype,
+                    ..Default::default()
                 },
             };
             mark_line(backend, data, row, "y", &value, None);
@@ -242,6 +244,7 @@ impl Geom for GeomVline {
                     alpha: self.alpha,
                     width: self.width,
                     linetype: self.linetype,
+                    ..Default::default()
                 },
             };
             let axis = Some(super::tip_value(&value));
@@ -393,6 +396,7 @@ impl Geom for GeomAbline {
                     alpha: self.alpha,
                     width: self.width,
                     linetype: self.linetype,
+                    ..Default::default()
                 },
             };
             let series = row.and_then(|i| super::series_key(data, i));
