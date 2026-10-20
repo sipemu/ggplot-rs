@@ -14,6 +14,11 @@ pub struct ScaleSizeContinuous {
     range: (f64, f64),
     /// Locale for the default break labels (`None` = default marks).
     locale: Option<crate::locale::Locale>,
+    /// `scale_size_area(max_size)` (B3-6): private, set only via
+    /// [`area`](Self::area). `None` (the default) keeps the linear radius
+    /// mapping (`range`); `Some(max_size)` maps so *area* — not radius —
+    /// is proportional to the value, with 0 mapping to 0.
+    area_max: Option<f64>,
 }
 
 impl ScaleSizeContinuous {
@@ -25,6 +30,7 @@ impl ScaleSizeContinuous {
             trained: false,
             range: (1.0, 6.0),
             locale: None,
+            area_max: None,
         }
     }
 
@@ -36,6 +42,25 @@ impl ScaleSizeContinuous {
     pub fn with_name(mut self, name: &str) -> Self {
         self.name = name.to_string();
         self
+    }
+
+    /// `scale_size_area(max_size)` (ggplot2): maps so that *area* — not
+    /// radius — is proportional to `|value|`, with 0 mapping to 0:
+    /// `size = max_size · √(|value| / max(|lo|, |hi|))`, where `lo`/`hi`
+    /// are the trained domain. A non-finite or non-positive `max_size` is
+    /// corrected to the ggplot2 default (6) by [`validate`](Self::validate)
+    /// and by the mapping itself.
+    pub fn area(mut self, max_size: f64) -> Self {
+        self.area_max = Some(max_size);
+        self
+    }
+
+    fn sanitized_area_max(max_size: f64) -> f64 {
+        if max_size.is_finite() && max_size > 0.0 {
+            max_size
+        } else {
+            6.0
+        }
     }
 }
 
@@ -129,9 +154,32 @@ impl Scale for ScaleSizeContinuous {
     }
 
     fn map_to_size(&self, value: &Value) -> Option<f64> {
+        if let Some(max_size) = self.area_max {
+            let v = value.as_f64()?;
+            if !v.is_finite() {
+                return None;
+            }
+            let max_size = Self::sanitized_area_max(max_size);
+            let denom = self.min.abs().max(self.max.abs());
+            return Some(if denom < f64::EPSILON {
+                0.0
+            } else {
+                max_size * (v.abs() / denom).sqrt()
+            });
+        }
         let t = self.map(value);
         let (lo, hi) = self.range;
         Some(lo + t * (hi - lo))
+    }
+
+    fn validate(&self, warnings: &mut Vec<String>) {
+        if let Some(max_size) = self.area_max {
+            if !(max_size.is_finite() && max_size > 0.0) {
+                warnings.push(format!(
+                    "scale_size_area: max_size({max_size}) must be finite and positive; falling back to 6"
+                ));
+            }
+        }
     }
 
     fn map_fraction_to_size(&self, fraction: f64) -> Option<f64> {
@@ -163,5 +211,47 @@ mod tests {
         );
         assert_eq!(s.format_value(&Value::Float(f64::NAN)), None);
         assert_eq!(s.format_value(&Value::Na), None);
+    }
+
+    #[test]
+    fn scale_size_area_matches_r_ggplot2() {
+        let mut s = ScaleSizeContinuous::new().area(6.0);
+        s.train(&[
+            Value::Float(0.0),
+            Value::Float(1.0),
+            Value::Float(4.0),
+            Value::Float(16.0),
+        ]);
+        let got: Vec<f64> = [0.0, 1.0, 4.0, 16.0]
+            .iter()
+            .map(|&v| s.map_to_size(&Value::Float(v)).unwrap())
+            .collect();
+        for (g, e) in got.iter().zip([0.0, 1.5, 3.0, 6.0]) {
+            assert!((g - e).abs() < 1e-9, "got {got:?}");
+        }
+    }
+
+    #[test]
+    fn scale_size_area_rejects_na_and_non_finite() {
+        let mut s = ScaleSizeContinuous::new().area(6.0);
+        s.train(&[Value::Float(0.0), Value::Float(10.0)]);
+        assert_eq!(s.map_to_size(&Value::Na), None);
+        assert_eq!(s.map_to_size(&Value::Float(f64::NAN)), None);
+    }
+
+    #[test]
+    fn scale_size_area_bad_max_warns_and_falls_back_to_six() {
+        let mut s = ScaleSizeContinuous::new().area(-1.0);
+        s.train(&[Value::Float(0.0), Value::Float(16.0)]);
+        let mut warnings = Vec::new();
+        s.validate(&mut warnings);
+        assert!(warnings.iter().any(|w| w.contains("max_size")));
+        // Falls back to the ggplot2 default (6) regardless of `validate`
+        // being called — `map_to_size` guards it inline too.
+        assert_eq!(
+            s.map_to_size(&Value::Float(16.0)),
+            Some(6.0),
+            "falls back to max_size 6"
+        );
     }
 }

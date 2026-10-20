@@ -1440,6 +1440,16 @@ impl GGPlot {
         self
     }
 
+    /// `scale_size_area(max_size)` (ggplot2, B3-6): size scale where
+    /// *area*, not radius, is proportional to the value, and 0 maps to 0.
+    /// See [`ScaleSizeContinuous::area`].
+    pub fn scale_size_area(mut self, max_size: f64) -> Self {
+        self.scales.push(Box::new(
+            crate::scale::size::ScaleSizeContinuous::new().area(max_size),
+        ));
+        self
+    }
+
     pub fn scale_alpha(mut self, s: crate::scale::alpha::ScaleAlphaContinuous) -> Self {
         self.scales.push(Box::new(s));
         self

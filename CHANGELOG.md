@@ -29,6 +29,12 @@ guarded by `tests/default_output_022.rs`.
   `position_stack(vjust =)`/`position_fill(vjust =)` (#147). `vjust != 1`
   also writes an `ymax` column holding the segment's top.
 
+- `ScaleSizeContinuous::area(max_size)` / `GGPlot::scale_size_area(max_size)`
+  (ggplot2's `scale_size_area()`, #150): size ∝ √(value) so that *area*
+  (not radius) is proportional to the data, with 0 mapping to 0. NA/non-
+  finite input maps to `None`. A non-finite or non-positive `max_size`
+  warns and falls back to 6.
+
 ### Changed
 
 - A faceted `position_stack`/`position_fill` now computes per panel
