@@ -132,6 +132,7 @@ honouring a theme/geom font family it previously ignored. `Layer` and
 
 ### Changed
 
+- **Missing colour values render grey** on continuous colour/fill scales (`na_value`, default grey50, as in ggplot2), also without limits. Previously NaN rendered black and NA the low end of the gradient.
 - `fill-opacity`/`stroke-opacity` is written only when the value isn't
   `1.000` (the SVG default); it was previously written unconditionally on
   every mark.
