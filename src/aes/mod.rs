@@ -30,8 +30,12 @@ pub enum Aesthetic {
     /// A custom `<title>` hover tooltip, replacing the geom's own.
     Tooltip,
     /// A custom `data-<name>` attribute on the mark. The `String` is the
-    /// full attribute name (already prefixed: `"data-<name>"`), validated
-    /// by [`Aes::data_attr`] against `[a-z0-9][a-z0-9-]*`.
+    /// full attribute name (`"data-<name>"`). [`Aes::data_attr`] validates
+    /// `name` against `[a-z0-9][a-z0-9-]*` (excluding reserved names) before
+    /// constructing this; a `DataAttr` built directly — bypassing that
+    /// builder — is re-validated in `resolve_mappings`
+    /// (`aes::validated_data_attr_internal_name`), the single authoritative
+    /// gate regardless of how the mapping was created.
     DataAttr(String),
     /// Financial OHLC aesthetics (`geom_candlestick` / `geom_ohlc`); they
     /// share the y position scale.
@@ -260,15 +264,22 @@ impl Aes {
     }
 
     /// A custom `data-<name>` attribute on the mark, from `col`. `name` must
-    /// match `[a-z0-9][a-z0-9-]*`; an invalid name is skipped with a build
-    /// warning (surfaced via [`GGPlot::aes`](crate::plot::GGPlot::aes) /
-    /// `layer_aes`). A user attr replaces a built-in of the same name
-    /// (`data-x`, `data-series`, `data-value`) — never duplicated.
+    /// match `[a-z0-9][a-z0-9-]*` and not be a name ggplot-rs itself writes
+    /// via another mechanism (currently just `"part"` — see
+    /// `DrawBackend::set_mark_part`); an invalid or reserved name is skipped
+    /// with a build warning (surfaced via
+    /// [`GGPlot::aes`](crate::plot::GGPlot::aes) / `layer_aes`). A user attr
+    /// replaces a built-in of the same name (`data-x`, `data-series`,
+    /// `data-value`) — never duplicated.
     pub fn data_attr(mut self, name: &str, col: &str) -> Self {
         if !is_valid_data_attr_name(name) {
-            self.warnings.push(format!(
-                "aes: data_attr name {name:?} is invalid (must match [a-z0-9][a-z0-9-]*); skipped"
-            ));
+            let reason = if RESERVED_DATA_ATTR_NAMES.contains(&name) {
+                "reserved (written by ggplot-rs itself)"
+            } else {
+                "invalid (must match [a-z0-9][a-z0-9-]*)"
+            };
+            self.warnings
+                .push(format!("aes: data_attr name {name:?} is {reason}; skipped"));
             return self;
         }
         self.push(col, Aesthetic::DataAttr(format!("data-{name}")))
@@ -368,8 +379,19 @@ impl Aes {
     }
 }
 
-/// `[a-z0-9][a-z0-9-]*` — a valid HTML custom-data-attribute suffix.
-fn is_valid_data_attr_name(name: &str) -> bool {
+/// Names ggplot-rs itself writes via a mechanism other than `data_attr`'s
+/// `set_mark_attrs` dedup — reserved so a user mapping can never collide and
+/// produce a duplicate attribute. `"part"` is `DrawBackend::set_mark_part`
+/// (arrowheads: `data-part="arrow"`), written directly in `push_mark`, not
+/// through the built-ins list `set_mark_attrs` dedups against.
+const RESERVED_DATA_ATTR_NAMES: &[&str] = &["part"];
+
+/// `[a-z0-9][a-z0-9-]*`, excluding [`RESERVED_DATA_ATTR_NAMES`] — a valid,
+/// non-colliding HTML custom-data-attribute suffix.
+pub(crate) fn is_valid_data_attr_name(name: &str) -> bool {
+    if RESERVED_DATA_ATTR_NAMES.contains(&name) {
+        return false;
+    }
     let mut chars = name.chars();
     match chars.next() {
         Some(c) if c.is_ascii_lowercase() || c.is_ascii_digit() => {}
@@ -378,9 +400,36 @@ fn is_valid_data_attr_name(name: &str) -> bool {
     chars.all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '-')
 }
 
+/// Internal storage prefix for validated `data_attr` columns in the built
+/// DataFrame. Reserved: no column name a caller can produce through the
+/// public API collides with it (it isn't a legal data-attr target itself,
+/// and isn't a plain column name any aesthetic resolves to), so
+/// `geom::set_row_extras` can look for *only* this prefix instead of
+/// scanning for anything that merely looks like a `data-*` column — which
+/// would also match an unrelated raw source column a caller never mapped
+/// through `Aes::data_attr` (the injection this guards against: see
+/// `validated_data_attr_internal_name`).
+pub(crate) const DATA_ATTR_INTERNAL_PREFIX: &str = "\u{0}ggplot-rs:data-attr:";
+
+/// Validate a `data_attr` mapping's target (`"data-<name>"`, as stored in
+/// [`Aesthetic::DataAttr`]) and, if valid, return the internal column name
+/// it should be written under. This is the single authoritative gate: it
+/// runs in `resolve_mappings` regardless of *how* the `DataAttr` mapping was
+/// created — the validated `Aes::data_attr` builder, or a `DataAttr`
+/// constructed directly and pushed into the public `Aes.mappings` field,
+/// bypassing the builder's own check.
+pub(crate) fn validated_data_attr_internal_name(data_attr_target: &str) -> Option<String> {
+    let suffix = data_attr_target.strip_prefix("data-")?;
+    if is_valid_data_attr_name(suffix) {
+        Some(format!("{DATA_ATTR_INTERNAL_PREFIX}{data_attr_target}"))
+    } else {
+        None
+    }
+}
+
 #[cfg(test)]
 mod data_attr_name_tests {
-    use super::is_valid_data_attr_name;
+    use super::{is_valid_data_attr_name, validated_data_attr_internal_name};
 
     #[test]
     fn accepts_lowercase_alnum_and_hyphen() {
@@ -394,5 +443,27 @@ mod data_attr_name_tests {
         for bad in ["", "-x", "X", "a_b", "a.b", "a b", "déjà"] {
             assert!(!is_valid_data_attr_name(bad), "{bad} should be invalid");
         }
+    }
+
+    #[test]
+    fn rejects_the_reserved_part_name() {
+        assert!(!is_valid_data_attr_name("part"));
+        assert_eq!(validated_data_attr_internal_name("data-part"), None);
+    }
+
+    #[test]
+    fn rejects_a_malformed_injection_attempt_even_with_the_data_prefix() {
+        // Space, `=`, parens: none of these are legal in the suffix.
+        assert_eq!(
+            validated_data_attr_internal_name("data-a onmouseover=alert(1) b"),
+            None
+        );
+    }
+
+    #[test]
+    fn valid_target_maps_to_the_internal_prefix_plus_itself() {
+        let internal = validated_data_attr_internal_name("data-orig").unwrap();
+        assert!(internal.starts_with(super::DATA_ATTR_INTERNAL_PREFIX));
+        assert!(internal.ends_with("data-orig"));
     }
 }

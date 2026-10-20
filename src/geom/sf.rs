@@ -308,6 +308,7 @@ impl Geom for GeomSf {
             self.draw_geometry(&g, &project, fill, color, backend)?;
         }
         backend.set_tooltip(None);
+        super::clear_mark(backend);
         super::clear_row_extras(backend);
         Ok(())
     }

@@ -45,6 +45,7 @@ impl Default for GeomCurve {
 }
 
 impl GeomCurve {
+    /// Fixed stroke colour, used when no `color` aesthetic is mapped.
     pub fn color(mut self, color: (u8, u8, u8)) -> Self {
         self.color = color;
         self
@@ -56,11 +57,13 @@ impl GeomCurve {
         self
     }
 
+    /// Fixed opacity, used when no `alpha` aesthetic is mapped.
     pub fn alpha(mut self, alpha: f64) -> Self {
         self.alpha = alpha;
         self
     }
 
+    /// See the [`curvature`](Self::curvature) field doc.
     pub fn curvature(mut self, curvature: f64) -> Self {
         self.curvature = curvature;
         self
@@ -72,11 +75,13 @@ impl GeomCurve {
         self
     }
 
+    /// Draw an arrowhead at the end(s) — see [`arrow()`](crate::geom::arrow::arrow).
     pub fn arrow(mut self, arrow: Arrow) -> Self {
         self.arrow = Some(arrow);
         self
     }
 
+    /// Line cap style (R grid's `lineend`).
     pub fn lineend(mut self, lineend: LineEnd) -> Self {
         self.lineend = lineend;
         self
@@ -183,6 +188,7 @@ impl Geom for GeomCurve {
                 draw_heads(backend, &hs, arrow, line_color, alpha, width)?;
             }
         }
+        super::clear_mark(backend);
         super::clear_row_extras(backend);
 
         Ok(())
@@ -364,5 +370,52 @@ mod tests {
         let b = plain(plot());
         assert_eq!(a, b);
         assert!(!a.contains("data-orig"));
+    }
+
+    /// Review finding #3: `data_attr("part", ...)` must never produce a
+    /// second `data-part` alongside the arrowhead's own — a duplicate
+    /// attribute is an XML parse error, and the duplicate would shadow
+    /// `data-part="arrow"`, breaking the `[data-part="arrow"]` selector.
+    #[test]
+    fn data_attr_named_part_is_rejected_so_arrowheads_never_get_a_duplicate_data_part() {
+        let plot = GGPlot::new(vec![
+            ("x".into(), vec![Value::Float(0.0), Value::Float(0.2)]),
+            ("y".into(), vec![Value::Float(0.0), Value::Float(1.0)]),
+            ("xend".into(), vec![Value::Float(1.0), Value::Float(0.8)]),
+            ("yend".into(), vec![Value::Float(0.5), Value::Float(0.3)]),
+            (
+                "p".into(),
+                vec![Value::Str("mine".into()), Value::Str("mine".into())],
+            ),
+        ])
+        .aes(
+            Aes::new()
+                .x("x")
+                .y("y")
+                .xend("xend")
+                .yend("yend")
+                .data_attr("part", "p"),
+        );
+        // The invalid/reserved name is rejected with a build warning, not
+        // silently accepted.
+        assert!(plot
+            .warnings
+            .iter()
+            .any(|w| w.contains("part") && w.contains("reserved")));
+
+        let svg = plot
+            .geom_curve_with(GeomCurve::default().arrow(crate::geom::arrow::arrow().closed()))
+            .render_svg_native_with_size(200, 200)
+            .unwrap();
+
+        // Exactly one `data-part` per arrowhead element, always "arrow".
+        for part in svg.split("<polygon").skip(1) {
+            let element = part.split("/>").next().unwrap_or("");
+            if element.contains("data-part") {
+                assert_eq!(element.matches("data-part=").count(), 1);
+                assert!(element.contains("data-part=\"arrow\""));
+            }
+        }
+        assert!(!svg.contains("data-part=\"mine\""));
     }
 }

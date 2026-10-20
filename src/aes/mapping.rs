@@ -1,10 +1,18 @@
-use crate::aes::{Aes, MappingStage};
+use crate::aes::{validated_data_attr_internal_name, Aes, Aesthetic, MappingStage};
 use crate::data::DataFrame;
 
 /// Evaluate aesthetic mappings: extract columns from source data
 /// and rename them to canonical aesthetic names (x, y, color, etc.).
 /// Only resolves BeforeStat mappings.
-pub fn resolve_mappings(data: &DataFrame, mapping: &Aes) -> DataFrame {
+///
+/// A `DataAttr` mapping's target is re-validated here (see
+/// `validated_data_attr_internal_name`) regardless of how it was built,
+/// and stored under an internal, non-colliding column name — not the plain
+/// `"data-<name>"` a caller's own unrelated raw data column could also be
+/// named. `geom::set_row_extras` only reads that internal prefix, so it
+/// never mistakes an incidental raw `data-*` column for a validated one.
+/// An invalid or reserved target is dropped with a warning.
+pub fn resolve_mappings(data: &DataFrame, mapping: &Aes, warnings: &mut Vec<String>) -> DataFrame {
     let mut result = DataFrame::new();
     let nrows = data.nrows();
 
@@ -16,13 +24,24 @@ pub fn resolve_mappings(data: &DataFrame, mapping: &Aes) -> DataFrame {
         if m.stage != MappingStage::BeforeStat {
             continue;
         }
-        let col_name = m.aesthetic.col_name();
+        let col_name = match &m.aesthetic {
+            Aesthetic::DataAttr(target) => match validated_data_attr_internal_name(target) {
+                Some(internal) => internal,
+                None => {
+                    warnings.push(format!(
+                        "aes: data_attr target {target:?} is invalid or reserved; skipped"
+                    ));
+                    continue;
+                }
+            },
+            other => other.col_name().to_string(),
+        };
         if let Some(values) = data.column(&m.column) {
-            result.add_column(col_name.to_string(), values.to_vec());
+            result.add_column(col_name, values.to_vec());
         } else if let Some(values) = super::expr::eval_expression(&m.column, data) {
             // Computed aesthetic — `m.column` is an expression like "a / b" or
             // "log(gdp)" rather than a bare column name.
-            result.add_column(col_name.to_string(), values);
+            result.add_column(col_name, values);
         }
     }
 
@@ -42,13 +61,27 @@ pub fn resolve_mappings(data: &DataFrame, mapping: &Aes) -> DataFrame {
 }
 
 /// Apply after_stat mappings: rename stat-computed columns to canonical aesthetic names.
-/// Called after the stat step in the build pipeline.
-pub fn apply_after_stat(data: &mut DataFrame, mapping: &Aes) {
+/// Called after the stat step in the build pipeline. `DataAttr` targets are
+/// validated the same way as in [`resolve_mappings`] (a `DataAttr` mapping
+/// built directly and pushed with `MappingStage::AfterStat` is obscure but
+/// not impossible, so it gets the same gate).
+pub fn apply_after_stat(data: &mut DataFrame, mapping: &Aes, warnings: &mut Vec<String>) {
     for m in &mapping.mappings {
         if m.stage != MappingStage::AfterStat {
             continue;
         }
-        let target = m.aesthetic.col_name();
+        let target = match &m.aesthetic {
+            Aesthetic::DataAttr(target) => match validated_data_attr_internal_name(target) {
+                Some(internal) => internal,
+                None => {
+                    warnings.push(format!(
+                        "aes: data_attr target {target:?} is invalid or reserved; skipped"
+                    ));
+                    continue;
+                }
+            },
+            other => other.col_name().to_string(),
+        };
         let source = &m.column;
 
         // If the stat produced the source column, rename it to the target
@@ -61,12 +94,12 @@ pub fn apply_after_stat(data: &mut DataFrame, mapping: &Aes) {
         };
         if let Some(values) = values {
             // Remove existing target column if any, then add the new mapping
-            if data.has_column(target) {
-                if let Some(col) = data.column_mut(target) {
+            if data.has_column(&target) {
+                if let Some(col) = data.column_mut(&target) {
                     *col = values;
                 }
             } else {
-                data.add_column(target.to_string(), values);
+                data.add_column(target, values);
             }
         }
     }

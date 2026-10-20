@@ -87,8 +87,15 @@ impl SvgBackend {
     /// Emit `<tag attrs/>`, or `<tag attrs data-…><title>tip</title></tag>`
     /// when a tooltip / mark metadata is set (native SVG hover + host grouping).
     fn push_mark(&mut self, tag: &str, attrs: &str) {
-        // Built-ins first, then user `data-*` attrs — a user attr with the
-        // same name replaces the built-in rather than duplicating it.
+        // Built-ins first, then user `data-*` attrs — re-validated here as
+        // defence in depth even though `geom::set_row_extras` already
+        // derives them only from validated `data_attr` mappings, because
+        // `set_mark_attrs` is a public `DrawBackend` method any caller could
+        // invoke directly. A later entry with the same name replaces an
+        // earlier one rather than duplicating it — including `mark_part`'s
+        // own `data-part`, added last, so it always wins over anything a
+        // caller supplied under that name (an element never carries the
+        // same attribute twice, which is an XML parse error).
         let mut pairs: Vec<(String, String)> = Vec::new();
         for (name, val) in [
             ("data-x", &self.axis_key),
@@ -100,23 +107,30 @@ impl SvgBackend {
             }
         }
         for (name, val) in &self.mark_attrs {
+            if !is_valid_mark_attr_name(name) {
+                continue;
+            }
             match pairs.iter_mut().find(|(n, _)| n == name) {
                 Some(existing) => existing.1 = val.clone(),
                 None => pairs.push((name.clone(), val.clone())),
+            }
+        }
+        // A mark part (e.g. an arrowhead) is decorative: no `<title>`, but it
+        // still carries `data-part` plus `aria-hidden` so assistive tech
+        // skips it (the parent mark already carries the semantic tooltip).
+        // Routed through the same dedup as the other attrs.
+        if let Some(part) = &self.mark_part {
+            match pairs.iter_mut().find(|(n, _)| n == "data-part") {
+                Some(existing) => existing.1 = part.clone(),
+                None => pairs.push(("data-part".to_string(), part.clone())),
             }
         }
         let mut data = String::new();
         for (name, val) in &pairs {
             data.push_str(&format!(" {name}=\"{}\"", escape(val)));
         }
-        // A mark part (e.g. an arrowhead) is decorative: no `<title>`, but it
-        // still carries `data-part` plus `aria-hidden` so assistive tech
-        // skips it (the parent mark already carries the semantic tooltip).
-        if let Some(part) = &self.mark_part {
-            data.push_str(&format!(
-                " data-part=\"{}\" aria-hidden=\"true\"",
-                escape(part)
-            ));
+        if self.mark_part.is_some() {
+            data.push_str(" aria-hidden=\"true\"");
         }
         let mark = if self.mark_part.is_some() {
             format!("<{tag} {attrs}{data}/>")
@@ -272,6 +286,20 @@ fn json_string(s: &str) -> String {
     }
     out.push('"');
     out
+}
+
+/// Defence-in-depth gate for `push_mark`'s `mark_attrs`: `^data-[a-z0-9][a-z0-9-]*$`.
+/// `geom::set_row_extras` only ever supplies already-validated names, but
+/// `set_mark_attrs` is a public `DrawBackend` method any caller (a custom
+/// `Geom` impl, or misuse from outside the crate) could invoke directly with
+/// an arbitrary string, so this is checked again right before it reaches
+/// the wire — never trust a single validation layer for attribute-name
+/// injection.
+fn is_valid_mark_attr_name(name: &str) -> bool {
+    match name.strip_prefix("data-") {
+        Some(suffix) => crate::aes::is_valid_data_attr_name(suffix),
+        None => false,
+    }
 }
 
 fn rgb((r, g, b): (u8, u8, u8)) -> String {

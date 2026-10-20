@@ -566,7 +566,7 @@ impl PlotBuilder {
         }
 
         // Step 3: Evaluate aes — rename columns to canonical names
-        let mut working_data = resolve_mappings(source_data, &merged_mapping);
+        let mut working_data = resolve_mappings(source_data, &merged_mapping, warnings);
 
         // Remember which columns the user actually supplied (pre-stat). A required
         // aesthetic is satisfied if it was present here OR is synthesized by the
@@ -677,7 +677,7 @@ impl PlotBuilder {
         };
 
         // Step 6a: Apply after_stat() mappings (rename stat-computed columns)
-        apply_after_stat(&mut working_data, &merged_mapping);
+        apply_after_stat(&mut working_data, &merged_mapping, warnings);
 
         // Stat output can contain NaN (e.g. a fit on degenerate input): drop
         // those rows too, so nothing non-finite reaches a geom.

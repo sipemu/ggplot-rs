@@ -216,35 +216,49 @@ pub(crate) fn clear_mark(backend: &mut dyn DrawBackend) {
 }
 
 /// Apply one row's interactive aesthetics (B1-7: `Aes::tooltip`,
-/// `Aes::data_attr`) to the backend: a mapped `tooltip` column replaces the
-/// geom's own `<title>` (set `set_mark(...)` *before* calling this, so the
-/// custom tooltip wins); every `data-*` column becomes a `data-*` attribute
-/// (the SVG backend replaces a built-in of the same name — never
-/// duplicated). A no-op when the built data has neither column, so layers
-/// without these aes stay byte-identical.
+/// `Aes::data_attr`) to the backend.
+///
+/// A mapped `tooltip` column replaces the geom's own `<title>` (call the
+/// geom's own `set_mark(...)` *before* this, so a custom tooltip wins); when
+/// the column exists but this row's value is NA, the tooltip is explicitly
+/// reset to `None` — never inheriting an earlier row's — covering geoms with
+/// no title of their own. `set_tooltip` is only called at all when the
+/// `tooltip` column exists, so layers that never map it don't touch
+/// whatever the geom already set.
+///
+/// Every validated `data_attr` column becomes a `data-<name>` attribute.
+/// These are stored under [`crate::aes::DATA_ATTR_INTERNAL_PREFIX`] — an
+/// internal name no caller-supplied column can produce through the public
+/// API — rather than scanned by a `"data-"` name prefix: a raw source
+/// column that merely happens to be named like a data attribute (e.g. a SQL
+/// alias) was never validated and must never reach `push_mark` (see
+/// `aes::validated_data_attr_internal_name`). `set_mark_attrs` is *always*
+/// called, even with an empty list, so a row with no attrs doesn't inherit
+/// an earlier row's.
 pub(crate) fn set_row_extras(backend: &mut dyn DrawBackend, data: &DataFrame, row: usize) {
-    if let Some(v) = data.column("tooltip").and_then(|c| c.get(row)) {
-        if !v.is_na() {
-            backend.set_tooltip(Some(tip_value(v)));
-        }
+    if let Some(col) = data.column("tooltip") {
+        let tip = col.get(row).filter(|v| !v.is_na()).map(tip_value);
+        backend.set_tooltip(tip);
     }
     let mut attrs = Vec::new();
     for name in data.column_names() {
-        if name.starts_with("data-") {
+        if let Some(target) = name.strip_prefix(crate::aes::DATA_ATTR_INTERNAL_PREFIX) {
             if let Some(v) = data.column(name).and_then(|c| c.get(row)) {
                 if !v.is_na() {
-                    attrs.push((name.to_string(), tip_value(v)));
+                    attrs.push((target.to_string(), tip_value(v)));
                 }
             }
         }
     }
-    if !attrs.is_empty() {
-        backend.set_mark_attrs(attrs);
-    }
+    backend.set_mark_attrs(attrs);
 }
 
-/// Clear interactive-aesthetic attributes after a layer finishes drawing.
+/// Clear interactive-aesthetic attributes *and* the tooltip after a layer
+/// finishes drawing, so neither leaks into a later layer, an annotation, or
+/// the legend's own background/key marks (which share the same backend
+/// instance for the rest of the render).
 pub(crate) fn clear_row_extras(backend: &mut dyn DrawBackend) {
+    backend.set_tooltip(None);
     backend.set_mark_attrs(Vec::new());
 }
 

@@ -38,7 +38,10 @@ pub struct Arrow {
     pub angle: f64,
     /// Wing length in pixels.
     pub length: f64,
+    /// Which end(s) of the path get a head. Default [`ArrowEnds::Last`].
     pub ends: ArrowEnds,
+    /// Open (stroked wings) or closed (filled triangle). Default
+    /// [`ArrowType::Open`].
     pub kind: ArrowType,
     /// Where along the path's arc length the head sits, as a fraction in
     /// `[0, 1]` measured from the path's start (`1.0`, the default, is the
@@ -65,21 +68,25 @@ impl Default for Arrow {
 }
 
 impl Arrow {
+    /// Half-angle of the wings, in degrees. Default `30.0`.
     pub fn angle(mut self, degrees: f64) -> Self {
         self.angle = degrees;
         self
     }
 
+    /// Wing length in pixels. Default `18.0`.
     pub fn length(mut self, px: f64) -> Self {
         self.length = px;
         self
     }
 
+    /// Which end(s) of the path get a head.
     pub fn ends(mut self, ends: ArrowEnds) -> Self {
         self.ends = ends;
         self
     }
 
+    /// Open (stroked wings) or closed (filled triangle).
     pub fn kind(mut self, kind: ArrowType) -> Self {
         self.kind = kind;
         self
@@ -97,18 +104,24 @@ impl Arrow {
         self
     }
 
+    /// Where along the path's arc length the head sits — see the
+    /// [`position`](Self::position) field doc.
     pub fn position(mut self, fraction: f64) -> Self {
         self.position = fraction;
         self
     }
 
+    /// Scale the effective wing length with the stroke width — see the
+    /// [`length_per_linewidth`](Self::length_per_linewidth) field doc.
     pub fn length_per_linewidth(mut self, k: f64) -> Self {
         self.length_per_linewidth = k;
         self
     }
 }
 
-/// Build an [`Arrow`] with grid-like defaults: `arrow().closed().angle(20.0)`.
+/// Build an [`Arrow`] with the default settings (open, 30° half-angle, 18px
+/// wings, a head at the end): `arrow()`, or `arrow().closed().angle(20.0)`
+/// for a filled, narrower head.
 pub fn arrow() -> Arrow {
     Arrow::default()
 }

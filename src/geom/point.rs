@@ -191,3 +191,106 @@ pub(crate) fn draw_points(
 
     Ok(())
 }
+
+#[cfg(test)]
+mod interactive_aes_tests {
+    use crate::data::Value;
+    use crate::prelude::*;
+
+    /// Review finding #1 (CRITICAL): a raw data column that merely happens
+    /// to be named like a `data-*` attribute — never mapped through
+    /// `Aes::data_attr` — must never reach the SVG as an attribute, since an
+    /// adversarial column name (e.g. a SQL alias) could inject arbitrary
+    /// attribute syntax.
+    #[test]
+    fn a_raw_column_named_like_a_data_attr_is_never_emitted_as_one() {
+        let evil = "data-a onmouseover=alert(1) b";
+        let svg = GGPlot::new(vec![
+            ("x".into(), vec![Value::Float(0.0), Value::Float(1.0)]),
+            ("y".into(), vec![Value::Float(0.0), Value::Float(1.0)]),
+            (
+                evil.into(),
+                vec![Value::Str("v".into()), Value::Str("v".into())],
+            ),
+        ])
+        .aes(Aes::new().x("x").y("y")) // no data_attr mapping at all
+        .geom_point()
+        .render_svg_native_with_size(200, 200)
+        .unwrap();
+
+        assert!(!svg.contains("onmouseover"));
+        assert!(!svg.contains(evil));
+        // Also: a column that merely *looks* like a validly-named data-attr
+        // (no injection, but still unmapped) must not leak either, so
+        // "layers without these aes are byte-identical" actually holds.
+        let svg2 = GGPlot::new(vec![
+            ("x".into(), vec![Value::Float(0.0)]),
+            ("y".into(), vec![Value::Float(0.0)]),
+            ("data-row".into(), vec![Value::Str("42".into())]),
+        ])
+        .aes(Aes::new().x("x").y("y"))
+        .geom_point()
+        .render_svg_native_with_size(200, 200)
+        .unwrap();
+        assert!(!svg2.contains("data-row"));
+    }
+
+    #[test]
+    fn missing_tooltip_or_attr_on_a_later_row_does_not_inherit_an_earlier_rows() {
+        let svg = GGPlot::new(vec![
+            ("x".into(), vec![Value::Float(0.0), Value::Float(1.0)]),
+            ("y".into(), vec![Value::Float(0.0), Value::Float(1.0)]),
+            ("tip".into(), vec![Value::Str("first".into()), Value::Na]),
+            ("extra".into(), vec![Value::Str("A".into()), Value::Na]),
+        ])
+        .aes(
+            Aes::new()
+                .x("x")
+                .y("y")
+                .tooltip("tip")
+                .data_attr("extra", "extra"),
+        )
+        .geom_point()
+        .render_svg_native_with_size(200, 200)
+        .unwrap();
+
+        // Exactly one <title> (row 1's) and one data-extra (row 1's) — row 2
+        // carries neither.
+        assert_eq!(svg.matches("<title>first</title>").count(), 1);
+        assert_eq!(svg.matches("data-extra=\"A\"").count(), 1);
+        // Row 2's circle (the second <circle ...>) has no data-extra and no
+        // <title> at all.
+        let circles: Vec<&str> = svg.split("<circle").skip(1).collect();
+        assert_eq!(circles.len(), 2);
+        let second = circles[1].split("/>").next().unwrap();
+        assert!(!second.contains("data-extra"));
+        assert!(!circles[1].contains("<title>"));
+    }
+
+    #[test]
+    fn tooltip_does_not_leak_into_a_later_layer_or_the_legend() {
+        let svg = GGPlot::new(vec![
+            ("x".into(), vec![Value::Float(0.0), Value::Float(1.0)]),
+            ("y".into(), vec![Value::Float(0.0), Value::Float(1.0)]),
+            (
+                "g".into(),
+                vec![Value::Str("a".into()), Value::Str("b".into())],
+            ),
+            (
+                "tip".into(),
+                vec![Value::Str("T1".into()), Value::Str("T2".into())],
+            ),
+        ])
+        .aes(Aes::new().x("x").y("y").color("g").tooltip("tip"))
+        .geom_point()
+        .annotate_rect(0.2, 0.3, 0.2, 0.3)
+        .render_svg_native_with_size(300, 300)
+        .unwrap();
+
+        // Only the two mapped point tooltips exist; the legend keys/
+        // background and the annotation rect carry none of them.
+        assert_eq!(svg.matches("<title>").count(), 2);
+        assert!(svg.contains("<title>T1</title>"));
+        assert!(svg.contains("<title>T2</title>"));
+    }
+}

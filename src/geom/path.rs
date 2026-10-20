@@ -38,6 +38,7 @@ impl Default for GeomPath {
 }
 
 impl GeomPath {
+    /// Fixed stroke colour, used when no `color` aesthetic is mapped.
     pub fn color(mut self, color: (u8, u8, u8)) -> Self {
         self.color = color;
         self
@@ -49,16 +50,19 @@ impl GeomPath {
         self
     }
 
+    /// Fixed opacity, used when no `alpha` aesthetic is mapped.
     pub fn alpha(mut self, alpha: f64) -> Self {
         self.alpha = alpha;
         self
     }
 
+    /// Draw an arrowhead at the end(s) — see [`arrow()`](crate::geom::arrow::arrow).
     pub fn arrow(mut self, arrow: Arrow) -> Self {
         self.arrow = Some(arrow);
         self
     }
 
+    /// Line cap style (R grid's `lineend`).
     pub fn lineend(mut self, lineend: LineEnd) -> Self {
         self.lineend = lineend;
         self
@@ -180,6 +184,7 @@ impl Geom for GeomPath {
                 self.width,
             )?;
         }
+        super::clear_mark(backend);
         super::clear_row_extras(backend);
 
         Ok(())

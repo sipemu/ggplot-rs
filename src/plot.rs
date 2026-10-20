@@ -1410,6 +1410,9 @@ impl GGPlot {
         self
     }
 
+    /// Continuous linewidth scale for the `linewidth` aesthetic (segment,
+    /// curve, path, line) — see
+    /// [`ScaleLinewidthContinuous`](crate::scale::linewidth::ScaleLinewidthContinuous).
     pub fn scale_linewidth(mut self, s: crate::scale::linewidth::ScaleLinewidthContinuous) -> Self {
         self.scales.push(Box::new(s));
         self
