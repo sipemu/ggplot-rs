@@ -24,6 +24,7 @@ pub struct SvgBackend {
     axis_key: Option<String>,
     series_key: Option<String>,
     value_key: Option<String>,
+    mark_part: Option<String>,
     root_attrs: Vec<(String, String)>,
     warnings: Vec<String>,
     /// Emit the root `data-plot` panel rect (off for composite pages, whose
@@ -46,6 +47,7 @@ impl SvgBackend {
             axis_key: None,
             series_key: None,
             value_key: None,
+            mark_part: None,
             root_attrs: Vec::new(),
             warnings: Vec::new(),
             plot_attr: true,
@@ -93,9 +95,22 @@ impl SvgBackend {
                 data.push_str(&format!(" {name}=\"{}\"", escape(v)));
             }
         }
-        let mark = match &self.tooltip {
-            Some(t) => format!("<{tag} {attrs}{data}><title>{}</title></{tag}>", escape(t)),
-            None => format!("<{tag} {attrs}{data}/>"),
+        // A mark part (e.g. an arrowhead) is decorative: no `<title>`, but it
+        // still carries `data-part` plus `aria-hidden` so assistive tech
+        // skips it (the parent mark already carries the semantic tooltip).
+        if let Some(part) = &self.mark_part {
+            data.push_str(&format!(
+                " data-part=\"{}\" aria-hidden=\"true\"",
+                escape(part)
+            ));
+        }
+        let mark = if self.mark_part.is_some() {
+            format!("<{tag} {attrs}{data}/>")
+        } else {
+            match &self.tooltip {
+                Some(t) => format!("<{tag} {attrs}{data}><title>{}</title></{tag}>", escape(t)),
+                None => format!("<{tag} {attrs}{data}/>"),
+            }
         };
         self.body.push_str(&mark);
     }
@@ -312,6 +327,10 @@ impl DrawBackend for SvgBackend {
 
     fn warn(&mut self, message: String) {
         self.warnings.push(message);
+    }
+
+    fn set_mark_part(&mut self, part: Option<&str>) {
+        self.mark_part = part.map(|s| s.to_string());
     }
 
     fn draw_circle(

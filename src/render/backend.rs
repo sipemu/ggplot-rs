@@ -227,6 +227,15 @@ pub trait DrawBackend {
     /// backend) append it to the render warnings. Default: ignored.
     fn warn(&mut self, _message: String) {}
 
+    /// Mark subsequently-drawn marks as belonging to a sub-part of a larger
+    /// geom (e.g. `"arrow"` for an arrowhead drawn alongside a segment/curve/
+    /// path/line). While set, the SVG backend writes `data-part="<part>"
+    /// aria-hidden="true"` and omits the `<title>` tooltip (the part is
+    /// decorative; the parent mark already carries the semantic info).
+    /// `data-x`/`data-series`/`data-value` (and any user `data-*` attrs) are
+    /// still written. Default: no-op.
+    fn set_mark_part(&mut self, _part: Option<&str>) {}
+
     /// Draw a point with a specific shape. Default delegates to draw_circle for Circle.
     fn draw_shape(
         &mut self,

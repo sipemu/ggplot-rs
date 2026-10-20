@@ -1,4 +1,5 @@
 pub mod area;
+pub mod arrow;
 pub mod bar;
 pub mod bin2d;
 pub mod blank;
