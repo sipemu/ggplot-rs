@@ -157,6 +157,46 @@ fn non_finite_vjust_warns_and_falls_back() {
     );
 }
 
+/// `PositionFill` has the same non-finite-vjust guard as `PositionStack`.
+#[test]
+fn fill_non_finite_vjust_warns_and_falls_back() {
+    let (svg, warnings) = GGPlot::new(single_x_two_groups())
+        .aes(Aes::new().x("x").y("y").fill("grp"))
+        .geom_col()
+        .position(PositionFill.with_vjust(f64::NAN))
+        .render_svg_native_with_warnings(300, 300)
+        .unwrap();
+    assert!(!svg.contains("NaN"), "{svg}");
+    assert!(
+        warnings
+            .iter()
+            .any(|w| w.contains("vjust") && w.contains("finite")),
+        "{warnings:?}"
+    );
+}
+
+/// `position_fill()` gives the same default (`vjust` 1) as the bare const.
+#[test]
+fn position_fill_free_function_matches_the_bare_const() {
+    let via_const = render(
+        GGPlot::new(single_x_two_groups())
+            .aes(Aes::new().x("x").y("y").fill("grp"))
+            .geom_col()
+            .position(PositionFill),
+        300,
+        300,
+    );
+    let via_fn = render(
+        GGPlot::new(single_x_two_groups())
+            .aes(Aes::new().x("x").y("y").fill("grp"))
+            .geom_col()
+            .position(position_fill()),
+        300,
+        300,
+    );
+    assert_eq!(via_const, via_fn);
+}
+
 fn dodge_two_groups_two_x() -> Vec<(String, Vec<Value>)> {
     vec![
         (

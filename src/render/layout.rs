@@ -275,3 +275,47 @@ impl PlotLayout {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::theme::presets::theme_gray;
+
+    /// `compute_full` is kept as a public byte-identical shim over
+    /// `compute_with_extras(..., LayoutExtras::default())` (B3-1) — no
+    /// longer called internally (`layout_built` calls `compute_with_extras`
+    /// directly), but still part of the public API.
+    #[test]
+    fn compute_full_matches_compute_with_extras_default() {
+        let theme = theme_gray();
+        let a = PlotLayout::compute_full(
+            640.0, 400.0, &theme, true, false, false, true, false, None, None,
+        );
+        let b = PlotLayout::compute_with_extras(
+            640.0,
+            400.0,
+            &theme,
+            true,
+            false,
+            false,
+            true,
+            false,
+            None,
+            None,
+            LayoutExtras::default(),
+        );
+        assert_eq!(a.plot_area.x, b.plot_area.x);
+        assert_eq!(a.plot_area.width, b.plot_area.width);
+        assert_eq!(a.plot_area.height, b.plot_area.height);
+    }
+
+    #[test]
+    fn compute_delegates_to_compute_full() {
+        let theme = theme_gray();
+        let a = PlotLayout::compute(640.0, 400.0, &theme, true, false);
+        let b = PlotLayout::compute_full(
+            640.0, 400.0, &theme, true, false, false, false, false, None, None,
+        );
+        assert_eq!(a.plot_area.x, b.plot_area.x);
+    }
+}
