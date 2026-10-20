@@ -109,7 +109,14 @@ impl PlotRenderer {
             }
 
             // 4. Draw axes
-            axis::draw_x_axis(hs, built.coord.as_ref(), theme, &plot_area, backend)?;
+            axis::draw_x_axis(
+                hs,
+                built.coord.as_ref(),
+                theme,
+                &plot_area,
+                &total_area,
+                backend,
+            )?;
             axis::draw_y_axis(vs, built.coord.as_ref(), theme, &plot_area, backend)?;
 
             // 4b. Draw secondary y axis if present
@@ -211,13 +218,14 @@ impl PlotRenderer {
         }
 
         // 9. Draw legend
-        legend::draw_legend(
+        legend::draw_legend_planned(
             &built.scales,
             theme,
             &plot_area,
             backend,
             &built.guide_legend,
             &built.suppressed_aes,
+            built.legend_plan.as_ref(),
         )?;
 
         // 10. Draw caption
@@ -549,7 +557,14 @@ impl PlotRenderer {
 
                 // Bottom row gets x axis
                 if panel.row == nrow - 1 || pi + ncol >= built.panels.len() {
-                    axis::draw_x_axis(xs, built.coord.as_ref(), theme, &panel_rect, backend)?;
+                    axis::draw_x_axis(
+                        xs,
+                        built.coord.as_ref(),
+                        theme,
+                        &panel_rect,
+                        &total_area,
+                        backend,
+                    )?;
                 }
 
                 // Left column gets y axis
@@ -663,13 +678,14 @@ impl PlotRenderer {
         )?;
 
         // Draw legend
-        legend::draw_legend(
+        legend::draw_legend_planned(
             &built.scales,
             theme,
             &plot_area,
             backend,
             &built.guide_legend,
             &built.suppressed_aes,
+            built.legend_plan.as_ref(),
         )?;
 
         // Draw corner tag (labs(tag = ...))

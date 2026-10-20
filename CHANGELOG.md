@@ -3,6 +3,181 @@
 All notable changes to this project are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.22.0] — 2026-10-20
+
+Minor bump: layout and stats (upstream batch 2). Default output stays
+byte-identical except for the deliberate changes under "Changed", each
+guarded by `tests/default_output_022.rs`.
+
+### Added
+
+- `render::text::text_width(text, size)` and ggplot2's `check.overlap`
+  priority order for axis labels, ported from the consumer's `ticks.rs` so
+  ggplot-rs owns outer-label overflow and overlap thinning centrally.
+- `Theme.axis_text_x_fit: AxisLabelFit { Clip, Shift, #[default] Reserve }`
+  and `Theme.axis_text_x_check_overlap` (default `false`), with
+  `GGPlot::axis_text_x_fit`/`axis_text_x_check_overlap` builders.
+- `GuideLegend.byrow`/`max_rows`, with `with_byrow`/`with_max_rows`
+  builders: an explicit `nrow`/`ncol` legend grid (column-major unless
+  `byrow`), and an auto-wrapped horizontal legend that ends in a trailing
+  "+N more" when it still doesn't fit `max_rows`.
+- `Position::per_panel()` (default `false`) and `Position::validate()`
+  (default no-op); `PositionStack`/`PositionFill` are per-panel.
+- `PositionStack`/`PositionFill` gain a `vjust` field (default `1`, the
+  previous top-anchored behaviour) with a `with_vjust` builder and free
+  functions `position_stack()`/`position_fill()`, matching ggplot2's
+  `position_stack(vjust =)`/`position_fill(vjust =)` (#147). `vjust != 1`
+  also writes an `ymax` column holding the segment's top.
+
+- `ScaleSizeContinuous::area(max_size)` / `GGPlot::scale_size_area(max_size)`
+  (ggplot2's `scale_size_area()`, #150): size ∝ √(value) so that *area*
+  (not radius) is proportional to the data, with 0 mapping to 0. NA/non-
+  finite input maps to `None`. A non-finite or non-positive `max_size`
+  warns and falls back to 6.
+- `geom_boxplot(stat = "identity")`: new `Lower`/`Middle`/`Upper`/
+  `Outliers` aesthetics (`Aes::lower`/`middle`/`upper`/`outliers`, D4
+  extensions) let a layer supply the five-number summary directly instead
+  of ggplot-rs computing it, matching ggplot2 (#149) — `ymin`/`ymax` are
+  also required, as in ggplot2 4.0.3. `outliers` takes a comma list with
+  optional brackets (`"7, 9"` or `"[7, 9]"`), or a single bare number; an
+  unparsable part is skipped with one warning. The boxplot now consumes
+  `tooltip()`/`data_attr()` (`consumes_tooltips` is true).
+- `Geom::mapped_only_columns()` (D3, default empty — `GeomBoxplot` returns
+  `lower`/`middle`/`upper`/`outliers`): a raw column of that name is
+  dropped right after `resolve_mappings` unless the aesthetic was
+  actually mapped, so a column that merely happens to share the name
+  (e.g. a SQL alias) can't be mistaken for a mapped one, and so a raw
+  `lower` is never drawn as a boxplot hinge. Scoped to `GeomBoxplot`
+  alone — see the `Value::Na`/non-finite drop bullet under "Changed" for
+  how an unmapped `lower`/`middle`/`upper` on any *other* geom is handled
+  without removing it from the data (review #158's final check).
+- `Geom::validate_layer(pre_stat_columns, stat_name)` (default no-op):
+  stat-dependent validation beyond `required_aes`. Under
+  `stat = "identity"`, `geom_boxplot` requires `lower`/`middle`/`upper`/
+  `ymin`/`ymax` to be mapped (a `ValidationError` otherwise, matching
+  ggplot2 4.0.3's own `stat_identity` boxplot requirement); under the
+  default stat, it requires `y`.
+
+### Changed
+
+- Outer x-axis labels that would cross the SVG edge are kept on-canvas by
+  default (allowed #1, #2 — `AxisLabelFit::Reserve`, the new default):
+  the panel narrows by just the overflow if `Reserve` can reserve enough
+  margin, and a label whose own tick has scrolled off the canvas is
+  dropped rather than drawn off-page. A plot whose outer labels already
+  fit is unaffected (`tests/axis_label_fit.rs`;
+  `default_output_022`'s `wide_axis` case, re-blessed when the Reserve
+  formula bug — finding 1 below — was fixed). The total reservation is
+  now capped so the panel can never start beyond the canvas or shrink
+  past its own minimum width (review #158's second re-review, LOW): a
+  single, centred break whose label is wider than the whole canvas falls
+  back to `Shift`'s draw-time adjustment for whatever still overflows
+  past the cap (`tests/axis_label_fit.rs`).
+- A single horizontal legend that overflows its one-line layout now
+  auto-wraps to more rows instead of running off the panel (allowed #3,
+  D7); beyond `max_rows` it ends in a trailing "+N more" with a build
+  warning. A legend that already fits on one line is unaffected. A
+  vertical `ncol` legend grid that still overflows the canvas after its
+  width is reserved now also gets a build warning (review #158's second
+  re-review, LOW; `tests/legend_wrap.rs`).
+- Tooltip-template placeholders for every position column
+  (`xmin`/`xmax`/`xend`/`ymin`/`ymax`/`yend`/`lower`/`middle`/`upper`,
+  D9 allowed #7) are now formatted through the x/y scale, the same as the
+  bare `x`/`y` they're derived from — previously they fell back to the
+  plain display format, ignoring a custom formatter or a log-transformed
+  scale's inverse transform. A `tooltip()` template that names one of
+  these columns on a transformed scale, or with a custom number
+  formatter, now shows a different (correct) value.
+- `geom_boxplot` outliers now widen the trained y domain to include every
+  outlier value instead of silently leaving it at the whiskers' extent
+  (allowed #6; confirmed as a real bug with a failing test before the
+  fix landed — see `tests/boxplot_identity.rs`). A boxplot whose outliers
+  fall outside `ymin`/`ymax` renders with a taller y axis.
+
+- A faceted `position_stack`/`position_fill` now computes per panel
+  instead of on the rows pooled across panels before faceting, matching
+  ggplot2 (#146). A plot with 2 or more distinct facet panels and a stack/
+  fill layer may render differently; one panel (or none) is unaffected.
+- `geom_text`/`geom_label` now honour a discrete `position_dodge`, via the
+  same `XMapper` bar/col/point/errorbar/… already use (#148). A plot that
+  dodges text/labels on a discrete x axis renders differently; text/
+  labels without a dodge are unaffected.
+- `geom_errorbar`'s whisker caps shrink by the dodge group count under a
+  discrete `position_dodge`, so caps from adjacent groups no longer
+  visually overlap (#151). An un-dodged errorbar is unaffected.
+- A `Value::Na` (e.g. a SQL NULL) in a position column that is never
+  legitimately discrete (`ymin`/`ymax`/`xend`/`yend`/`lower`/`middle`/
+  `upper`/…, i.e. every position column except `x`/`y`, which may hold
+  discrete category values) is now dropped with the standard "removed N
+  row(s) containing non-finite values" warning, the same as `Float(NaN)`
+  already was — previously it silently mapped to 0 with no warning
+  (review #158 finding 4). This applies to every geom that uses one of
+  these columns, not just `geom_boxplot`: e.g. `geom_errorbar`/
+  `geom_pointrange`/`geom_ribbon` with a `Value::Na` `ymin` now drop that
+  row with a warning instead of silently drawing it from 0 — matching
+  ggplot2, which has always dropped a missing aesthetic's row this way.
+  The new `lower`/`middle`/`upper` columns also drop a non-numeric,
+  non-`Na` value (a stray string) the same way, since they have no
+  legitimate discrete use. A plot whose position data has no `Na` is
+  unaffected.
+- `lower`/`middle`/`upper` are excluded from the above `Value::Na`/non-
+  finite drop, the pre-stat y-scale transform, and the y-scale training
+  *when the layer never mapped the corresponding aesthetic* — a raw,
+  unmapped column under one of these names (e.g. a forecast's confidence-
+  bound columns on a plain `geom_line`) is otherwise left completely
+  untouched in the layer's data, so a `tooltip("{lower}")` placeholder or
+  a `facet_wrap("upper")` on it still works, exactly as any other
+  unmapped column would (review #158's final check — round 3's universal
+  drop of these names from the data for every geom was itself a
+  regression on both of those). `geom_boxplot`'s own hinges — mapped
+  under `stat = "identity"`, or computed fresh by its default stat — are
+  unaffected either way.
+
+### Breaking
+
+- `Theme` gains two new public fields, `axis_text_x_fit: AxisLabelFit` and
+  `axis_text_x_check_overlap: bool` — an external `Theme { .. }`
+  struct-literal pattern without `..Default::default()` (or
+  `..theme_gray()`/another preset) no longer compiles.
+- `GuideLegend` gains two new public fields, `byrow: bool` and
+  `max_rows: Option<usize>` — same breakage for an external
+  `GuideLegend { .. }` struct literal without `..Default::default()`.
+  Neither struct is `#[non_exhaustive]`.
+- `guide::axis::draw_x_axis` gained a `canvas: &Rect` parameter (the full
+  SVG viewport, not just the panel) — a deviation from the plan, needed
+  for the outer-label-fit edge checks (B3-1): an off-canvas label can't
+  be detected from the panel rect alone. An external direct caller of
+  `draw_x_axis` needs to pass it (`backend.total_area()`).
+- `PositionStack`/`PositionFill` are now structs with a `vjust` field
+  instead of unit structs — an external `PositionStack { .. }`/
+  `PositionFill { .. }` struct-literal pattern no longer compiles (the
+  bare value `PositionStack`/`PositionFill` still does, via a `const` of
+  the same name — dodge.rs's existing `PositionDodge` precedent).
+- New `Aesthetic` variants `Lower`/`Middle`/`Upper`/`Outliers`: an
+  exhaustive external `match` on `Aesthetic` no longer compiles.
+- `Geom::setup_data` gained a second parameter,
+  `warnings: &mut Vec<String>` (a deviation from the plan, needed so
+  `GeomBoxplot::setup_data` can warn on an unparsable outlier value
+  through the existing warnings channel rather than a new one or
+  `eprintln!`): `fn setup_data(&self, data: &mut DataFrame)` becomes
+  `fn setup_data(&self, data: &mut DataFrame, warnings: &mut Vec<String>)`.
+  An external `Geom` impl overriding it needs the new parameter.
+
+- The `arrow` feature now pins `arrow = "59"` (was `"53"`), still with
+  `default-features = false`. `GGPlot::new(batch)` and the `GGData` impl for
+  `arrow::record_batch::RecordBatch` compile unchanged against arrow 59 —
+  no source changes were needed in `src/data/source.rs`. This lets Arrow-
+  native producers on arrow 59.x (e.g. the inventory-rs DuckDB/Parquet
+  ingest path) hand `RecordBatch`es to ggplot-rs directly, without a copy
+  through an intermediate arrow 53 batch (#123). The `polars` feature is
+  unaffected: polars vendors its own `polars-arrow` crate rather than
+  depending on the `arrow` crate, so the two can be enabled together with a
+  single `arrow` v59.3.1 in the dependency tree. This is a semver-relevant
+  change for `arrow`-feature users: code that names arrow-53-specific types
+  (e.g. via `arrow = "53"` pinned directly) needs to move to arrow 59 too,
+  since arrow does not guarantee cross-major type compatibility. Originally
+  sipemu/ggplot-rs#143; folded into 0.22.0.
+
 ## [0.21.1] — 2026-10-20
 
 Patch bump: additive and bug fixes only, no API break. Default output is

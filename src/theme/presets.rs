@@ -190,6 +190,8 @@ pub fn theme_gray_base(base_size: f64) -> Theme {
         },
         legend_bar_border: None,
         geom: crate::theme::elements::ElementGeom::default(),
+        axis_text_x_fit: crate::theme::AxisLabelFit::default(),
+        axis_text_x_check_overlap: false,
     }
 }
 
@@ -599,5 +601,7 @@ pub fn theme_void_base(base_size: f64) -> Theme {
         },
         legend_bar_border: None,
         geom: crate::theme::elements::ElementGeom::default(),
+        axis_text_x_fit: crate::theme::AxisLabelFit::default(),
+        axis_text_x_check_overlap: false,
     }
 }

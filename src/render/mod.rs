@@ -9,6 +9,7 @@ pub mod pixel_backend;
 pub mod plotters_backend;
 pub mod renderer;
 pub mod svg_backend;
+pub mod text;
 
 /// A rectangle in pixel coordinates.
 #[derive(Clone, Debug)]

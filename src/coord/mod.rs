@@ -81,4 +81,14 @@ pub trait Coord: Send + Sync {
     fn discrete_expand(&self) -> bool {
         true
     }
+
+    /// Whether `Theme::axis_text_x_fit`'s `Reserve` mode may grow the panel
+    /// margin for this coordinate system (B3-1). `transform` isn't a simple
+    /// linear per-axis map for polar/radar (angle) or sf (letterboxed,
+    /// non-degree units), so reserving a left/right margin from a label
+    /// bbox would be meaningless there; those coords still get the
+    /// draw-time `Shift` fallback in `draw_x_axis`. Default true.
+    fn supports_axis_reserve(&self) -> bool {
+        true
+    }
 }

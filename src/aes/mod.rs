@@ -53,6 +53,18 @@ pub enum Aesthetic {
     Yintercept,
     Slope,
     Intercept,
+    /// Boxplot `stat="identity"` aesthetics (B3-5; ggplot2 extension, D4):
+    /// the box's lower/middle/upper hinges. Live on the y scale (D-style,
+    /// like `ymin`/`ymax`) — [`crate::scale::ScaleSet::ensure_scale`] gives
+    /// them no scale of their own.
+    Lower,
+    Middle,
+    Upper,
+    /// A comma-separated list of outlier values, optionally bracketed
+    /// (`"7, 9"` or `"[7, 9]"`) — ggplot2 extension, D4. Unparsable parts
+    /// are skipped with one warning. Lives on the y scale, like `Lower`/
+    /// `Middle`/`Upper`.
+    Outliers,
 }
 
 impl Aesthetic {
@@ -89,6 +101,10 @@ impl Aesthetic {
             Aesthetic::Yintercept => "yintercept",
             Aesthetic::Slope => "slope",
             Aesthetic::Intercept => "intercept",
+            Aesthetic::Lower => "lower",
+            Aesthetic::Middle => "middle",
+            Aesthetic::Upper => "upper",
+            Aesthetic::Outliers => "outliers",
         }
     }
 }
@@ -256,6 +272,23 @@ impl Aes {
     /// Stroke width for segment/curve/path/line (R's `linewidth`).
     pub fn linewidth(self, col: &str) -> Self {
         self.push(col, Aesthetic::Linewidth)
+    }
+    /// Boxplot `stat="identity"` lower hinge (B3-5).
+    pub fn lower(self, col: &str) -> Self {
+        self.push(col, Aesthetic::Lower)
+    }
+    /// Boxplot `stat="identity"` middle (median) line (B3-5).
+    pub fn middle(self, col: &str) -> Self {
+        self.push(col, Aesthetic::Middle)
+    }
+    /// Boxplot `stat="identity"` upper hinge (B3-5).
+    pub fn upper(self, col: &str) -> Self {
+        self.push(col, Aesthetic::Upper)
+    }
+    /// Boxplot `stat="identity"` outlier values, as a comma list with
+    /// optional brackets (`"7, 9"` or `"[7, 9]"`) (B3-5).
+    pub fn outliers(self, col: &str) -> Self {
+        self.push(col, Aesthetic::Outliers)
     }
 
     /// A custom `<title>` hover tooltip from `col`, replacing the geom's
@@ -432,6 +465,20 @@ pub(crate) const DATA_ATTR_INTERNAL_PREFIX: &str = "\u{0}ggplot-rs:data-attr:";
 /// of bug `DATA_ATTR_INTERNAL_PREFIX` fixes for `data_attr`); routing it
 /// through the same internal-prefix scheme closes that for tooltips too.
 pub(crate) const TOOLTIP_INTERNAL_NAME: &str = "\u{0}ggplot-rs:tooltip";
+
+/// Internal storage names for `GeomBoxplot::setup_data`'s outlier-extent
+/// columns — see [`INTERNAL_PREFIX`] (review #158 finding 5: these used to
+/// be plain `"ymin_final"`/`"ymax_final"`, trained into the y scale for
+/// *every* layer at build Step 8b regardless of which geom produced them;
+/// `resolve_mappings` carries over any raw source column with a
+/// not-otherwise-mapped canonical name, so a raw column literally named
+/// `ymin_final` — e.g. a SQL alias — on an unrelated geom like `geom_point`
+/// silently widened its y domain. Routing them through the internal-prefix
+/// scheme means only `GeomBoxplot::setup_data` itself can ever produce
+/// these columns; a raw column with this name is already stripped by
+/// `is_forged_internal_name` before it reaches the built data.
+pub(crate) const BOXPLOT_YMIN_FINAL: &str = "\u{0}ggplot-rs:ymin_final";
+pub(crate) const BOXPLOT_YMAX_FINAL: &str = "\u{0}ggplot-rs:ymax_final";
 
 /// Validate a `data_attr` mapping's target (`"data-<name>"`, as stored in
 /// [`Aesthetic::DataAttr`]) and, if valid, return the internal column name

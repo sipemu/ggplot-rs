@@ -37,6 +37,16 @@ pub struct BuiltPlot {
     /// "geom_point: removed 2 rows containing non-finite values". See
     /// [`BuiltPlot::warnings`].
     pub warnings: Vec<String>,
+    /// The single discrete legend's B3-2 layout plan (explicit `nrow`/
+    /// `ncol` grid, or auto-wrap), computed exactly once in `layout_built`
+    /// and reused as-is by `draw_legend_planned` — never recomputed at
+    /// draw time, so the warning (based on this same plan) always matches
+    /// what's drawn (review #158 finding 2: computing it twice, once
+    /// against the pre-reservation panel height and once against the
+    /// post-reservation one, could warn "+7 more" while drawing "+15
+    /// more"). `None` when there's no such plan (nothing changes from the
+    /// 0.21 single-row/single-column path).
+    pub(crate) legend_plan: Option<crate::guide::legend::LegendPlan>,
 }
 
 impl BuiltPlot {
@@ -67,6 +77,12 @@ const POSITION_COLS: &[&str] = &[
     "yintercept",
     "slope",
     "intercept",
+    // Boxplot stat="identity" hinges (B3-5). `outliers` is a comma-list
+    // string, not a position value, so it's not listed here — a non-finite
+    // outlier is skipped individually with its own warning when parsed.
+    "lower",
+    "middle",
+    "upper",
 ];
 
 /// Columns a position scale's transformation applies to (pre-stat).
@@ -81,6 +97,9 @@ const Y_FAMILY: &[&str] = &[
     "low",
     "close",
     "yintercept",
+    "lower",
+    "middle",
+    "upper",
 ];
 
 /// Reference-line intercept columns and the position scale they train
@@ -111,6 +130,10 @@ fn column_aesthetic(name: &str) -> Option<Aesthetic> {
         "size" => Some(Aesthetic::Size),
         "linewidth" => Some(Aesthetic::Linewidth),
         "alpha" => Some(Aesthetic::Alpha),
+        // Position columns (B3-5, D9 allowed #7): formatted through the
+        // x/y scale, same as the bare `x`/`y` they're derived from.
+        "xmin" | "xmax" | "xend" => Some(Aesthetic::X),
+        "ymin" | "ymax" | "yend" | "lower" | "middle" | "upper" => Some(Aesthetic::Y),
         _ => None,
     }
 }
@@ -371,6 +394,7 @@ impl PlotBuilder {
             suppressed_aes,
             panel_scales,
             warnings,
+            legend_plan: None,
         })
     }
 
@@ -402,17 +426,48 @@ impl PlotBuilder {
     /// `data` as a non-finite pixel position, which `DrawBackend::draw_line`
     /// splits the polyline on, instead of being spliced out and silently
     /// joining the finite points across the gap.
-    fn drop_non_finite(data: &mut DataFrame, allow_infinite: bool, keep_as_break: bool) -> usize {
+    /// `exclude`: column names to skip entirely this call — `lower`/
+    /// `middle`/`upper` present in the raw data but not mapped as that
+    /// aesthetic on this layer (review #158's final check: these must
+    /// never cost an unrelated geom its rows; see `raw_unmapped` at the
+    /// call site).
+    fn drop_non_finite(
+        data: &mut DataFrame,
+        allow_infinite: bool,
+        keep_as_break: bool,
+        exclude: &[&str],
+    ) -> usize {
         let n = data.nrows();
         let mut keep = vec![true; n];
         for col in POSITION_COLS {
+            if exclude.contains(col) {
+                continue;
+            }
             if let Some(values) = data.column(col) {
+                // Several position columns are legitimately discrete
+                // (`Value::Str`) in this codebase — not just `x`/`y`, e.g.
+                // `geom_bracket`'s `xmin`/`xmax` hold category names for a
+                // bracket spanning two discrete groups. `Value::Na` is
+                // unambiguously missing everywhere, though (review #158
+                // finding 4: a SQL NULL in a boxplot position column used
+                // to silently map to 0 instead of being dropped with the
+                // standard warning; only `Float(NaN)` was caught before).
+                // The new boxplot-only `lower`/`middle`/`upper` columns
+                // have no legitimate discrete use anywhere, so a
+                // non-numeric, non-`Na` value there (a stray string) is
+                // missing too.
+                let strictly_numeric = matches!(*col, "lower" | "middle" | "upper");
                 for (i, v) in values.iter().enumerate() {
-                    if let crate::data::Value::Float(f) = v {
-                        let bad = f.is_nan() || (f.is_infinite() && !allow_infinite);
-                        if bad {
-                            keep[i] = false;
+                    let bad = match v {
+                        crate::data::Value::Na => true,
+                        crate::data::Value::Float(f) => {
+                            f.is_nan() || (f.is_infinite() && !allow_infinite)
                         }
+                        _ if strictly_numeric => v.as_f64().is_none(),
+                        _ => false,
+                    };
+                    if bad {
+                        keep[i] = false;
                     }
                 }
             }
@@ -686,6 +741,67 @@ impl PlotBuilder {
         // Step 3: Evaluate aes — rename columns to canonical names
         let mut working_data = resolve_mappings(source_data, &merged_mapping, warnings);
 
+        // D3 (B3-5): drop a "mapped-only" column (e.g. `lower`/`middle`/
+        // `upper`/`outliers` for the boxplot) unless the user actually
+        // mapped that aesthetic — so a raw column that merely happens to
+        // share the name (a SQL alias, say) is never mistaken for one, and
+        // so a raw `lower` is never drawn as a boxplot hinge on
+        // `geom_boxplot` itself.
+        //
+        // Review #158's *final check* found that making this drop
+        // universal (every geom, round 3's `MAPPED_ONLY_COLS`) was itself
+        // a regression: it removed the raw `lower`/`middle`/`upper`/
+        // `outliers` columns from a layer's data entirely, so a forecast
+        // chart's `tooltip("{y} [{lower}, {upper}]")` on an unmapped
+        // `geom_line` rendered `[, ]` instead of the actual bounds, and
+        // `facet_wrap("upper")` on an unmapped column silently rendered
+        // unfaceted. ggplot2 never drops a raw data column just because
+        // its name matches an unused extension aesthetic — it only ever
+        // special-cases `lower`/`middle`/`upper`/`outliers` for
+        // `geom_boxplot`'s own hinges, so this drop goes back to being
+        // scoped to `geom.mapped_only_columns()` alone (empty by default,
+        // `GeomBoxplot` returns the four names). The narrower position/
+        // non-finite/y-scale-training concerns from the *previous*
+        // re-review (the forecast y-domain-stretch/row-drop regression)
+        // are instead handled per layer below (`raw_unmapped`), without
+        // ever removing the columns from `working_data`.
+        for col in geom.mapped_only_columns() {
+            let is_mapped = merged_mapping
+                .mappings
+                .iter()
+                .any(|m| m.aesthetic.col_name() == *col);
+            if !is_mapped {
+                working_data.remove_column(col);
+            }
+        }
+
+        // `lower`/`middle`/`upper` present in the raw (pre-stat) data under
+        // their canonical name, but *not* actually mapped as that
+        // aesthetic on this layer — e.g. a forecast's confidence-bound
+        // columns, never mapped on a plain `geom_line`/`geom_point` layer.
+        // These stay in `working_data` (see above), but mustn't be treated
+        // as position data a geom never asked for: excluded below from the
+        // non-finite/NA position drop, the `Y_FAMILY` pre-stat scale
+        // transform, and the y-scale training.
+        //
+        // Computed once, right here (before the stat runs), so it reflects
+        // only what the *raw* data actually had under these names.
+        // `GeomBoxplot`'s own default (non-identity) stat produces *fresh*
+        // `lower`/`middle`/`upper` columns later (not present yet, so never
+        // in this set) — those stay subject to all three, unaffected; an
+        // identity-stat boxplot has them mapped (required by
+        // `validate_layer` below), so they're not in this set either.
+        let raw_unmapped: Vec<&'static str> = ["lower", "middle", "upper"]
+            .into_iter()
+            .filter(|col| {
+                working_data.has_column(col)
+                    && !merged_mapping
+                        .mappings
+                        .iter()
+                        .any(|m| m.aesthetic.col_name() == *col)
+            })
+            .collect();
+
         // Remember which columns the user actually supplied (pre-stat). A required
         // aesthetic is satisfied if it was present here OR is synthesized by the
         // stat (checked after Step 6) — e.g. boxplot maps `y` then the stat turns
@@ -695,6 +811,14 @@ impl PlotBuilder {
             .iter()
             .map(|s| s.to_string())
             .collect();
+
+        // B3-5: stat-dependent validation beyond `required_aes` (e.g.
+        // `geom_boxplot` requires lower/middle/upper under stat="identity",
+        // else y) — before Step 4, so a bad mapping fails before any scale
+        // work happens.
+        if let Err(msg) = geom.validate_layer(&pre_stat_columns, stat.name()) {
+            return Err(GGError::ValidationError(msg));
+        }
 
         // Step 4: Ensure scales exist for each mapped aesthetic
         for m in &merged_mapping.mappings {
@@ -707,7 +831,16 @@ impl PlotBuilder {
             let aes = scale.aesthetic();
             let cols: Vec<&str> = match aes {
                 Aesthetic::X => X_FAMILY.to_vec(),
-                Aesthetic::Y => Y_FAMILY.to_vec(),
+                // `lower`/`middle`/`upper` present but unmapped (raw
+                // forecast-shaped passthrough columns, say) are not
+                // position data this layer's geom reads, so a log/sqrt/…
+                // y-scale transform must not touch them (review #158's
+                // final check).
+                Aesthetic::Y => Y_FAMILY
+                    .iter()
+                    .copied()
+                    .filter(|c| !raw_unmapped.contains(c))
+                    .collect(),
                 _ => vec![aes.col_name()],
             };
             for col_name in cols {
@@ -749,6 +882,7 @@ impl PlotBuilder {
             &mut working_data,
             geom.allows_infinite(),
             geom.keeps_na_as_break(),
+            &raw_unmapped,
         );
         if removed > 0 {
             warnings.push(format!(
@@ -807,11 +941,17 @@ impl PlotBuilder {
         apply_after_stat(&mut working_data, &merged_mapping, warnings);
 
         // Stat output can contain NaN (e.g. a fit on degenerate input): drop
-        // those rows too, so nothing non-finite reaches a geom.
+        // those rows too, so nothing non-finite reaches a geom. `raw_unmapped`
+        // was computed pre-stat, so a passthrough stat (e.g. `StatIdentity`
+        // under `geom_line`/`geom_point`) still excludes the same raw,
+        // unmapped `lower`/`middle`/`upper` here as it did above; a stat
+        // that *produces* these fresh (`StatBoxplot`'s default, non-identity
+        // path) was never in that set, since they didn't exist pre-stat.
         let removed = Self::drop_non_finite(
             &mut working_data,
             geom.allows_infinite(),
             geom.keeps_na_as_break(),
+            &raw_unmapped,
         );
         if removed > 0 {
             warnings.push(format!(
@@ -876,9 +1016,25 @@ impl PlotBuilder {
             ("xmax", Aesthetic::X),
             ("ymin", Aesthetic::Y),
             ("ymax", Aesthetic::Y),
+            // Boxplot stat="identity" hinges (B3-5): live on the y scale.
+            ("lower", Aesthetic::Y),
+            ("middle", Aesthetic::Y),
+            ("upper", Aesthetic::Y),
+            // Boxplot outlier extent (B3-5, allowed #6): `GeomBoxplot::
+            // setup_data` adds these (under an internal-prefix name — see
+            // review #158 finding 5 and `aes::BOXPLOT_YMIN_FINAL`'s doc,
+            // so a raw column can never forge them) from the parsed
+            // `outliers` column, so the y scale trains on them too (step
+            // 8b below).
+            (crate::aes::BOXPLOT_YMIN_FINAL, Aesthetic::Y),
+            (crate::aes::BOXPLOT_YMAX_FINAL, Aesthetic::Y),
         ];
+        // `raw_unmapped` (a raw, unmapped `lower`/`middle`/`upper` passthrough
+        // column) never trains or gets a scale here — only a layer that
+        // actually mapped (or whose stat computed) that name does (review
+        // #158's final check).
         for (col, aes) in &stat_aes {
-            if working_data.has_column(col) {
+            if working_data.has_column(col) && !raw_unmapped.contains(col) {
                 scale_set.ensure_scale(aes, &working_data);
             }
         }
@@ -893,15 +1049,26 @@ impl PlotBuilder {
             }
         }
 
-        // Step 7: Position adjustment
+        // Step 7: Position adjustment. `validate` runs once per layer (D2)
+        // regardless of whether the position is per-panel.
+        position.validate(warnings);
         let params = PositionParams::default();
-        position.compute(&mut working_data, &params);
+        if position.per_panel() {
+            Self::compute_position_per_panel(
+                position.as_ref(),
+                &mut working_data,
+                &params,
+                facet_vars,
+            );
+        } else {
+            position.compute(&mut working_data, &params);
+        }
 
         // Step 7b: Geom-specific setup (e.g. tile/candlestick extents), then
         // make sure position scales exist for any extent columns it added.
-        geom.setup_data(&mut working_data);
+        geom.setup_data(&mut working_data, warnings);
         for (col, aes) in &stat_aes {
-            if working_data.has_column(col) {
+            if working_data.has_column(col) && !raw_unmapped.contains(col) {
                 scale_set.ensure_scale(aes, &working_data);
             }
         }
@@ -918,7 +1085,12 @@ impl PlotBuilder {
         // Step 8b: Positional scales also need to see stat-computed extent columns
         // (e.g. boxplot/errorbar/pointrange emit ymin/ymax but no "y"). Without
         // this the Y (or X) scale would never train on the range and collapse.
+        // Same `raw_unmapped` exclusion as Step 6b/7b above: an unmapped
+        // raw `lower`/`middle`/`upper` must never stretch the y domain.
         for (col, aes) in &stat_aes {
+            if raw_unmapped.contains(col) {
+                continue;
+            }
             if let Some(values) = working_data.column(col) {
                 if let Some(scale) = scale_set.get_mut(aes) {
                     scale.train(values);
@@ -1119,6 +1291,90 @@ impl PlotBuilder {
             }
         }
         suppressed
+    }
+
+    /// Run a per-panel [`Position`](crate::position::Position) (B3-3, D8):
+    /// partition the rows by the facet variables' joined key, in
+    /// first-seen order, run `compute` on each panel separately, then
+    /// scatter the rows back into their original positions — NA-filling
+    /// any column a panel's `compute` added that another panel's didn't
+    /// (there currently are none in practice: `PositionStack`/
+    /// `PositionFill` add the same `ymin` everywhere). Falls back to the
+    /// plain pooled `compute` when there's no facet column, or only one
+    /// distinct panel — both byte-identical to the pooled path, since
+    /// there's nothing to partition.
+    fn compute_position_per_panel(
+        position: &dyn crate::position::Position,
+        data: &mut DataFrame,
+        params: &PositionParams,
+        facet_vars: &[String],
+    ) {
+        let active_vars: Vec<&str> = facet_vars
+            .iter()
+            .map(|s| s.as_str())
+            .filter(|v| data.has_column(v))
+            .collect();
+        if active_vars.is_empty() {
+            position.compute(data, params);
+            return;
+        }
+
+        let n = data.nrows();
+        let mut order: Vec<String> = Vec::new();
+        let mut groups: indexmap::IndexMap<String, Vec<usize>> = indexmap::IndexMap::new();
+        for i in 0..n {
+            let key = active_vars
+                .iter()
+                .map(|v| data.column(v).unwrap()[i].key_str().into_owned())
+                .collect::<Vec<_>>()
+                .join("\u{1}");
+            if !groups.contains_key(&key) {
+                order.push(key.clone());
+            }
+            groups.entry(key).or_default().push(i);
+        }
+        if order.len() < 2 {
+            position.compute(data, params);
+            return;
+        }
+
+        let col_names: Vec<String> = data.column_names().iter().map(|s| s.to_string()).collect();
+        let mut panels: Vec<(Vec<usize>, DataFrame)> = Vec::with_capacity(order.len());
+        for key in &order {
+            let indices = &groups[key];
+            let mut sub = DataFrame::new();
+            for name in &col_names {
+                let col = data.column(name).unwrap();
+                let values: Vec<crate::data::Value> =
+                    indices.iter().map(|&i| col[i].clone()).collect();
+                sub.add_column(name.clone(), values);
+            }
+            position.compute(&mut sub, params);
+            panels.push((indices.clone(), sub));
+        }
+
+        // Union of every column present after `compute` (new columns like
+        // `ymin` may have been added), so a panel that for some reason
+        // didn't add one still gets NA there rather than a stale value.
+        let mut all_cols = col_names.clone();
+        for (_, sub) in &panels {
+            for name in sub.column_names() {
+                if !all_cols.iter().any(|c| c == name) {
+                    all_cols.push(name.to_string());
+                }
+            }
+        }
+        for name in &all_cols {
+            let mut full = vec![crate::data::Value::Na; n];
+            for (indices, sub) in &panels {
+                if let Some(col) = sub.column(name) {
+                    for (j, &i) in indices.iter().enumerate() {
+                        full[i] = col[j].clone();
+                    }
+                }
+            }
+            data.add_column(name.clone(), full);
+        }
     }
 
     /// Detect which columns to group by for statistics.

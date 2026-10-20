@@ -44,6 +44,28 @@ pub enum LegendDirection {
     Horizontal,
 }
 
+/// How an outer x-axis tick label that would cross the SVG's edge is
+/// handled (B3-1; ggplot2 itself leaves this to the viewport/device and has
+/// no direct equivalent — this is a ggplot-rs extension, D4).
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum AxisLabelFit {
+    /// The 0.21 behaviour: the label is drawn exactly where ggplot2's own
+    /// math puts it, even if that crosses the SVG edge.
+    Clip,
+    /// The panel keeps its size; an outer label that would cross the edge
+    /// is shifted inward just enough to stay inside, at draw time. Use this
+    /// for panels that must stay pixel-aligned with other elements (e.g. a
+    /// consumer's `::TRACK`-aligned strip).
+    Shift,
+    /// The layout reserves just the overflow as extra left/right panel
+    /// margin, so a plot whose outer labels already fit is byte-identical.
+    /// Anything still outside after that (e.g. a faceted plot, where the
+    /// reservation is skipped) is shifted inward at draw time, same as
+    /// [`Shift`](Self::Shift).
+    #[default]
+    Reserve,
+}
+
 /// Plot margins (in pixels).
 #[derive(Clone, Debug)]
 pub struct Margin {
@@ -148,6 +170,13 @@ pub struct Theme {
     /// Geom ink/paper/accent/family palette (ggplot2 4.0's `element_geom`,
     /// B2-7). Every field `None` (the default) changes nothing.
     pub geom: ElementGeom,
+
+    /// How an outer x-axis label that would cross the SVG edge is handled
+    /// (B3-1, D6). Default [`AxisLabelFit::Reserve`].
+    pub axis_text_x_fit: AxisLabelFit,
+    /// Thin crowded x-axis labels in ggplot2's `check.overlap` priority
+    /// order (B3-1, D5): off by default, so default output is unaffected.
+    pub axis_text_x_check_overlap: bool,
 }
 
 impl Theme {

@@ -166,6 +166,30 @@ fn a_template_on_a_geom_that_ignores_tooltips_warns() {
     );
 }
 
+/// Regression for review #158's final check: round 3's universal
+/// `MAPPED_ONLY_COLS` drop removed a raw, unmapped `lower`/`upper` column
+/// from the layer's data entirely, so a forecast chart's confidence-bound
+/// placeholders rendered empty (`[, ]`) instead of the actual bounds. The
+/// columns must stay in the data — just excluded from position/non-finite/
+/// training concerns, not from the data itself.
+#[test]
+fn an_unmapped_lower_upper_placeholder_renders_the_raw_value() {
+    let data = frame(vec![
+        ("x", floats(&[1.0])),
+        ("y", floats(&[10.0])),
+        ("lower", floats(&[9.0])),
+        ("upper", floats(&[11.0])),
+    ]);
+    let svg = GGPlot::new(data)
+        .aes(Aes::new().x("x").y("y"))
+        .geom_line()
+        .geom_point()
+        .tooltip("{y} [{lower}, {upper}]")
+        .render_svg_native_with_size(300, 200)
+        .unwrap();
+    assert!(svg.contains("<title>10 [9, 11]</title>"), "{svg}");
+}
+
 #[test]
 fn a_template_on_a_geom_that_reads_tooltips_does_not_warn() {
     let data = frame(vec![("x", floats(&[1.0])), ("y", floats(&[2.0]))]);

@@ -14,6 +14,23 @@ pub struct PlotLayout {
     pub legend_area: Rect,
 }
 
+/// Extra layout reservations beyond the theme-driven defaults (B3-1/B3-2):
+/// additional left/right panel margin to keep outer x-axis labels on-canvas
+/// under [`AxisLabelFit::Reserve`](crate::theme::AxisLabelFit::Reserve), and
+/// extra legend rows from the B3-2 auto-wrap/`nrow`/`ncol` planner. All-zero
+/// (the `Default`) reproduces `compute_full`'s own byte-identical math.
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
+pub(crate) struct LayoutExtras {
+    pub left: f64,
+    pub right: f64,
+    pub legend_extra_rows: usize,
+    /// Extra legend band width (B3-2, review #158 finding 3): a vertical
+    /// explicit grid with `ncol > 1` needs `(cols − 1) · col_pitch` beyond
+    /// the single-column `legend_size` estimate, or its later columns run
+    /// off the canvas.
+    pub legend_extra_width: f64,
+}
+
 impl PlotLayout {
     /// Compute layout from total dimensions and theme settings.
     pub fn compute(
@@ -46,6 +63,39 @@ impl PlotLayout {
         x_axis_top: bool,
         y_label_width: Option<f64>,
         x_label_height: Option<f64>,
+    ) -> Self {
+        Self::compute_with_extras(
+            width,
+            height,
+            theme,
+            has_title,
+            has_subtitle,
+            has_caption,
+            has_legend,
+            x_axis_top,
+            y_label_width,
+            x_label_height,
+            LayoutExtras::default(),
+        )
+    }
+
+    /// Like [`compute_full`](Self::compute_full), plus [`LayoutExtras`] for
+    /// the outer-label-fit left/right panel reservation (B3-1) and the
+    /// legend auto-wrap extra rows (B3-2). `extras` all-zero is byte-identical
+    /// to `compute_full`.
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) fn compute_with_extras(
+        width: f64,
+        height: f64,
+        theme: &Theme,
+        has_title: bool,
+        has_subtitle: bool,
+        has_caption: bool,
+        has_legend: bool,
+        x_axis_top: bool,
+        y_label_width: Option<f64>,
+        x_label_height: Option<f64>,
+        extras: LayoutExtras,
     ) -> Self {
         let margin = &theme.plot_margin;
 
@@ -104,6 +154,7 @@ impl PlotLayout {
                 + theme.legend_spacing
                 + theme.legend_text.size * 6.0
                 + theme.legend_margin.right
+                + extras.legend_extra_width
         } else {
             0.0
         };
@@ -115,6 +166,7 @@ impl PlotLayout {
                 + theme.legend_key_height
                 + theme.legend_spacing
                 + theme.legend_margin.bottom
+                + extras.legend_extra_rows as f64 * (theme.legend_key_height + theme.legend_spacing)
         } else {
             0.0
         };
@@ -132,15 +184,21 @@ impl PlotLayout {
             (0.0, 0.0, 0.0, 0.0)
         };
 
-        let plot_x = margin.left + y_axis_width + legend_left;
+        let plot_x = margin.left + y_axis_width + legend_left + extras.left;
         // A top x-axis reserves its space above the panel instead of below.
         let plot_y = margin.top
             + title_height
             + subtitle_height
             + legend_top
             + if x_axis_top { x_axis_height } else { 0.0 };
-        let plot_width =
-            width - margin.left - margin.right - y_axis_width - legend_right - legend_left;
+        let plot_width = width
+            - margin.left
+            - margin.right
+            - y_axis_width
+            - legend_right
+            - legend_left
+            - extras.left
+            - extras.right;
         let plot_height = height
             - margin.top
             - margin.bottom
@@ -221,5 +279,49 @@ impl PlotLayout {
                 height: plot_height,
             },
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::theme::presets::theme_gray;
+
+    /// `compute_full` is kept as a public byte-identical shim over
+    /// `compute_with_extras(..., LayoutExtras::default())` (B3-1) — no
+    /// longer called internally (`layout_built` calls `compute_with_extras`
+    /// directly), but still part of the public API.
+    #[test]
+    fn compute_full_matches_compute_with_extras_default() {
+        let theme = theme_gray();
+        let a = PlotLayout::compute_full(
+            640.0, 400.0, &theme, true, false, false, true, false, None, None,
+        );
+        let b = PlotLayout::compute_with_extras(
+            640.0,
+            400.0,
+            &theme,
+            true,
+            false,
+            false,
+            true,
+            false,
+            None,
+            None,
+            LayoutExtras::default(),
+        );
+        assert_eq!(a.plot_area.x, b.plot_area.x);
+        assert_eq!(a.plot_area.width, b.plot_area.width);
+        assert_eq!(a.plot_area.height, b.plot_area.height);
+    }
+
+    #[test]
+    fn compute_delegates_to_compute_full() {
+        let theme = theme_gray();
+        let a = PlotLayout::compute(640.0, 400.0, &theme, true, false);
+        let b = PlotLayout::compute_full(
+            640.0, 400.0, &theme, true, false, false, false, false, None, None,
+        );
+        assert_eq!(a.plot_area.x, b.plot_area.x);
     }
 }

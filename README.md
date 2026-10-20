@@ -125,8 +125,14 @@ choropleth needs the `sf` feature; drop it for the rest).
       <img src="assets/gallery/spatial.png" width="260" alt="Choropleth"><br>
       <sub>Choropleth · <code>geom_sf</code> <sub>(feature <code>sf</code>)</sub></sub>
     </td>
-    <td align="center"></td>
-    <td align="center"></td>
+    <td align="center">
+      <img src="assets/gallery/legend_wrap.png" width="260" alt="Auto-wrapped legend"><br>
+      <sub>Auto-wrapped legend · <code>guide_legend</code> (0.22)</sub>
+    </td>
+    <td align="center">
+      <img src="assets/gallery/boxplot_identity.png" width="260" alt="Boxplot stat identity"><br>
+      <sub>Five-number summary · <code>stat = "identity"</code> (0.22)</sub>
+    </td>
   </tr>
 </table>
 
@@ -247,6 +253,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
 `geom_point`, `geom_line`, `geom_bar`, `geom_col`, `geom_histogram`, `geom_boxplot`, `geom_violin`, `geom_smooth`, `geom_density`, `geom_area`, `geom_ribbon`, `geom_errorbar`, `geom_segment`, `geom_rug`, `geom_text`, `geom_label`, `geom_tile`, `geom_raster`, `geom_bin2d`, `geom_hex`, `geom_contour`, `geom_contour_filled`, `geom_path`, `geom_step`, `geom_hline`, `geom_vline`, `geom_abline`, and more (40+)
 
+- **`geom_boxplot(stat = "identity")`** (0.22): supply the five-number summary directly via `Aes::lower`/`middle`/`upper` (plus the usual `ymin`/`ymax`) instead of letting ggplot-rs compute it, with an `Aes::outliers("7, 9")` comma list (brackets optional) drawn as points that now also widen the y axis to fit them. The box reads `tooltip()`/`data_attr()` like any other geom.
+- **`geom_text`/`geom_label` honour a discrete `position_dodge`** (0.22), landing at the same x as a dodged `geom_col`'s bar centres.
+- **`geom_errorbar` caps shrink under a discrete `position_dodge`** (0.22) by the number of dodged groups, so adjacent caps don't visually overlap.
+
 ### Stats
 
 `StatIdentity`, `StatCount`, `StatBin`, `StatBoxplot`, `StatSmooth` (Lm + Loess), `StatDensity`, `StatLoess`, `StatSummary`, `StatEcdf`, `StatFunction`, `StatEllipse`, `StatContour`, `StatBin2d`, `StatBinHex`, `StatSum`, `StatYDensity`, `StatQQ`, `StatSummary2d`, `StatQuantile` (feature `regression`), and more
@@ -257,6 +267,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 - **Discrete**: automatic categorical mapping
 - **Color**: discrete palettes (Viridis, Brewer Set1/Dark2, etc.), continuous gradients, diverging gradient2, binned/stepped scales (`scale_color_steps`/`fermenter`), manual color assignment
 - **Shape & Linetype**: discrete mapping for point shapes and line styles
+- **`scale_size_area(max_size)`** (0.22): size scale where *area* — not radius — is proportional to the value, so 0 maps to 0 (ggplot2 parity).
 - **Locale-aware labels**: `GGPlot::locale(Locale::from_tag("de-DE"))` renders default axis and legend labels with the locale's marks (`1.000`, `2,5`) and date axes with its month names (`Okt. 2026`, `15. Okt. 2026`); presets `en_us`, `en_gb`, `de_de`, `fr_fr`. Without it, output is unchanged.
 
 ```rust
@@ -330,7 +341,16 @@ See [`examples/spatial.rs`](examples/spatial.rs) (`cargo run --features sf --exa
 `facet_wrap` and `facet_grid` with free/fixed scales, proportional panel sizing
 (`space = "free"` via `facet_grid_space`), and multi-variable columns
 (`facet_grid_multi`, R's `rows ~ b + c`). Computed stats (density/histogram) are
-estimated per panel.
+estimated per panel, and so is `position_stack`/`position_fill` (0.22) — a
+faceted stacked bar no longer mixes rows from different panels into one
+shared total.
+
+### Positions
+
+`position_identity`, `position_dodge`/`dodge2`, `position_jitter`/`jitterdodge`,
+`position_nudge`, and `position_stack`/`position_fill` — both take a `vjust`
+(0.22, ggplot2's `position_stack(vjust =)`): `1` (default) places a segment's
+label at its top, `0.5` at its centre, `0` at its bottom.
 
 ### Themes
 
@@ -345,6 +365,9 @@ estimated per panel.
 - **Legend inside the panel** at panel-relative coords: `legend_position_inside(x, y)` (R's `legend.position = c(x, y)`).
 - **Axis label rotation**: `axis_text_x_angle(deg)` / `axis_text_y_angle(deg)` (R's `guide_axis(angle = ...)`).
 - **Label dodging**: `axis_text_x_dodge(n)` staggers crowded x labels across `n` rows (`guide_axis(n.dodge)`).
+- **Outer-label fit** (0.22): `axis_text_x_fit(AxisLabelFit::Reserve | Shift | Clip)` keeps an outer x label on-canvas instead of letting it cross the SVG edge — `Reserve` (default) grows the panel margin just enough, `Shift` moves the label at draw time without resizing the panel, `Clip` is the pre-0.22 behaviour.
+- **`check.overlap`** (0.22): `axis_text_x_check_overlap(true)` thins crowded x labels in ggplot2's own priority order (first, last, then the busiest middle), off by default.
+- **Legend `nrow`/`ncol`/`byrow` and auto-wrap** (0.22): `guides(GuideLegend::new().with_nrow/ncol(n).with_byrow(true))` lays out an explicit grid (column-major, or row-major with `byrow`); with neither set, an overflowing single horizontal legend auto-wraps, ending in "+N more" (`with_max_rows(n)` caps the growth) when it still doesn't fit.
 - **Corner tag**: `tag("A")` for figure-panel labels (`labs(tag)`).
 - **Axis position & expansion**: `ScaleContinuous::with_position_opposite()` (x-axis on top / y on the right) and `with_expand_sides(...)` for per-side expansion.
 

@@ -1,8 +1,9 @@
 use crate::coord::Coord;
 use crate::render::backend::{DrawBackend, LineStyle, TextAnchor, TextStyle};
+use crate::render::text::{axis_label_priority, label_bbox};
 use crate::render::{Rect, RenderError};
 use crate::scale::Scale;
-use crate::theme::Theme;
+use crate::theme::{AxisLabelFit, Theme};
 
 /// Horizontal pixel for a break at normalized `pos` along the *horizontal* axis.
 /// `coord_flip` swaps which normalized component drives horizontal position, so
@@ -27,11 +28,18 @@ fn along_y(coord: &dyn Coord, pos: f64, area: &Rect) -> f64 {
 }
 
 /// Draw the X axis: ticks, labels, and title.
+///
+/// `canvas` is the full SVG viewport (not just the panel): B3-1's outer-
+/// label fit drops a label whose tick has scrolled off it, and shifts a
+/// label bbox that crosses it back inside, unless
+/// `theme.axis_text_x_fit` is [`AxisLabelFit::Clip`] (the 0.21 behaviour —
+/// no correction). Ticks and gridlines are drawn regardless.
 pub fn draw_x_axis(
     scale: &dyn Scale,
     coord: &dyn Coord,
     theme: &Theme,
     plot_area: &Rect,
+    canvas: &Rect,
     backend: &mut dyn DrawBackend,
 ) -> Result<(), RenderError> {
     let breaks = scale.breaks();
@@ -65,8 +73,100 @@ pub fn draw_x_axis(
         )?;
     }
 
-    // Ticks and labels
+    // Precompute, per break, whether/where its label is drawn — but keep a
+    // single loop below in the *original* per-break (tick, label) order, so
+    // a plot whose labels all fit and don't overlap renders byte-identical
+    // SVG to 0.21 (same element order), even though the decision logic ran.
+    let label_draw: Vec<Option<f64>> = if theme.axis_text_x.visible {
+        let angle = theme.axis_text_x.angle;
+        let rotated = angle.abs() > 10.0;
+        let anchor_frac = if rotated { 1.0 } else { 0.5 };
+        let fit = theme.axis_text_x_fit;
+        let canvas_lo = canvas.x;
+        let canvas_hi = canvas.x + canvas.width;
+        const EDGE: f64 = 1.0;
+        let size = theme.axis_text_x.size;
+
+        // (index, px, label) for breaks whose tick is on-canvas. A label
+        // whose tick has scrolled off the canvas names nothing that is
+        // shown — unconditional, even under `Clip`.
+        let onscreen: Vec<(usize, f64, &str)> = breaks
+            .iter()
+            .enumerate()
+            .map(|(i, (pos, label))| (i, along_x(coord, *pos, plot_area), label.as_str()))
+            .filter(|(_, px, _)| (canvas_lo..=canvas_hi).contains(px))
+            .collect();
+
+        // ggplot2's `check.overlap`: draw in priority order (first, last,
+        // then recursive midpoint bisection — D5), skipping any label that
+        // would overlap one already kept.
+        let mut keep = vec![true; onscreen.len()];
+        if theme.axis_text_x_check_overlap && onscreen.len() > 1 {
+            let n = onscreen.len();
+            let mut kept: Vec<(f64, f64, f64)> = Vec::with_capacity(n); // (x0, x2, px)
+            keep = vec![false; n];
+            for p in axis_label_priority(n) {
+                let idx = p - 1; // 1-indexed in the ggplot2 sense
+                let (_, px, label) = onscreen[idx];
+                let bbox = label_bbox(label, size, px, 0.0, angle, anchor_frac);
+                let overlaps = kept.iter().any(|&(kx0, kx2, kpx)| {
+                    if !rotated {
+                        bbox[0] < kx2 && bbox[2] > kx0
+                    } else {
+                        // Parallel rotated labels on one baseline: the
+                        // perpendicular distance across the text direction
+                        // must leave room for a line of text.
+                        (px - kpx).abs() * angle.to_radians().sin().abs() < size
+                    }
+                });
+                if !overlaps {
+                    keep[idx] = true;
+                    kept.push((bbox[0], bbox[2], px));
+                }
+            }
+        }
+
+        let mut draw = vec![None; breaks.len()];
+        for (k, &(i, px, label)) in onscreen.iter().enumerate() {
+            if !keep[k] {
+                continue;
+            }
+            // Shift a bbox that crosses the canvas edge back inside (moving
+            // the rotate centre too), unless `fit` is `Clip` (0.21 behaviour).
+            let lx = if fit == AxisLabelFit::Clip {
+                px
+            } else {
+                // `ly` doesn't affect the x-bbox; 0.0 is a placeholder.
+                let bbox = label_bbox(label, size, px, 0.0, angle, anchor_frac);
+                let room_hi = canvas_hi - EDGE;
+                let room_lo = canvas_lo + EDGE;
+                if bbox[0] < room_lo {
+                    px + (room_lo - bbox[0])
+                } else if bbox[2] > room_hi {
+                    px - (bbox[2] - room_hi).min(bbox[0] - room_lo)
+                } else {
+                    px
+                }
+            };
+            draw[i] = Some(lx);
+        }
+        draw
+    } else {
+        Vec::new()
+    };
+
+    // Ticks and labels, interleaved in break order (ticks always stay).
     let dodge = theme.axis_text_x_dodge.max(1);
+    let family = if theme.axis_text_x.family.is_empty() {
+        None
+    } else {
+        Some(theme.axis_text_x.family.clone())
+    };
+    let anchor = if theme.axis_text_x.angle.abs() > 10.0 {
+        TextAnchor::End
+    } else {
+        TextAnchor::Middle
+    };
     for (i, (pos, label)) in breaks.iter().enumerate() {
         let px = along_x(coord, *pos, plot_area);
 
@@ -83,37 +183,24 @@ pub fn draw_x_axis(
             )?;
         }
 
-        if theme.axis_text_x.visible {
-            let family = if theme.axis_text_x.family.is_empty() {
-                None
-            } else {
-                Some(theme.axis_text_x.family.clone())
-            };
-            // Adjust anchor for rotated labels
-            let anchor = if theme.axis_text_x.angle.abs() > 10.0 {
-                TextAnchor::End
-            } else {
-                TextAnchor::Middle
-            };
+        if let Some(Some(lx)) = label_draw.get(i) {
             // Stagger labels across `dodge` rows to avoid overlap.
             let row_offset = (i % dodge) as f64 * (theme.axis_text_x.size + 2.0);
+            let ly = edge_y
+                + dir
+                    * (tick_len
+                        + theme.legend_spacing / 2.0
+                        + theme.axis_text_x.size / 2.0
+                        + row_offset);
             backend.draw_text(
                 label,
-                (
-                    px,
-                    edge_y
-                        + dir
-                            * (tick_len
-                                + theme.legend_spacing / 2.0
-                                + theme.axis_text_x.size / 2.0
-                                + row_offset),
-                ),
+                (*lx, ly),
                 &TextStyle {
                     color: theme.axis_text_x.color,
                     size: theme.axis_text_x.size,
-                    anchor,
+                    anchor: anchor.clone(),
                     angle: theme.axis_text_x.angle,
-                    family,
+                    family: family.clone(),
                     face: theme.axis_text_x.face,
                 },
             )?;
@@ -492,4 +579,141 @@ pub fn draw_gridlines(
     }
 
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::aes::Aesthetic;
+    use crate::coord::cartesian::CoordCartesian;
+    use crate::data::Value;
+    use crate::render::svg_backend::SvgBackend;
+    use crate::theme::presets::theme_gray;
+
+    /// A scale with hand-picked break positions/labels, so a test can place
+    /// one off the canvas without fighting a real break algorithm.
+    struct FixedBreaksScale(Vec<(f64, String)>);
+
+    impl Scale for FixedBreaksScale {
+        fn aesthetic(&self) -> Aesthetic {
+            Aesthetic::X
+        }
+        fn train(&mut self, _values: &[Value]) {}
+        fn map(&self, _value: &Value) -> f64 {
+            0.0
+        }
+        fn breaks(&self) -> Vec<(f64, String)> {
+            self.0.clone()
+        }
+        fn name(&self) -> &str {
+            ""
+        }
+        fn set_name(&mut self, _name: &str) {}
+        fn clone_box(&self) -> Box<dyn Scale> {
+            Box::new(FixedBreaksScale(self.0.clone()))
+        }
+    }
+
+    fn backend(w: u32, h: u32, plot_area: Rect) -> SvgBackend {
+        SvgBackend::new(w, h, plot_area)
+    }
+
+    #[test]
+    fn a_tick_outside_the_svg_is_dropped() {
+        // Normalized position 5.0 is nowhere near [0, 1]; through
+        // `CoordCartesian` that lands far outside the 200×100 canvas.
+        let scale = FixedBreaksScale(vec![
+            (0.2, "kept".to_string()),
+            (5.0, "off_canvas".to_string()),
+        ]);
+        let coord = CoordCartesian::new();
+        let theme = theme_gray();
+        let plot_area = Rect {
+            x: 10.0,
+            y: 10.0,
+            width: 180.0,
+            height: 70.0,
+        };
+        let canvas = Rect {
+            x: 0.0,
+            y: 0.0,
+            width: 200.0,
+            height: 100.0,
+        };
+        let mut backend = backend(200, 100, plot_area.clone());
+        draw_x_axis(&scale, &coord, &theme, &plot_area, &canvas, &mut backend).unwrap();
+        let svg = backend.finish();
+        assert!(svg.contains(">kept<"), "on-canvas label dropped: {svg}");
+        assert!(
+            !svg.contains(">off_canvas<"),
+            "off-canvas label was drawn: {svg}"
+        );
+    }
+
+    #[test]
+    fn clip_draws_the_label_exactly_at_the_tick_even_past_the_edge() {
+        // A very wide label at the rightmost tick, Clip mode: no shift.
+        let scale = FixedBreaksScale(vec![
+            (0.0, "a".to_string()),
+            (1.0, "2021-01-01".to_string()),
+        ]);
+        let coord = CoordCartesian::new();
+        let mut theme = theme_gray();
+        theme.axis_text_x_fit = crate::theme::AxisLabelFit::Clip;
+        let plot_area = Rect {
+            x: 0.0,
+            y: 0.0,
+            width: 60.0,
+            height: 50.0,
+        };
+        let canvas = plot_area.clone();
+        let mut backend = backend(60, 50, plot_area.clone());
+        draw_x_axis(&scale, &coord, &theme, &plot_area, &canvas, &mut backend).unwrap();
+        let svg = backend.finish();
+        // Clip: the label sits exactly on the tick (x="60.00"), unmoved,
+        // even though its bbox clearly overflows a 60px canvas.
+        assert!(
+            svg.contains("x=\"60.00\" y=\"") && svg.contains(">2021-01-01<"),
+            "clip mode should not shift the label: {svg}"
+        );
+    }
+
+    #[test]
+    fn shift_moves_the_same_label_inside_the_canvas() {
+        let scale = FixedBreaksScale(vec![
+            (0.0, "a".to_string()),
+            (1.0, "2021-01-01".to_string()),
+        ]);
+        let coord = CoordCartesian::new();
+        let mut theme = theme_gray();
+        theme.axis_text_x_fit = crate::theme::AxisLabelFit::Shift;
+        let plot_area = Rect {
+            x: 0.0,
+            y: 0.0,
+            width: 60.0,
+            height: 50.0,
+        };
+        let canvas = plot_area.clone();
+        let mut backend = backend(60, 50, plot_area.clone());
+        draw_x_axis(&scale, &coord, &theme, &plot_area, &canvas, &mut backend).unwrap();
+        let svg = backend.finish();
+        assert!(
+            !svg.contains("x=\"60.00\" y=\""),
+            "shift mode should move the label off the bare tick: {svg}"
+        );
+        let w = crate::render::text::text_width("2021-01-01", theme.axis_text_x.size);
+        // The shifted label's right edge must land inside the canvas.
+        let needle = ">2021-01-01<";
+        let tag_end = svg.find(needle).unwrap();
+        let tag_start = svg[..tag_end].rfind("<text ").unwrap();
+        let tag = &svg[tag_start..tag_end];
+        let x_attr = tag.rsplit("x=\"").next().unwrap();
+        let x: f64 = x_attr.split('"').next().unwrap().parse().unwrap();
+        // `x` round-trips through a `"{:.2}"`-formatted SVG attribute, so
+        // allow a hair of slack for that rounding.
+        assert!(
+            x + w / 2.0 <= 60.0 - 1.0 + 0.01,
+            "right edge still overflows: x={x} w={w}"
+        );
+    }
 }

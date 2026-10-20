@@ -113,6 +113,12 @@ impl Coord for CoordSf {
             }
         }
     }
+
+    // Letterboxed, non-degree units: a label bbox doesn't correspond to a
+    // simple left/right panel margin here (B3-1).
+    fn supports_axis_reserve(&self) -> bool {
+        false
+    }
 }
 
 #[cfg(test)]

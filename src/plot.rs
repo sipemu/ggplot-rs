@@ -1440,6 +1440,16 @@ impl GGPlot {
         self
     }
 
+    /// `scale_size_area(max_size)` (ggplot2, B3-6): size scale where
+    /// *area*, not radius, is proportional to the value, and 0 maps to 0.
+    /// See [`ScaleSizeContinuous::area`](crate::scale::size::ScaleSizeContinuous::area).
+    pub fn scale_size_area(mut self, max_size: f64) -> Self {
+        self.scales.push(Box::new(
+            crate::scale::size::ScaleSizeContinuous::new().area(max_size),
+        ));
+        self
+    }
+
     pub fn scale_alpha(mut self, s: crate::scale::alpha::ScaleAlphaContinuous) -> Self {
         self.scales.push(Box::new(s));
         self
@@ -1890,6 +1900,22 @@ impl GGPlot {
     /// Draw minor tick marks between major ticks (R's `axis.minor.ticks`).
     pub fn axis_minor_ticks(mut self) -> Self {
         self.theme.axis_minor_ticks = true;
+        self
+    }
+
+    /// How an outer x-axis label that would cross the SVG edge is handled
+    /// (B3-1, D6): [`AxisLabelFit::Reserve`](crate::theme::AxisLabelFit::Reserve) (default), `Shift`, or `Clip`
+    /// (the 0.21 behaviour). Use `Shift` for panels that must stay
+    /// pixel-aligned with other elements (e.g. a host's own aligned strip).
+    pub fn axis_text_x_fit(mut self, fit: crate::theme::AxisLabelFit) -> Self {
+        self.theme.axis_text_x_fit = fit;
+        self
+    }
+
+    /// Thin crowded x-axis labels in ggplot2's `check.overlap` priority
+    /// order (B3-1, D5). Off by default.
+    pub fn axis_text_x_check_overlap(mut self, on: bool) -> Self {
+        self.theme.axis_text_x_check_overlap = on;
         self
     }
 
@@ -2507,7 +2533,258 @@ impl GGPlot {
             None
         };
 
-        PlotLayout::compute_full(
+        // B3-1 (D6): reserve just enough left/right panel margin to keep
+        // the outer x-axis labels on-canvas under `AxisLabelFit::Reserve`,
+        // for a single (non-faceted) panel on a coord that supports it
+        // (not polar/radar/sf, where a label bbox doesn't map to a simple
+        // panel margin). A faceted plot skips the layout-level reservation
+        // and relies on `draw_x_axis`'s own draw-time shift instead — so
+        // does `AxisLabelFit::Shift` (the panel must keep its size) and
+        // `Clip` (the 0.21 behaviour, no correction at all). A plot whose
+        // outer labels already fit never grows `extras`, so it stays
+        // byte-identical.
+        let mut extras = crate::render::layout::LayoutExtras::default();
+        let can_reserve = built.facet.is_none()
+            && built.theme.axis_text_x.visible
+            && built.theme.axis_text_x_fit == crate::theme::AxisLabelFit::Reserve
+            && !built.coord.is_polar()
+            && built.coord.supports_axis_reserve();
+        if can_reserve {
+            if let Some(hs) = built.scales.get(&h_aes) {
+                let breaks = hs.breaks();
+                if let (Some(first), Some(last)) = (breaks.first(), breaks.last()) {
+                    let angle = built.theme.axis_text_x.angle;
+                    let anchor = if angle.abs() > 10.0 { 1.0 } else { 0.5 };
+                    let size = built.theme.axis_text_x.size;
+                    const EDGE: f64 = 1.0;
+                    for _ in 0..2 {
+                        let layout = PlotLayout::compute_with_extras(
+                            w as f64,
+                            h as f64,
+                            &built.theme,
+                            has_title,
+                            has_subtitle,
+                            has_caption,
+                            has_legend,
+                            x_axis_top,
+                            y_label_width,
+                            x_label_height,
+                            extras,
+                        );
+                        let area = &layout.plot_area;
+                        let edge_y = area.y + area.height;
+                        let to_point = |pos: f64| if flipped { (0.0, pos) } else { (pos, 0.0) };
+                        let px_first = built.coord.transform(to_point(first.0), area).0;
+                        let px_last = built.coord.transform(to_point(last.0), area).0;
+                        let bbox_first = crate::render::text::label_bbox(
+                            &first.1, size, px_first, edge_y, angle, anchor,
+                        );
+                        let bbox_last = crate::render::text::label_bbox(
+                            &last.1, size, px_last, edge_y, angle, anchor,
+                        );
+                        let deficit_left = (EDGE - bbox_first[0]).max(0.0);
+                        let deficit_right = (bbox_last[2] - (w as f64 - EDGE)).max(0.0);
+                        if deficit_left <= 0.0 && deficit_right <= 0.0 {
+                            break;
+                        }
+                        // Growing the left margin by `eL` (holding `eR` fixed)
+                        // shifts a label at normalized position `p` right by
+                        // `eL·(1 − p)`; growing the right margin by `eR`
+                        // shifts it left by `eR·p` (the panel maps [0, 1] to
+                        // [plot_x + eL, plot_x + width − eR]). Review #158
+                        // finding 1: the original code divided by `p_first`
+                        // and `1 − p_last` — inverted, which over-reserved
+                        // by about `1/p_last` (≈20× at a typical p_last≈0.95).
+                        let (p_first, p_last) = (first.0, last.0);
+                        if deficit_left > 0.0 && deficit_right > 0.0 {
+                            // Both ends overflow: solve the 2×2 system so
+                            // each margin accounts for its effect on *both*
+                            // labels, rather than correcting them
+                            // independently and overshooting.
+                            let (a, b, c, d) = (1.0 - p_first, p_first, 1.0 - p_last, p_last);
+                            let det = a * d - b * c;
+                            if det.abs() > 0.01 {
+                                extras.left +=
+                                    ((deficit_left * d + deficit_right * b) / det).max(0.0);
+                                extras.right +=
+                                    ((deficit_right * a + deficit_left * c) / det).max(0.0);
+                            } else {
+                                // Degenerate (first and last break nearly
+                                // coincide in normalized space): fall back
+                                // to the independent, clamped formulas.
+                                extras.left += deficit_left / (1.0 - p_first).max(0.05);
+                                extras.right += deficit_right / p_last.max(0.05);
+                            }
+                        } else if deficit_left > 0.0 {
+                            extras.left += deficit_left / (1.0 - p_first).max(0.05);
+                        } else if deficit_right > 0.0 {
+                            extras.right += deficit_right / p_last.max(0.05);
+                        }
+                        // Cap the total reservation so the panel can never
+                        // start beyond the canvas or be squeezed past the
+                        // same minimum width `compute_with_extras` already
+                        // floors it to (review #158's second re-review,
+                        // LOW): a single, centred break whose label is
+                        // wider than the whole canvas has `p_first ==
+                        // p_last == 0.5`, so both `eL` and `eR` grow by
+                        // roughly the same (large) deficit independently,
+                        // and together they could place `plot_x` past `w`
+                        // entirely. Past this cap, Reserve simply stops
+                        // growing and `draw_x_axis`'s own draw-time shift
+                        // — which always runs for Reserve, the same as for
+                        // `Shift` — takes over for whatever's still
+                        // outside, exactly as D6 already documents.
+                        const MIN_PANEL_WIDTH: f64 = 50.0;
+                        let cap = (w as f64 - MIN_PANEL_WIDTH).max(0.0);
+                        if extras.left + extras.right > cap {
+                            let scale = if extras.left + extras.right > 0.0 {
+                                cap / (extras.left + extras.right)
+                            } else {
+                                0.0
+                            };
+                            extras.left *= scale;
+                            extras.right *= scale;
+                        }
+                    }
+                }
+            }
+        }
+
+        // B3-2 (D7): a single discrete legend's `nrow`/`ncol` grid, or an
+        // overflowing horizontal legend's auto-wrap, reserves extra legend
+        // rows. Scoped to exactly one discrete guide, matching
+        // `draw_legend_planned`'s own gate — several simultaneous guides
+        // are a follow-up (sipemu/ggplot-rs#155).
+        if has_legend
+            && !matches!(
+                built.theme.legend_position,
+                crate::theme::LegendPosition::None
+            )
+        {
+            let legend_aes =
+                crate::guide::legend::legend_scales_for(&built.scales, &built.suppressed_aes);
+            if legend_aes.len() == 1 {
+                if let Some(scale) = built.scales.get(&legend_aes[0]) {
+                    if scale.is_discrete() {
+                        let breaks = scale.breaks();
+                        let layout0 = PlotLayout::compute_with_extras(
+                            w as f64,
+                            h as f64,
+                            &built.theme,
+                            has_title,
+                            has_subtitle,
+                            has_caption,
+                            has_legend,
+                            x_axis_top,
+                            y_label_width,
+                            x_label_height,
+                            extras,
+                        );
+                        let (legend_x0, _, mut is_horizontal) =
+                            crate::guide::legend::legend_position(&built.theme, &layout0.plot_area);
+                        if let Some(dir) = built.theme.legend_direction {
+                            is_horizontal =
+                                matches!(dir, crate::theme::LegendDirection::Horizontal);
+                        }
+                        let avail_width =
+                            (layout0.plot_area.x + layout0.plot_area.width - legend_x0).max(0.0);
+                        let mut legend_warnings = Vec::new();
+                        let validated_guide = built
+                            .guide_legend
+                            .validated(breaks.len(), &mut legend_warnings);
+                        let plan = crate::guide::legend::plan_legend(
+                            &breaks,
+                            &validated_guide,
+                            &built.theme,
+                            avail_width,
+                            layout0.plot_area.height,
+                            is_horizontal,
+                        );
+                        built.warnings.extend(legend_warnings);
+                        if let Some(plan) = &plan {
+                            extras.legend_extra_rows = plan.rows.saturating_sub(1);
+                            // Review #158 finding 3: a vertical explicit
+                            // grid with ncol > 1 needs extra legend band
+                            // width for its later columns, or they run off
+                            // the canvas (cols is always 1, col_pitch 0,
+                            // for the horizontal auto-wrap path, so this is
+                            // a no-op there).
+                            extras.legend_extra_width =
+                                plan.cols.saturating_sub(1) as f64 * plan.col_pitch;
+                            // Review #158's second re-review, LOW: warn
+                            // when a vertical multi-column grid still runs
+                            // off the canvas even after reserving the
+                            // extra width above — e.g. the grid is simply
+                            // too wide for this chart (many columns, long
+                            // labels, a narrow canvas). Measures each
+                            // entry's own actual rendered right edge
+                            // (swatch + spacing + that label's text width)
+                            // rather than `cols * col_pitch` (the worst-
+                            // case upper bound every column *could* need,
+                            // which over-warns whenever the columns' real
+                            // labels are shorter than the single widest
+                            // one `col_pitch` is sized from).
+                            if !is_horizontal && plan.cols > 1 {
+                                let final_layout = PlotLayout::compute_with_extras(
+                                    w as f64,
+                                    h as f64,
+                                    &built.theme,
+                                    has_title,
+                                    has_subtitle,
+                                    has_caption,
+                                    has_legend,
+                                    x_axis_top,
+                                    y_label_width,
+                                    x_label_height,
+                                    extras,
+                                );
+                                let (legend_x_final, _, _) = crate::guide::legend::legend_position(
+                                    &built.theme,
+                                    &final_layout.plot_area,
+                                );
+                                let swatch_and_gap =
+                                    built.theme.legend_key_width + built.theme.legend_spacing;
+                                let text_size = built.theme.legend_text.size;
+                                let legend_right_edge = plan
+                                    .entries
+                                    .iter()
+                                    .map(|e| {
+                                        let label = &breaks[e.break_idx].1;
+                                        legend_x_final
+                                            + e.x_offset
+                                            + swatch_and_gap
+                                            + crate::render::text::text_width(label, text_size)
+                                    })
+                                    .fold(0.0_f64, f64::max);
+                                if legend_right_edge > w as f64 {
+                                    built.warnings.push(format!(
+                                        "legend: the {}-column grid still doesn't fit the {w}px chart (needs about {} px)",
+                                        plan.cols,
+                                        legend_right_edge.ceil() as i64
+                                    ));
+                                }
+                            }
+                            if let Some(ov) = &plan.overflow {
+                                let n = breaks.len();
+                                let shown = n - ov.dropped;
+                                built.warnings.push(format!(
+                                    "legend: {} of {n} entries don't fit the chart; the legend shows {shown} and \"+{} more\"",
+                                    ov.dropped, ov.dropped
+                                ));
+                            }
+                        }
+                        // Review #158 finding 2: store this exact plan so
+                        // `draw_legend_planned` draws it verbatim instead of
+                        // recomputing against the (shorter) post-reservation
+                        // panel height, which could warn "+7 more" while
+                        // drawing "+15 more".
+                        built.legend_plan = plan;
+                    }
+                }
+            }
+        }
+
+        PlotLayout::compute_with_extras(
             w as f64,
             h as f64,
             &built.theme,
@@ -2518,6 +2795,7 @@ impl GGPlot {
             x_axis_top,
             y_label_width,
             x_label_height,
+            extras,
         )
     }
 

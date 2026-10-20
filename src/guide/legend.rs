@@ -19,6 +19,32 @@ const LEGEND_AESTHETICS: &[Aesthetic] = &[
     Aesthetic::Linewidth,
 ];
 
+/// The aesthetics that would get a legend, in the same order and with the
+/// same color/fill de-duplication `draw_legend` and `draw_legend_planned`
+/// use. Shared with `layout_built` (B3-2), so the "is this the single
+/// discrete guide D7 requires" check is the same one the drawing code
+/// uses.
+pub(crate) fn legend_scales_for(
+    scales: &ScaleSet,
+    suppressed: &std::collections::HashSet<Aesthetic>,
+) -> Vec<Aesthetic> {
+    let mut legend_scales: Vec<Aesthetic> = Vec::new();
+    for aes in LEGEND_AESTHETICS {
+        if suppressed.contains(aes) {
+            continue;
+        }
+        if let Some(scale) = scales.get(aes) {
+            if !scale.breaks().is_empty() {
+                if *aes == Aesthetic::Fill && legend_scales.contains(&Aesthetic::Color) {
+                    continue;
+                }
+                legend_scales.push(aes.clone());
+            }
+        }
+    }
+    legend_scales
+}
+
 /// Draw all legends for the plot.
 pub fn draw_legend(
     scales: &ScaleSet,
@@ -120,7 +146,7 @@ pub fn draw_legend(
 
 /// Compute legend origin based on position setting.
 /// Returns (x, y, is_horizontal).
-fn legend_position(theme: &Theme, plot_area: &Rect) -> (f64, f64, bool) {
+pub(crate) fn legend_position(theme: &Theme, plot_area: &Rect) -> (f64, f64, bool) {
     match theme.legend_position {
         LegendPosition::Right => (
             plot_area.x + plot_area.width + theme.legend_margin.left,
@@ -253,109 +279,20 @@ fn draw_discrete_legend_at(
         }
 
         // Draw the appropriate swatch based on aesthetic type
-        let value = Value::Str(label.clone());
-        match aes {
-            Aesthetic::Color | Aesthetic::Fill => {
-                let color = scales.map_color(aes, &value).unwrap_or((127, 127, 127));
-                backend.draw_rect(
-                    (x, y),
-                    (x + swatch_size, y + swatch_size),
-                    &RectStyle {
-                        fill: Some(color),
-                        stroke: None,
-                        stroke_width: 0.0,
-                        alpha: 1.0,
-                        clip: false,
-                    },
-                )?;
-            }
-            Aesthetic::Shape => {
-                let shape = scales
-                    .map_shape(&value)
-                    .unwrap_or(crate::render::backend::PointShape::Circle);
-                backend.draw_shape(
-                    (center_x, center_y),
-                    swatch_size / 3.0,
-                    &PointStyle {
-                        color: theme.geom.ink.unwrap_or((50, 50, 50)),
-                        alpha: 1.0,
-                        filled: true,
-                        shape,
-                    },
-                )?;
-            }
-            Aesthetic::Linetype => {
-                let lt = scales.map_linetype(&value).unwrap_or(Linetype::Solid);
-                backend.draw_line(
-                    &[(x + 2.0, center_y), (x + swatch_size - 2.0, center_y)],
-                    &LineStyle {
-                        color: theme.geom.ink.unwrap_or((50, 50, 50)),
-                        width: 1.5,
-                        alpha: 1.0,
-                        linetype: lt,
-                        ..Default::default()
-                    },
-                )?;
-            }
-            Aesthetic::Size => {
-                // For size, show varying circle sizes. Uses the break's own
-                // [0,1] fraction, not a round trip through the label text
-                // (a discrete-style legend key for a continuous scale only
-                // has the rendered label, and `Value::Str(label).as_f64()`
-                // doesn't parse it back to a number) — see
-                // `Scale::map_fraction_to_size`.
-                let size = scale
-                    .map_fraction_to_size(*pos)
-                    .or_else(|| scales.map_size(&value))
-                    .unwrap_or(3.0);
-                backend.draw_shape(
-                    (center_x, center_y),
-                    size.min(swatch_size / 2.0),
-                    &PointStyle {
-                        color: theme.geom.ink.unwrap_or((50, 50, 50)),
-                        alpha: 1.0,
-                        filled: true,
-                        shape: crate::render::backend::PointShape::Circle,
-                    },
-                )?;
-            }
-            Aesthetic::Alpha => {
-                // Same fix as `Size` above, via `Scale::map_fraction_to_alpha`.
-                let alpha = scale
-                    .map_fraction_to_alpha(*pos)
-                    .or_else(|| scales.map_alpha(&value))
-                    .unwrap_or(1.0);
-                backend.draw_rect(
-                    (x, y),
-                    (x + swatch_size, y + swatch_size),
-                    &RectStyle {
-                        fill: Some(theme.geom.ink.unwrap_or((50, 50, 50))),
-                        stroke: None,
-                        stroke_width: 0.0,
-                        alpha,
-                        clip: false,
-                    },
-                )?;
-            }
-            Aesthetic::Linewidth => {
-                // A horizontal line of the mapped width, capped at the key
-                // height. Uses the break's own [0,1] fraction (not a
-                // round-trip through the label text — see
-                // `Scale::map_fraction_to_size`).
-                let width = scale.map_fraction_to_size(*pos).unwrap_or(1.0);
-                backend.draw_line(
-                    &[(x + 2.0, center_y), (x + swatch_size - 2.0, center_y)],
-                    &LineStyle {
-                        color: theme.geom.ink.unwrap_or((50, 50, 50)),
-                        width: width.min(swatch_size),
-                        alpha: 1.0,
-                        linetype: Linetype::Solid,
-                        ..Default::default()
-                    },
-                )?;
-            }
-            _ => {}
-        }
+        draw_legend_swatch(
+            backend,
+            scales,
+            aes,
+            scale,
+            theme,
+            label,
+            *pos,
+            x,
+            y,
+            center_x,
+            center_y,
+            swatch_size,
+        )?;
 
         // Label
         let label_family = if theme.legend_text.family.is_empty() {
@@ -536,4 +473,568 @@ fn draw_continuous_legend_at(
     }
 
     Ok(title_offset + bar_height)
+}
+
+/// Draw one legend key's swatch (not its label) for `aes`, at `(x, y)`
+/// (top-left) / `(center_x, center_y)` (centre), `swatch_size` square.
+/// Shared by the unchanged [`draw_discrete_legend_at`] and the B3-2
+/// planner-driven [`draw_legend_planned`], so both draw pixel-identical
+/// swatches.
+#[allow(clippy::too_many_arguments)]
+fn draw_legend_swatch(
+    backend: &mut dyn DrawBackend,
+    scales: &ScaleSet,
+    aes: &Aesthetic,
+    scale: &dyn crate::scale::Scale,
+    theme: &Theme,
+    label: &str,
+    pos: f64,
+    x: f64,
+    y: f64,
+    center_x: f64,
+    center_y: f64,
+    swatch_size: f64,
+) -> Result<(), RenderError> {
+    let value = Value::Str(label.to_string());
+    match aes {
+        Aesthetic::Color | Aesthetic::Fill => {
+            let color = scales.map_color(aes, &value).unwrap_or((127, 127, 127));
+            backend.draw_rect(
+                (x, y),
+                (x + swatch_size, y + swatch_size),
+                &RectStyle {
+                    fill: Some(color),
+                    stroke: None,
+                    stroke_width: 0.0,
+                    alpha: 1.0,
+                    clip: false,
+                },
+            )?;
+        }
+        Aesthetic::Shape => {
+            let shape = scales
+                .map_shape(&value)
+                .unwrap_or(crate::render::backend::PointShape::Circle);
+            backend.draw_shape(
+                (center_x, center_y),
+                swatch_size / 3.0,
+                &PointStyle {
+                    color: theme.geom.ink.unwrap_or((50, 50, 50)),
+                    alpha: 1.0,
+                    filled: true,
+                    shape,
+                },
+            )?;
+        }
+        Aesthetic::Linetype => {
+            let lt = scales.map_linetype(&value).unwrap_or(Linetype::Solid);
+            backend.draw_line(
+                &[(x + 2.0, center_y), (x + swatch_size - 2.0, center_y)],
+                &LineStyle {
+                    color: theme.geom.ink.unwrap_or((50, 50, 50)),
+                    width: 1.5,
+                    alpha: 1.0,
+                    linetype: lt,
+                    ..Default::default()
+                },
+            )?;
+        }
+        Aesthetic::Size => {
+            let size = scale
+                .map_fraction_to_size(pos)
+                .or_else(|| scales.map_size(&value))
+                .unwrap_or(3.0);
+            backend.draw_shape(
+                (center_x, center_y),
+                size.min(swatch_size / 2.0),
+                &PointStyle {
+                    color: theme.geom.ink.unwrap_or((50, 50, 50)),
+                    alpha: 1.0,
+                    filled: true,
+                    shape: crate::render::backend::PointShape::Circle,
+                },
+            )?;
+        }
+        Aesthetic::Alpha => {
+            let alpha = scale
+                .map_fraction_to_alpha(pos)
+                .or_else(|| scales.map_alpha(&value))
+                .unwrap_or(1.0);
+            backend.draw_rect(
+                (x, y),
+                (x + swatch_size, y + swatch_size),
+                &RectStyle {
+                    fill: Some(theme.geom.ink.unwrap_or((50, 50, 50))),
+                    stroke: None,
+                    stroke_width: 0.0,
+                    alpha,
+                    clip: false,
+                },
+            )?;
+        }
+        Aesthetic::Linewidth => {
+            let width = scale.map_fraction_to_size(pos).unwrap_or(1.0);
+            backend.draw_line(
+                &[(x + 2.0, center_y), (x + swatch_size - 2.0, center_y)],
+                &LineStyle {
+                    color: theme.geom.ink.unwrap_or((50, 50, 50)),
+                    width: width.min(swatch_size),
+                    alpha: 1.0,
+                    linetype: Linetype::Solid,
+                    ..Default::default()
+                },
+            )?;
+        }
+        _ => {}
+    }
+    Ok(())
+}
+
+// ─── B3-2: nrow/ncol/byrow, auto-wrap, "+N more" ───────────────────────────
+
+/// One legend key's grid placement, in the planner's own pixel space
+/// (relative to the legend's own origin — `row` is 0-indexed top row,
+/// `x_offset` is the horizontal pitch from the first column).
+#[derive(Clone, Debug)]
+pub(crate) struct LegendEntry {
+    pub break_idx: usize,
+    pub row: usize,
+    pub x_offset: f64,
+}
+
+/// A trailing "+{k} more" marker when the legend doesn't have room for
+/// every key (D7). Not a mark (`draw_text` only — no swatch, no
+/// `data-geom`/class).
+#[derive(Clone, Debug)]
+pub(crate) struct LegendOverflow {
+    pub dropped: usize,
+    pub row: usize,
+    pub x_offset: f64,
+    pub text: String,
+}
+
+/// A non-default legend layout (B3-2): an explicit `nrow`/`ncol` grid, or
+/// an auto-wrapped horizontal legend. `None` from [`plan_legend`] means
+/// "nothing changes" — the caller keeps the 0.21 single-row/single-column
+/// path verbatim, so a plot that doesn't need this is byte-identical.
+#[derive(Clone, Debug)]
+pub(crate) struct LegendPlan {
+    pub rows: usize,
+    pub entries: Vec<LegendEntry>,
+    pub overflow: Option<LegendOverflow>,
+    /// Columns in an explicit grid (always 1 for the horizontal auto-wrap
+    /// path, which never adds columns). Review #158 finding 3: a vertical
+    /// legend with `ncol > 1` needs `(cols − 1) · col_pitch` of extra
+    /// width reserved, the same way extra rows are reserved for height.
+    pub cols: usize,
+    /// The per-column horizontal pitch an explicit grid uses (0 for the
+    /// auto-wrap path, which doesn't have columns in this sense).
+    pub col_pitch: f64,
+}
+
+/// Per-key horizontal pitch (swatch + spacing + label + gap): the larger of
+/// today's crude per-character advance (`draw_discrete_legend_at`'s
+/// `cur_x` formula) and a `text_width`-based measurement, so a label that
+/// ties under both estimates stays on the byte-identical single-row path.
+fn legend_pitch(label: &str, theme: &Theme) -> f64 {
+    let swatch = theme.legend_key_width;
+    let spacing = theme.legend_spacing;
+    let text_size = theme.legend_text.size;
+    let legacy =
+        swatch + spacing + (label.chars().count() as f64) * text_size * 0.62 + spacing * 3.0;
+    let measured = swatch + spacing + crate::render::text::text_width(label, text_size) + 8.0;
+    legacy.max(measured)
+}
+
+/// Plan a non-default legend layout (B3-2, D7). `avail_width` is the
+/// horizontal room for a horizontal legend's flow-pack / overflow check
+/// (`plot_area.x + plot_area.width - legend_x`); `avail_height` only feeds
+/// the default `max_rows` formula. Returns `None` when nothing changes:
+/// no explicit `nrow`/`ncol`, and (for a horizontal legend) the one-line
+/// layout already fits — or the legend is vertical, where auto-wrap never
+/// applies (D7 is horizontal-only; `nrow`/`ncol` still work on either).
+pub(crate) fn plan_legend(
+    breaks: &[(f64, String)],
+    guide: &GuideLegend,
+    theme: &Theme,
+    avail_width: f64,
+    avail_height: f64,
+    is_horizontal: bool,
+) -> Option<LegendPlan> {
+    let n = breaks.len();
+    if n == 0 {
+        return None;
+    }
+
+    // Explicit grid: ggplot2's `nrow`/`ncol`, column-major unless `byrow`.
+    if guide.nrow.is_some() || guide.ncol.is_some() {
+        let (rows, cols) = match (guide.nrow, guide.ncol) {
+            (Some(nrow), Some(ncol)) => (nrow, ncol),
+            (Some(nrow), None) => (nrow.max(1), n.div_ceil(nrow.max(1))),
+            (None, Some(ncol)) => (n.div_ceil(ncol.max(1)), ncol.max(1)),
+            (None, None) => unreachable!("checked above"),
+        };
+        let rows = rows.max(1);
+        let cols = cols.max(1);
+        let col_pitch = breaks
+            .iter()
+            .map(|(_, l)| legend_pitch(l, theme))
+            .fold(0.0_f64, f64::max);
+        let entries = (0..n)
+            .map(|i| {
+                let (row, col) = if guide.byrow {
+                    (i / cols, i % cols)
+                } else {
+                    (i % rows, i / rows)
+                };
+                LegendEntry {
+                    break_idx: i,
+                    row,
+                    x_offset: col as f64 * col_pitch,
+                }
+            })
+            .collect();
+        return Some(LegendPlan {
+            rows,
+            entries,
+            overflow: None,
+            cols,
+            col_pitch,
+        });
+    }
+
+    // Auto mode: D7 scopes auto-wrap to horizontal legends only.
+    if !is_horizontal {
+        return None;
+    }
+
+    let pitches: Vec<f64> = breaks.iter().map(|(_, l)| legend_pitch(l, theme)).collect();
+    let total_width: f64 = pitches.iter().sum();
+    if total_width <= avail_width.max(0.0) {
+        return None; // fits on one line — byte-identical to 0.21.
+    }
+
+    let item_height = theme.legend_key_height.max(1.0);
+    let row_limit = guide
+        .max_rows
+        .unwrap_or_else(|| 1 + (avail_height / 3.0 / item_height).floor().max(0.0) as usize)
+        .max(1);
+
+    let mut entries: Vec<LegendEntry> = Vec::with_capacity(n);
+    let mut row = 0usize;
+    let mut cur_x = 0.0_f64;
+    for (i, &p) in pitches.iter().enumerate() {
+        if cur_x > 0.0 && cur_x + p > avail_width {
+            if row + 1 >= row_limit {
+                break; // out of rows — the rest overflow into "+N more".
+            }
+            row += 1;
+            cur_x = 0.0;
+        }
+        entries.push(LegendEntry {
+            break_idx: i,
+            row,
+            x_offset: cur_x,
+        });
+        cur_x += p;
+    }
+
+    if entries.len() >= n {
+        return Some(LegendPlan {
+            rows: row + 1,
+            entries,
+            overflow: None,
+            cols: 1,
+            col_pitch: 0.0,
+        });
+    }
+
+    // Overflow: make room for "+{k} more" on the last row, dropping
+    // entries from its tail until it fits (or the row is empty).
+    let mut dropped = n - entries.len();
+    loop {
+        let text = format!("+{dropped} more");
+        let more_pitch = legend_pitch(&text, theme);
+        let row_count = entries.iter().filter(|e| e.row == row).count();
+        let last_x = entries
+            .iter()
+            .filter(|e| e.row == row)
+            .map(|e| e.x_offset + pitches[e.break_idx])
+            .fold(0.0_f64, f64::max);
+        if last_x + more_pitch <= avail_width || row_count == 0 {
+            return Some(LegendPlan {
+                rows: row + 1,
+                entries,
+                overflow: Some(LegendOverflow {
+                    dropped,
+                    row,
+                    x_offset: last_x,
+                    text,
+                }),
+                cols: 1,
+                col_pitch: 0.0,
+            });
+        }
+        entries.pop();
+        dropped += 1;
+    }
+}
+
+/// Draw all legends for the plot, honouring a B3-2 `plan_legend` layout
+/// when one changes anything (explicit `nrow`/`ncol`, or an overflowing
+/// horizontal legend). Falls back to the unchanged [`draw_legend`] path —
+/// same calls, same order — whenever `plan_legend` would return `None`,
+/// which keeps this byte-identical to 0.21 for every plot this plan
+/// doesn't touch. Used by `renderer.rs` (single and faceted); `draw_legend`
+/// itself stays the one `compose::capture_legend` calls.
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn draw_legend_planned(
+    scales: &ScaleSet,
+    theme: &Theme,
+    plot_area: &Rect,
+    backend: &mut dyn DrawBackend,
+    guide: &GuideLegend,
+    suppressed: &std::collections::HashSet<Aesthetic>,
+    // Review #158 finding 2: the single discrete guide's plan, computed
+    // exactly once in `layout_built` (`BuiltPlot::legend_plan`) — drawn
+    // verbatim here rather than recomputed against this (possibly
+    // shorter, post-row-reservation) `plot_area`, so the drawn "+N more"
+    // always matches the warning that plan already produced.
+    legend_plan: Option<&LegendPlan>,
+) -> Result<(), RenderError> {
+    if matches!(theme.legend_position, LegendPosition::None) {
+        return Ok(());
+    }
+
+    let legend_scales = legend_scales_for(scales, suppressed);
+    if legend_scales.is_empty() {
+        return Ok(());
+    }
+
+    let (legend_x, legend_y, mut is_horizontal) = legend_position(theme, plot_area);
+    if let Some(dir) = theme.legend_direction {
+        is_horizontal = matches!(dir, crate::theme::LegendDirection::Horizontal);
+    }
+
+    let mut offset_y = legend_y;
+    let mut offset_x = legend_x;
+
+    for aes in &legend_scales {
+        let scale = scales.get(aes).unwrap();
+        if !scale.is_discrete() {
+            // Continuous legends (colorbar, or size/alpha sampled breaks)
+            // aren't in scope for B3-2 — unchanged.
+            if matches!(aes, Aesthetic::Color | Aesthetic::Fill) {
+                let height =
+                    draw_continuous_legend_at(scale, theme, offset_x, offset_y, backend, guide)?;
+                if is_horizontal {
+                    offset_x += theme.legend_key_width
+                        + theme.legend_text.size * 6.0
+                        + theme.legend_spacing * 2.0;
+                } else {
+                    offset_y += height + theme.legend_spacing * 2.0;
+                }
+            } else {
+                let height = draw_discrete_legend_at(
+                    scales,
+                    aes,
+                    scale,
+                    theme,
+                    offset_x,
+                    offset_y,
+                    backend,
+                    guide,
+                    is_horizontal,
+                )?;
+                if is_horizontal {
+                    offset_x += theme.legend_key_width
+                        + theme.legend_text.size * 6.0
+                        + theme.legend_spacing * 2.0;
+                } else {
+                    offset_y += height + theme.legend_spacing * 2.0;
+                }
+            }
+            continue;
+        }
+
+        // Explicit nrow/ncol and auto-wrap are both scoped to a single
+        // discrete guide (D7's "one discrete guide"; several simultaneous
+        // guides are a follow-up, sipemu/ggplot-rs#155).
+        if legend_scales.len() != 1 {
+            if is_horizontal {
+                let width = draw_discrete_legend_at(
+                    scales, aes, scale, theme, offset_x, offset_y, backend, guide, true,
+                )?;
+                offset_x += width + theme.legend_spacing * 2.0;
+            } else {
+                let height = draw_discrete_legend_at(
+                    scales, aes, scale, theme, offset_x, offset_y, backend, guide, false,
+                )?;
+                offset_y += height + theme.legend_spacing * 2.0;
+            }
+            continue;
+        }
+
+        match legend_plan {
+            None => {
+                if is_horizontal {
+                    let width = draw_discrete_legend_at(
+                        scales, aes, scale, theme, offset_x, offset_y, backend, guide, true,
+                    )?;
+                    offset_x += width + theme.legend_spacing * 2.0;
+                } else {
+                    let height = draw_discrete_legend_at(
+                        scales, aes, scale, theme, offset_x, offset_y, backend, guide, false,
+                    )?;
+                    offset_y += height + theme.legend_spacing * 2.0;
+                }
+            }
+            Some(plan) => {
+                let height = draw_discrete_legend_grid(
+                    scales, aes, scale, theme, offset_x, offset_y, backend, guide, plan,
+                )?;
+                if is_horizontal {
+                    offset_x += plot_area.width; // single-guide-per-row scope (D7)
+                } else {
+                    offset_y += height + theme.legend_spacing * 2.0;
+                }
+            }
+        }
+    }
+
+    Ok(())
+}
+
+/// Draw a discrete legend using a [`LegendPlan`] (explicit grid or
+/// auto-wrap). Returns the total height used (including any "+N more"
+/// row).
+#[allow(clippy::too_many_arguments)]
+fn draw_discrete_legend_grid(
+    scales: &ScaleSet,
+    aes: &Aesthetic,
+    scale: &dyn crate::scale::Scale,
+    theme: &Theme,
+    legend_x: f64,
+    legend_y: f64,
+    backend: &mut dyn DrawBackend,
+    guide: &GuideLegend,
+    plan: &LegendPlan,
+) -> Result<f64, RenderError> {
+    let mut breaks = scale.breaks();
+    if breaks.is_empty() {
+        return Ok(0.0);
+    }
+    if guide.reverse {
+        breaks.reverse();
+    }
+
+    let swatch_size = theme.legend_key_width;
+    let item_height = theme.legend_key_height;
+
+    let title = guide.title.as_deref().unwrap_or_else(|| scale.name());
+    let legend_family = if theme.legend_title.family.is_empty() {
+        None
+    } else {
+        Some(theme.legend_title.family.clone())
+    };
+    let title_offset = if !title.is_empty() {
+        backend.draw_text(
+            title,
+            (legend_x, legend_y),
+            &TextStyle {
+                color: theme.legend_title.color,
+                size: theme.legend_title.size,
+                anchor: TextAnchor::Start,
+                angle: 0.0,
+                family: legend_family,
+                face: theme.legend_title.face,
+            },
+        )?;
+        theme.legend_title.size + 4.0
+    } else {
+        0.0
+    };
+    let items_y = legend_y + title_offset;
+
+    for entry in &plan.entries {
+        let (pos, label) = &breaks[entry.break_idx];
+        let x = legend_x + entry.x_offset;
+        let y = items_y + entry.row as f64 * item_height;
+        let center_x = x + swatch_size / 2.0;
+        let center_y = y + swatch_size / 2.0;
+
+        if theme.legend_key.visible {
+            if let Some(fill) = theme.legend_key.fill {
+                backend.draw_rect(
+                    (x, y),
+                    (x + swatch_size, y + swatch_size),
+                    &RectStyle {
+                        fill: Some(fill),
+                        stroke: theme.legend_key.color,
+                        stroke_width: theme.legend_key.width,
+                        alpha: 1.0,
+                        clip: false,
+                    },
+                )?;
+            }
+        }
+
+        draw_legend_swatch(
+            backend,
+            scales,
+            aes,
+            scale,
+            theme,
+            label,
+            *pos,
+            x,
+            y,
+            center_x,
+            center_y,
+            swatch_size,
+        )?;
+
+        let label_family = if theme.legend_text.family.is_empty() {
+            None
+        } else {
+            Some(theme.legend_text.family.clone())
+        };
+        backend.draw_text(
+            label,
+            (x + swatch_size + theme.legend_spacing, center_y),
+            &TextStyle {
+                color: theme.legend_text.color,
+                size: theme.legend_text.size,
+                anchor: TextAnchor::Start,
+                angle: 0.0,
+                family: label_family,
+                face: theme.legend_text.face,
+            },
+        )?;
+    }
+
+    // The overflow marker is text only — not a mark, no swatch.
+    if let Some(ov) = &plan.overflow {
+        let x = legend_x + ov.x_offset;
+        let y = items_y + ov.row as f64 * item_height + swatch_size / 2.0;
+        let label_family = if theme.legend_text.family.is_empty() {
+            None
+        } else {
+            Some(theme.legend_text.family.clone())
+        };
+        backend.draw_text(
+            &ov.text,
+            (x, y),
+            &TextStyle {
+                color: theme.legend_text.color,
+                size: theme.legend_text.size,
+                anchor: TextAnchor::Start,
+                angle: 0.0,
+                family: label_family,
+                face: theme.legend_text.face,
+            },
+        )?;
+    }
+
+    Ok(title_offset + plan.rows as f64 * item_height)
 }

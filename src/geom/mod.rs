@@ -166,8 +166,11 @@ pub trait Geom: Send + Sync {
     /// Geom-specific data preparation after the stat and position steps but
     /// before scale training (ggplot2's `GeomX$setup_data`) — e.g. a tile adds
     /// its `xmin`/`xmax`/`ymin`/`ymax` extents so continuous scales train on
-    /// them. Default: no-op.
-    fn setup_data(&self, _data: &mut DataFrame) {}
+    /// them. `warnings` is the layer's own build-warnings sink (B3-5: added
+    /// so `GeomBoxplot` can warn on an unparsable outlier value here, the
+    /// same channel every other build warning uses — never `eprintln!`).
+    /// Default: no-op.
+    fn setup_data(&self, _data: &mut DataFrame, _warnings: &mut Vec<String>) {}
 
     /// Whether the layer inherits the plot-level aesthetic mapping (ggplot2's
     /// `inherit.aes`). Reference-line geoms return false, as in ggplot2, so a
@@ -175,6 +178,26 @@ pub trait Geom: Send + Sync {
     /// Default true.
     fn inherit_aes(&self) -> bool {
         true
+    }
+
+    /// Canonical column names this geom only reads when the user actually
+    /// mapped the corresponding aesthetic (D3, B3-5) — never from a raw
+    /// column that merely happens to share the name (e.g. a SQL alias
+    /// literally called `lower`). `build_layer` drops any of these columns
+    /// right after `resolve_mappings` unless the aesthetic was mapped.
+    /// Default empty; `GeomBoxplot` returns `["lower", "middle", "upper",
+    /// "outliers"]`.
+    fn mapped_only_columns(&self) -> &'static [&'static str] {
+        &[]
+    }
+
+    /// Stat-dependent layer validation beyond [`required_aes`](Self::required_aes)
+    /// (B3-5): called once per layer with the resolved (pre-stat, post-D3-drop)
+    /// column names and the layer's stat name, before the stat runs. Default
+    /// no-op. `GeomBoxplot` requires `lower`/`middle`/`upper` to be mapped
+    /// under `stat="identity"`, else `y`.
+    fn validate_layer(&self, _pre_stat_columns: &[String], _stat_name: &str) -> Result<(), String> {
+        Ok(())
     }
 }
 
