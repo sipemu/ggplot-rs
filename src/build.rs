@@ -37,6 +37,16 @@ pub struct BuiltPlot {
     /// "geom_point: removed 2 rows containing non-finite values". See
     /// [`BuiltPlot::warnings`].
     pub warnings: Vec<String>,
+    /// The single discrete legend's B3-2 layout plan (explicit `nrow`/
+    /// `ncol` grid, or auto-wrap), computed exactly once in `layout_built`
+    /// and reused as-is by `draw_legend_planned` — never recomputed at
+    /// draw time, so the warning (based on this same plan) always matches
+    /// what's drawn (review #158 finding 2: computing it twice, once
+    /// against the pre-reservation panel height and once against the
+    /// post-reservation one, could warn "+7 more" while drawing "+15
+    /// more"). `None` when there's no such plan (nothing changes from the
+    /// 0.21 single-row/single-column path).
+    pub(crate) legend_plan: Option<crate::guide::legend::LegendPlan>,
 }
 
 impl BuiltPlot {
@@ -384,6 +394,7 @@ impl PlotBuilder {
             suppressed_aes,
             panel_scales,
             warnings,
+            legend_plan: None,
         })
     }
 
@@ -420,12 +431,30 @@ impl PlotBuilder {
         let mut keep = vec![true; n];
         for col in POSITION_COLS {
             if let Some(values) = data.column(col) {
+                // Several position columns are legitimately discrete
+                // (`Value::Str`) in this codebase — not just `x`/`y`, e.g.
+                // `geom_bracket`'s `xmin`/`xmax` hold category names for a
+                // bracket spanning two discrete groups. `Value::Na` is
+                // unambiguously missing everywhere, though (review #158
+                // finding 4: a SQL NULL in a boxplot position column used
+                // to silently map to 0 instead of being dropped with the
+                // standard warning; only `Float(NaN)` was caught before).
+                // The new boxplot-only `lower`/`middle`/`upper` columns
+                // have no legitimate discrete use anywhere, so a
+                // non-numeric, non-`Na` value there (a stray string) is
+                // missing too.
+                let strictly_numeric = matches!(*col, "lower" | "middle" | "upper");
                 for (i, v) in values.iter().enumerate() {
-                    if let crate::data::Value::Float(f) = v {
-                        let bad = f.is_nan() || (f.is_infinite() && !allow_infinite);
-                        if bad {
-                            keep[i] = false;
+                    let bad = match v {
+                        crate::data::Value::Na => true,
+                        crate::data::Value::Float(f) => {
+                            f.is_nan() || (f.is_infinite() && !allow_infinite)
                         }
+                        _ if strictly_numeric => v.as_f64().is_none(),
+                        _ => false,
+                    };
+                    if bad {
+                        keep[i] = false;
                     }
                 }
             }
@@ -916,10 +945,13 @@ impl PlotBuilder {
             ("middle", Aesthetic::Y),
             ("upper", Aesthetic::Y),
             // Boxplot outlier extent (B3-5, allowed #6): `GeomBoxplot::
-            // setup_data` adds these from the parsed `outliers` column so
-            // the y scale trains on them too (step 8b below).
-            ("ymin_final", Aesthetic::Y),
-            ("ymax_final", Aesthetic::Y),
+            // setup_data` adds these (under an internal-prefix name — see
+            // review #158 finding 5 and `aes::BOXPLOT_YMIN_FINAL`'s doc,
+            // so a raw column can never forge them) from the parsed
+            // `outliers` column, so the y scale trains on them too (step
+            // 8b below).
+            (crate::aes::BOXPLOT_YMIN_FINAL, Aesthetic::Y),
+            (crate::aes::BOXPLOT_YMAX_FINAL, Aesthetic::Y),
         ];
         for (col, aes) in &stat_aes {
             if working_data.has_column(col) {

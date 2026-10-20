@@ -202,6 +202,58 @@ fn vertical_legend_with_explicit_ncol_two() {
     let svg = render(base(4).guides(GuideLegend::new().with_ncol(2)), 500, 400);
     assert!(svg.contains(">Group 01<"));
     assert!(svg.contains(">Group 04<"));
+    assert!(
+        max_text_x(&svg) <= 500.0,
+        "max text x {} exceeds the 500px canvas",
+        max_text_x(&svg)
+    );
+}
+
+/// The max `x="..."` of any `<text>` element.
+fn max_text_x(svg: &str) -> f64 {
+    svg.match_indices("<text ")
+        .filter_map(|(start, _)| {
+            let tag_end = svg[start..].find('>').map(|e| start + e)?;
+            let tag = &svg[start..tag_end];
+            tag.split("x=\"")
+                .nth(1)?
+                .split('"')
+                .next()?
+                .parse::<f64>()
+                .ok()
+        })
+        .fold(0.0_f64, f64::max)
+}
+
+/// Regression for review #158 finding 3: a vertical legend's right-hand
+/// band was sized for exactly one column, so `ncol(2)`'s second column ran
+/// off the canvas with long-enough labels (the reviewer's repro: 8 labels
+/// ~27 chars at 640×400 put the second column at x≈687, past the 640px
+/// SVG). The layout must now reserve `(cols - 1) * col_pitch` extra band
+/// width for an explicit multi-column vertical grid.
+#[test]
+fn vertical_legend_ncol_two_with_long_labels_stays_on_canvas() {
+    let data = groups_with_labels(8, |i| format!("Moderately Long Group Label {}", i + 1));
+    let svg = render(
+        GGPlot::new(data)
+            .aes(Aes::new().x("x").y("y").color("g"))
+            .geom_point()
+            .guides(GuideLegend::new().with_ncol(2)),
+        640,
+        400,
+    );
+    let max_x = max_text_x(&svg);
+    assert!(
+        max_x <= 640.0,
+        "max text x {max_x} exceeds the 640px canvas"
+    );
+}
+
+fn groups_with_labels(n: usize, label: impl Fn(usize) -> String) -> Vec<(String, Vec<Value>)> {
+    let x: Vec<Value> = (0..n).map(|i| Value::Float(i as f64)).collect();
+    let y: Vec<Value> = (0..n).map(|i| Value::Float((i % 3) as f64)).collect();
+    let g: Vec<Value> = (0..n).map(label).map(Value::Str).collect();
+    vec![("x".into(), x), ("y".into(), y), ("g".into(), g)]
 }
 
 /// `nrow(0)`/`ncol(0)` and an `nrow·ncol < n` grid are invalid; both are
@@ -248,5 +300,89 @@ fn byte_identical_cases_are_unaffected() {
     for pos in [LegendPosition::Right, LegendPosition::Bottom] {
         let svg = render(base(3).legend_position(pos), 800, 400);
         assert!(!svg.contains(" more<"), "a 3-key legend never overflows");
+    }
+}
+
+/// The drawn "+N more" text, if any.
+fn drawn_plus_n(svg: &str) -> Option<usize> {
+    let start = svg.find(" more<")?;
+    let seg = &svg[..start];
+    let open = seg.rfind('>')? + 1;
+    seg[open..].trim_start_matches('+').parse().ok()
+}
+
+/// The warned overflow count, if any ("legend: {k} of {n} entries...").
+fn warned_n(warnings: &[String]) -> Option<usize> {
+    warnings.iter().find_map(|w| {
+        let rest = w.strip_prefix("legend: ")?;
+        let k = rest.split(' ').next()?;
+        k.parse().ok()
+    })
+}
+
+/// Regression for review #158 finding 2: `layout_built` used to plan
+/// against the pre-row-reservation panel height (for the warning and the
+/// space reservation) while `draw_legend_planned` re-planned against the
+/// shorter, post-reservation height (for drawing) — two different plans,
+/// so the warned "+N more" and the drawn "+N more" could disagree (the
+/// reviewer's repro: 30 keys at 320×400 warned "+7 more" but drew "+15
+/// more"). Now the plan is computed once (`BuiltPlot::legend_plan`) and
+/// reused verbatim for drawing, so a scan over heights and key counts
+/// (mirroring the reviewer's 180-of-207-mismatched scan) must always
+/// agree, and the reserved band height must match the drawn row count.
+#[test]
+fn drawn_plus_n_always_matches_the_warned_n_across_heights_and_counts() {
+    let mut checked_some_overflow = false;
+    for h in [120u32, 200, 320, 400, 480, 600] {
+        for n in [20usize, 40, 80] {
+            let (svg, warnings) = base(n)
+                .legend_position(LegendPosition::Bottom)
+                .render_svg_native_with_warnings(320, h)
+                .unwrap();
+            let warned = warned_n(&warnings);
+            let drawn = drawn_plus_n(&svg);
+            assert_eq!(
+                warned, drawn,
+                "h={h} n={n}: warned {warned:?} but drew {drawn:?}"
+            );
+            if warned.is_some() {
+                checked_some_overflow = true;
+            }
+        }
+    }
+    assert!(
+        checked_some_overflow,
+        "the scan should hit at least one overflowing combination"
+    );
+}
+
+/// The legend band `layout_built` reserves (via `legend_extra_rows`) must
+/// match the number of rows `draw_legend_planned` actually draws — not a
+/// taller band than what ends up on the page (also review #158 finding 2).
+#[test]
+fn reserved_band_height_matches_the_drawn_row_count() {
+    let n = 40;
+    let h = 320u32;
+    let svg = render(base(n).legend_position(LegendPosition::Bottom), 320, h);
+    // Panel bottom (from data-plot) plus the legend's own margin/key
+    // geometry should accommodate every drawn key <rect> — i.e. no legend
+    // swatch rect extends below the canvas.
+    let canvas_h = h as f64;
+    for (start, _) in svg.match_indices("<rect ") {
+        let tag_end = svg[start..].find('/').map(|e| start + e).unwrap_or(start);
+        let tag = &svg[start..tag_end];
+        if !tag.contains("width=\"12.00\"") {
+            continue; // not a legend key swatch (fixed 12px key size)
+        }
+        let y: f64 = tag
+            .split("y=\"")
+            .nth(1)
+            .and_then(|s| s.split('"').next())
+            .and_then(|s| s.parse().ok())
+            .unwrap_or(0.0);
+        assert!(
+            y <= canvas_h,
+            "a legend key at y={y} falls below the {canvas_h}px canvas — reserved band too short"
+        );
     }
 }

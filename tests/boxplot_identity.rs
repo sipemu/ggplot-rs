@@ -200,19 +200,111 @@ fn na_lower_row_is_dropped_with_the_standard_warning() {
         ("lower", vec![Value::Float(f64::NAN), Value::Float(3.0)]),
         ("middle", floats(&[5.0, 5.0])),
         ("upper", floats(&[7.0, 7.0])),
+        ("ymin", floats(&[1.0, 1.0])),
+        ("ymax", floats(&[8.0, 8.0])),
     ]))
     .aes(
         Aes::new()
             .x("x")
             .lower("lower")
             .middle("middle")
-            .upper("upper"),
+            .upper("upper")
+            .ymin("ymin")
+            .ymax("ymax"),
     )
     .geom_boxplot()
     .stat(StatIdentity)
     .render_svg_native_with_warnings(300, 300)
     .unwrap();
     assert!(!svg.contains("NaN"));
+    assert!(
+        warnings
+            .iter()
+            .any(|w| w.contains("geom_boxplot") && w.contains("non-finite values")),
+        "{warnings:?}"
+    );
+}
+
+/// Regression for review #158 finding 4: a SQL NULL (`Value::Na`, as
+/// opposed to a `Float(NaN)`) in a boxplot position column used to be
+/// silently rendered as 0 with no warning at all (the reviewer's repro: a
+/// `lower` of `Value::Na` drew a box titled "B: median 4 (0–5)"). It must
+/// now be dropped with the exact same "non-finite values" warning a NaN
+/// gets — row B must not appear at all, and the warning must mention it.
+#[test]
+fn na_lower_row_sql_null_is_dropped_not_drawn_at_zero() {
+    let (svg, warnings) = GGPlot::new(frame(vec![
+        ("x", strs(&["A", "B"])),
+        ("lower", vec![Value::Float(3.0), Value::Na]),
+        ("middle", floats(&[5.0, 4.0])),
+        ("upper", floats(&[7.0, 5.0])),
+        ("ymin", floats(&[1.0, 1.0])),
+        ("ymax", floats(&[8.0, 8.0])),
+    ]))
+    .aes(
+        Aes::new()
+            .x("x")
+            .lower("lower")
+            .middle("middle")
+            .upper("upper")
+            .ymin("ymin")
+            .ymax("ymax"),
+    )
+    .geom_boxplot()
+    .stat(StatIdentity)
+    .render_svg_native_with_warnings(300, 300)
+    .unwrap();
+    // The dropped row's box must not render at all — specifically not as
+    // a box "from 0" (the pre-fix bug).
+    assert!(
+        !svg.contains("median 4 (0"),
+        "row B must not silently render from 0: {svg}"
+    );
+    assert!(
+        !svg.contains(">B<"),
+        "row B's category must not appear: {svg}"
+    );
+    assert!(
+        warnings
+            .iter()
+            .any(|w| w.contains("geom_boxplot") && w.contains("non-finite values")),
+        "{warnings:?}"
+    );
+}
+
+/// A `Value::Na` in a boxplot's `middle`/`upper` is dropped the same way.
+#[test]
+fn na_middle_and_upper_rows_are_also_dropped() {
+    let (svg, warnings) = GGPlot::new(frame(vec![
+        ("x", strs(&["A", "B", "C"])),
+        ("lower", floats(&[3.0, 3.0, 3.0])),
+        (
+            "middle",
+            vec![Value::Float(5.0), Value::Na, Value::Float(5.0)],
+        ),
+        (
+            "upper",
+            vec![Value::Float(7.0), Value::Float(7.0), Value::Na],
+        ),
+        ("ymin", floats(&[1.0, 1.0, 1.0])),
+        ("ymax", floats(&[8.0, 8.0, 8.0])),
+    ]))
+    .aes(
+        Aes::new()
+            .x("x")
+            .lower("lower")
+            .middle("middle")
+            .upper("upper")
+            .ymin("ymin")
+            .ymax("ymax"),
+    )
+    .geom_boxplot()
+    .stat(StatIdentity)
+    .render_svg_native_with_warnings(300, 300)
+    .unwrap();
+    assert!(svg.contains(">A<"), "row A (fully numeric) must survive");
+    assert!(!svg.contains(">B<"), "row B (Na middle) must be dropped");
+    assert!(!svg.contains(">C<"), "row C (Na upper) must be dropped");
     assert!(
         warnings
             .iter()
@@ -230,6 +322,8 @@ fn tooltip_and_data_attr_reach_the_box() {
         ("lower", floats(&[3.0])),
         ("middle", floats(&[5.0])),
         ("upper", floats(&[7.0])),
+        ("ymin", floats(&[1.0])),
+        ("ymax", floats(&[8.0])),
         ("grade", strs(&["B"])),
     ]))
     .aes(
@@ -238,6 +332,8 @@ fn tooltip_and_data_attr_reach_the_box() {
             .lower("lower")
             .middle("middle")
             .upper("upper")
+            .ymin("ymin")
+            .ymax("ymax")
             .data_attr("grade", "grade"),
     )
     .geom_boxplot()
@@ -310,6 +406,97 @@ fn five_number_template_formats_through_the_y_scale_including_log10() {
     assert!(
         log10.contains("<title>1/10/100/1000/10000</title>"),
         "{log10}"
+    );
+}
+
+/// Review #158 finding 5: under `stat = "identity"`, ggplot2 4.0.3 also
+/// requires `ymin`/`ymax` (plan §0's R table), not just `lower`/`middle`/
+/// `upper` — a layer missing them used to render whisker-less boxes with
+/// no error at all.
+#[test]
+fn missing_ymin_ymax_under_identity_is_a_validation_error() {
+    let result = GGPlot::new(frame(vec![
+        ("x", strs(&["A"])),
+        ("lower", floats(&[3.0])),
+        ("middle", floats(&[5.0])),
+        ("upper", floats(&[7.0])),
+    ]))
+    .aes(
+        Aes::new()
+            .x("x")
+            .lower("lower")
+            .middle("middle")
+            .upper("upper"),
+    )
+    .geom_boxplot()
+    .stat(StatIdentity)
+    .render_svg_native_with_size(300, 300);
+    assert!(
+        matches!(result, Err(GGError::ValidationError(_))),
+        "{result:?}"
+    );
+}
+
+/// A numeric (not comma-list-string) `outliers` cell is a single outlier,
+/// not silently ignored (review #158 finding 5).
+#[test]
+fn numeric_outliers_cell_is_treated_as_a_single_outlier() {
+    let (svg, domain) = render_with_ydomain(
+        GGPlot::new(frame(vec![
+            ("x", strs(&["A"])),
+            ("lower", floats(&[3.0])),
+            ("middle", floats(&[5.0])),
+            ("upper", floats(&[7.0])),
+            ("ymin", floats(&[1.0])),
+            ("ymax", floats(&[8.0])),
+            ("outliers", floats(&[50.0])),
+        ]))
+        .aes(
+            Aes::new()
+                .x("x")
+                .lower("lower")
+                .middle("middle")
+                .upper("upper")
+                .ymin("ymin")
+                .ymax("ymax")
+                .outliers("outliers"),
+        )
+        .geom_boxplot()
+        .stat(StatIdentity),
+        300,
+        300,
+    );
+    assert_eq!(svg.matches("<circle ").count(), 1, "{svg}");
+    assert!(
+        domain.1 >= 50.0 - 1e-6,
+        "a numeric outliers cell must still widen y: {domain:?}"
+    );
+}
+
+/// Review #158 finding 5 (the `ymin_final`/`ymax_final` leak): these
+/// internal outlier-extent columns are trained into the y scale at build
+/// Step 8b for *every* layer. Before routing them through an internal-
+/// prefix name, a raw source column that happened to be named
+/// `ymin_final` — unrelated to any boxplot — silently widened an
+/// unrelated geom's y domain (the reviewer's repro: `geom_point` with a
+/// raw `ymin_final = -500` gave a y domain of roughly -527..77). A raw
+/// column with that exact name must now be inert.
+#[test]
+fn raw_ymin_final_column_does_not_leak_into_an_unrelated_geoms_y_domain() {
+    let (_, domain) = render_with_ydomain(
+        GGPlot::new(frame(vec![
+            ("x", floats(&[1.0, 2.0, 3.0])),
+            ("y", floats(&[10.0, 20.0, 30.0])),
+            ("ymin_final", floats(&[-500.0, -500.0, -500.0])),
+        ]))
+        .aes(Aes::new().x("x").y("y"))
+        .geom_point(),
+        300,
+        300,
+    );
+    assert!(
+        domain.0 > -100.0,
+        "a raw, unmapped `ymin_final` column must not widen geom_point's y domain: {domain:?}"
     );
 }
 

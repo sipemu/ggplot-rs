@@ -31,6 +31,19 @@ fn count_text_elements(svg: &str) -> usize {
     svg.matches("<text ").count()
 }
 
+/// The panel's width from `data-plot="x y w h"`.
+fn panel_width(svg: &str) -> f64 {
+    let start = svg.find("data-plot=\"").unwrap() + "data-plot=\"".len();
+    let rest = &svg[start..];
+    let end = rest.find('"').unwrap();
+    rest[..end]
+        .split_whitespace()
+        .nth(2)
+        .unwrap()
+        .parse()
+        .unwrap()
+}
+
 /// One point per month across two years (epoch seconds), so the date
 /// labels (`%Y-%m-%d`) are long — ~10 characters — and crowd a narrow axis.
 fn timeseries(n: usize) -> Vec<(String, Vec<Value>)> {
@@ -180,4 +193,69 @@ fn a_wide_chart_is_unaffected_by_reserve() {
         500,
     );
     assert_eq!(clip, reserve, "a wide chart's labels already fit");
+}
+
+/// Regression for review #158 finding 1 (HIGH): `Reserve`'s left/right
+/// divisors were inverted (`deficit / p` instead of `deficit / (1 − p)` on
+/// the left, and the mirror image on the right), over-reserving by about
+/// `1 / p_last` — roughly 20× at a typical `p_last ≈ 0.95` — and collapsing
+/// ordinary charts to the panel-width floor. A 600×300 date line whose last
+/// label overflows the canvas by `d` px must narrow the panel by *about*
+/// `d` px (bounded well under 2×d here, since this case's `p_last` is close
+/// to 1), never by anywhere near 20×d.
+#[test]
+fn reserve_narrows_the_panel_by_about_the_overflow_not_20x() {
+    const W: u32 = 600;
+    const H: u32 = 300;
+    let clip = render(date_plot(10).axis_text_x_fit(AxisLabelFit::Clip), W, H);
+    let reserve = render(date_plot(10).axis_text_x_fit(AxisLabelFit::Reserve), W, H);
+
+    let clip_w = panel_width(&clip);
+    let reserve_w = panel_width(&reserve);
+    let narrowed_by = clip_w - reserve_w;
+    assert!(
+        narrowed_by > 1.0,
+        "this case must actually overflow: {narrowed_by}"
+    );
+
+    // The last label's measured overflow past the canvas edge under Clip.
+    let last_label = "2021-10-14";
+    let x = label_x(&clip, last_label).expect("last label");
+    let half_w = ggplot_rs::render::text::text_width(last_label, 8.8) / 2.0;
+    let deficit = (x + half_w) - (W as f64 - 1.0);
+    assert!(deficit > 1.0, "this case must actually overflow: {deficit}");
+
+    // The old (inverted) formula divided by `1 - p_last` (~0.05-0.1 here),
+    // which would narrow the panel by roughly 10-20x the deficit — easily
+    // 150+ px. The fix divides by `p_last` (close to 1 here), so the panel
+    // narrows by close to, and at most ~1.5x, the deficit.
+    assert!(
+        narrowed_by < deficit * 1.5,
+        "narrowed by {narrowed_by}, deficit was {deficit} — looks like the inverted-divisor bug"
+    );
+    assert!(
+        narrowed_by < 30.0,
+        "narrowed by {narrowed_by} px — far more than this ~{deficit}px overflow justifies"
+    );
+}
+
+/// The 280px and 500px narrow-date-axis cases from review #158 stay sane
+/// (small, proportional reservations — not collapsed to the panel-width
+/// floor of 50px).
+#[test]
+fn reserve_stays_sane_on_the_280_and_500_px_cases() {
+    for w in [280u32, 500] {
+        let clip = render(date_plot(6).axis_text_x_fit(AxisLabelFit::Clip), w, 300);
+        let reserve = render(date_plot(6).axis_text_x_fit(AxisLabelFit::Reserve), w, 300);
+        let clip_w = panel_width(&clip);
+        let reserve_w = panel_width(&reserve);
+        assert!(
+            reserve_w > clip_w - 30.0,
+            "w={w}: reserve panel {reserve_w} collapsed too far below clip's {clip_w}"
+        );
+        assert!(
+            reserve_w > 50.1,
+            "w={w}: reserve panel {reserve_w} hit the panel-width floor — looks collapsed"
+        );
+    }
 }

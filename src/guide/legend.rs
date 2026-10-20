@@ -622,6 +622,14 @@ pub(crate) struct LegendPlan {
     pub rows: usize,
     pub entries: Vec<LegendEntry>,
     pub overflow: Option<LegendOverflow>,
+    /// Columns in an explicit grid (always 1 for the horizontal auto-wrap
+    /// path, which never adds columns). Review #158 finding 3: a vertical
+    /// legend with `ncol > 1` needs `(cols − 1) · col_pitch` of extra
+    /// width reserved, the same way extra rows are reserved for height.
+    pub cols: usize,
+    /// The per-column horizontal pitch an explicit grid uses (0 for the
+    /// auto-wrap path, which doesn't have columns in this sense).
+    pub col_pitch: f64,
 }
 
 /// Per-key horizontal pitch (swatch + spacing + label + gap): the larger of
@@ -690,6 +698,8 @@ pub(crate) fn plan_legend(
             rows,
             entries,
             overflow: None,
+            cols,
+            col_pitch,
         });
     }
 
@@ -734,6 +744,8 @@ pub(crate) fn plan_legend(
             rows: row + 1,
             entries,
             overflow: None,
+            cols: 1,
+            col_pitch: 0.0,
         });
     }
 
@@ -759,6 +771,8 @@ pub(crate) fn plan_legend(
                     x_offset: last_x,
                     text,
                 }),
+                cols: 1,
+                col_pitch: 0.0,
             });
         }
         entries.pop();
@@ -773,13 +787,20 @@ pub(crate) fn plan_legend(
 /// which keeps this byte-identical to 0.21 for every plot this plan
 /// doesn't touch. Used by `renderer.rs` (single and faceted); `draw_legend`
 /// itself stays the one `compose::capture_legend` calls.
-pub fn draw_legend_planned(
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn draw_legend_planned(
     scales: &ScaleSet,
     theme: &Theme,
     plot_area: &Rect,
     backend: &mut dyn DrawBackend,
     guide: &GuideLegend,
     suppressed: &std::collections::HashSet<Aesthetic>,
+    // Review #158 finding 2: the single discrete guide's plan, computed
+    // exactly once in `layout_built` (`BuiltPlot::legend_plan`) — drawn
+    // verbatim here rather than recomputed against this (possibly
+    // shorter, post-row-reservation) `plot_area`, so the drawn "+N more"
+    // always matches the warning that plan already produced.
+    legend_plan: Option<&LegendPlan>,
 ) -> Result<(), RenderError> {
     if matches!(theme.legend_position, LegendPosition::None) {
         return Ok(());
@@ -854,20 +875,7 @@ pub fn draw_legend_planned(
             continue;
         }
 
-        let breaks = scale.breaks();
-        let mut discard = Vec::new();
-        let validated = guide.validated(breaks.len(), &mut discard);
-        let avail_width = (plot_area.x + plot_area.width - offset_x).max(0.0);
-        let plan = plan_legend(
-            &breaks,
-            &validated,
-            theme,
-            avail_width,
-            plot_area.height,
-            is_horizontal,
-        );
-
-        match plan {
+        match legend_plan {
             None => {
                 if is_horizontal {
                     let width = draw_discrete_legend_at(
@@ -883,7 +891,7 @@ pub fn draw_legend_planned(
             }
             Some(plan) => {
                 let height = draw_discrete_legend_grid(
-                    scales, aes, scale, theme, offset_x, offset_y, backend, guide, &plan,
+                    scales, aes, scale, theme, offset_x, offset_y, backend, guide, plan,
                 )?;
                 if is_horizontal {
                     offset_x += plot_area.width; // single-guide-per-row scope (D7)

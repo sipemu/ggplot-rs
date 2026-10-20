@@ -24,6 +24,11 @@ pub(crate) struct LayoutExtras {
     pub left: f64,
     pub right: f64,
     pub legend_extra_rows: usize,
+    /// Extra legend band width (B3-2, review #158 finding 3): a vertical
+    /// explicit grid with `ncol > 1` needs `(cols − 1) · col_pitch` beyond
+    /// the single-column `legend_size` estimate, or its later columns run
+    /// off the canvas.
+    pub legend_extra_width: f64,
 }
 
 impl PlotLayout {
@@ -149,6 +154,7 @@ impl PlotLayout {
                 + theme.legend_spacing
                 + theme.legend_text.size * 6.0
                 + theme.legend_margin.right
+                + extras.legend_extra_width
         } else {
             0.0
         };

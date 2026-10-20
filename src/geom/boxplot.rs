@@ -290,7 +290,11 @@ impl Geom for GeomBoxplot {
     fn validate_layer(&self, pre_stat_columns: &[String], stat_name: &str) -> Result<(), String> {
         let has = |c: &str| pre_stat_columns.iter().any(|x| x == c);
         if stat_name == "identity" {
-            for c in ["lower", "middle", "upper"] {
+            // ggplot2 4.0.3's own stat="identity" boxplot requires the
+            // full five-number summary (plan §0's R table) — review #158
+            // finding 5: this previously only required lower/middle/upper,
+            // silently rendering whisker-less boxes with no ymin/ymax.
+            for c in ["lower", "middle", "upper", "ymin", "ymax"] {
                 if !has(c) {
                     return Err(format!(
                         "geom_boxplot requires aesthetic '{c}' under stat=\"identity\" but it was not provided"
@@ -341,6 +345,15 @@ impl Geom for GeomBoxplot {
                         .join(", ");
                     (vals, Value::Str(joined))
                 }
+                // Review #158 finding 5: a numeric `outliers` cell (a
+                // single value, not a comma list) is a single outlier, not
+                // silently ignored. Normalised to the same `Value::Str`
+                // shape as the parsed-list case, so `draw`'s plain
+                // split/parse keeps working unchanged.
+                Some(v) if v.as_f64().is_some_and(f64::is_finite) => {
+                    let f = v.as_f64().unwrap();
+                    (vec![f], Value::Str(f.to_string()))
+                }
                 Some(other) => (Vec::new(), other.clone()),
                 None => (Vec::new(), Value::Na),
             };
@@ -369,7 +382,11 @@ impl Geom for GeomBoxplot {
         }
 
         data.add_column("outliers".to_string(), cleaned);
-        data.add_column("ymin_final".to_string(), ymin_final);
-        data.add_column("ymax_final".to_string(), ymax_final);
+        // Review #158 finding 5: an internal-prefix name (never a raw
+        // source column can forge it — see `BOXPLOT_YMIN_FINAL`'s doc),
+        // so only this geom's own `setup_data` can ever produce these,
+        // not a SQL alias/leftover column on an unrelated geom.
+        data.add_column(crate::aes::BOXPLOT_YMIN_FINAL.to_string(), ymin_final);
+        data.add_column(crate::aes::BOXPLOT_YMAX_FINAL.to_string(), ymax_final);
     }
 }

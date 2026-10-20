@@ -2587,11 +2587,38 @@ impl GGPlot {
                         if deficit_left <= 0.0 && deficit_right <= 0.0 {
                             break;
                         }
-                        if deficit_left > 0.0 {
-                            extras.left += deficit_left / first.0.max(0.05);
-                        }
-                        if deficit_right > 0.0 {
-                            extras.right += deficit_right / (1.0 - last.0).max(0.05);
+                        // Growing the left margin by `eL` (holding `eR` fixed)
+                        // shifts a label at normalized position `p` right by
+                        // `eL·(1 − p)`; growing the right margin by `eR`
+                        // shifts it left by `eR·p` (the panel maps [0, 1] to
+                        // [plot_x + eL, plot_x + width − eR]). Review #158
+                        // finding 1: the original code divided by `p_first`
+                        // and `1 − p_last` — inverted, which over-reserved
+                        // by about `1/p_last` (≈20× at a typical p_last≈0.95).
+                        let (p_first, p_last) = (first.0, last.0);
+                        if deficit_left > 0.0 && deficit_right > 0.0 {
+                            // Both ends overflow: solve the 2×2 system so
+                            // each margin accounts for its effect on *both*
+                            // labels, rather than correcting them
+                            // independently and overshooting.
+                            let (a, b, c, d) = (1.0 - p_first, p_first, 1.0 - p_last, p_last);
+                            let det = a * d - b * c;
+                            if det.abs() > 0.01 {
+                                extras.left +=
+                                    ((deficit_left * d + deficit_right * b) / det).max(0.0);
+                                extras.right +=
+                                    ((deficit_right * a + deficit_left * c) / det).max(0.0);
+                            } else {
+                                // Degenerate (first and last break nearly
+                                // coincide in normalized space): fall back
+                                // to the independent, clamped formulas.
+                                extras.left += deficit_left / (1.0 - p_first).max(0.05);
+                                extras.right += deficit_right / p_last.max(0.05);
+                            }
+                        } else if deficit_left > 0.0 {
+                            extras.left += deficit_left / (1.0 - p_first).max(0.05);
+                        } else if deficit_right > 0.0 {
+                            extras.right += deficit_right / p_last.max(0.05);
                         }
                     }
                 }
@@ -2651,6 +2678,14 @@ impl GGPlot {
                         built.warnings.extend(legend_warnings);
                         if let Some(plan) = &plan {
                             extras.legend_extra_rows = plan.rows.saturating_sub(1);
+                            // Review #158 finding 3: a vertical explicit
+                            // grid with ncol > 1 needs extra legend band
+                            // width for its later columns, or they run off
+                            // the canvas (cols is always 1, col_pitch 0,
+                            // for the horizontal auto-wrap path, so this is
+                            // a no-op there).
+                            extras.legend_extra_width =
+                                plan.cols.saturating_sub(1) as f64 * plan.col_pitch;
                             if let Some(ov) = &plan.overflow {
                                 let n = breaks.len();
                                 let shown = n - ov.dropped;
@@ -2660,6 +2695,12 @@ impl GGPlot {
                                 ));
                             }
                         }
+                        // Review #158 finding 2: store this exact plan so
+                        // `draw_legend_planned` draws it verbatim instead of
+                        // recomputing against the (shorter) post-reservation
+                        // panel height, which could warn "+7 more" while
+                        // drawing "+15 more".
+                        built.legend_plan = plan;
                     }
                 }
             }

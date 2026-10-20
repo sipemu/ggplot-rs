@@ -37,8 +37,9 @@ guarded by `tests/default_output_022.rs`.
 - `geom_boxplot(stat = "identity")`: new `Lower`/`Middle`/`Upper`/
   `Outliers` aesthetics (`Aes::lower`/`middle`/`upper`/`outliers`, D4
   extensions) let a layer supply the five-number summary directly instead
-  of ggplot-rs computing it, matching ggplot2 (#149). `outliers` takes a
-  comma list with optional brackets (`"7, 9"` or `"[7, 9]"`); an
+  of ggplot-rs computing it, matching ggplot2 (#149) — `ymin`/`ymax` are
+  also required, as in ggplot2 4.0.3. `outliers` takes a comma list with
+  optional brackets (`"7, 9"` or `"[7, 9]"`), or a single bare number; an
   unparsable part is skipped with one warning. The boxplot now consumes
   `tooltip()`/`data_attr()` (`consumes_tooltips` is true).
 - `Geom::mapped_only_columns()` (D3, default empty — `GeomBoxplot` returns
@@ -48,12 +49,25 @@ guarded by `tests/default_output_022.rs`.
   (e.g. a SQL alias) can't be mistaken for a mapped one.
 - `Geom::validate_layer(pre_stat_columns, stat_name)` (default no-op):
   stat-dependent validation beyond `required_aes`. Under
-  `stat = "identity"`, `geom_boxplot` requires `lower`/`middle`/`upper`
-  to be mapped (a `ValidationError` otherwise); under the default stat,
-  it requires `y`.
+  `stat = "identity"`, `geom_boxplot` requires `lower`/`middle`/`upper`/
+  `ymin`/`ymax` to be mapped (a `ValidationError` otherwise, matching
+  ggplot2 4.0.3's own `stat_identity` boxplot requirement); under the
+  default stat, it requires `y`.
 
 ### Changed
 
+- Outer x-axis labels that would cross the SVG edge are kept on-canvas by
+  default (allowed #1, #2 — `AxisLabelFit::Reserve`, the new default):
+  the panel narrows by just the overflow if `Reserve` can reserve enough
+  margin, and a label whose own tick has scrolled off the canvas is
+  dropped rather than drawn off-page. A plot whose outer labels already
+  fit is unaffected (`tests/axis_label_fit.rs`;
+  `default_output_022`'s `wide_axis` case, re-blessed when the Reserve
+  formula bug — finding 1 below — was fixed).
+- A single horizontal legend that overflows its one-line layout now
+  auto-wraps to more rows instead of running off the panel (allowed #3,
+  D7); beyond `max_rows` it ends in a trailing "+N more" with a build
+  warning. A legend that already fits on one line is unaffected.
 - Tooltip-template placeholders for every position column
   (`xmin`/`xmax`/`xend`/`ymin`/`ymax`/`yend`/`lower`/`middle`/`upper`,
   D9 allowed #7) are now formatted through the x/y scale, the same as the
@@ -79,9 +93,27 @@ guarded by `tests/default_output_022.rs`.
 - `geom_errorbar`'s whisker caps shrink by the dodge group count under a
   discrete `position_dodge`, so caps from adjacent groups no longer
   visually overlap (#151). An un-dodged errorbar is unaffected.
+- A `Value::Na` (e.g. a SQL NULL) in a position column that is never
+  legitimately discrete (`ymin`/`ymax`/`xend`/`yend`/`lower`/`middle`/
+  `upper`/…, i.e. every position column except `x`/`y`, which may hold
+  discrete category values) is now dropped with the standard "removed N
+  row(s) containing non-finite values" warning, the same as `Float(NaN)`
+  already was — previously it silently mapped to 0 with no warning
+  (review #158 finding 4). The new `lower`/`middle`/`upper` columns also
+  drop a non-numeric, non-`Na` value (a stray string) the same way,
+  since they have no legitimate discrete use. A plot whose position data
+  has no `Na` is unaffected.
 
 ### Breaking
 
+- `Theme` gains two new public fields, `axis_text_x_fit: AxisLabelFit` and
+  `axis_text_x_check_overlap: bool` — an external `Theme { .. }`
+  struct-literal pattern without `..Default::default()` (or
+  `..theme_gray()`/another preset) no longer compiles.
+- `GuideLegend` gains two new public fields, `byrow: bool` and
+  `max_rows: Option<usize>` — same breakage for an external
+  `GuideLegend { .. }` struct literal without `..Default::default()`.
+  Neither struct is `#[non_exhaustive]`.
 - `guide::axis::draw_x_axis` gained a `canvas: &Rect` parameter (the full
   SVG viewport, not just the panel) — a deviation from the plan, needed
   for the outer-label-fit edge checks (B3-1): an off-canvas label can't

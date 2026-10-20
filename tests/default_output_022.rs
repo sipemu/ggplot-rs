@@ -199,35 +199,20 @@ fn size_data() -> Cols {
     ]
 }
 
-/// 20 discrete x values: long labels at a narrow width overflow the SVG
-/// edge at the outer ticks under 0.21.0's no-op axis fit (B3-1 territory).
+/// A monthly date x-axis whose last `%Y-%m-%d` label overflows the right
+/// canvas edge at this width — exercises allowed change #1 (`Reserve`
+/// narrows the panel to keep it on-canvas). Re-blessed in the commit that
+/// fixed review #158 finding 1 (the Reserve left/right divisors were
+/// inverted, which over-reserved by about 20× and would have collapsed
+/// this panel to the width floor instead of narrowing it proportionally;
+/// before that fix this case's hash was unaffected — the previous,
+/// differently-shaped `wide_axis` case never actually overflowed).
 fn wide_axis_data() -> Cols {
-    let labels = [
-        "January",
-        "February",
-        "March",
-        "April",
-        "May",
-        "June",
-        "July",
-        "August",
-        "September",
-        "October",
-        "November",
-        "December",
-        "Thirteen",
-        "Fourteen",
-        "Fifteen",
-        "Sixteen",
-        "Seventeen",
-        "Eighteen",
-        "Nineteen",
-        "Twenty",
-    ];
-    let n = labels.len();
-    let x: Vec<&str> = labels.to_vec();
-    let y: Vec<f64> = (0..n).map(|i| (i as f64 * 1.3).sin() * 5.0 + 6.0).collect();
-    vec![("x".into(), s(&x)), ("y".into(), f(&y))]
+    let base = 1_609_459_200.0; // 2021-01-01 UTC
+    let n = 10;
+    let t: Vec<f64> = (0..n).map(|i| base + i as f64 * 2_629_800.0).collect();
+    let y: Vec<f64> = (0..n).map(|i| (i as f64).sin()).collect();
+    vec![("t".into(), f(&t)), ("y".into(), f(&y))]
 }
 
 /// 16 discrete groups: a one-row horizontal legend overflows a 320px-wide
@@ -288,7 +273,7 @@ fn expected() -> Vec<(&'static str, u64)> {
         ("errorbar", 0xe7abdb6d7e210a85),
         ("errorbar_dodge", 0x5728c4bd5983c21c),
         ("size", 0xa5314ef4d0585c40),
-        ("wide_axis", 0x9d4188248632b19f),
+        ("wide_axis", 0xc0df1cb8d594b7d2),
         ("big_legend", 0x0a625a0466236f03),
     ]
 }
@@ -575,10 +560,15 @@ fn default_output_is_byte_identical_to_v0_21_0() {
             "wide_axis",
             hash_svg(
                 GGPlot::new(wide_axis_data())
-                    .aes(Aes::new().x("x").y("y"))
-                    .geom_col(),
+                    .aes(Aes::new().x("t").y("y"))
+                    .geom_line()
+                    .scale_x_datetime(
+                        ScaleDateTime::new()
+                            .with_date_breaks("14 days")
+                            .with_date_labels("%Y-%m-%d"),
+                    ),
+                600,
                 300,
-                260,
                 "wide_axis",
             ),
         ),
