@@ -189,6 +189,7 @@ pub fn theme_gray_base(base_size: f64) -> Theme {
             linetype: crate::render::backend::Linetype::Solid,
         },
         legend_bar_border: None,
+        geom: crate::theme::elements::ElementGeom::default(),
     }
 }
 
@@ -597,5 +598,6 @@ pub fn theme_void_base(base_size: f64) -> Theme {
             linetype: crate::render::backend::Linetype::Solid,
         },
         legend_bar_border: None,
+        geom: crate::theme::elements::ElementGeom::default(),
     }
 }

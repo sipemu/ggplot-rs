@@ -100,6 +100,17 @@ pub trait Geom: Send + Sync {
     /// default is a no-op; series geoms override it.
     fn set_series_color(&mut self, _color: (u8, u8, u8)) {}
 
+    /// Recolour this geom's *built-in default* colour/fill from the theme's
+    /// ink/paper/accent palette (B2-7's `element_geom`), called once per
+    /// layer before [`set_series_color`](Self::set_series_color). Default
+    /// no-op; a geom that honours this replaces only a field still at its
+    /// own hard-coded default (black/`(50, 50, 50)` → `ink`, white →
+    /// `paper`), so a mapped or explicit colour — and a brand colour
+    /// already applied by `set_series_color` — are never touched. `None`
+    /// fields of `ElementGeom` change nothing, so the default theme (no
+    /// ink/paper/accent set) stays byte-identical.
+    fn apply_element_geom(&mut self, _el: &crate::theme::elements::ElementGeom) {}
+
     /// Whether this geom draws from a 0 baseline, so the Y scale should include
     /// 0 even when `y` is explicitly mapped (bars/columns/area/histograms — as
     /// in ggplot2). Default false.
@@ -231,17 +242,21 @@ pub(crate) fn set_mark(
 }
 
 /// Resolve the font family for a text-drawing geom (text, label, repel,
-/// bracket, annotations) — B2-6: `geom_family` (the geom's own
-/// `fontfamily`, e.g. `GeomText::with_fontfamily`) when set, else
+/// bracket, annotations) — B2-6/B2-7's three-tier order: `geom_family`
+/// (the geom's own `fontfamily`, e.g. `GeomText::with_fontfamily`) when
+/// set, else `theme.geom.family` (B2-7's `element_geom`), else
 /// `theme.text.family` (read after `Theme::resolve_inheritance`, so an
 /// inherited value is already resolved), else `None` (the SVG backend's
 /// own `"sans-serif"` default). `ElementText::family` defaults to
-/// `"sans-serif"` itself, so with nothing configured anywhere this already
-/// returns `Some("sans-serif")` — the same string the backend would have
-/// defaulted to, so default output stays byte-identical.
+/// `"sans-serif"` itself and `theme.geom.family` defaults to `None`, so
+/// with nothing configured anywhere this already returns
+/// `Some("sans-serif")` — the same string the backend would have defaulted
+/// to, so default output stays byte-identical.
 pub(crate) fn resolve_font_family(geom_family: &str, theme: &Theme) -> Option<String> {
     if !geom_family.is_empty() {
         Some(geom_family.to_string())
+    } else if let Some(family) = &theme.geom.family {
+        Some(family.clone())
     } else if theme.text.family.is_empty() {
         None
     } else {

@@ -241,7 +241,7 @@ impl PlotBuilder {
                 &plot_data,
                 &plot_mapping,
                 &mut scale_set,
-                theme.primary,
+                &theme,
                 &facet_vars,
                 &mut warnings,
             )?;
@@ -627,10 +627,12 @@ impl PlotBuilder {
         plot_data: &DataFrame,
         plot_mapping: &Aes,
         scale_set: &mut ScaleSet,
-        primary: Option<(u8, u8, u8)>,
+        theme: &Theme,
         facet_vars: &[String],
         warnings: &mut Vec<String>,
     ) -> Result<BuiltLayer, GGError> {
+        let primary = theme.primary;
+        let geom_theme = &theme.geom;
         let Layer {
             data: layer_data,
             mapping: layer_mapping,
@@ -656,6 +658,10 @@ impl PlotBuilder {
         } else {
             layer_mapping.clone()
         };
+
+        // B2-7: geom ink/paper/accent palette, applied before the brand
+        // colour below so a primary colour still wins when both are set.
+        geom.apply_element_geom(geom_theme);
 
         // Brand/primary color: apply to a single-series geom only when the layer
         // maps neither color nor fill (an explicit aesthetic always wins) and

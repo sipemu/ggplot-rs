@@ -233,6 +233,15 @@ impl Geom for GeomBoxplot {
         "boxplot"
     }
 
+    fn apply_element_geom(&mut self, el: &crate::theme::elements::ElementGeom) {
+        if let (true, Some(ink)) = (self.color == (50, 50, 50), el.ink) {
+            self.color = ink;
+        }
+        if let (true, Some(paper)) = (self.fill == (255, 255, 255), el.paper) {
+            self.fill = paper;
+        }
+    }
+
     fn set_series_color(&mut self, color: (u8, u8, u8)) {
         self.fill = color;
     }

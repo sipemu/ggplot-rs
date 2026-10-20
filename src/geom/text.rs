@@ -143,6 +143,11 @@ impl Geom for GeomText {
     fn name(&self) -> &str {
         "text"
     }
+    fn apply_element_geom(&mut self, el: &crate::theme::elements::ElementGeom) {
+        if let (true, Some(ink)) = (self.color == (0, 0, 0), el.ink) {
+            self.color = ink;
+        }
+    }
 }
 
 /// Label geometry — like text but with a background rectangle.
@@ -294,6 +299,14 @@ impl Geom for GeomLabel {
     }
     fn name(&self) -> &str {
         "label"
+    }
+    fn apply_element_geom(&mut self, el: &crate::theme::elements::ElementGeom) {
+        if let (true, Some(ink)) = (self.color == (0, 0, 0), el.ink) {
+            self.color = ink;
+        }
+        if let (true, Some(paper)) = (self.fill == (255, 255, 255), el.paper) {
+            self.fill = paper;
+        }
     }
 }
 

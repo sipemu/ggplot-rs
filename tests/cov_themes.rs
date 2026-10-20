@@ -231,6 +231,7 @@ fn theme_update_render() {
         strip_text: Some(ElementText::default()),
         strip_background: Some(ElementRect::default()),
         plot_margin: Some(Margin::default()),
+        geom: Some(ElementGeom::default()),
     };
     assert_renders(base_plot().theme_update(update));
 

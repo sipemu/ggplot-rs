@@ -3,7 +3,7 @@ pub mod config;
 pub mod elements;
 pub mod presets;
 
-pub use elements::{ElementLine, ElementRect, ElementText};
+pub use elements::{ElementGeom, ElementLine, ElementRect, ElementText};
 
 /// Position of the legend.
 #[derive(Clone, Debug)]
@@ -145,6 +145,9 @@ pub struct Theme {
     /// (`legend_key.color`, else dark grey, 0.5 wide); `ElementLine::blank()`
     /// hides it.
     pub legend_bar_border: Option<ElementLine>,
+    /// Geom ink/paper/accent/family palette (ggplot2 4.0's `element_geom`,
+    /// B2-7). Every field `None` (the default) changes nothing.
+    pub geom: ElementGeom,
 }
 
 impl Theme {
@@ -157,6 +160,20 @@ impl Theme {
     /// Set the brand/primary color (builder style).
     pub fn with_primary(mut self, color: (u8, u8, u8)) -> Self {
         self.primary = Some(color);
+        self
+    }
+
+    /// Set the geom ink/paper/accent/family palette (B2-7).
+    pub fn set_geom(mut self, el: ElementGeom) -> Self {
+        self.geom = el;
+        self
+    }
+
+    /// Set just the geom ink and paper colours (B2-7's stretch goal),
+    /// leaving `accent`/`family` as they were.
+    pub fn with_ink_paper(mut self, ink: (u8, u8, u8), paper: (u8, u8, u8)) -> Self {
+        self.geom.ink = Some(ink);
+        self.geom.paper = Some(paper);
         self
     }
 
@@ -535,6 +552,9 @@ impl Theme {
         if let Some(v) = upd.plot_margin {
             self.plot_margin = v;
         }
+        if let Some(v) = upd.geom {
+            self.geom = v;
+        }
         self
     }
 }
@@ -567,6 +587,8 @@ pub struct ThemeUpdate {
     pub strip_text: Option<ElementText>,
     pub strip_background: Option<ElementRect>,
     pub plot_margin: Option<Margin>,
+    /// Geom ink/paper/accent/family palette (B2-7).
+    pub geom: Option<ElementGeom>,
 }
 
 impl Default for Theme {

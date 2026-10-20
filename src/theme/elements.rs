@@ -97,3 +97,58 @@ impl Default for ElementRect {
         }
     }
 }
+
+/// Geom "ink"/"paper"/"accent" palette (ggplot2 4.0's `element_geom`,
+/// B2-7): recolours a geom's *built-in default* colour without touching
+/// every geom's own color/fill field or needing a mapped/explicit colour
+/// to be set first. `None` everywhere (the default) changes nothing —
+/// byte-identical output. Marked `#[non_exhaustive]` so a later field can
+/// be added without an `..Default::default()` break.
+///
+/// A default [`Geom::apply_element_geom`](crate::geom::Geom::apply_element_geom)
+/// is a no-op; a geom that honours this overrides it, replacing only
+/// fields still at their own built-in default (so a mapped or explicit
+/// colour is never touched) — called once per layer, before the brand
+/// [`Theme::primary`](super::Theme::primary) colour is applied.
+#[non_exhaustive]
+#[derive(Clone, Debug, Default)]
+pub struct ElementGeom {
+    /// Replaces a geom's built-in black / `(50, 50, 50)` line, text or
+    /// outline colour (including the legend key colour).
+    pub ink: Option<(u8, u8, u8)>,
+    /// Replaces a geom's built-in white fill.
+    pub paper: Option<(u8, u8, u8)>,
+    /// Replaces the smooth line's built-in colour.
+    pub accent: Option<(u8, u8, u8)>,
+    /// Font family — the middle tier of B2-6's resolution order
+    /// (a geom's own `fontfamily`, then this, then `theme.text.family`).
+    pub family: Option<String>,
+}
+
+impl ElementGeom {
+    /// Builder for [`ink`](Self::ink) — `#[non_exhaustive]` blocks a
+    /// cross-crate struct literal even with `..Default::default()`, so
+    /// each field gets one of these.
+    pub fn with_ink(mut self, color: (u8, u8, u8)) -> Self {
+        self.ink = Some(color);
+        self
+    }
+
+    /// Builder for [`paper`](Self::paper).
+    pub fn with_paper(mut self, color: (u8, u8, u8)) -> Self {
+        self.paper = Some(color);
+        self
+    }
+
+    /// Builder for [`accent`](Self::accent).
+    pub fn with_accent(mut self, color: (u8, u8, u8)) -> Self {
+        self.accent = Some(color);
+        self
+    }
+
+    /// Builder for [`family`](Self::family).
+    pub fn with_family(mut self, family: &str) -> Self {
+        self.family = Some(family.to_string());
+        self
+    }
+}

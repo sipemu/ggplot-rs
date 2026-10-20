@@ -267,6 +267,16 @@ impl Geom for GeomSmooth {
         "smooth"
     }
 
+    fn apply_element_geom(&mut self, el: &crate::theme::elements::ElementGeom) {
+        const DEFAULT: (u8, u8, u8) = (51, 102, 204);
+        if let (true, Some(accent)) = (self.color == DEFAULT, el.accent) {
+            self.color = accent;
+        }
+        if let (true, Some(accent)) = (self.fill == DEFAULT, el.accent) {
+            self.fill = accent;
+        }
+    }
+
     fn set_series_color(&mut self, color: (u8, u8, u8)) {
         self.color = color;
         self.fill = color;
