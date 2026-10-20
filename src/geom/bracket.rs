@@ -98,6 +98,10 @@ impl Geom for GeomBracket {
                 Some(series),
                 value,
             );
+            // No scale backs the bracket's p-value column: nothing
+            // meaningful to format it through, so just reset (no leak from
+            // an earlier layer).
+            super::set_mark_formatted(backend, scales, None, &Aesthetic::Y, None);
 
             // Bar at `py` with end ticks pointing toward the data (+y is down in
             // screen space, so the ticks drop below the bar).

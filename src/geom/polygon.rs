@@ -107,6 +107,7 @@ impl Geom for GeomPolygon {
                 .collect();
             let series = super::series_key(data, first_idx);
             super::set_mark(backend, series.clone(), None, series, None);
+            super::set_mark_formatted(backend, scales, None, &Aesthetic::Y, None);
             super::set_row_extras(backend, data, first_idx);
 
             backend.draw_polygon(

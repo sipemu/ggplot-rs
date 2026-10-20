@@ -66,8 +66,16 @@ fn row_style(
 /// Hover metadata for one reference line: `data-series` (the row's colour /
 /// group level) and `data-value` (the intercept), with a `"<series>: y = v"`
 /// tooltip.
+///
+/// B2-4: with `svg_formatted_values` on, the value is formatted through the
+/// matching position scale (`what == "x"` → the x scale, else y) instead of
+/// the plain numeric display — in the tooltip, and (for a vline, which is
+/// the only caller that passes an `axis`) in `data-x` itself: a raw
+/// epoch-seconds number is not materially useful even un-formatted, so this
+/// one replaces rather than just adding `data-fx` alongside it.
 fn mark_line(
     backend: &mut dyn DrawBackend,
+    scales: &ScaleSet,
     data: &DataFrame,
     i: Option<usize>,
     what: &str,
@@ -76,11 +84,30 @@ fn mark_line(
 ) {
     let series = i.and_then(|i| super::series_key(data, i));
     let raw = super::raw_value(value);
-    let tip = raw.as_ref().map(|v| match &series {
-        Some(s) => format!("{s}: {what} = {}", super::tip_value(value)),
-        None => format!("{what} = {v}"),
+    let aes = if what == "x" {
+        Aesthetic::X
+    } else {
+        Aesthetic::Y
+    };
+    let formatted = if backend.wants_formatted_values() {
+        scales.get(&aes).and_then(|s| s.format_value(value))
+    } else {
+        None
+    };
+    let shown = formatted.clone().unwrap_or_else(|| super::tip_value(value));
+    let tip = raw.as_ref().map(|_| match &series {
+        Some(s) => format!("{s}: {what} = {shown}"),
+        None => format!("{what} = {shown}"),
     });
+    let axis = axis.map(|_| formatted.unwrap_or(shown));
     super::set_mark(backend, tip, axis, series, raw);
+    super::set_mark_formatted(
+        backend,
+        scales,
+        (what == "x").then_some(value),
+        &Aesthetic::Y,
+        (what == "y").then_some(value),
+    );
 }
 
 /// The rows to draw: one per row of `col` (finite values only), or the
@@ -159,7 +186,7 @@ impl Geom for GeomHline {
                     ..Default::default()
                 },
             };
-            mark_line(backend, data, row, "y", &value, None);
+            mark_line(backend, scales, data, row, "y", &value, None);
             let pts = sample_segment(coord, &plot_area, (0.0, ny), (1.0, ny));
             backend.draw_line(&pts, &style)?;
         }
@@ -248,7 +275,7 @@ impl Geom for GeomVline {
                 },
             };
             let axis = Some(super::tip_value(&value));
-            mark_line(backend, data, row, "x", &value, axis);
+            mark_line(backend, scales, data, row, "x", &value, axis);
             let pts = sample_segment(coord, &plot_area, (nx, 0.0), (nx, 1.0));
             backend.draw_line(&pts, &style)?;
         }
@@ -416,6 +443,8 @@ impl Geom for GeomAbline {
                 series,
                 super::raw_value(&Value::Float(slope)),
             );
+            // Slope/intercept aren't on either position scale — reset only.
+            super::set_mark_formatted(backend, scales, None, &Aesthetic::Y, None);
             for run in abline_runs(scales, slope, intercept) {
                 let mut pts = Vec::new();
                 for w in run.windows(2) {

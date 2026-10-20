@@ -84,12 +84,20 @@ impl Geom for GeomBoxplot {
             } else {
                 format!("{group}: median {} ({}–{})", r(middle), r(lower), r(upper))
             };
+            let middle_value = Value::Float(middle);
             super::set_mark(
                 backend,
                 Some(tip),
                 Some(group.clone()).filter(|g| !g.is_empty()),
                 super::series_key(data, i).or(Some(group).filter(|g| !g.is_empty())),
-                super::raw_value(&Value::Float(middle)),
+                super::raw_value(&middle_value),
+            );
+            super::set_mark_formatted(
+                backend,
+                scales,
+                Some(&x_col[i]),
+                &Aesthetic::Y,
+                Some(&middle_value),
             );
 
             // Box (IQR) — honour a mapped `fill` (e.g. by group), else the default.

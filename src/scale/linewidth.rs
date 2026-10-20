@@ -209,6 +209,14 @@ impl Scale for ScaleLinewidthContinuous {
         self.locale.as_ref()
     }
 
+    fn format_value(&self, value: &Value) -> Option<String> {
+        let f = value.as_f64()?;
+        if !f.is_finite() {
+            return None;
+        }
+        Some(self.format_label(f))
+    }
+
     fn aesthetic(&self) -> Aesthetic {
         Aesthetic::Linewidth
     }

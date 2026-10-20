@@ -114,6 +114,13 @@ impl Geom for GeomBar {
                 None => v.clone(),
             });
             super::set_mark(backend, tip, Some(super::tip_value(&x_col[i])), series, raw);
+            super::set_mark_formatted(
+                backend,
+                scales,
+                Some(&x_col[i]),
+                &Aesthetic::Y,
+                super::measured_raw(data, i),
+            );
             super::set_row_extras(backend, data, i);
 
             if coord.is_polar() {

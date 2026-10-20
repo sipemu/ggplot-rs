@@ -33,6 +33,15 @@ pub struct SvgBackend {
     /// Emit the root `data-plot` panel rect (off for composite pages, whose
     /// root is not a single panel).
     plot_attr: bool,
+    /// B2-4: whether `GGPlot::svg_formatted_values` is on — see
+    /// [`DrawBackend::wants_formatted_values`].
+    formatted_values: bool,
+    /// `data-fvalue` for the next drawn mark(s) — see
+    /// [`DrawBackend::set_mark_fvalue`].
+    mark_fvalue: Option<String>,
+    /// `data-fx` for the next drawn mark(s) — see
+    /// [`DrawBackend::set_mark_fx`].
+    mark_fx: Option<String>,
 }
 
 impl SvgBackend {
@@ -56,7 +65,17 @@ impl SvgBackend {
             root_attrs: Vec::new(),
             warnings: Vec::new(),
             plot_attr: true,
+            formatted_values: false,
+            mark_fvalue: None,
+            mark_fx: None,
         }
+    }
+
+    /// Turn `data-fvalue`/`data-fx` on for the whole render
+    /// ([`GGPlot::svg_formatted_values`](crate::plot::GGPlot::svg_formatted_values)).
+    /// Default off (set once, before drawing).
+    pub(crate) fn set_formatted_values(&mut self, on: bool) {
+        self.formatted_values = on;
     }
 
     /// Add extra attributes to the root `<svg>` element (e.g. the
@@ -133,6 +152,17 @@ impl SvgBackend {
             if let Some(v) = val {
                 pairs.push((name.to_string(), v.clone()));
             }
+        }
+        // B2-4: `data-fx` only when it says something `data-x` doesn't —
+        // most marks have a plain numeric x, where the "formatted" value is
+        // the same string, and a redundant duplicate attribute is noise.
+        if let Some(fx) = &self.mark_fx {
+            if self.axis_key.as_deref() != Some(fx.as_str()) {
+                pairs.push(("data-fx".to_string(), fx.clone()));
+            }
+        }
+        if let Some(fvalue) = &self.mark_fvalue {
+            pairs.push(("data-fvalue".to_string(), fvalue.clone()));
         }
         for (name, val) in &self.mark_attrs {
             if !is_valid_mark_attr_name(name) {
@@ -546,6 +576,18 @@ impl DrawBackend for SvgBackend {
 
     fn set_mark_attrs(&mut self, attrs: Vec<(String, String)>) {
         self.mark_attrs = attrs;
+    }
+
+    fn wants_formatted_values(&self) -> bool {
+        self.formatted_values
+    }
+
+    fn set_mark_fvalue(&mut self, value: Option<String>) {
+        self.mark_fvalue = value;
+    }
+
+    fn set_mark_fx(&mut self, value: Option<String>) {
+        self.mark_fx = value;
     }
 
     fn draw_circle(

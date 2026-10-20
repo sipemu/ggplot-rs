@@ -170,7 +170,8 @@ impl Geom for GeomSmooth {
                         },
                     )?;
                     draw_hover_marks(
-                        backend, &points, indices, x_col, y_col, ymin_col, ymax_col, line_color,
+                        backend, scales, &points, indices, x_col, y_col, ymin_col, ymax_col,
+                        line_color,
                     )?;
                 }
             }
@@ -234,7 +235,7 @@ impl Geom for GeomSmooth {
                 )?;
                 let rows: Vec<usize> = (0..data.nrows()).collect();
                 draw_hover_marks(
-                    backend, &points, &rows, x_col, y_col, ymin_col, ymax_col, self.color,
+                    backend, scales, &points, &rows, x_col, y_col, ymin_col, ymax_col, self.color,
                 )?;
             }
         }
@@ -279,6 +280,7 @@ impl Geom for GeomSmooth {
 #[allow(clippy::too_many_arguments)]
 fn draw_hover_marks(
     backend: &mut dyn DrawBackend,
+    scales: &ScaleSet,
     points: &[(f64, f64)],
     rows: &[usize],
     x_col: &[Value],
@@ -298,6 +300,13 @@ fn draw_hover_marks(
             Some(super::tip_value(&x_col[i])),
             None,
             super::raw_value(&y_col[i]),
+        );
+        super::set_mark_formatted(
+            backend,
+            scales,
+            Some(&x_col[i]),
+            &Aesthetic::Y,
+            Some(&y_col[i]),
         );
         backend.draw_shape(
             points[k],

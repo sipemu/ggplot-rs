@@ -1000,6 +1000,15 @@ impl DrawBackend for Measure<'_> {
     fn set_mark_attrs(&mut self, attrs: Vec<(String, String)>) {
         self.inner.set_mark_attrs(attrs)
     }
+    fn wants_formatted_values(&self) -> bool {
+        self.inner.wants_formatted_values()
+    }
+    fn set_mark_fvalue(&mut self, value: Option<String>) {
+        self.inner.set_mark_fvalue(value)
+    }
+    fn set_mark_fx(&mut self, value: Option<String>) {
+        self.inner.set_mark_fx(value)
+    }
 }
 
 // ─── Operator sugar ─────────────────────────────────────────────────

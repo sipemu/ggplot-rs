@@ -102,6 +102,18 @@ pub trait Scale: Send + Sync {
         None
     }
 
+    /// Format a single raw (pre-scale-transform) data `value` for a
+    /// per-mark attribute (`data-fvalue`/`data-fx`, B2-4) or a tooltip
+    /// template placeholder — e.g. a de-DE currency string, or a datetime
+    /// x's ISO/locale date, independent of how the axis itself abbreviates
+    /// its break labels. `None` for a missing/non-finite value, or a scale
+    /// with nothing meaningful to format (default: every scale except
+    /// continuous position/size/linewidth and datetime/colour-continuous,
+    /// which override this).
+    fn format_value(&self, _value: &Value) -> Option<String> {
+        None
+    }
+
     /// Override the trained domain limits (used by coord_cartesian zoom).
     fn set_limits(&mut self, _min: f64, _max: f64) {
         // Default no-op. Continuous scales override this.

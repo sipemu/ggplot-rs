@@ -339,6 +339,22 @@ impl Scale for ScaleDateTime {
         self.locale.as_ref()
     }
 
+    fn format_value(&self, value: &Value) -> Option<String> {
+        let f = value.as_f64()?;
+        if !f.is_finite() {
+            return None;
+        }
+        let secs = f as i64;
+        Some(match &self.locale {
+            Some(loc) => loc.format_datetime(secs),
+            // No locale set: the plain ISO date (plus time-of-day away from
+            // midnight), not the en-US preset's "Oct 12, 2026" — `locale()`
+            // being `None` here means "no locale was configured", not
+            // "assume en-US".
+            None => crate::data::format_epoch_secs(secs),
+        })
+    }
+
     fn aesthetic(&self) -> Aesthetic {
         self.aesthetic.clone()
     }

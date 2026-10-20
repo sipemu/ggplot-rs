@@ -119,6 +119,7 @@ impl PlotBuilder {
             svg_root_data: _,
             root_attrs: _,
             svg_warnings_attr: _,
+            svg_formatted_values: _,
         } = plot;
         let mut theme = theme;
         if theme.aspect_ratio.is_none() {

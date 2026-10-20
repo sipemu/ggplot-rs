@@ -164,6 +164,13 @@ fn for_each_period(
             series,
             super::raw_value(&c_col[i]),
         );
+        super::set_mark_formatted(
+            backend,
+            scales,
+            Some(&x_col[i]),
+            &Aesthetic::Y,
+            Some(&c_col[i]),
+        );
         draw(&p, half, backend)?;
     }
     super::clear_mark(backend);

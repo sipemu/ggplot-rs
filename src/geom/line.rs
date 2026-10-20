@@ -112,6 +112,7 @@ impl Geom for GeomLine {
                 // Tag each line with its series (for hover + linked highlighting).
                 let series = Some(super::tip_value(&cc[first_idx]));
                 super::set_mark(backend, series.clone(), None, series, None);
+                super::set_mark_formatted(backend, scales, None, &Aesthetic::Y, None);
                 super::set_row_extras(backend, data, first_idx);
 
                 let lt = linetype_col

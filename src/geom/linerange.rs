@@ -66,7 +66,15 @@ impl Geom for GeomLinerange {
                 .and_then(|cc| scales.map_color(&Aesthetic::Color, &cc[i]))
                 .unwrap_or(self.color);
 
-            super::support::mark_interval(backend, data, i, &x_col[i], &ymin_col[i], &ymax_col[i]);
+            super::support::mark_interval(
+                backend,
+                scales,
+                data,
+                i,
+                &x_col[i],
+                &ymin_col[i],
+                &ymax_col[i],
+            );
             backend.draw_line(
                 &[top, bottom],
                 &LineStyle {

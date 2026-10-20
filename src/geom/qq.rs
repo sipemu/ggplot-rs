@@ -78,6 +78,13 @@ impl Geom for GeomQQ {
                 series,
                 super::raw_value(&y_col[i]),
             );
+            super::set_mark_formatted(
+                backend,
+                scales,
+                Some(&x_col[i]),
+                &Aesthetic::Y,
+                Some(&y_col[i]),
+            );
 
             backend.draw_shape(
                 (px, py),
@@ -174,6 +181,7 @@ impl Geom for GeomQQLine {
                 .unwrap_or(self.color);
             let series = super::series_key(data, first);
             super::set_mark(backend, series.clone(), None, series, None);
+            super::set_mark_formatted(backend, scales, None, &Aesthetic::Y, None);
             if points.len() >= 2 {
                 backend.draw_line(
                     &points,

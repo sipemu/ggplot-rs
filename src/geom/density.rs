@@ -161,6 +161,13 @@ impl Geom for GeomDensity {
                     super::series_key(data, i),
                     super::measured_value(data, i),
                 );
+                super::set_mark_formatted(
+                    backend,
+                    scales,
+                    Some(&x_col[i]),
+                    &Aesthetic::Y,
+                    super::measured_raw(data, i),
+                );
                 backend.draw_shape(
                     upper[k],
                     0.6,

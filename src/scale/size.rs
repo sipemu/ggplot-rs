@@ -56,6 +56,14 @@ impl Scale for ScaleSizeContinuous {
         self.locale.as_ref()
     }
 
+    fn format_value(&self, value: &Value) -> Option<String> {
+        let f = value.as_f64()?;
+        if !f.is_finite() {
+            return None;
+        }
+        Some(super::util::format_number_opt(f, self.locale.as_ref()))
+    }
+
     fn aesthetic(&self) -> Aesthetic {
         Aesthetic::Size
     }

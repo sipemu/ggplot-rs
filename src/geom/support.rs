@@ -74,6 +74,7 @@ impl<'a> XMapper<'a> {
 /// `y` when present, else `"ymin ymax"`; tooltip `"<series>: <x>: y [lo, hi]"`.
 pub(crate) fn mark_interval(
     backend: &mut dyn crate::render::backend::DrawBackend,
+    scales: &crate::scale::ScaleSet,
     data: &DataFrame,
     i: usize,
     x: &Value,
@@ -98,6 +99,10 @@ pub(crate) fn mark_interval(
             .map(|(a, b)| format!("{a} {b}")),
     };
     super::set_mark(backend, tip, Some(super::tip_value(x)), series, value);
+    // A [lo, hi] range (no single `y`) isn't a single raw value
+    // `Scale::format_value` can take, so `data-fvalue` only applies when a
+    // plain `y` exists.
+    super::set_mark_formatted(backend, scales, Some(x), &crate::aes::Aesthetic::Y, y);
 }
 
 /// Map a numeric position through a position scale. A numeric value on a

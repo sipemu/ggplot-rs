@@ -109,6 +109,13 @@ impl Geom for GeomHistogram {
                 super::series_key(data, i),
                 super::measured_value(data, i),
             );
+            super::set_mark_formatted(
+                backend,
+                scales,
+                data.column("x").map(|c| &c[i]),
+                &Aesthetic::Y,
+                super::measured_raw(data, i),
+            );
             super::set_row_extras(backend, data, i);
 
             backend.draw_rect(

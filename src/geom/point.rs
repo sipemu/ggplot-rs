@@ -151,6 +151,13 @@ pub(crate) fn draw_points(
             super::series_key(data, i),
             super::measured_value(data, i),
         );
+        super::set_mark_formatted(
+            backend,
+            scales,
+            Some(&x_col[i]),
+            &Aesthetic::Y,
+            super::measured_raw(data, i),
+        );
         super::set_row_extras(backend, data, i);
 
         let (r, g, b) = if let Some(cc) = color_col {

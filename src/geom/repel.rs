@@ -746,6 +746,13 @@ fn draw_repel(
                 super::series_key(data, it.row),
                 super::measured_value(data, it.row),
             );
+            super::set_mark_formatted(
+                backend,
+                scales,
+                Some(&x_col[it.row]),
+                &Aesthetic::Y,
+                super::measured_raw(data, it.row),
+            );
             backend.draw_rect(
                 (b.cx - b.hw, b.cy - b.hh),
                 (b.cx + b.hw, b.cy + b.hh),

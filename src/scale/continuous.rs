@@ -35,6 +35,10 @@ pub struct ScaleContinuous {
     label_formatter: Option<LabelFormatter>,
     /// Locale for the default labels (`None` = default marks).
     locale: Option<crate::locale::Locale>,
+    /// Formatter for `format_value` (B2-4: `data-fvalue`/tooltip templates),
+    /// distinct from `label_formatter` — e.g. a full currency string where
+    /// the axis itself shows an abbreviated break.
+    value_formatter: Option<LabelFormatter>,
 }
 
 impl ScaleContinuous {
@@ -55,6 +59,7 @@ impl ScaleContinuous {
             sec_axis: None,
             label_formatter: None,
             locale: None,
+            value_formatter: None,
         }
     }
 
@@ -141,6 +146,19 @@ impl ScaleContinuous {
         self
     }
 
+    /// Set a formatter for [`format_value`](Scale::format_value) — a
+    /// per-mark `data-fvalue` or tooltip-template value — distinct from
+    /// [`with_label_formatter`](Self::with_label_formatter), which only
+    /// affects axis break labels. Falls back to the label formatter, then
+    /// the locale default, when unset.
+    pub fn with_value_formatter<F>(mut self, f: F) -> Self
+    where
+        F: Fn(f64) -> String + Send + Sync + 'static,
+    {
+        self.value_formatter = Some(std::sync::Arc::new(f));
+        self
+    }
+
     /// Render the default break labels with `locale`'s decimal and thousands
     /// marks (`1.000`, `2,5` in de-DE). Overrides the plot locale
     /// ([`GGPlot::locale`](crate::GGPlot::locale)); a custom
@@ -196,6 +214,17 @@ impl Scale for ScaleContinuous {
 
     fn locale(&self) -> Option<&crate::locale::Locale> {
         self.locale.as_ref()
+    }
+
+    fn format_value(&self, value: &Value) -> Option<String> {
+        let f = value.as_f64()?;
+        if !f.is_finite() {
+            return None;
+        }
+        Some(match &self.value_formatter {
+            Some(fmt) => fmt(f),
+            None => self.format_label(f),
+        })
     }
 
     fn aesthetic(&self) -> Aesthetic {

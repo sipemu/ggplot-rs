@@ -129,6 +129,9 @@ impl Geom for GeomCooksContour {
                 None,
                 super::raw_value(&Value::Float(level)),
             );
+            // A contour level, not a data-driven value with a scale behind
+            // it — reset only.
+            super::set_mark_formatted(backend, scales, None, &Aesthetic::Y, None);
             for sign in [1.0, -1.0] {
                 let pts: Vec<(f64, f64)> = hs
                     .iter()

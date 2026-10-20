@@ -122,6 +122,10 @@ pub struct GGPlot {
     /// on the root `<svg>` ([`svg_warnings_attr`](Self::svg_warnings_attr)).
     /// Default off; byte-identical output when off.
     pub(crate) svg_warnings_attr: bool,
+    /// Whether to emit `data-fvalue`/`data-fx` on marks
+    /// ([`svg_formatted_values`](Self::svg_formatted_values)). Default off;
+    /// byte-identical output when off.
+    pub(crate) svg_formatted_values: bool,
 }
 
 impl GGPlot {
@@ -149,6 +153,7 @@ impl GGPlot {
             svg_root_data: true,
             root_attrs: Vec::new(),
             svg_warnings_attr: false,
+            svg_formatted_values: false,
         }
     }
 
@@ -1738,6 +1743,19 @@ impl GGPlot {
         self
     }
 
+    /// Emit `data-fvalue`/`data-fx` on marks: the value aesthetic's raw
+    /// data value (y for most geoms, fill for hex/tile) and the x value,
+    /// each formatted through its scale (currency/locale numbers, ISO or
+    /// locale dates — [`Scale::format_value`](crate::scale::Scale::format_value))
+    /// rather than the plain display string `data-value`/`data-x` already
+    /// carry. `data-fx` is omitted when it would just duplicate `data-x`.
+    /// Default off, and omitted entirely when off (byte-identical to not
+    /// calling this).
+    pub fn svg_formatted_values(mut self, on: bool) -> Self {
+        self.svg_formatted_values = on;
+        self
+    }
+
     /// Transform the coordinate space at draw time (R's `coord_trans`) — stats are
     /// computed on raw data but drawn on non-linear axes. Pass a per-axis
     /// [`ScaleTransform`] (e.g. `Some(ScaleTransform::Log10)`), `None` to leave an
@@ -2205,9 +2223,11 @@ impl GGPlot {
         let svg_root_data = self.svg_root_data;
         let root_attrs = self.root_attrs.clone();
         let svg_warnings_attr = self.svg_warnings_attr;
+        let svg_formatted_values = self.svg_formatted_values;
         let (built, layout) = self.prepare(w, h)?;
         let pa = layout.plot_area.clone();
         let mut backend = crate::render::svg_backend::SvgBackend::new(w, h, pa.clone());
+        backend.set_formatted_values(svg_formatted_values);
         let existing_root_attrs = if svg_root_data {
             let attrs = crate::render::svg_backend::root_data_attrs(&built);
             backend.set_root_attrs(attrs.clone());

@@ -111,6 +111,7 @@ impl Geom for GeomStep {
                 .unwrap_or(Linetype::Solid);
             let series = super::series_key(data, first);
             super::set_mark(backend, series.clone(), None, series, None);
+            super::set_mark_formatted(backend, scales, None, &Aesthetic::Y, None);
 
             if points.len() >= 2 {
                 backend.draw_line(

@@ -76,6 +76,13 @@ impl Geom for GeomBin2d {
                 None,
                 fill_col.and_then(|c| super::raw_value(&c[i])),
             );
+            super::set_mark_formatted(
+                backend,
+                scales,
+                None,
+                &Aesthetic::Fill,
+                fill_col.map(|c| &c[i]),
+            );
             backend.draw_rect(
                 (left, top.min(bottom)),
                 (right, top.max(bottom)),
