@@ -7,6 +7,7 @@ pub mod format;
 pub mod gradient;
 pub mod gradient_n;
 pub mod grey;
+pub mod identity;
 pub mod linetype;
 pub mod linetype_manual;
 pub mod linewidth;

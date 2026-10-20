@@ -1128,6 +1128,25 @@ impl GGPlot {
         self.scale_fill(s)
     }
 
+    /// The `colour`/`color` column already holds `#RRGGBB`/`#RGB` hex
+    /// strings, used as-is — no legend (R's `scale_colour_identity`).
+    pub fn scale_colour_identity(self) -> Self {
+        let s = crate::scale::identity::ScaleColorIdentity::new(crate::aes::Aesthetic::Color);
+        self.scale_color(s)
+    }
+
+    /// American-spelling alias for [`scale_colour_identity`](Self::scale_colour_identity).
+    pub fn scale_color_identity(self) -> Self {
+        self.scale_colour_identity()
+    }
+
+    /// The `fill` column already holds `#RRGGBB`/`#RGB` hex strings, used
+    /// as-is — no legend (R's `scale_fill_identity`).
+    pub fn scale_fill_identity(self) -> Self {
+        let s = crate::scale::identity::ScaleColorIdentity::new(crate::aes::Aesthetic::Fill);
+        self.scale_fill(s)
+    }
+
     pub fn scale_color_viridis(self) -> Self {
         use crate::scale::color::ScaleColorDiscrete;
         use crate::scale::palettes::PaletteName;

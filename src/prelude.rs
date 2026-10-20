@@ -77,6 +77,7 @@ pub use crate::scale::format::{
 pub use crate::scale::gradient::ScaleColorGradient2;
 pub use crate::scale::gradient_n::ScaleColorGradientN;
 pub use crate::scale::grey::ScaleColorGrey;
+pub use crate::scale::identity::ScaleColorIdentity;
 pub use crate::scale::linetype_manual::ScaleLinetypeManual;
 pub use crate::scale::linewidth::ScaleLinewidthContinuous;
 pub use crate::scale::manual::ScaleManual;
