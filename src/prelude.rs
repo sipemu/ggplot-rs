@@ -3,6 +3,8 @@ pub use crate::annotate::Annotation;
 pub use crate::compose::{GridCell, GridLegendPosition, PlotGrid, TagLevels};
 pub use crate::coord::polar::CoordPolar;
 pub use crate::coord::radar::CoordRadar;
+#[cfg(feature = "sf")]
+pub use crate::coord::sf::CoordSf;
 pub use crate::data::{GGData, Value};
 pub use crate::facet::{FacetLabeller, FacetScales, FacetSpace};
 pub use crate::geom::area::GeomArea;

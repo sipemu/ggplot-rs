@@ -131,6 +131,13 @@ pub trait Scale: Send + Sync {
         false
     }
 
+    /// Set the expansion multiplier/additive constant (R's `expand =
+    /// c(mult, add)`), applied symmetrically to both ends. Used by
+    /// `CoordSf::train_scales` (`expand(false)` passes `(0.0, 0.0)`) to pin
+    /// an explicit `xlim`/`ylim` to the panel exactly. Default: no-op
+    /// (discrete / non-position scales have no expansion to set).
+    fn set_expand(&mut self, _mult: f64, _add: f64) {}
+
     /// Map an already-computed `[0, 1]` scale fraction (as returned
     /// alongside each label by [`breaks`](Self::breaks)) directly to an
     /// output size, bypassing the round trip through [`map`](Self::map) — a

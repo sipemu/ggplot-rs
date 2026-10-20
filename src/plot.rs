@@ -110,6 +110,11 @@ pub struct GGPlot {
     pub(crate) default_aspect_ratio: Option<f64>,
     /// Plot-wide default locale for axis / legend labels ([`GGPlot::locale`]).
     pub(crate) locale: Option<crate::locale::Locale>,
+    /// Whether the rendered root `<svg>` carries `data-plot`/`data-domain`/…
+    /// ([`svg_root_data`](Self::svg_root_data)). Default `true`; a consumer
+    /// overlaying a fragment on its own basemap (`render_svg_native_at`)
+    /// turns it off so the fragment adds no root attributes of its own.
+    pub(crate) svg_root_data: bool,
 }
 
 impl GGPlot {
@@ -134,6 +139,7 @@ impl GGPlot {
             warnings: Vec::new(),
             default_aspect_ratio: None,
             locale: None,
+            svg_root_data: true,
         }
     }
 
@@ -1670,6 +1676,27 @@ impl GGPlot {
         self
     }
 
+    /// Spatial coordinate system with explicit settings (`xlim`/`ylim`/
+    /// `expand`) — see [`CoordSf`](crate::coord::sf::CoordSf). Used by
+    /// consumers overlaying a fragment on their own projected basemap: a
+    /// fixed pixel window via `xlim`/`ylim` and `expand(false)`.
+    #[cfg(feature = "sf")]
+    pub fn coord_sf_with(mut self, coord: crate::coord::sf::CoordSf) -> Self {
+        self.coord = Box::new(coord);
+        self
+    }
+
+    /// Whether the rendered root `<svg>` carries `data-plot`/`data-domain`/
+    /// `data-xdomain`/… (see [`root_data_attrs`](crate::render::svg_backend::root_data_attrs)).
+    /// Default `true`. A consumer that overlays a rendered fragment
+    /// (`render_svg_native_at`) on its own basemap — which already has its
+    /// own root attributes and window — turns this off so the fragment adds
+    /// none of its own.
+    pub fn svg_root_data(mut self, on: bool) -> Self {
+        self.svg_root_data = on;
+        self
+    }
+
     /// Transform the coordinate space at draw time (R's `coord_trans`) — stats are
     /// computed on raw data but drawn on non-linear axes. Pass a per-axis
     /// [`ScaleTransform`] (e.g. `Some(ScaleTransform::Log10)`), `None` to leave an
@@ -2134,10 +2161,15 @@ impl GGPlot {
         ),
         GGError,
     > {
+        let svg_root_data = self.svg_root_data;
         let (built, layout) = self.prepare(w, h)?;
         let pa = layout.plot_area.clone();
         let mut backend = crate::render::svg_backend::SvgBackend::new(w, h, pa.clone());
-        backend.set_root_attrs(crate::render::svg_backend::root_data_attrs(&built));
+        if svg_root_data {
+            backend.set_root_attrs(crate::render::svg_backend::root_data_attrs(&built));
+        } else {
+            backend.without_plot_attr();
+        }
         PlotRenderer::render(&built, &mut backend).map_err(GGError::Render)?;
         let mut warnings = built.warnings;
         warnings.extend(backend.take_warnings());
