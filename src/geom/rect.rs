@@ -74,6 +74,7 @@ impl Geom for GeomRect {
                 alpha: self.alpha,
                 clip: !coord.is_polar(),
             };
+            super::set_row_extras(backend, data, i);
 
             if coord.is_polar() {
                 // Under polar coords a rect is an annulus sector (gauge bands).
@@ -86,6 +87,7 @@ impl Geom for GeomRect {
             let (right, bottom) = coord.transform((nxmax, nymin), &plot_area);
             backend.draw_rect((left, top.min(bottom)), (right, top.max(bottom)), &style)?;
         }
+        super::clear_row_extras(backend);
 
         Ok(())
     }

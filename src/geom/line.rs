@@ -108,6 +108,7 @@ impl Geom for GeomLine {
                 // Tag each line with its series (for hover + linked highlighting).
                 let series = Some(super::tip_value(&cc[first_idx]));
                 super::set_mark(backend, series.clone(), None, series, None);
+                super::set_row_extras(backend, data, first_idx);
 
                 let lt = linetype_col
                     .and_then(|lc| scales.map_linetype(&lc[first_idx]))
@@ -155,6 +156,7 @@ impl Geom for GeomLine {
                 )?;
             }
             super::clear_mark(backend);
+            super::clear_row_extras(backend);
         } else {
             let lt = linetype_col
                 .and_then(|lc| {
@@ -195,6 +197,9 @@ impl Geom for GeomLine {
                 widths.push(widths[0]);
             }
 
+            if data.nrows() > 0 {
+                super::set_row_extras(backend, data, 0);
+            }
             draw_polyline_with_linewidth(
                 backend,
                 &points,
@@ -206,6 +211,7 @@ impl Geom for GeomLine {
                 self.arrow.as_ref(),
                 self.width,
             )?;
+            super::clear_row_extras(backend);
         }
 
         Ok(())

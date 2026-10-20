@@ -215,6 +215,39 @@ pub(crate) fn clear_mark(backend: &mut dyn DrawBackend) {
     set_mark(backend, None, None, None, None);
 }
 
+/// Apply one row's interactive aesthetics (B1-7: `Aes::tooltip`,
+/// `Aes::data_attr`) to the backend: a mapped `tooltip` column replaces the
+/// geom's own `<title>` (set `set_mark(...)` *before* calling this, so the
+/// custom tooltip wins); every `data-*` column becomes a `data-*` attribute
+/// (the SVG backend replaces a built-in of the same name — never
+/// duplicated). A no-op when the built data has neither column, so layers
+/// without these aes stay byte-identical.
+pub(crate) fn set_row_extras(backend: &mut dyn DrawBackend, data: &DataFrame, row: usize) {
+    if let Some(v) = data.column("tooltip").and_then(|c| c.get(row)) {
+        if !v.is_na() {
+            backend.set_tooltip(Some(tip_value(v)));
+        }
+    }
+    let mut attrs = Vec::new();
+    for name in data.column_names() {
+        if name.starts_with("data-") {
+            if let Some(v) = data.column(name).and_then(|c| c.get(row)) {
+                if !v.is_na() {
+                    attrs.push((name.to_string(), tip_value(v)));
+                }
+            }
+        }
+    }
+    if !attrs.is_empty() {
+        backend.set_mark_attrs(attrs);
+    }
+}
+
+/// Clear interactive-aesthetic attributes after a layer finishes drawing.
+pub(crate) fn clear_row_extras(backend: &mut dyn DrawBackend) {
+    backend.set_mark_attrs(Vec::new());
+}
+
 /// Draw one group's polyline (path/line), honouring a per-point `linewidth`.
 /// A constant width draws one polyline (byte-identical to the pre-linewidth
 /// behaviour); a varying width falls back to drawing segment-by-segment,

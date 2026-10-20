@@ -102,6 +102,7 @@ impl Geom for GeomHex {
                 None,
                 fill_col.and_then(|c| super::raw_value(&c[i])),
             );
+            super::set_row_extras(backend, data, i);
 
             // Vertices in data space, each individually mapped + projected —
             // correct under any coord, including `coord_sf`.
@@ -131,6 +132,7 @@ impl Geom for GeomHex {
             )?;
         }
         super::clear_mark(backend);
+        super::clear_row_extras(backend);
 
         Ok(())
     }

@@ -846,6 +846,9 @@ impl<'a> DrawBackend for PanelBackendAdapter<'a> {
     fn set_mark_part(&mut self, part: Option<&str>) {
         self.inner.set_mark_part(part)
     }
+    fn set_mark_attrs(&mut self, attrs: Vec<(String, String)>) {
+        self.inner.set_mark_attrs(attrs)
+    }
     fn total_area(&self) -> crate::render::Rect {
         self.inner.total_area()
     }

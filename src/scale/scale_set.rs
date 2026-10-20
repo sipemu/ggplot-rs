@@ -73,6 +73,10 @@ impl ScaleSet {
                 // continuous scale onto a discrete axis).
                 | Aesthetic::Xintercept
                 | Aesthetic::Yintercept
+                // Interactive aesthetics carry their value straight through
+                // to the mark's attributes — no visual mapping, no legend.
+                | Aesthetic::Tooltip
+                | Aesthetic::DataAttr(_)
         ) {
             return;
         }

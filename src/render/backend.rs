@@ -236,6 +236,13 @@ pub trait DrawBackend {
     /// still written. Default: no-op.
     fn set_mark_part(&mut self, _part: Option<&str>) {}
 
+    /// Attach arbitrary `data-*` attributes to subsequently-drawn marks
+    /// (B1-7's `Aes::data_attr`). The SVG backend writes each, escaped; an
+    /// attr with the same name as a built-in (`data-x`, `data-series`,
+    /// `data-value`) replaces it rather than duplicating it. An empty
+    /// `Vec` clears any previously set attrs. Default: no-op.
+    fn set_mark_attrs(&mut self, _attrs: Vec<(String, String)>) {}
+
     /// Draw a point with a specific shape. Default delegates to draw_circle for Circle.
     fn draw_shape(
         &mut self,

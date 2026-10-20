@@ -202,6 +202,7 @@ impl Geom for GeomTile {
                 };
                 super::set_mark(backend, Some(tip), Some(xs), Some(ys), raw);
             }
+            super::set_row_extras(backend, data, i);
 
             backend.draw_rect(
                 (left, top.min(bottom)),
@@ -216,6 +217,7 @@ impl Geom for GeomTile {
             )?;
         }
         super::clear_mark(backend);
+        super::clear_row_extras(backend);
 
         Ok(())
     }

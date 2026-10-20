@@ -172,6 +172,7 @@ impl Geom for GeomCol {
                 super::series_key(data, i),
                 raw,
             );
+            super::set_row_extras(backend, data, i);
 
             if coord.is_polar() {
                 // A bar becomes a radial sector: tessellate the outer arc
@@ -197,6 +198,7 @@ impl Geom for GeomCol {
             }
         }
         super::clear_mark(backend);
+        super::clear_row_extras(backend);
 
         Ok(())
     }

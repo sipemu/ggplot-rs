@@ -117,6 +117,7 @@ impl Geom for GeomSegment {
             let width = linewidth_col
                 .and_then(|lc| scales.map_linewidth(&lc[i]))
                 .unwrap_or(self.width);
+            super::set_row_extras(backend, data, i);
 
             let path = [(px1, py1), (px2, py2)];
             backend.draw_line(
@@ -135,6 +136,7 @@ impl Geom for GeomSegment {
                 draw_heads(backend, &hs, arrow, line_color, alpha, width)?;
             }
         }
+        super::clear_row_extras(backend);
 
         Ok(())
     }

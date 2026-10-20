@@ -25,6 +25,7 @@ pub struct SvgBackend {
     series_key: Option<String>,
     value_key: Option<String>,
     mark_part: Option<String>,
+    mark_attrs: Vec<(String, String)>,
     root_attrs: Vec<(String, String)>,
     warnings: Vec<String>,
     /// Emit the root `data-plot` panel rect (off for composite pages, whose
@@ -48,6 +49,7 @@ impl SvgBackend {
             series_key: None,
             value_key: None,
             mark_part: None,
+            mark_attrs: Vec::new(),
             root_attrs: Vec::new(),
             warnings: Vec::new(),
             plot_attr: true,
@@ -85,15 +87,27 @@ impl SvgBackend {
     /// Emit `<tag attrs/>`, or `<tag attrs data-…><title>tip</title></tag>`
     /// when a tooltip / mark metadata is set (native SVG hover + host grouping).
     fn push_mark(&mut self, tag: &str, attrs: &str) {
-        let mut data = String::new();
+        // Built-ins first, then user `data-*` attrs — a user attr with the
+        // same name replaces the built-in rather than duplicating it.
+        let mut pairs: Vec<(String, String)> = Vec::new();
         for (name, val) in [
             ("data-x", &self.axis_key),
             ("data-series", &self.series_key),
             ("data-value", &self.value_key),
         ] {
             if let Some(v) = val {
-                data.push_str(&format!(" {name}=\"{}\"", escape(v)));
+                pairs.push((name.to_string(), v.clone()));
             }
+        }
+        for (name, val) in &self.mark_attrs {
+            match pairs.iter_mut().find(|(n, _)| n == name) {
+                Some(existing) => existing.1 = val.clone(),
+                None => pairs.push((name.clone(), val.clone())),
+            }
+        }
+        let mut data = String::new();
+        for (name, val) in &pairs {
+            data.push_str(&format!(" {name}=\"{}\"", escape(val)));
         }
         // A mark part (e.g. an arrowhead) is decorative: no `<title>`, but it
         // still carries `data-part` plus `aria-hidden` so assistive tech
@@ -331,6 +345,10 @@ impl DrawBackend for SvgBackend {
 
     fn set_mark_part(&mut self, part: Option<&str>) {
         self.mark_part = part.map(|s| s.to_string());
+    }
+
+    fn set_mark_attrs(&mut self, attrs: Vec<(String, String)>) {
+        self.mark_attrs = attrs;
     }
 
     fn draw_circle(

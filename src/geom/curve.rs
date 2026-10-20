@@ -162,6 +162,7 @@ impl Geom for GeomCurve {
             let width = linewidth_col
                 .and_then(|lc| scales.map_linewidth(&lc[i]))
                 .unwrap_or(self.width);
+            super::set_row_extras(backend, data, i);
 
             backend.draw_quadratic(
                 p0,
@@ -182,6 +183,7 @@ impl Geom for GeomCurve {
                 draw_heads(backend, &hs, arrow, line_color, alpha, width)?;
             }
         }
+        super::clear_row_extras(backend);
 
         Ok(())
     }
@@ -264,5 +266,103 @@ mod tests {
         // mid = (5, 0); dx = 10, dy = 0 -> ctrl = (5 - 0*0.2, 0 + 10*0.2) = (5, 2)
         assert!((ctrl.0 - 5.0).abs() < 1e-9);
         assert!((ctrl.1 - 2.0).abs() < 1e-9);
+    }
+
+    // ─── B1-7: interactive aesthetics ──────────────────────────────────
+
+    fn plot_with_extras() -> GGPlot {
+        GGPlot::new(vec![
+            ("x".into(), vec![Value::Float(0.0), Value::Float(0.2)]),
+            ("y".into(), vec![Value::Float(0.0), Value::Float(1.0)]),
+            ("xend".into(), vec![Value::Float(1.0), Value::Float(0.8)]),
+            ("yend".into(), vec![Value::Float(0.5), Value::Float(0.3)]),
+            (
+                "orig".into(),
+                vec![Value::Str("Berlin".into()), Value::Str("Paris & Co".into())],
+            ),
+            (
+                "tip".into(),
+                vec![
+                    Value::Str("A tooltip".into()),
+                    Value::Str("<script>".into()),
+                ],
+            ),
+        ])
+        .aes(
+            Aes::new()
+                .x("x")
+                .y("y")
+                .xend("xend")
+                .yend("yend")
+                .data_attr("orig", "orig")
+                .tooltip("tip"),
+        )
+    }
+
+    #[test]
+    fn data_attr_and_tooltip_both_emit_and_arrow_heads_carry_the_attr_but_no_title() {
+        let svg = plot_with_extras()
+            .geom_curve_with(GeomCurve::default().arrow(crate::geom::arrow::arrow().closed()))
+            .render_svg_native_with_size(200, 200)
+            .unwrap();
+
+        assert!(svg.contains("data-orig=\"Berlin\""));
+        // `&` is escaped.
+        assert!(svg.contains("data-orig=\"Paris &amp; Co\""));
+        assert!(svg.contains("<title>A tooltip</title>"));
+        // `<script>` is escaped, never a literal second element.
+        assert!(svg.contains("&lt;script&gt;"));
+        assert!(!svg.contains("<script>"));
+
+        // Arrow heads are decorative marks: they carry the row's data-orig
+        // (set before the arrow is drawn) but no `<title>`. Each is a
+        // self-closing `<polygon .../>` element, so bound the check to it.
+        for part in svg.split("<polygon").skip(1) {
+            let element = part.split("/>").next().unwrap_or("");
+            if element.contains("data-part=\"arrow\"") {
+                assert!(element.contains("data-orig="));
+                assert!(!element.contains("<title>"));
+            }
+        }
+    }
+
+    #[test]
+    fn data_attr_x_gives_a_single_data_x_not_two() {
+        // GeomPoint sets the built-in `data-x` via `set_mark_axis`;
+        // `data_attr("x", "xlabel")` maps to the same attribute name and
+        // should replace it, not duplicate it.
+        let svg = GGPlot::new(vec![
+            ("x".into(), vec![Value::Float(0.0), Value::Float(1.0)]),
+            ("y".into(), vec![Value::Float(0.0), Value::Float(1.0)]),
+            (
+                "xlabel".into(),
+                vec![Value::Str("first".into()), Value::Str("second".into())],
+            ),
+        ])
+        .aes(Aes::new().x("x").y("y").data_attr("x", "xlabel"))
+        .geom_point()
+        .render_svg_native_with_size(200, 200)
+        .unwrap();
+
+        assert!(svg.contains("data-x=\"first\""));
+        assert!(svg.contains("data-x=\"second\""));
+        for tag_open in svg.split('<').skip(1) {
+            let attrs_part = tag_open.split('>').next().unwrap_or("");
+            let count = attrs_part.matches("data-x=\"").count();
+            assert!(count <= 1, "data-x duplicated in: <{tag_open}");
+        }
+    }
+
+    #[test]
+    fn layers_without_interactive_aes_are_byte_identical() {
+        let plain = |p: GGPlot| {
+            p.geom_curve_with(GeomCurve::default())
+                .render_svg_native_with_size(200, 200)
+                .unwrap()
+        };
+        let a = plain(plot());
+        let b = plain(plot());
+        assert_eq!(a, b);
+        assert!(!a.contains("data-orig"));
     }
 }

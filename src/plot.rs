@@ -139,6 +139,7 @@ impl GGPlot {
 
     /// Set the plot-level aesthetic mapping.
     pub fn aes(mut self, mapping: Aes) -> Self {
+        self.warnings.extend(mapping.warnings.iter().cloned());
         self.mapping = mapping;
         self
     }
@@ -1067,6 +1068,7 @@ impl GGPlot {
 
     /// Override the aesthetic mapping for the most recently added layer.
     pub fn layer_aes(mut self, mapping: Aes) -> Self {
+        self.warnings.extend(mapping.warnings.iter().cloned());
         if let Some(layer) = self.layers.last_mut() {
             layer.mapping = mapping;
         }

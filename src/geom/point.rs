@@ -151,6 +151,7 @@ pub(crate) fn draw_points(
             super::series_key(data, i),
             super::measured_value(data, i),
         );
+        super::set_row_extras(backend, data, i);
 
         let (r, g, b) = if let Some(cc) = color_col {
             scales
@@ -186,6 +187,7 @@ pub(crate) fn draw_points(
         )?;
     }
     super::clear_mark(backend);
+    super::clear_row_extras(backend);
 
     Ok(())
 }

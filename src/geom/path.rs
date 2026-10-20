@@ -126,6 +126,7 @@ impl Geom for GeomPath {
                     })
                     .collect();
 
+                super::set_row_extras(backend, data, first_idx);
                 draw_polyline_with_linewidth(
                     backend,
                     &points,
@@ -164,6 +165,9 @@ impl Geom for GeomPath {
                 })
                 .collect();
 
+            if data.nrows() > 0 {
+                super::set_row_extras(backend, data, 0);
+            }
             draw_polyline_with_linewidth(
                 backend,
                 &points,
@@ -176,6 +180,7 @@ impl Geom for GeomPath {
                 self.width,
             )?;
         }
+        super::clear_row_extras(backend);
 
         Ok(())
     }

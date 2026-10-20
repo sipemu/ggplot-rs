@@ -938,6 +938,9 @@ impl DrawBackend for Measure<'_> {
     fn set_mark_part(&mut self, part: Option<&str>) {
         self.inner.set_mark_part(part)
     }
+    fn set_mark_attrs(&mut self, attrs: Vec<(String, String)>) {
+        self.inner.set_mark_attrs(attrs)
+    }
 }
 
 // ─── Operator sugar ─────────────────────────────────────────────────

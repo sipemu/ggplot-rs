@@ -27,6 +27,12 @@ pub enum Aesthetic {
     Radius,
     /// Stroke width for segment/curve/path/line (R's `linewidth`).
     Linewidth,
+    /// A custom `<title>` hover tooltip, replacing the geom's own.
+    Tooltip,
+    /// A custom `data-<name>` attribute on the mark. The `String` is the
+    /// full attribute name (already prefixed: `"data-<name>"`), validated
+    /// by [`Aes::data_attr`] against `[a-z0-9][a-z0-9-]*`.
+    DataAttr(String),
     /// Financial OHLC aesthetics (`geom_candlestick` / `geom_ohlc`); they
     /// share the y position scale.
     Open,
@@ -66,6 +72,8 @@ impl Aesthetic {
             Aesthetic::Angle => "angle",
             Aesthetic::Radius => "radius",
             Aesthetic::Linewidth => "linewidth",
+            Aesthetic::Tooltip => "tooltip",
+            Aesthetic::DataAttr(name) => name,
             Aesthetic::Open => "open",
             Aesthetic::High => "high",
             Aesthetic::Low => "low",
@@ -111,6 +119,10 @@ pub struct Aes {
     pub mappings: Vec<AesMapping>,
     /// Post-scale color derivations (`after_scale`).
     pub after_scale: Vec<AfterScaleSpec>,
+    /// Non-fatal build warnings (e.g. an invalid [`data_attr`](Self::data_attr)
+    /// name), merged into [`GGPlot`](crate::plot::GGPlot)'s warnings by
+    /// `aes()`/`layer_aes()`.
+    pub(crate) warnings: Vec<String>,
 }
 
 impl Aes {
@@ -238,6 +250,29 @@ impl Aes {
     pub fn linewidth(self, col: &str) -> Self {
         self.push(col, Aesthetic::Linewidth)
     }
+
+    /// A custom `<title>` hover tooltip from `col`, replacing the geom's
+    /// own. `ensure_scale` skips it (no scale, no legend): computing stats
+    /// drop the column (identity-stat layers keep it), as `linetype`/`alpha`
+    /// do.
+    pub fn tooltip(self, col: &str) -> Self {
+        self.push(col, Aesthetic::Tooltip)
+    }
+
+    /// A custom `data-<name>` attribute on the mark, from `col`. `name` must
+    /// match `[a-z0-9][a-z0-9-]*`; an invalid name is skipped with a build
+    /// warning (surfaced via [`GGPlot::aes`](crate::plot::GGPlot::aes) /
+    /// `layer_aes`). A user attr replaces a built-in of the same name
+    /// (`data-x`, `data-series`, `data-value`) — never duplicated.
+    pub fn data_attr(mut self, name: &str, col: &str) -> Self {
+        if !is_valid_data_attr_name(name) {
+            self.warnings.push(format!(
+                "aes: data_attr name {name:?} is invalid (must match [a-z0-9][a-z0-9-]*); skipped"
+            ));
+            return self;
+        }
+        self.push(col, Aesthetic::DataAttr(format!("data-{name}")))
+    }
     /// Opening price (`geom_candlestick` / `geom_ohlc`).
     pub fn open(self, col: &str) -> Self {
         self.push(col, Aesthetic::Open)
@@ -328,6 +363,36 @@ impl Aes {
                 .retain(|existing| existing.aesthetic != m.aesthetic);
             result.mappings.push(m.clone());
         }
+        result.warnings.extend(other.warnings.iter().cloned());
         result
+    }
+}
+
+/// `[a-z0-9][a-z0-9-]*` — a valid HTML custom-data-attribute suffix.
+fn is_valid_data_attr_name(name: &str) -> bool {
+    let mut chars = name.chars();
+    match chars.next() {
+        Some(c) if c.is_ascii_lowercase() || c.is_ascii_digit() => {}
+        _ => return false,
+    }
+    chars.all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '-')
+}
+
+#[cfg(test)]
+mod data_attr_name_tests {
+    use super::is_valid_data_attr_name;
+
+    #[test]
+    fn accepts_lowercase_alnum_and_hyphen() {
+        for ok in ["x", "row", "data-ish", "a1", "0a", "fvalue"] {
+            assert!(is_valid_data_attr_name(ok), "{ok} should be valid");
+        }
+    }
+
+    #[test]
+    fn rejects_empty_uppercase_and_other_punctuation() {
+        for bad in ["", "-x", "X", "a_b", "a.b", "a b", "déjà"] {
+            assert!(!is_valid_data_attr_name(bad), "{bad} should be invalid");
+        }
     }
 }
