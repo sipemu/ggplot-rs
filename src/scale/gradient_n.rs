@@ -17,6 +17,13 @@ pub struct ScaleColorGradientN {
     max: f64,
     /// Locale for the default break labels (`None` = default marks).
     locale: Option<crate::locale::Locale>,
+    /// Fixed `(lo, hi)` domain ([`with_limits`](Self::with_limits)):
+    /// `train` no longer widens it, and `map_to_color` maps against it
+    /// instead of the trained min/max.
+    limits: Option<(f64, f64)>,
+    /// Out-of-bounds policy for `limits` ([`with_oob`](Self::with_oob)).
+    /// Default [`Oob::Censor`](super::Oob::Censor).
+    oob: super::Oob,
 }
 
 impl ScaleColorGradientN {
@@ -32,7 +39,25 @@ impl ScaleColorGradientN {
             min: f64::INFINITY,
             max: f64::NEG_INFINITY,
             locale: None,
+            limits: None,
+            oob: super::Oob::Censor,
         }
+    }
+
+    /// Fix the colour domain to `[lo, hi]` instead of whatever the data
+    /// happens to span. Out-of-range values follow
+    /// [`with_oob`](Self::with_oob) (default: no colour).
+    pub fn with_limits(mut self, lo: f64, hi: f64) -> Self {
+        self.limits = Some((lo, hi));
+        self
+    }
+
+    /// Out-of-bounds policy for [`with_limits`](Self::with_limits):
+    /// [`Oob::Censor`](super::Oob::Censor) (default) or
+    /// [`Oob::Squish`](super::Oob::Squish).
+    pub fn with_oob(mut self, oob: super::Oob) -> Self {
+        self.oob = oob;
+        self
     }
 
     /// Create a continuous viridis palette.
@@ -112,6 +137,9 @@ impl Scale for ScaleColorGradientN {
     }
 
     fn train(&mut self, values: &[Value]) {
+        if self.limits.is_some() {
+            return;
+        }
         for v in values {
             if let Some(f) = v.as_f64() {
                 if f.is_finite() {
@@ -131,30 +159,32 @@ impl Scale for ScaleColorGradientN {
             Some(f) => f,
             None => return 0.0,
         };
-        let range = self.max - self.min;
+        let (lo, hi) = self.limits.unwrap_or((self.min, self.max));
+        let range = hi - lo;
         if range.abs() < f64::EPSILON {
             0.5
         } else {
-            (f - self.min) / range
+            (f - lo) / range
         }
     }
 
     fn breaks(&self) -> Vec<(f64, String)> {
-        if self.min > self.max || !self.min.is_finite() || !self.max.is_finite() {
+        let (lo, hi) = self.limits.unwrap_or((self.min, self.max));
+        if lo > hi || !lo.is_finite() || !hi.is_finite() {
             return vec![];
         }
-        let range = self.max - self.min;
-        if super::util::is_degenerate_range(self.min, self.max) {
+        let range = hi - lo;
+        if super::util::is_degenerate_range(lo, hi) {
             return vec![(
                 0.5,
-                super::util::format_number_opt(self.min, self.locale.as_ref()),
+                super::util::format_number_opt(lo, self.locale.as_ref()),
             )];
         }
         let n_breaks = 5;
         let raw_step = range / n_breaks as f64;
         let step = nice_step(raw_step);
-        let start = (self.min / step).ceil() * step;
-        let values = super::util::stepped_breaks(start, self.max, step);
+        let start = (lo / step).ceil() * step;
+        let values = super::util::stepped_breaks(start, hi, step);
         let labels = super::util::format_numbers_opt(&values, self.locale.as_ref());
         values
             .iter()
@@ -172,12 +202,23 @@ impl Scale for ScaleColorGradientN {
     }
 
     fn map_to_color(&self, value: &Value) -> Option<(u8, u8, u8)> {
+        // Only a finite numeric value can be out of the fixed `limits` —
+        // non-numeric / non-finite keeps the pre-existing contract of
+        // falling through to `map`'s own 0.0 fallback instead of `None`.
+        if let Some(f) = value.as_f64() {
+            if f.is_finite() {
+                super::resolve_oob(f, self.limits, self.oob)?;
+            }
+        }
         let t = self.map(value);
         let c = self.color_at(t);
         Some((c.r, c.g, c.b))
     }
 
     fn domain(&self) -> Option<(f64, f64)> {
+        if let Some((lo, hi)) = self.limits {
+            return Some((lo, hi));
+        }
         if self.min.is_finite() && self.max.is_finite() && self.min <= self.max {
             Some((self.min, self.max))
         } else {

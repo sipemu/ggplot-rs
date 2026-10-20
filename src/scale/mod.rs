@@ -29,6 +29,42 @@ use crate::aes::Aesthetic;
 use crate::data::Value;
 use crate::render::backend::{Linetype, PointShape};
 
+/// ggplot2's "out of bounds" handling for a continuous colour scale's fixed
+/// [`with_limits`](color::ScaleColorContinuous::with_limits) domain — e.g.
+/// fixing `[-1, 1]` for a correlation matrix so the *colours* (not just the
+/// legend) reflect that fixed range rather than whatever the data happens
+/// to span.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum Oob {
+    /// A value outside the limits maps to no colour (ggplot2's default):
+    /// `map_to_color` returns `None`, so the geom falls back to its own
+    /// default colour for that row.
+    #[default]
+    Censor,
+    /// A value outside the limits is clamped to the nearest limit before
+    /// mapping, so it still gets the end colour instead of none at all.
+    Squish,
+}
+
+/// Resolve one value against a scale's optional fixed `(lo, hi)` limits and
+/// [`Oob`] policy, for `map_to_color` on the gradient scales. `limits: None`
+/// (the default — domain from trained data) never rejects a value: this
+/// only has an effect once `with_limits` is set. Returns `None` exactly
+/// when the value is outside fixed limits under [`Oob::Censor`].
+pub(crate) fn resolve_oob(f: f64, limits: Option<(f64, f64)>, oob: Oob) -> Option<f64> {
+    let Some((lo, hi)) = limits else {
+        return Some(f);
+    };
+    if f < lo || f > hi {
+        match oob {
+            Oob::Squish => Some(f.clamp(lo, hi)),
+            Oob::Censor => None,
+        }
+    } else {
+        Some(f)
+    }
+}
+
 /// Trait for scales that map data values to visual properties.
 pub trait Scale: Send + Sync {
     /// Which aesthetic this scale is for.

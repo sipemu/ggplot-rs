@@ -17,6 +17,12 @@ All notable changes to this project are documented here. The format follows
   `vline` or `abline`. New `DrawBackend::set_mark_geom` hook (default no-op),
   forwarded by `compose::Measure` as well as the panel backend adapter, so
   `PlotGrid` marks are classed too.
+- `ScaleColorContinuous`/`ScaleColorGradient2`/`ScaleColorGradientN` gain
+  `with_limits(lo, hi)`, fixing the colour domain (not just the legend) to
+  a range independent of the trained data — e.g. `[-1, 1]` for a
+  correlation matrix. New `Oob` enum (`Censor`, the default: an
+  out-of-range value gets no colour, so the geom falls back to its own
+  default; `Squish`, opt-in via `with_oob`: clamped to the nearest limit).
 
 ## [0.20.0] — 2026-10-20
 
