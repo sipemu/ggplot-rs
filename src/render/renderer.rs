@@ -109,7 +109,14 @@ impl PlotRenderer {
             }
 
             // 4. Draw axes
-            axis::draw_x_axis(hs, built.coord.as_ref(), theme, &plot_area, backend)?;
+            axis::draw_x_axis(
+                hs,
+                built.coord.as_ref(),
+                theme,
+                &plot_area,
+                &total_area,
+                backend,
+            )?;
             axis::draw_y_axis(vs, built.coord.as_ref(), theme, &plot_area, backend)?;
 
             // 4b. Draw secondary y axis if present
@@ -549,7 +556,14 @@ impl PlotRenderer {
 
                 // Bottom row gets x axis
                 if panel.row == nrow - 1 || pi + ncol >= built.panels.len() {
-                    axis::draw_x_axis(xs, built.coord.as_ref(), theme, &panel_rect, backend)?;
+                    axis::draw_x_axis(
+                        xs,
+                        built.coord.as_ref(),
+                        theme,
+                        &panel_rect,
+                        &total_area,
+                        backend,
+                    )?;
                 }
 
                 // Left column gets y axis

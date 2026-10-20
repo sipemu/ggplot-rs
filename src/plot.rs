@@ -1893,6 +1893,22 @@ impl GGPlot {
         self
     }
 
+    /// How an outer x-axis label that would cross the SVG edge is handled
+    /// (B3-1, D6): [`AxisLabelFit::Reserve`] (default), `Shift`, or `Clip`
+    /// (the 0.21 behaviour). Use `Shift` for panels that must stay
+    /// pixel-aligned with other elements (e.g. a host's own aligned strip).
+    pub fn axis_text_x_fit(mut self, fit: crate::theme::AxisLabelFit) -> Self {
+        self.theme.axis_text_x_fit = fit;
+        self
+    }
+
+    /// Thin crowded x-axis labels in ggplot2's `check.overlap` priority
+    /// order (B3-1, D5). Off by default.
+    pub fn axis_text_x_check_overlap(mut self, on: bool) -> Self {
+        self.theme.axis_text_x_check_overlap = on;
+        self
+    }
+
     /// Align title/subtitle/caption to the panel or the whole plot width
     /// (R's `plot.title.position`).
     pub fn title_position(mut self, pos: crate::theme::TitlePosition) -> Self {
@@ -2507,7 +2523,72 @@ impl GGPlot {
             None
         };
 
-        PlotLayout::compute_full(
+        // B3-1 (D6): reserve just enough left/right panel margin to keep
+        // the outer x-axis labels on-canvas under `AxisLabelFit::Reserve`,
+        // for a single (non-faceted) panel on a coord that supports it
+        // (not polar/radar/sf, where a label bbox doesn't map to a simple
+        // panel margin). A faceted plot skips the layout-level reservation
+        // and relies on `draw_x_axis`'s own draw-time shift instead — so
+        // does `AxisLabelFit::Shift` (the panel must keep its size) and
+        // `Clip` (the 0.21 behaviour, no correction at all). A plot whose
+        // outer labels already fit never grows `extras`, so it stays
+        // byte-identical.
+        let mut extras = crate::render::layout::LayoutExtras::default();
+        let can_reserve = built.facet.is_none()
+            && built.theme.axis_text_x.visible
+            && built.theme.axis_text_x_fit == crate::theme::AxisLabelFit::Reserve
+            && !built.coord.is_polar()
+            && built.coord.supports_axis_reserve();
+        if can_reserve {
+            if let Some(hs) = built.scales.get(&h_aes) {
+                let breaks = hs.breaks();
+                if let (Some(first), Some(last)) = (breaks.first(), breaks.last()) {
+                    let angle = built.theme.axis_text_x.angle;
+                    let anchor = if angle.abs() > 10.0 { 1.0 } else { 0.5 };
+                    let size = built.theme.axis_text_x.size;
+                    const EDGE: f64 = 1.0;
+                    for _ in 0..2 {
+                        let layout = PlotLayout::compute_with_extras(
+                            w as f64,
+                            h as f64,
+                            &built.theme,
+                            has_title,
+                            has_subtitle,
+                            has_caption,
+                            has_legend,
+                            x_axis_top,
+                            y_label_width,
+                            x_label_height,
+                            extras,
+                        );
+                        let area = &layout.plot_area;
+                        let edge_y = area.y + area.height;
+                        let to_point = |pos: f64| if flipped { (0.0, pos) } else { (pos, 0.0) };
+                        let px_first = built.coord.transform(to_point(first.0), area).0;
+                        let px_last = built.coord.transform(to_point(last.0), area).0;
+                        let bbox_first = crate::render::text::label_bbox(
+                            &first.1, size, px_first, edge_y, angle, anchor,
+                        );
+                        let bbox_last = crate::render::text::label_bbox(
+                            &last.1, size, px_last, edge_y, angle, anchor,
+                        );
+                        let deficit_left = (EDGE - bbox_first[0]).max(0.0);
+                        let deficit_right = (bbox_last[2] - (w as f64 - EDGE)).max(0.0);
+                        if deficit_left <= 0.0 && deficit_right <= 0.0 {
+                            break;
+                        }
+                        if deficit_left > 0.0 {
+                            extras.left += deficit_left / first.0.max(0.05);
+                        }
+                        if deficit_right > 0.0 {
+                            extras.right += deficit_right / (1.0 - last.0).max(0.05);
+                        }
+                    }
+                }
+            }
+        }
+
+        PlotLayout::compute_with_extras(
             w as f64,
             h as f64,
             &built.theme,
@@ -2518,6 +2599,7 @@ impl GGPlot {
             x_axis_top,
             y_label_width,
             x_label_height,
+            extras,
         )
     }
 

@@ -14,6 +14,18 @@ pub struct PlotLayout {
     pub legend_area: Rect,
 }
 
+/// Extra layout reservations beyond the theme-driven defaults (B3-1/B3-2):
+/// additional left/right panel margin to keep outer x-axis labels on-canvas
+/// under [`AxisLabelFit::Reserve`](crate::theme::AxisLabelFit::Reserve), and
+/// extra legend rows from the B3-2 auto-wrap/`nrow`/`ncol` planner. All-zero
+/// (the `Default`) reproduces `compute_full`'s own byte-identical math.
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
+pub(crate) struct LayoutExtras {
+    pub left: f64,
+    pub right: f64,
+    pub legend_extra_rows: usize,
+}
+
 impl PlotLayout {
     /// Compute layout from total dimensions and theme settings.
     pub fn compute(
@@ -46,6 +58,39 @@ impl PlotLayout {
         x_axis_top: bool,
         y_label_width: Option<f64>,
         x_label_height: Option<f64>,
+    ) -> Self {
+        Self::compute_with_extras(
+            width,
+            height,
+            theme,
+            has_title,
+            has_subtitle,
+            has_caption,
+            has_legend,
+            x_axis_top,
+            y_label_width,
+            x_label_height,
+            LayoutExtras::default(),
+        )
+    }
+
+    /// Like [`compute_full`](Self::compute_full), plus [`LayoutExtras`] for
+    /// the outer-label-fit left/right panel reservation (B3-1) and the
+    /// legend auto-wrap extra rows (B3-2). `extras` all-zero is byte-identical
+    /// to `compute_full`.
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) fn compute_with_extras(
+        width: f64,
+        height: f64,
+        theme: &Theme,
+        has_title: bool,
+        has_subtitle: bool,
+        has_caption: bool,
+        has_legend: bool,
+        x_axis_top: bool,
+        y_label_width: Option<f64>,
+        x_label_height: Option<f64>,
+        extras: LayoutExtras,
     ) -> Self {
         let margin = &theme.plot_margin;
 
@@ -115,6 +160,7 @@ impl PlotLayout {
                 + theme.legend_key_height
                 + theme.legend_spacing
                 + theme.legend_margin.bottom
+                + extras.legend_extra_rows as f64 * (theme.legend_key_height + theme.legend_spacing)
         } else {
             0.0
         };
@@ -132,15 +178,21 @@ impl PlotLayout {
             (0.0, 0.0, 0.0, 0.0)
         };
 
-        let plot_x = margin.left + y_axis_width + legend_left;
+        let plot_x = margin.left + y_axis_width + legend_left + extras.left;
         // A top x-axis reserves its space above the panel instead of below.
         let plot_y = margin.top
             + title_height
             + subtitle_height
             + legend_top
             + if x_axis_top { x_axis_height } else { 0.0 };
-        let plot_width =
-            width - margin.left - margin.right - y_axis_width - legend_right - legend_left;
+        let plot_width = width
+            - margin.left
+            - margin.right
+            - y_axis_width
+            - legend_right
+            - legend_left
+            - extras.left
+            - extras.right;
         let plot_height = height
             - margin.top
             - margin.bottom
