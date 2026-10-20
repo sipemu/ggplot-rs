@@ -661,7 +661,16 @@ impl PlotBuilder {
 
         // B2-7: geom ink/paper/accent palette, applied before the brand
         // colour below so a primary colour still wins when both are set.
-        geom.apply_element_geom(geom_theme);
+        // Skipped when the layer was configured explicitly
+        // (`geom_*_with(...)`) — the same `explicit_style` gate
+        // `set_series_color` uses below, and for the same reason: a
+        // field-value comparison against the hard-coded default (e.g.
+        // `color == (0, 0, 0)`) can't tell an explicitly-set black apart
+        // from a black that was simply never touched (review PR#141
+        // finding 4), but `explicit_style` can.
+        if !explicit_style {
+            geom.apply_element_geom(geom_theme);
+        }
 
         // Brand/primary color: apply to a single-series geom only when the layer
         // maps neither color nor fill (an explicit aesthetic always wins) and

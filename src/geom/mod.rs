@@ -102,13 +102,21 @@ pub trait Geom: Send + Sync {
 
     /// Recolour this geom's *built-in default* colour/fill from the theme's
     /// ink/paper/accent palette (B2-7's `element_geom`), called once per
-    /// layer before [`set_series_color`](Self::set_series_color). Default
-    /// no-op; a geom that honours this replaces only a field still at its
+    /// layer before [`set_series_color`](Self::set_series_color) — and only
+    /// when the layer was *not* configured explicitly (`geom_*_with(...)`;
+    /// the build pipeline gates the call on the same `explicit_style` flag
+    /// `set_series_color`'s brand-colour application is gated on). That
+    /// gate, not a field-value comparison, is what keeps an explicit colour
+    /// untouched: a geom that honours this replaces a field still at its
     /// own hard-coded default (black/`(50, 50, 50)` → `ink`, white →
-    /// `paper`), so a mapped or explicit colour — and a brand colour
-    /// already applied by `set_series_color` — are never touched. `None`
-    /// fields of `ElementGeom` change nothing, so the default theme (no
-    /// ink/paper/accent set) stays byte-identical.
+    /// `paper`) by comparing its *value*, which cannot by itself tell an
+    /// explicitly-set colour that happens to equal that default (e.g.
+    /// `GeomPoint { color: (0, 0, 0), .. }` under `geom_point_with`) apart
+    /// from one that was simply never touched — only skipping the call
+    /// entirely for an explicitly-configured layer closes that gap (review
+    /// PR#141 finding 4). Default no-op; `None` fields of `ElementGeom`
+    /// change nothing, so the default theme (no ink/paper/accent set)
+    /// stays byte-identical.
     fn apply_element_geom(&mut self, _el: &crate::theme::elements::ElementGeom) {}
 
     /// Whether this geom draws from a 0 baseline, so the Y scale should include

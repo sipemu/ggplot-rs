@@ -188,3 +188,109 @@ fn ink_and_paper_recolour_geom_label() {
     assert!(svg.contains("fill=\"#FFFFFF\""), "{svg}");
     assert!(svg.contains(">hi</text>"), "{svg}");
 }
+
+#[test]
+fn an_explicit_colour_that_equals_the_built_in_default_is_still_unaffected_by_ink() {
+    // Review PR#141 finding 4: a value-equality check ("is color still at
+    // its hard-coded default?") can't tell an *explicitly set* colour that
+    // happens to equal that default (black, here) apart from a colour that
+    // was simply never touched. `apply_element_geom` is now gated on
+    // `explicit_style` (the same flag `set_series_color`'s brand-colour
+    // application already uses), so a `geom_*_with(...)` layer's colour is
+    // never touched at all, regardless of its value.
+    let data = frame(vec![("x", floats(&[1.0, 2.0])), ("y", floats(&[1.0, 2.0]))]);
+    let svg = GGPlot::new(data)
+        .aes(Aes::new().x("x").y("y"))
+        .geom_point_with(GeomPoint {
+            color: (0, 0, 0),
+            ..Default::default()
+        })
+        .theme(Theme::default().with_ink_paper(WHITE, BLACK))
+        .render_svg_native_with_size(300, 200)
+        .unwrap();
+    let circles = tags(&svg, "circle");
+    assert_eq!(circles.len(), 2, "{svg}");
+    for c in circles {
+        assert!(
+            c.contains("fill=\"#000000\""),
+            "an explicit black colour must stay black, not become ink: {c}"
+        );
+    }
+}
+
+#[test]
+fn geom_with_variants_for_line_path_text_label_and_boxplot_keep_their_explicit_colours() {
+    let data = frame(vec![
+        ("x", floats(&[1.0, 2.0])),
+        ("y", floats(&[1.0, 2.0])),
+        ("label", strs(&["hi", "there"])),
+    ]);
+    let theme = || Theme::default().with_ink_paper(WHITE, BLACK);
+
+    let line_svg = GGPlot::new(data.clone())
+        .aes(Aes::new().x("x").y("y"))
+        .geom_line_with(GeomLine {
+            color: (0, 0, 0),
+            ..Default::default()
+        })
+        .theme(theme())
+        .render_svg_native_with_size(300, 200)
+        .unwrap();
+    assert!(line_svg.contains("stroke=\"#000000\""), "{line_svg}");
+
+    let path_svg = GGPlot::new(data.clone())
+        .aes(Aes::new().x("x").y("y"))
+        .geom_path_with(GeomPath {
+            color: (0, 0, 0),
+            ..Default::default()
+        })
+        .theme(theme())
+        .render_svg_native_with_size(300, 200)
+        .unwrap();
+    assert!(path_svg.contains("stroke=\"#000000\""), "{path_svg}");
+
+    let text_svg = GGPlot::new(data.clone())
+        .aes(Aes::new().x("x").y("y").label("label"))
+        .geom_text_with(GeomText {
+            color: (0, 0, 0),
+            ..Default::default()
+        })
+        .theme(theme())
+        .render_svg_native_with_size(300, 200)
+        .unwrap();
+    assert!(text_svg.contains("fill=\"#000000\""), "{text_svg}");
+
+    let label_svg = GGPlot::new(data.clone())
+        .aes(Aes::new().x("x").y("y").label("label"))
+        .geom_label_with(GeomLabel {
+            color: (0, 0, 0),
+            fill: WHITE,
+            ..Default::default()
+        })
+        .theme(theme())
+        .render_svg_native_with_size(300, 200)
+        .unwrap();
+    assert!(label_svg.contains("fill=\"#000000\""), "{label_svg}");
+    let rects = tags(&label_svg, "rect");
+    assert!(
+        rects.iter().any(|r| r.contains("fill=\"#FFFFFF\"")),
+        "the label's explicit white background must stay white, not become paper: {label_svg}"
+    );
+
+    let boxplot_data = frame(vec![
+        ("x", strs(&["a", "a", "a", "a"])),
+        ("y", floats(&[1.0, 2.0, 3.0, 4.0])),
+    ]);
+    let box_svg = GGPlot::new(boxplot_data)
+        .aes(Aes::new().x("x").y("y"))
+        .geom_boxplot_with(GeomBoxplot {
+            color: (0, 0, 0),
+            fill: WHITE,
+            ..Default::default()
+        })
+        .theme(theme())
+        .render_svg_native_with_size(300, 200)
+        .unwrap();
+    assert!(box_svg.contains("stroke=\"#000000\""), "{box_svg}");
+    assert!(box_svg.contains("fill=\"#FFFFFF\""), "{box_svg}");
+}

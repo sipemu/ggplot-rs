@@ -107,9 +107,25 @@ impl Default for ElementRect {
 ///
 /// A default [`Geom::apply_element_geom`](crate::geom::Geom::apply_element_geom)
 /// is a no-op; a geom that honours this overrides it, replacing only
-/// fields still at their own built-in default (so a mapped or explicit
-/// colour is never touched) — called once per layer, before the brand
-/// [`Theme::primary`](super::Theme::primary) colour is applied.
+/// fields still at their own built-in default — called once per layer,
+/// before the brand [`Theme::primary`](super::Theme::primary) colour is
+/// applied, and (like the brand colour) only for a layer that was *not*
+/// configured explicitly via `geom_*_with(...)`: that is the actual guard
+/// against touching an explicit colour (an `explicit_style` gate in the
+/// build pipeline), not a comparison of the field's *value* against the
+/// hard-coded default, which can't otherwise tell an explicitly-set black
+/// apart from a black nobody touched.
+///
+/// **Geoms covered (0.21.0):** `GeomPoint`, `GeomLine`, `GeomPath`,
+/// `GeomText`, `GeomLabel` and `GeomBoxplot` (`ink` for a black/
+/// `(50, 50, 50)` line, text or outline; `paper` for a white fill) and
+/// `GeomSmooth` (`accent` for its default blue line and ribbon fill) — plus
+/// the legend key swatch colour, which reads `ink` directly rather than
+/// going through this trait method. Every other geom (segment, curve,
+/// reference lines, errorbar/linerange/pointrange, step, rect/tile
+/// outlines, density/violin/area outlines, crossbar, …) does not yet
+/// honour `ElementGeom` and keeps its hard-coded colour regardless —
+/// tracked at sipemu/ggplot-rs#142.
 #[non_exhaustive]
 #[derive(Clone, Debug, Default)]
 pub struct ElementGeom {

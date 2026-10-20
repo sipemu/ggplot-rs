@@ -66,10 +66,19 @@ honouring a theme/geom font family it previously ignored. `Layer` and
   `Theme::set_geom`/`with_ink_paper`, and `ThemeConfig`'s `geom.ink`/
   `geom.paper`/`geom.accent`/`geom.family` config keys. A new default
   `Geom::apply_element_geom` (a no-op) is called once per layer before the
-  brand/primary colour; `GeomPoint`/`GeomLine`/`GeomPath`/`GeomText`/
-  `GeomLabel`/`GeomBoxplot` recolour their built-in black/`(50, 50, 50)`/
-  white defaults from `ink`/`paper`, and `GeomSmooth` from `accent`. The
-  legend key swatch colour is now `theme.geom.ink.unwrap_or((50, 50, 50))`.
+  brand/primary colour, and only for a layer *not* configured explicitly
+  via `geom_*_with(...)` (the same `explicit_style` gate the brand colour
+  already uses — review PR#141 finding 4: a field-*value* comparison
+  against the hard-coded default can't tell an explicitly-set colour that
+  happens to equal it apart from one nobody touched, so the gate skips the
+  call entirely instead). Covered geoms: `GeomPoint`/`GeomLine`/
+  `GeomPath`/`GeomText`/`GeomLabel`/`GeomBoxplot` recolour their built-in
+  black/`(50, 50, 50)`/white defaults from `ink`/`paper`, and `GeomSmooth`
+  from `accent`. The legend key swatch colour is now
+  `theme.geom.ink.unwrap_or((50, 50, 50))`. Every other geom (segment,
+  curve, reference lines, errorbar/linerange/pointrange, step, rect/tile
+  outlines, density/violin/area outlines, crossbar) does not yet honour
+  `ElementGeom` — tracked at sipemu/ggplot-rs#142.
 - `ScaleColorContinuous`/`ScaleColorGradient2`/`ScaleColorGradientN` gain
   `with_limits(lo, hi)`, fixing the colour domain (not just the legend) to
   a range independent of the trained data — e.g. `[-1, 1]` for a
