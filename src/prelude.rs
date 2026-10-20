@@ -134,5 +134,7 @@ pub use crate::geom::errorbarh::GeomErrorbarh;
 pub use crate::geom::qq::GeomQQBand;
 pub use crate::geom::ribbon::GeomStepribbon;
 pub use crate::position::dodge::position_dodge;
+pub use crate::position::fill::position_fill;
+pub use crate::position::stack::position_stack;
 pub use crate::stat::ecdf::StatEcdfBand;
 pub use crate::stat::qq::{QQBandType, QQDistribution, StatQQBand, StatQQDist, StatQQLineDist};

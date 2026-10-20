@@ -68,7 +68,7 @@ jobs:
       # Target the lib (spatial unit tests) + the sf integration test only:
       # skips the polars-using doctests and trims the link footprint.
       - name: Tests (sf)
-        run: cargo test --no-default-features --features sf --lib --test sf --test native_svg --test linewidth_arrow --test hexbin --test svg_root_attrs --test formatted_values --test tooltip_templates --test geom_text_font --test geom_ink_paper --test geom_ink_paper_sf --test gradient_limits --test default_output_022 --test axis_label_fit --test legend_wrap --test position_panels_r
+        run: cargo test --no-default-features --features sf --lib --test sf --test native_svg --test linewidth_arrow --test hexbin --test svg_root_attrs --test formatted_values --test tooltip_templates --test geom_text_font --test geom_ink_paper --test geom_ink_paper_sf --test gradient_limits --test default_output_022 --test axis_label_fit --test legend_wrap --test position_panels_r --test position_vjust_text_dodge
 
       - name: Clippy (geojson)
         run: cargo clippy --no-default-features --features geojson --lib -- -D warnings

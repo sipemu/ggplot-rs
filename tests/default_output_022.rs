@@ -267,7 +267,7 @@ const EXPECTED: &[(&str, u64)] = &[
     ("facet_stack", 0x19ec9f748b5bb2bc),
     ("flip", 0x94fdd6d55d9a7be1),
     ("text", 0x9fc585729f348a51),
-    ("text_dodge", 0xb73b3b9f8236fe35),
+    ("text_dodge", 0x902c0a52604228e3),
     ("violin", 0x68cd485311890ec4),
     ("errorbar", 0xe7abdb6d7e210a85),
     ("errorbar_dodge", 0xb84cd4b0733c711c),

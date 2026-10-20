@@ -23,6 +23,11 @@ guarded by `tests/default_output_022.rs`.
   "+N more" when it still doesn't fit `max_rows`.
 - `Position::per_panel()` (default `false`) and `Position::validate()`
   (default no-op); `PositionStack`/`PositionFill` are per-panel.
+- `PositionStack`/`PositionFill` gain a `vjust` field (default `1`, the
+  previous top-anchored behaviour) with a `with_vjust` builder and free
+  functions `position_stack()`/`position_fill()`, matching ggplot2's
+  `position_stack(vjust =)`/`position_fill(vjust =)` (#147). `vjust != 1`
+  also writes an `ymax` column holding the segment's top.
 
 ### Changed
 
@@ -30,8 +35,18 @@ guarded by `tests/default_output_022.rs`.
   instead of on the rows pooled across panels before faceting, matching
   ggplot2 (#146). A plot with 2 or more distinct facet panels and a stack/
   fill layer may render differently; one panel (or none) is unaffected.
+- `geom_text`/`geom_label` now honour a discrete `position_dodge`, via the
+  same `XMapper` bar/col/point/errorbar/… already use (#148). A plot that
+  dodges text/labels on a discrete x axis renders differently; text/
+  labels without a dodge are unaffected.
 
 ### Breaking
+
+- `PositionStack`/`PositionFill` are now structs with a `vjust` field
+  instead of unit structs — an external `PositionStack { .. }`/
+  `PositionFill { .. }` struct-literal pattern no longer compiles (the
+  bare value `PositionStack`/`PositionFill` still does, via a `const` of
+  the same name — dodge.rs's existing `PositionDodge` precedent).
 
 - The `arrow` feature now pins `arrow = "59"` (was `"53"`), still with
   `default-features = false`. `GGPlot::new(batch)` and the `GGData` impl for
