@@ -3,6 +3,24 @@
 All notable changes to this project are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [Unreleased]
+
+### Changed
+
+- The `arrow` feature now pins `arrow = "59"` (was `"53"`), still with
+  `default-features = false`. `GGPlot::new(batch)` and the `GGData` impl for
+  `arrow::record_batch::RecordBatch` compile unchanged against arrow 59 —
+  no source changes were needed in `src/data/source.rs`. This lets Arrow-
+  native producers on arrow 59.x (e.g. the inventory-rs DuckDB/Parquet
+  ingest path) hand `RecordBatch`es to ggplot-rs directly, without a copy
+  through an intermediate arrow 53 batch (#123). The `polars` feature is
+  unaffected: polars vendors its own `polars-arrow` crate rather than
+  depending on the `arrow` crate, so the two can be enabled together with a
+  single `arrow` v59.3.1 in the dependency tree. This is a semver-relevant
+  change for `arrow`-feature users: code that names arrow-53-specific types
+  (e.g. via `arrow = "53"` pinned directly) needs to move to arrow 59 too,
+  since arrow does not guarantee cross-major type compatibility.
+
 ## [0.21.0] — 2026-10-20
 
 Minor bump: the SVG mark contract. Default output is byte-identical except
