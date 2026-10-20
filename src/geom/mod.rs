@@ -230,6 +230,25 @@ pub(crate) fn set_mark(
     backend.set_mark_value(value);
 }
 
+/// Resolve the font family for a text-drawing geom (text, label, repel,
+/// bracket, annotations) — B2-6: `geom_family` (the geom's own
+/// `fontfamily`, e.g. `GeomText::with_fontfamily`) when set, else
+/// `theme.text.family` (read after `Theme::resolve_inheritance`, so an
+/// inherited value is already resolved), else `None` (the SVG backend's
+/// own `"sans-serif"` default). `ElementText::family` defaults to
+/// `"sans-serif"` itself, so with nothing configured anywhere this already
+/// returns `Some("sans-serif")` — the same string the backend would have
+/// defaulted to, so default output stays byte-identical.
+pub(crate) fn resolve_font_family(geom_family: &str, theme: &Theme) -> Option<String> {
+    if !geom_family.is_empty() {
+        Some(geom_family.to_string())
+    } else if theme.text.family.is_empty() {
+        None
+    } else {
+        Some(theme.text.family.clone())
+    }
+}
+
 /// Clear all per-mark metadata after a geom has drawn its marks.
 pub(crate) fn clear_mark(backend: &mut dyn DrawBackend) {
     set_mark(backend, None, None, None, None);

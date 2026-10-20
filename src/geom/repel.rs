@@ -562,6 +562,7 @@ fn draw_repel(
     data: &DataFrame,
     coord: &dyn Coord,
     scales: &ScaleSet,
+    theme: &Theme,
     backend: &mut dyn DrawBackend,
     size: f64,
     color: (u8, u8, u8),
@@ -774,7 +775,7 @@ fn draw_repel(
                 size,
                 anchor: TextAnchor::Middle,
                 angle: 0.0,
-                family: None,
+                family: super::resolve_font_family("", theme),
                 face,
             },
         )?;
@@ -799,7 +800,7 @@ impl Geom for GeomTextRepel {
         data: &DataFrame,
         coord: &dyn Coord,
         scales: &ScaleSet,
-        _theme: &Theme,
+        theme: &Theme,
         backend: &mut dyn DrawBackend,
     ) -> Result<(), RenderError> {
         draw_repel(
@@ -807,6 +808,7 @@ impl Geom for GeomTextRepel {
             data,
             coord,
             scales,
+            theme,
             backend,
             self.size,
             self.color,
@@ -840,7 +842,7 @@ impl Geom for GeomLabelRepel {
         data: &DataFrame,
         coord: &dyn Coord,
         scales: &ScaleSet,
-        _theme: &Theme,
+        theme: &Theme,
         backend: &mut dyn DrawBackend,
     ) -> Result<(), RenderError> {
         draw_repel(
@@ -848,6 +850,7 @@ impl Geom for GeomLabelRepel {
             data,
             coord,
             scales,
+            theme,
             backend,
             self.size,
             self.color,

@@ -147,6 +147,7 @@ impl PlotRenderer {
             &built.scales,
             built.coord.as_ref(),
             &plot_area,
+            theme,
             backend,
         )?;
 
@@ -657,6 +658,7 @@ impl PlotRenderer {
             &built.scales,
             built.coord.as_ref(),
             &plot_area,
+            theme,
             backend,
         )?;
 
@@ -681,6 +683,7 @@ impl PlotRenderer {
         scales: &crate::scale::ScaleSet,
         coord: &dyn crate::coord::Coord,
         plot_area: &crate::render::Rect,
+        theme: &crate::theme::Theme,
         backend: &mut dyn DrawBackend,
     ) -> Result<(), RenderError> {
         use crate::data::Value;
@@ -708,7 +711,7 @@ impl PlotRenderer {
                             size: *size,
                             anchor: TextAnchor::Middle,
                             angle: 0.0,
-                            family: None,
+                            family: crate::geom::resolve_font_family("", theme),
                             face: crate::render::backend::FontFace::Plain,
                         },
                     )?;

@@ -69,7 +69,7 @@ impl Geom for GeomText {
         data: &DataFrame,
         coord: &dyn Coord,
         scales: &ScaleSet,
-        _theme: &Theme,
+        theme: &Theme,
         backend: &mut dyn DrawBackend,
     ) -> Result<(), RenderError> {
         let x_col = data
@@ -118,7 +118,7 @@ impl Geom for GeomText {
                     size: self.size,
                     anchor,
                     angle: 0.0,
-                    family: None,
+                    family: super::resolve_font_family(&self.fontfamily, theme),
                     face: crate::render::backend::FontFace::Plain,
                 },
             )?;
@@ -206,7 +206,7 @@ impl Geom for GeomLabel {
         data: &DataFrame,
         coord: &dyn Coord,
         scales: &ScaleSet,
-        _theme: &Theme,
+        theme: &Theme,
         backend: &mut dyn DrawBackend,
     ) -> Result<(), RenderError> {
         let x_col = data
@@ -270,7 +270,7 @@ impl Geom for GeomLabel {
                     size: self.size,
                     anchor,
                     angle: 0.0,
-                    family: None,
+                    family: super::resolve_font_family(&self.fontfamily, theme),
                     face: crate::render::backend::FontFace::Plain,
                 },
             )?;
