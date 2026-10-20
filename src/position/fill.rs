@@ -65,4 +65,8 @@ impl Position for PositionFill {
     fn name(&self) -> &str {
         "fill"
     }
+
+    fn per_panel(&self) -> bool {
+        true
+    }
 }

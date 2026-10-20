@@ -61,4 +61,8 @@ impl Position for PositionStack {
     fn name(&self) -> &str {
         "stack"
     }
+
+    fn per_panel(&self) -> bool {
+        true
+    }
 }

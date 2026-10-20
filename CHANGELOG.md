@@ -11,7 +11,25 @@ guarded by `tests/default_output_022.rs`.
 
 ### Added
 
+- `render::text::text_width(text, size)` and ggplot2's `check.overlap`
+  priority order for axis labels, ported from the consumer's `ticks.rs` so
+  ggplot-rs owns outer-label overflow and overlap thinning centrally.
+- `Theme.axis_text_x_fit: AxisLabelFit { Clip, Shift, #[default] Reserve }`
+  and `Theme.axis_text_x_check_overlap` (default `false`), with
+  `GGPlot::axis_text_x_fit`/`axis_text_x_check_overlap` builders.
+- `GuideLegend.byrow`/`max_rows`, with `with_byrow`/`with_max_rows`
+  builders: an explicit `nrow`/`ncol` legend grid (column-major unless
+  `byrow`), and an auto-wrapped horizontal legend that ends in a trailing
+  "+N more" when it still doesn't fit `max_rows`.
+- `Position::per_panel()` (default `false`) and `Position::validate()`
+  (default no-op); `PositionStack`/`PositionFill` are per-panel.
+
 ### Changed
+
+- A faceted `position_stack`/`position_fill` now computes per panel
+  instead of on the rows pooled across panels before faceting, matching
+  ggplot2 (#146). A plot with 2 or more distinct facet panels and a stack/
+  fill layer may render differently; one panel (or none) is unaffected.
 
 ### Breaking
 

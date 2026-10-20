@@ -31,6 +31,21 @@ pub trait Position: Send + Sync {
     fn compute(&self, data: &mut DataFrame, params: &PositionParams);
 
     fn name(&self) -> &str;
+
+    /// Whether this position must run separately per facet panel rather
+    /// than once on the pooled rows before facets are split (B3-3, D8).
+    /// Default `false`. `PositionStack`/`PositionFill` override this to
+    /// `true` — a shared x category's stack height must not mix rows from
+    /// different panels. Dodge and jitter stay pooled across panels for
+    /// now (a follow-up, sipemu/ggplot-rs#154).
+    fn per_panel(&self) -> bool {
+        false
+    }
+
+    /// Validate this position's own parameters once per layer (D2);
+    /// default no-op. Implementations push a warning and fall back to a
+    /// sane default rather than panicking or silently miscomputing.
+    fn validate(&self, _warnings: &mut Vec<String>) {}
 }
 
 /// Column in which stacking positions keep each row's original (pre-stack)

@@ -893,9 +893,20 @@ impl PlotBuilder {
             }
         }
 
-        // Step 7: Position adjustment
+        // Step 7: Position adjustment. `validate` runs once per layer (D2)
+        // regardless of whether the position is per-panel.
+        position.validate(warnings);
         let params = PositionParams::default();
-        position.compute(&mut working_data, &params);
+        if position.per_panel() {
+            Self::compute_position_per_panel(
+                position.as_ref(),
+                &mut working_data,
+                &params,
+                facet_vars,
+            );
+        } else {
+            position.compute(&mut working_data, &params);
+        }
 
         // Step 7b: Geom-specific setup (e.g. tile/candlestick extents), then
         // make sure position scales exist for any extent columns it added.
@@ -1119,6 +1130,90 @@ impl PlotBuilder {
             }
         }
         suppressed
+    }
+
+    /// Run a per-panel [`Position`](crate::position::Position) (B3-3, D8):
+    /// partition the rows by the facet variables' joined key, in
+    /// first-seen order, run `compute` on each panel separately, then
+    /// scatter the rows back into their original positions — NA-filling
+    /// any column a panel's `compute` added that another panel's didn't
+    /// (there currently are none in practice: `PositionStack`/
+    /// `PositionFill` add the same `ymin` everywhere). Falls back to the
+    /// plain pooled `compute` when there's no facet column, or only one
+    /// distinct panel — both byte-identical to the pooled path, since
+    /// there's nothing to partition.
+    fn compute_position_per_panel(
+        position: &dyn crate::position::Position,
+        data: &mut DataFrame,
+        params: &PositionParams,
+        facet_vars: &[String],
+    ) {
+        let active_vars: Vec<&str> = facet_vars
+            .iter()
+            .map(|s| s.as_str())
+            .filter(|v| data.has_column(v))
+            .collect();
+        if active_vars.is_empty() {
+            position.compute(data, params);
+            return;
+        }
+
+        let n = data.nrows();
+        let mut order: Vec<String> = Vec::new();
+        let mut groups: indexmap::IndexMap<String, Vec<usize>> = indexmap::IndexMap::new();
+        for i in 0..n {
+            let key = active_vars
+                .iter()
+                .map(|v| data.column(v).unwrap()[i].key_str().into_owned())
+                .collect::<Vec<_>>()
+                .join("\u{1}");
+            if !groups.contains_key(&key) {
+                order.push(key.clone());
+            }
+            groups.entry(key).or_default().push(i);
+        }
+        if order.len() < 2 {
+            position.compute(data, params);
+            return;
+        }
+
+        let col_names: Vec<String> = data.column_names().iter().map(|s| s.to_string()).collect();
+        let mut panels: Vec<(Vec<usize>, DataFrame)> = Vec::with_capacity(order.len());
+        for key in &order {
+            let indices = &groups[key];
+            let mut sub = DataFrame::new();
+            for name in &col_names {
+                let col = data.column(name).unwrap();
+                let values: Vec<crate::data::Value> =
+                    indices.iter().map(|&i| col[i].clone()).collect();
+                sub.add_column(name.clone(), values);
+            }
+            position.compute(&mut sub, params);
+            panels.push((indices.clone(), sub));
+        }
+
+        // Union of every column present after `compute` (new columns like
+        // `ymin` may have been added), so a panel that for some reason
+        // didn't add one still gets NA there rather than a stale value.
+        let mut all_cols = col_names.clone();
+        for (_, sub) in &panels {
+            for name in sub.column_names() {
+                if !all_cols.iter().any(|c| c == name) {
+                    all_cols.push(name.to_string());
+                }
+            }
+        }
+        for name in &all_cols {
+            let mut full = vec![crate::data::Value::Na; n];
+            for (indices, sub) in &panels {
+                if let Some(col) = sub.column(name) {
+                    for (j, &i) in indices.iter().enumerate() {
+                        full[i] = col[j].clone();
+                    }
+                }
+            }
+            data.add_column(name.clone(), full);
+        }
     }
 
     /// Detect which columns to group by for statistics.
