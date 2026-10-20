@@ -834,6 +834,12 @@ impl Geom for GeomTextRepel {
     fn name(&self) -> &str {
         "text_repel"
     }
+
+    fn apply_element_geom(&mut self, el: &crate::theme::elements::ElementGeom) {
+        if let (true, Some(ink)) = (self.color == (0, 0, 0), el.ink) {
+            self.color = ink;
+        }
+    }
 }
 
 impl Geom for GeomLabelRepel {
@@ -875,6 +881,15 @@ impl Geom for GeomLabelRepel {
     }
     fn name(&self) -> &str {
         "label_repel"
+    }
+
+    fn apply_element_geom(&mut self, el: &crate::theme::elements::ElementGeom) {
+        if let (true, Some(ink)) = (self.color == (0, 0, 0), el.ink) {
+            self.color = ink;
+        }
+        if let (true, Some(paper)) = (self.fill == (255, 255, 255), el.paper) {
+            self.fill = paper;
+        }
     }
 }
 

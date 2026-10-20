@@ -159,6 +159,12 @@ impl Geom for GeomStep {
         "step"
     }
 
+    fn apply_element_geom(&mut self, el: &crate::theme::elements::ElementGeom) {
+        if let (true, Some(ink)) = (self.color == (0, 0, 0), el.ink) {
+            self.color = ink;
+        }
+    }
+
     /// stat_ecdf pads the step with ±Inf (ggplot2), drawn to the panel edge.
     fn allows_infinite(&self) -> bool {
         true

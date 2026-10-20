@@ -146,4 +146,10 @@ impl Geom for GeomDensity2d {
     fn name(&self) -> &str {
         "density_2d"
     }
+
+    fn apply_element_geom(&mut self, el: &crate::theme::elements::ElementGeom) {
+        if let (true, Some(ink)) = (self.color == (50, 50, 50), el.ink) {
+            self.color = ink;
+        }
+    }
 }

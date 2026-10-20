@@ -128,4 +128,10 @@ impl Geom for GeomContour {
     fn name(&self) -> &str {
         "contour"
     }
+
+    fn apply_element_geom(&mut self, el: &crate::theme::elements::ElementGeom) {
+        if let (true, Some(ink)) = (self.color == (50, 50, 50), el.ink) {
+            self.color = ink;
+        }
+    }
 }
