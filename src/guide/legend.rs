@@ -298,8 +298,16 @@ fn draw_discrete_legend_at(
                 )?;
             }
             Aesthetic::Size => {
-                // For size, show varying circle sizes
-                let size = scales.map_size(&value).unwrap_or(3.0);
+                // For size, show varying circle sizes. Uses the break's own
+                // [0,1] fraction, not a round trip through the label text
+                // (a discrete-style legend key for a continuous scale only
+                // has the rendered label, and `Value::Str(label).as_f64()`
+                // doesn't parse it back to a number) — see
+                // `Scale::map_fraction_to_size`.
+                let size = scale
+                    .map_fraction_to_size(*pos)
+                    .or_else(|| scales.map_size(&value))
+                    .unwrap_or(3.0);
                 backend.draw_shape(
                     (center_x, center_y),
                     size.min(swatch_size / 2.0),
@@ -312,7 +320,11 @@ fn draw_discrete_legend_at(
                 )?;
             }
             Aesthetic::Alpha => {
-                let alpha = scales.map_alpha(&value).unwrap_or(1.0);
+                // Same fix as `Size` above, via `Scale::map_fraction_to_alpha`.
+                let alpha = scale
+                    .map_fraction_to_alpha(*pos)
+                    .or_else(|| scales.map_alpha(&value))
+                    .unwrap_or(1.0);
                 backend.draw_rect(
                     (x, y),
                     (x + swatch_size, y + swatch_size),

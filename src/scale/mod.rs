@@ -211,6 +211,15 @@ pub trait Scale: Send + Sync {
         None
     }
 
+    /// Map an already-computed `[0, 1]` scale fraction directly to an output
+    /// alpha (opacity), the [`map_fraction_to_size`](Self::map_fraction_to_size)
+    /// equivalent for a continuous alpha scale's discrete-style legend keys —
+    /// see that method's doc for why the fraction, not the label, is the
+    /// input. Default: `None`.
+    fn map_fraction_to_alpha(&self, _fraction: f64) -> Option<f64> {
+        None
+    }
+
     /// Clone this scale into a boxed trait object.
     fn clone_box(&self) -> Box<dyn Scale>;
 
@@ -244,6 +253,7 @@ mod default_trait_method_tests {
         // colour-identity scale.
         scale.set_expand(0.1, 5.0);
         assert_eq!(scale.map_fraction_to_size(0.5), None);
+        assert_eq!(scale.map_fraction_to_alpha(0.5), None);
         // validate() is also a no-op default; an identity scale never has
         // anything to warn about.
         let mut warnings = Vec::new();
