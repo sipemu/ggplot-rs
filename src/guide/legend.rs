@@ -277,7 +277,7 @@ fn draw_discrete_legend_at(
                     (center_x, center_y),
                     swatch_size / 3.0,
                     &PointStyle {
-                        color: (50, 50, 50),
+                        color: theme.geom.ink.unwrap_or((50, 50, 50)),
                         alpha: 1.0,
                         filled: true,
                         shape,
@@ -289,7 +289,7 @@ fn draw_discrete_legend_at(
                 backend.draw_line(
                     &[(x + 2.0, center_y), (x + swatch_size - 2.0, center_y)],
                     &LineStyle {
-                        color: (50, 50, 50),
+                        color: theme.geom.ink.unwrap_or((50, 50, 50)),
                         width: 1.5,
                         alpha: 1.0,
                         linetype: lt,
@@ -304,7 +304,7 @@ fn draw_discrete_legend_at(
                     (center_x, center_y),
                     size.min(swatch_size / 2.0),
                     &PointStyle {
-                        color: (50, 50, 50),
+                        color: theme.geom.ink.unwrap_or((50, 50, 50)),
                         alpha: 1.0,
                         filled: true,
                         shape: crate::render::backend::PointShape::Circle,
@@ -317,7 +317,7 @@ fn draw_discrete_legend_at(
                     (x, y),
                     (x + swatch_size, y + swatch_size),
                     &RectStyle {
-                        fill: Some((50, 50, 50)),
+                        fill: Some(theme.geom.ink.unwrap_or((50, 50, 50))),
                         stroke: None,
                         stroke_width: 0.0,
                         alpha,
@@ -334,7 +334,7 @@ fn draw_discrete_legend_at(
                 backend.draw_line(
                     &[(x + 2.0, center_y), (x + swatch_size - 2.0, center_y)],
                     &LineStyle {
-                        color: (50, 50, 50),
+                        color: theme.geom.ink.unwrap_or((50, 50, 50)),
                         width: width.min(swatch_size),
                         alpha: 1.0,
                         linetype: Linetype::Solid,

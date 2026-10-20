@@ -42,7 +42,7 @@ impl Geom for GeomBracket {
         data: &DataFrame,
         coord: &dyn Coord,
         scales: &ScaleSet,
-        _theme: &Theme,
+        theme: &Theme,
         backend: &mut dyn DrawBackend,
     ) -> Result<(), RenderError> {
         let xmin_col = data
@@ -98,6 +98,10 @@ impl Geom for GeomBracket {
                 Some(series),
                 value,
             );
+            // No scale backs the bracket's p-value column: nothing
+            // meaningful to format it through, so just reset (no leak from
+            // an earlier layer).
+            super::set_mark_formatted(backend, scales, None, &Aesthetic::Y, None);
 
             // Bar at `py` with end ticks pointing toward the data (+y is down in
             // screen space, so the ticks drop below the bar).
@@ -132,7 +136,7 @@ impl Geom for GeomBracket {
                             size: self.label_size,
                             anchor: TextAnchor::Middle,
                             angle: 0.0,
-                            family: None,
+                            family: super::resolve_font_family("", theme),
                             face: FontFace::Plain,
                         },
                     )?;

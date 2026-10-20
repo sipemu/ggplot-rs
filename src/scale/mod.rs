@@ -29,6 +29,57 @@ use crate::aes::Aesthetic;
 use crate::data::Value;
 use crate::render::backend::{Linetype, PointShape};
 
+/// ggplot2's "out of bounds" handling for a continuous colour scale's fixed
+/// [`with_limits`](color::ScaleColorContinuous::with_limits) domain — e.g.
+/// fixing `[-1, 1]` for a correlation matrix so the *colours* (not just the
+/// legend) reflect that fixed range rather than whatever the data happens
+/// to span.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum Oob {
+    /// A value outside the limits maps to the scale's `na_value` (default
+    /// grey, ggplot2's `"grey50"`/`(127, 127, 127)`) — its own
+    /// `with_na_value`, not the geom's default colour, the same way a
+    /// genuinely missing (`NA`) value is rendered.
+    #[default]
+    Censor,
+    /// A value outside the limits is clamped to the nearest limit before
+    /// mapping, so it still gets the end colour instead of `na_value`.
+    Squish,
+}
+
+/// Default `na_value` for the gradient colour scales — ggplot2's
+/// `"grey50"`. Used for a genuinely missing (`NA`) or non-finite value, and
+/// for a value censored by [`Oob::Censor`] under `with_limits`.
+pub(crate) const DEFAULT_NA_VALUE: (u8, u8, u8) = (127, 127, 127);
+
+/// Resolve one value against a scale's optional fixed `(lo, hi)` limits and
+/// [`Oob`] policy, for `map_to_color` on the gradient scales. `limits: None`
+/// (the default — domain from trained data) never rejects a value: this
+/// only has an effect once `with_limits` is set. Returns `None` exactly
+/// when the value is outside fixed limits under [`Oob::Censor`] (the
+/// caller then uses `na_value`) — including when `lo > hi` (inverted
+/// limits, e.g. a `with_limits` typo): there is no value that satisfies
+/// `lo <= f <= hi` then, so every value is "outside", and treating it as
+/// unconditionally censored — regardless of the configured `Oob` — avoids
+/// `f64::clamp`'s `min > max` panic that `Oob::Squish` would otherwise hit.
+/// `Scale::validate` warns about this separately.
+pub(crate) fn resolve_oob(f: f64, limits: Option<(f64, f64)>, oob: Oob) -> Option<f64> {
+    let Some((lo, hi)) = limits else {
+        return Some(f);
+    };
+    if lo > hi {
+        return None;
+    }
+    if f < lo || f > hi {
+        match oob {
+            Oob::Squish => Some(f.clamp(lo, hi)),
+            Oob::Censor => None,
+        }
+    } else {
+        Some(f)
+    }
+}
+
 /// Trait for scales that map data values to visual properties.
 pub trait Scale: Send + Sync {
     /// Which aesthetic this scale is for.
@@ -99,6 +150,18 @@ pub trait Scale: Send + Sync {
 
     /// The locale this scale's default labels are rendered with, if any.
     fn locale(&self) -> Option<&crate::locale::Locale> {
+        None
+    }
+
+    /// Format a single raw (pre-scale-transform) data `value` for a
+    /// per-mark attribute (`data-fvalue`/`data-fx`, B2-4) or a tooltip
+    /// template placeholder — e.g. a de-DE currency string, or a datetime
+    /// x's ISO/locale date, independent of how the axis itself abbreviates
+    /// its break labels. `None` for a missing/non-finite value, or a scale
+    /// with nothing meaningful to format (default: every scale except
+    /// continuous position/size/linewidth and datetime/colour-continuous,
+    /// which override this).
+    fn format_value(&self, _value: &Value) -> Option<String> {
         None
     }
 
@@ -190,6 +253,25 @@ mod default_trait_method_tests {
         assert_eq!(
             scale.map_to_color(&Value::Str("#FFFFFF".into())),
             Some((255, 255, 255))
+        );
+        // format_value's default (B2-4): a scale with nothing meaningful to
+        // format (an identity colour scale has no numeric formatter) gets
+        // `None` rather than a missing-method compile error.
+        assert_eq!(scale.format_value(&Value::Str("#FFFFFF".into())), None);
+    }
+
+    /// `resolve_oob` (B2-7.5's gradient `with_limits`): `limits: None` never
+    /// rejects a value — the no-op path every scale takes before
+    /// `with_limits` is ever called.
+    #[test]
+    fn resolve_oob_without_limits_always_passes_through() {
+        assert_eq!(
+            super::resolve_oob(42.0, None, super::Oob::Censor),
+            Some(42.0)
+        );
+        assert_eq!(
+            super::resolve_oob(-5.0, None, super::Oob::Squish),
+            Some(-5.0)
         );
     }
 }

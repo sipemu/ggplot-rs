@@ -69,7 +69,7 @@ impl Geom for GeomText {
         data: &DataFrame,
         coord: &dyn Coord,
         scales: &ScaleSet,
-        _theme: &Theme,
+        theme: &Theme,
         backend: &mut dyn DrawBackend,
     ) -> Result<(), RenderError> {
         let x_col = data
@@ -118,7 +118,7 @@ impl Geom for GeomText {
                     size: self.size,
                     anchor,
                     angle: 0.0,
-                    family: None,
+                    family: super::resolve_font_family(&self.fontfamily, theme),
                     face: crate::render::backend::FontFace::Plain,
                 },
             )?;
@@ -142,6 +142,11 @@ impl Geom for GeomText {
     }
     fn name(&self) -> &str {
         "text"
+    }
+    fn apply_element_geom(&mut self, el: &crate::theme::elements::ElementGeom) {
+        if let (true, Some(ink)) = (self.color == (0, 0, 0), el.ink) {
+            self.color = ink;
+        }
     }
 }
 
@@ -206,7 +211,7 @@ impl Geom for GeomLabel {
         data: &DataFrame,
         coord: &dyn Coord,
         scales: &ScaleSet,
-        _theme: &Theme,
+        theme: &Theme,
         backend: &mut dyn DrawBackend,
     ) -> Result<(), RenderError> {
         let x_col = data
@@ -270,7 +275,7 @@ impl Geom for GeomLabel {
                     size: self.size,
                     anchor,
                     angle: 0.0,
-                    family: None,
+                    family: super::resolve_font_family(&self.fontfamily, theme),
                     face: crate::render::backend::FontFace::Plain,
                 },
             )?;
@@ -294,6 +299,14 @@ impl Geom for GeomLabel {
     }
     fn name(&self) -> &str {
         "label"
+    }
+    fn apply_element_geom(&mut self, el: &crate::theme::elements::ElementGeom) {
+        if let (true, Some(ink)) = (self.color == (0, 0, 0), el.ink) {
+            self.color = ink;
+        }
+        if let (true, Some(paper)) = (self.fill == (255, 255, 255), el.paper) {
+            self.fill = paper;
+        }
     }
 }
 

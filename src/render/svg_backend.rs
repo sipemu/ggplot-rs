@@ -26,11 +26,22 @@ pub struct SvgBackend {
     value_key: Option<String>,
     mark_part: Option<String>,
     mark_attrs: Vec<(String, String)>,
+    /// Geom of the layer being drawn (see [`DrawBackend::set_mark_geom`]).
+    mark_geom: Option<String>,
     root_attrs: Vec<(String, String)>,
     warnings: Vec<String>,
     /// Emit the root `data-plot` panel rect (off for composite pages, whose
     /// root is not a single panel).
     plot_attr: bool,
+    /// B2-4: whether `GGPlot::svg_formatted_values` is on — see
+    /// [`DrawBackend::wants_formatted_values`].
+    formatted_values: bool,
+    /// `data-fvalue` for the next drawn mark(s) — see
+    /// [`DrawBackend::set_mark_fvalue`].
+    mark_fvalue: Option<String>,
+    /// `data-fx` for the next drawn mark(s) — see
+    /// [`DrawBackend::set_mark_fx`].
+    mark_fx: Option<String>,
 }
 
 impl SvgBackend {
@@ -50,10 +61,21 @@ impl SvgBackend {
             value_key: None,
             mark_part: None,
             mark_attrs: Vec::new(),
+            mark_geom: None,
             root_attrs: Vec::new(),
             warnings: Vec::new(),
             plot_attr: true,
+            formatted_values: false,
+            mark_fvalue: None,
+            mark_fx: None,
         }
+    }
+
+    /// Turn `data-fvalue`/`data-fx` on for the whole render
+    /// ([`GGPlot::svg_formatted_values`](crate::plot::GGPlot::svg_formatted_values)).
+    /// Default off (set once, before drawing).
+    pub(crate) fn set_formatted_values(&mut self, on: bool) {
+        self.formatted_values = on;
     }
 
     /// Add extra attributes to the root `<svg>` element (e.g. the
@@ -61,6 +83,17 @@ impl SvgBackend {
     /// attribute names; values are escaped on output.
     pub fn set_root_attrs(&mut self, attrs: Vec<(String, String)>) {
         self.root_attrs = attrs;
+    }
+
+    /// Append extra attributes to the root `<svg>` element, after any
+    /// already set by [`set_root_attrs`](Self::set_root_attrs) (e.g. the
+    /// `data-domain` family from [`root_data_attrs`]). Unlike
+    /// `set_root_attrs`, this does not replace what is already there.
+    /// Callers (`GGPlot::svg_attr`/`PlotGrid::svg_attr`, via
+    /// [`validate_root_attrs`]) are responsible for name validation and
+    /// collision checks; this just appends. Values are escaped on output.
+    pub fn extend_root_attrs(&mut self, attrs: Vec<(String, String)>) {
+        self.root_attrs.extend(attrs);
     }
 
     /// Omit the root `data-plot` attribute (composite pages).
@@ -84,9 +117,23 @@ impl SvgBackend {
         std::mem::take(&mut self.warnings)
     }
 
+    /// ` class="gg-mark gg-<kind>" data-geom="<geom>"` while a layer's geom is
+    /// drawing; empty for axes, grid lines, legends and backgrounds.
+    fn mark_class(&self, kind: &str) -> String {
+        match &self.mark_geom {
+            Some(g) => format!(" class=\"gg-mark gg-{kind}\" data-geom=\"{}\"", escape(g)),
+            None => String::new(),
+        }
+    }
+
     /// Emit `<tag attrs/>`, or `<tag attrs data-…><title>tip</title></tag>`
     /// when a tooltip / mark metadata is set (native SVG hover + host grouping).
-    fn push_mark(&mut self, tag: &str, attrs: &str) {
+    ///
+    /// `kind` is the data-mark class suffix (see [`Self::mark_class`]) used
+    /// when no mark part is set. While a mark part *is* set (e.g. an
+    /// arrowhead), the part name is the effective kind instead — an
+    /// arrowhead gets `gg-mark gg-arrow`, not its parent's `gg-band`/`gg-line`.
+    fn push_mark(&mut self, tag: &str, kind: &str, attrs: &str) {
         // Built-ins first, then user `data-*` attrs — re-validated here as
         // defence in depth even though `geom::set_row_extras` already
         // derives them only from validated `data_attr` mappings, because
@@ -105,6 +152,17 @@ impl SvgBackend {
             if let Some(v) = val {
                 pairs.push((name.to_string(), v.clone()));
             }
+        }
+        // B2-4: `data-fx` only when it says something `data-x` doesn't —
+        // most marks have a plain numeric x, where the "formatted" value is
+        // the same string, and a redundant duplicate attribute is noise.
+        if let Some(fx) = &self.mark_fx {
+            if self.axis_key.as_deref() != Some(fx.as_str()) {
+                pairs.push(("data-fx".to_string(), fx.clone()));
+            }
+        }
+        if let Some(fvalue) = &self.mark_fvalue {
+            pairs.push(("data-fvalue".to_string(), fvalue.clone()));
         }
         for (name, val) in &self.mark_attrs {
             if !is_valid_mark_attr_name(name) {
@@ -132,6 +190,12 @@ impl SvgBackend {
         if self.mark_part.is_some() {
             data.push_str(" aria-hidden=\"true\"");
         }
+        // The class goes last so existing attribute sequences stay
+        // byte-identical. Exactly one `class` attribute is ever written here
+        // (no `data_attr` mapping can be named bare `class` — see
+        // `is_valid_mark_attr_name` — so nothing in `pairs` can collide with it).
+        let effective_kind: &str = self.mark_part.as_deref().unwrap_or(kind);
+        data.push_str(&self.mark_class(effective_kind));
         let mark = if self.mark_part.is_some() {
             format!("<{tag} {attrs}{data}/>")
         } else {
@@ -180,6 +244,40 @@ impl SvgBackend {
         let open = self.root_open(&format!("x=\"{}\" y=\"{}\" ", num(x), num(y)));
         format!("{open}{}</svg>", self.body)
     }
+
+    /// Emit one `<polyline>` for an already-finite run of points — see
+    /// [`DrawBackend::draw_line`]'s splitting at non-finite vertices.
+    fn draw_line_run(&mut self, pts: &[(f64, f64)], style: &LineStyle) {
+        let dash = match style
+            .linetype
+            .pattern()
+            .iter()
+            .flat_map(|(d, g)| [*d, *g])
+            .map(|v| format!("{v}"))
+            .collect::<Vec<_>>()
+            .join(",")
+        {
+            s if s.is_empty() => String::new(),
+            s => format!(" stroke-dasharray=\"{s}\""),
+        };
+        // `Butt` is SVG's own default: omitting the attribute keeps default
+        // output byte-identical.
+        let linecap = match style.lineend {
+            LineEnd::Butt => "",
+            LineEnd::Round => " stroke-linecap=\"round\"",
+            LineEnd::Square => " stroke-linecap=\"square\"",
+        };
+        let attrs = format!(
+            "points=\"{}\" fill=\"none\" stroke=\"{}\" stroke-width=\"{:.2}\"{}{}{}",
+            points(pts),
+            rgb(style.color),
+            finite_or(style.width, 1.0),
+            opacity_attr("stroke", style.alpha),
+            dash,
+            linecap
+        );
+        self.push_mark("polyline", "line", &attrs);
+    }
 }
 
 /// Format a coordinate with two decimals; non-finite becomes `0` (callers
@@ -197,6 +295,20 @@ fn finite_or(v: f64, fallback: f64) -> f64 {
         v
     } else {
         fallback
+    }
+}
+
+/// ` {prefix}-opacity="{alpha:.3}"` (with its own leading space), or the
+/// empty string when `alpha` — after the usual non-finite fallback to fully
+/// opaque — formats to `"1.000"`. Full opacity is the SVG default, so
+/// omitting it keeps default output byte-identical; an explicit `alpha = 1`
+/// is indistinguishable from "not set" and also omits the no-op attribute.
+fn opacity_attr(prefix: &str, alpha: f64) -> String {
+    let a = finite_or(alpha, 1.0);
+    if format!("{a:.3}") == "1.000" {
+        String::new()
+    } else {
+        format!(" {prefix}-opacity=\"{a:.3}\"")
     }
 }
 
@@ -288,6 +400,77 @@ fn json_string(s: &str) -> String {
     out
 }
 
+/// Allow-listed root-level attribute names for `GGPlot::svg_attr`/
+/// `PlotGrid::svg_attr`: the fixed names `role`, `id`, `class`, `lang`, or
+/// `data-*`/`aria-*` with the same charset-restricted suffix `data_attr`
+/// uses (`^[a-z0-9][a-z0-9-]*$`, excluding the reserved `part`/`geom`
+/// suffixes — irrelevant at the root, but no reason to special-case them
+/// out). Anything else is rejected.
+fn is_allowed_root_attr_name(name: &str) -> bool {
+    matches!(name, "role" | "id" | "class" | "lang")
+        || name
+            .strip_prefix("data-")
+            .is_some_and(crate::aes::is_valid_data_attr_name)
+        || name
+            .strip_prefix("aria-")
+            .is_some_and(crate::aes::is_valid_data_attr_name)
+}
+
+/// Validate and filter a caller's requested root `<svg>` attributes
+/// (`GGPlot::svg_attr`/`PlotGrid::svg_attr`), checked centrally here and
+/// used by both callers rather than re-implemented per type. A name outside
+/// [`is_allowed_root_attr_name`]'s allow-list, or one already present in
+/// `existing` (what ggplot-rs itself is about to write to the same root —
+/// e.g. `data-plot`/`data-domain`/`data-grid`, or `data-warnings` when
+/// `svg_warnings_attr` is also on), is dropped with a warning instead of
+/// silently overwriting or duplicating it. `label` names the caller
+/// (`"plot"`/`"grid"`) in the warning text.
+pub(crate) fn validate_root_attrs(
+    requested: &[(String, String)],
+    existing: &[(String, String)],
+    label: &str,
+    warnings: &mut Vec<String>,
+) -> Vec<(String, String)> {
+    let built_in: Vec<&str> = existing.iter().map(|(k, _)| k.as_str()).collect();
+    let mut used: Vec<&str> = built_in.clone();
+    let mut out = Vec::new();
+    for (name, value) in requested {
+        if !is_allowed_root_attr_name(name) {
+            warnings.push(format!(
+                "{label}: svg_attr(\"{name}\") is not on the allow-list (data-*, aria-*, role, id, class, lang) — ignored"
+            ));
+            continue;
+        }
+        if used.contains(&name.as_str()) {
+            // Review PR#141 nit #9: distinguish an actual collision with
+            // something ggplot-rs itself writes (`data-plot`, `data-grid`,
+            // …) from a *second* `svg_attr` call for the same name — the
+            // latter is the caller's own earlier value, not ggplot-rs's.
+            if built_in.contains(&name.as_str()) {
+                warnings.push(format!(
+                    "{label}: svg_attr(\"{name}\") collides with an attribute ggplot-rs already writes to the root — ignored"
+                ));
+            } else {
+                warnings.push(format!(
+                    "{label}: svg_attr(\"{name}\") was already set by an earlier svg_attr call — ignored"
+                ));
+            }
+            continue;
+        }
+        used.push(name.as_str());
+        out.push((name.clone(), value.clone()));
+    }
+    out
+}
+
+/// `["warning one", "warning two"]` — a minimal hand-rolled JSON array of
+/// strings for `svg_warnings_attr` (no serde dependency, kept out of the
+/// `sf`-feature dependency tree — see [`json_string`]).
+pub(crate) fn warnings_json(warnings: &[String]) -> String {
+    let items: Vec<String> = warnings.iter().map(|w| json_string(w)).collect();
+    format!("[{}]", items.join(","))
+}
+
 /// Defence-in-depth gate for `push_mark`'s `mark_attrs`: `^data-[a-z0-9][a-z0-9-]*$`.
 /// `geom::set_row_extras` only ever supplies already-validated names, but
 /// `set_mark_attrs` is a public `DrawBackend` method any caller (a custom
@@ -343,6 +526,34 @@ fn finite_pts(pts: &[(f64, f64)]) -> Vec<(f64, f64)> {
         .collect()
 }
 
+/// Split `pts` into maximal runs of consecutive finite vertices, dropping
+/// any run shorter than 2 points. Matches ggplot2's NA-break handling for
+/// lines: a non-finite vertex breaks the line instead of being silently
+/// skipped, which would otherwise visually bridge across the gap — but a
+/// single remaining observation isn't a line segment either (ggplot2 drops
+/// a one-point path piece the same way), so it draws nothing rather than
+/// an invisible 1-point `<polyline>` that would still carry a `<title>`
+/// and hover attributes.
+fn finite_runs(pts: &[(f64, f64)]) -> Vec<Vec<(f64, f64)>> {
+    let mut runs = Vec::new();
+    let mut cur: Vec<(f64, f64)> = Vec::new();
+    for &(x, y) in pts {
+        if x.is_finite() && y.is_finite() {
+            cur.push((x, y));
+        } else if !cur.is_empty() {
+            if cur.len() >= 2 {
+                runs.push(std::mem::take(&mut cur));
+            } else {
+                cur.clear();
+            }
+        }
+    }
+    if cur.len() >= 2 {
+        runs.push(cur);
+    }
+    runs
+}
+
 impl DrawBackend for SvgBackend {
     fn plot_area(&self) -> Rect {
         self.plot_area.clone()
@@ -367,6 +578,10 @@ impl DrawBackend for SvgBackend {
         self.value_key = value;
     }
 
+    fn set_mark_geom(&mut self, geom: Option<&str>) {
+        self.mark_geom = geom.map(str::to_string);
+    }
+
     fn warn(&mut self, message: String) {
         self.warnings.push(message);
     }
@@ -379,6 +594,18 @@ impl DrawBackend for SvgBackend {
         self.mark_attrs = attrs;
     }
 
+    fn wants_formatted_values(&self) -> bool {
+        self.formatted_values
+    }
+
+    fn set_mark_fvalue(&mut self, value: Option<String>) {
+        self.mark_fvalue = value;
+    }
+
+    fn set_mark_fx(&mut self, value: Option<String>) {
+        self.mark_fx = value;
+    }
+
     fn draw_circle(
         &mut self,
         (cx, cy): (f64, f64),
@@ -389,12 +616,12 @@ impl DrawBackend for SvgBackend {
             return Ok(());
         }
         let attrs = format!(
-            "cx=\"{cx:.2}\" cy=\"{cy:.2}\" r=\"{:.2}\" fill=\"{}\" fill-opacity=\"{:.3}\"",
+            "cx=\"{cx:.2}\" cy=\"{cy:.2}\" r=\"{:.2}\" fill=\"{}\"{}",
             radius.max(0.0),
             rgb(style.color),
-            finite_or(style.alpha, 1.0)
+            opacity_attr("fill", style.alpha)
         );
-        self.push_mark("circle", &attrs);
+        self.push_mark("circle", "point", &attrs);
         Ok(())
     }
 
@@ -412,16 +639,14 @@ impl DrawBackend for SvgBackend {
         }
         let r = radius.max(0.0);
         let color = rgb(style.color);
-        let alpha = finite_or(style.alpha, 1.0);
+        let fill_opacity = opacity_attr("fill", style.alpha);
+        let stroke_opacity = opacity_attr("stroke", style.alpha);
         let poly = |pts: &[(f64, f64)]| {
             if style.filled {
-                format!(
-                    "points=\"{}\" fill=\"{color}\" fill-opacity=\"{alpha:.3}\"",
-                    points(pts)
-                )
+                format!("points=\"{}\" fill=\"{color}\"{fill_opacity}", points(pts))
             } else {
                 format!(
-                    "points=\"{}\" fill=\"none\" stroke=\"{color}\" stroke-opacity=\"{alpha:.3}\"",
+                    "points=\"{}\" fill=\"none\" stroke=\"{color}\"{stroke_opacity}",
                     points(pts)
                 )
             }
@@ -435,15 +660,15 @@ impl DrawBackend for SvgBackend {
                     (cx + r, cy + r),
                     (cx - r, cy + r),
                 ]);
-                self.push_mark("polygon", &a);
+                self.push_mark("polygon", "point", &a);
             }
             PointShape::Triangle => {
                 let a = poly(&[(cx, cy - r), (cx + r, cy + r), (cx - r, cy + r)]);
-                self.push_mark("polygon", &a);
+                self.push_mark("polygon", "point", &a);
             }
             PointShape::Diamond => {
                 let a = poly(&[(cx, cy - r), (cx + r, cy), (cx, cy + r), (cx - r, cy)]);
-                self.push_mark("polygon", &a);
+                self.push_mark("polygon", "point", &a);
             }
             PointShape::Plus | PointShape::Cross => {
                 let d = if style.shape == PointShape::Plus {
@@ -468,50 +693,24 @@ impl DrawBackend for SvgBackend {
                     )
                 };
                 let a = format!(
-                    "d=\"{d}\" fill=\"none\" stroke=\"{color}\" stroke-width=\"{:.2}\" \
-                     stroke-opacity=\"{alpha:.3}\"",
+                    "d=\"{d}\" fill=\"none\" stroke=\"{color}\" stroke-width=\"{:.2}\"{stroke_opacity}",
                     (r / 2.5).clamp(1.0, 3.0)
                 );
-                self.push_mark("path", &a);
+                self.push_mark("path", "point", &a);
             }
         }
         Ok(())
     }
 
     fn draw_line(&mut self, pts: &[(f64, f64)], style: &LineStyle) -> Result<(), RenderError> {
-        let pts = finite_pts(pts);
-        if pts.len() < 2 {
-            return Ok(());
+        // Split at non-finite vertices instead of silently dropping them:
+        // dropping-and-joining would visually bridge the gap, but ggplot2
+        // treats a non-finite (NA) vertex as a break in the line (see
+        // `finite_runs`). Each run becomes its own `<polyline>` mark, with
+        // the same style and the same data-x/series/value/part attrs.
+        for run in finite_runs(pts) {
+            self.draw_line_run(&run, style);
         }
-        let dash = match style
-            .linetype
-            .pattern()
-            .iter()
-            .flat_map(|(d, g)| [*d, *g])
-            .map(|v| format!("{v}"))
-            .collect::<Vec<_>>()
-            .join(",")
-        {
-            s if s.is_empty() => String::new(),
-            s => format!(" stroke-dasharray=\"{s}\""),
-        };
-        // `Butt` is SVG's own default: omitting the attribute keeps default
-        // output byte-identical.
-        let linecap = match style.lineend {
-            LineEnd::Butt => "",
-            LineEnd::Round => " stroke-linecap=\"round\"",
-            LineEnd::Square => " stroke-linecap=\"square\"",
-        };
-        let attrs = format!(
-            "points=\"{}\" fill=\"none\" stroke=\"{}\" stroke-width=\"{:.2}\" stroke-opacity=\"{:.3}\"{}{}",
-            points(&pts),
-            rgb(style.color),
-            finite_or(style.width, 1.0),
-            finite_or(style.alpha, 1.0),
-            dash,
-            linecap
-        );
-        self.push_mark("polyline", &attrs);
         Ok(())
     }
 
@@ -555,14 +754,14 @@ impl DrawBackend for SvgBackend {
             p0.0, p0.1, ctrl.0, ctrl.1, p1.0, p1.1
         );
         let attrs = format!(
-            "d=\"{d}\" fill=\"none\" stroke=\"{}\" stroke-width=\"{:.2}\" stroke-opacity=\"{:.3}\"{}{}",
+            "d=\"{d}\" fill=\"none\" stroke=\"{}\" stroke-width=\"{:.2}\"{}{}{}",
             rgb(style.color),
             finite_or(style.width, 1.0),
-            finite_or(style.alpha, 1.0),
+            opacity_attr("stroke", style.alpha),
             dash,
             linecap
         );
-        self.push_mark("path", &attrs);
+        self.push_mark("path", "line", &attrs);
         Ok(())
     }
 
@@ -580,12 +779,12 @@ impl DrawBackend for SvgBackend {
         let fill = style.fill.map(rgb).unwrap_or_else(|| "none".into());
         let stroke = style.stroke.map(rgb).unwrap_or_else(|| "none".into());
         let attrs = format!(
-            "x=\"{x:.2}\" y=\"{y:.2}\" width=\"{w:.2}\" height=\"{h:.2}\" fill=\"{fill}\" \
-             fill-opacity=\"{:.3}\" stroke=\"{stroke}\" stroke-width=\"{:.2}\"",
-            finite_or(style.alpha, 1.0),
+            "x=\"{x:.2}\" y=\"{y:.2}\" width=\"{w:.2}\" height=\"{h:.2}\" fill=\"{fill}\"{} \
+             stroke=\"{stroke}\" stroke-width=\"{:.2}\"",
+            opacity_attr("fill", style.alpha),
             finite_or(style.stroke_width, 0.0)
         );
-        self.push_mark("rect", &attrs);
+        self.push_mark("rect", "bar", &attrs);
         Ok(())
     }
 
@@ -597,12 +796,12 @@ impl DrawBackend for SvgBackend {
         let fill = style.fill.map(rgb).unwrap_or_else(|| "none".into());
         let stroke = style.stroke.map(rgb).unwrap_or_else(|| "none".into());
         let attrs = format!(
-            "points=\"{}\" fill=\"{fill}\" fill-opacity=\"{:.3}\" stroke=\"{stroke}\" stroke-width=\"{:.2}\"",
+            "points=\"{}\" fill=\"{fill}\"{} stroke=\"{stroke}\" stroke-width=\"{:.2}\"",
             points(&pts),
-            finite_or(style.alpha, 1.0),
+            opacity_attr("fill", style.alpha),
             finite_or(style.stroke_width, 0.0)
         );
-        self.push_mark("polygon", &attrs);
+        self.push_mark("polygon", "band", &attrs);
         Ok(())
     }
 
@@ -637,9 +836,10 @@ impl DrawBackend for SvgBackend {
         } else {
             String::new()
         };
+        let class = self.mark_class("text");
         self.body.push_str(&format!(
             "<text x=\"{x:.2}\" y=\"{y:.2}\" font-size=\"{:.2}\" text-anchor=\"{anchor}\" \
-             dominant-baseline=\"middle\" font-family=\"{family}\"{weight}{fstyle} fill=\"{}\"{transform}>{}</text>",
+             dominant-baseline=\"middle\" font-family=\"{family}\"{weight}{fstyle} fill=\"{}\"{transform}{class}>{}</text>",
             finite_or(style.size, 12.0),
             rgb(style.color),
             escape(text)

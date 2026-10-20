@@ -209,6 +209,14 @@ impl Scale for ScaleLinewidthContinuous {
         self.locale.as_ref()
     }
 
+    fn format_value(&self, value: &Value) -> Option<String> {
+        let f = value.as_f64()?;
+        if !f.is_finite() {
+            return None;
+        }
+        Some(self.format_label(f))
+    }
+
     fn aesthetic(&self) -> Aesthetic {
         Aesthetic::Linewidth
     }
@@ -340,6 +348,16 @@ impl Scale for ScaleLinewidthContinuous {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn format_value_falls_back_to_format_label_and_rejects_non_finite() {
+        let s = ScaleLinewidthContinuous::new().with_label_formatter(|v| format!("{v:.1}mm"));
+        assert_eq!(
+            s.format_value(&Value::Float(2.0)),
+            Some("2.0mm".to_string())
+        );
+        assert_eq!(s.format_value(&Value::Float(f64::NAN)), None);
+    }
 
     #[test]
     fn range_transform_and_limits_match_the_documented_formula() {

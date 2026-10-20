@@ -662,12 +662,17 @@ fn scale_gradient2_low_mid_high_and_nonnumeric() {
         .render_svg();
     assert!(svg.is_ok(), "gradient2 render: {svg:?}");
 
-    // Direct map_to_color: below midpoint, above midpoint, and non-numeric → None.
+    // Direct map_to_color: below midpoint, above midpoint, and non-numeric
+    // → `na_value` (review PR#141 finding 3: ggplot2 renders a missing or
+    // unusable value in its na.value grey, not a bare `None`).
     let mut g = ScaleColorGradient2::new(ggplot_rs::aes::Aesthetic::Color).with_midpoint(0.0);
     g.train(&[Value::Float(-4.0), Value::Float(6.0)]);
     assert!(g.map_to_color(&Value::Float(-2.0)).is_some());
     assert!(g.map_to_color(&Value::Float(4.0)).is_some());
-    assert!(g.map_to_color(&Value::Str("nope".into())).is_none());
+    assert_eq!(
+        g.map_to_color(&Value::Str("nope".into())),
+        Some((127, 127, 127))
+    );
     assert!(g.domain().is_some());
 }
 

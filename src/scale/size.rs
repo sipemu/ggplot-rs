@@ -56,6 +56,14 @@ impl Scale for ScaleSizeContinuous {
         self.locale.as_ref()
     }
 
+    fn format_value(&self, value: &Value) -> Option<String> {
+        let f = value.as_f64()?;
+        if !f.is_finite() {
+            return None;
+        }
+        Some(super::util::format_number_opt(f, self.locale.as_ref()))
+    }
+
     fn aesthetic(&self) -> Aesthetic {
         Aesthetic::Size
     }
@@ -134,5 +142,21 @@ impl Scale for ScaleSizeContinuous {
         self.min = f64::INFINITY;
         self.max = f64::NEG_INFINITY;
         self.trained = false;
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn format_value_formats_a_finite_number_and_rejects_non_finite() {
+        let s = ScaleSizeContinuous::new();
+        assert_eq!(
+            s.format_value(&Value::Float(1234.0)),
+            Some("1234".to_string())
+        );
+        assert_eq!(s.format_value(&Value::Float(f64::NAN)), None);
+        assert_eq!(s.format_value(&Value::Na), None);
     }
 }

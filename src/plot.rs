@@ -88,6 +88,9 @@ pub struct Layer {
     /// The geom was configured explicitly (`geom_*_with(...)`), so its colours
     /// are deliberate and the theme's `primary_color` must not override them.
     pub explicit_style: bool,
+    /// A `{column}` tooltip template ([`GGPlot::tooltip`]), rendered per row
+    /// from the *built* layer data (post-stat) once that's available.
+    pub tooltip_template: Option<String>,
 }
 
 /// The top-level plot specification — builder pattern.
@@ -115,6 +118,17 @@ pub struct GGPlot {
     /// overlaying a fragment on its own basemap (`render_svg_native_at`)
     /// turns it off so the fragment adds no root attributes of its own.
     pub(crate) svg_root_data: bool,
+    /// Extra root `<svg>` attributes requested via [`svg_attr`](Self::svg_attr)/
+    /// [`svg_attrs`](Self::svg_attrs), validated and applied at render time.
+    pub(crate) root_attrs: Vec<(String, String)>,
+    /// Whether to emit a `data-warnings` JSON array of the build warnings
+    /// on the root `<svg>` ([`svg_warnings_attr`](Self::svg_warnings_attr)).
+    /// Default off; byte-identical output when off.
+    pub(crate) svg_warnings_attr: bool,
+    /// Whether to emit `data-fvalue`/`data-fx` on marks
+    /// ([`svg_formatted_values`](Self::svg_formatted_values)). Default off;
+    /// byte-identical output when off.
+    pub(crate) svg_formatted_values: bool,
 }
 
 impl GGPlot {
@@ -140,6 +154,9 @@ impl GGPlot {
             default_aspect_ratio: None,
             locale: None,
             svg_root_data: true,
+            root_attrs: Vec::new(),
+            svg_warnings_attr: false,
+            svg_formatted_values: false,
         }
     }
 
@@ -1042,6 +1059,7 @@ impl GGPlot {
             params,
             show_legend: None,
             explicit_style: false,
+            tooltip_template: None,
         });
         self
     }
@@ -1077,6 +1095,23 @@ impl GGPlot {
         self.warnings.extend(mapping.warnings.iter().cloned());
         if let Some(layer) = self.layers.last_mut() {
             layer.mapping = mapping;
+        }
+        self
+    }
+
+    /// A `{column}` tooltip template for the most recently added layer
+    /// (B2-5), replacing its default `<title>`. Each placeholder is filled
+    /// from the *built* layer data (so it can reference a stat-computed
+    /// column, e.g. a hex's `count`) at that row, formatted through the
+    /// column's scale when it has one
+    /// ([`Scale::format_value`](crate::scale::Scale::format_value)) — the same
+    /// `data-fvalue` logic, but written into the tooltip text. A column
+    /// that doesn't exist on this layer renders as empty, not literally
+    /// `{column}`. `{{`/`}}` are literal braces. The result is escaped the
+    /// same way any other tooltip is — this is plain text, not markup.
+    pub fn tooltip(mut self, template: &str) -> Self {
+        if let Some(layer) = self.layers.last_mut() {
+            layer.tooltip_template = Some(template.to_string());
         }
         self
     }
@@ -1700,6 +1735,48 @@ impl GGPlot {
         self
     }
 
+    /// Add one extra attribute to the root `<svg>` element — a host
+    /// identifier, an ARIA label, a CSS hook, and so on. Allowed names:
+    /// `data-*`, `aria-*`, `role`, `id`, `class`, `lang`; anything else, or
+    /// a name ggplot-rs already writes to the root (`data-plot`,
+    /// `data-domain`, …, or `data-warnings` when
+    /// [`svg_warnings_attr`](Self::svg_warnings_attr) is also on), is
+    /// ignored with a build warning instead of being silently dropped or
+    /// duplicated. Values are escaped on output. PlotGrid has the same API
+    /// ([`PlotGrid::svg_attr`](crate::compose::PlotGrid::svg_attr)).
+    pub fn svg_attr(mut self, name: impl Into<String>, value: impl Into<String>) -> Self {
+        self.root_attrs.push((name.into(), value.into()));
+        self
+    }
+
+    /// [`svg_attr`](Self::svg_attr) for several attributes at once.
+    pub fn svg_attrs(mut self, attrs: impl IntoIterator<Item = (String, String)>) -> Self {
+        self.root_attrs.extend(attrs);
+        self
+    }
+
+    /// Emit a `data-warnings` attribute on the root `<svg>` — a JSON array
+    /// of the build warnings (rows dropped for non-finite positions, an
+    /// `svg_attr` name rejected, …), `[]` when there are none. Default off,
+    /// and omitted entirely when off (byte-identical to not calling this).
+    pub fn svg_warnings_attr(mut self, on: bool) -> Self {
+        self.svg_warnings_attr = on;
+        self
+    }
+
+    /// Emit `data-fvalue`/`data-fx` on marks: the value aesthetic's raw
+    /// data value (y for most geoms, fill for hex/tile) and the x value,
+    /// each formatted through its scale (currency/locale numbers, ISO or
+    /// locale dates — [`Scale::format_value`](crate::scale::Scale::format_value))
+    /// rather than the plain display string `data-value`/`data-x` already
+    /// carry. `data-fx` is omitted when it would just duplicate `data-x`.
+    /// Default off, and omitted entirely when off (byte-identical to not
+    /// calling this).
+    pub fn svg_formatted_values(mut self, on: bool) -> Self {
+        self.svg_formatted_values = on;
+        self
+    }
+
     /// Transform the coordinate space at draw time (R's `coord_trans`) — stats are
     /// computed on raw data but drawn on non-linear axes. Pass a per-axis
     /// [`ScaleTransform`] (e.g. `Some(ScaleTransform::Log10)`), `None` to leave an
@@ -2165,17 +2242,47 @@ impl GGPlot {
         GGError,
     > {
         let svg_root_data = self.svg_root_data;
+        let root_attrs = self.root_attrs.clone();
+        let svg_warnings_attr = self.svg_warnings_attr;
+        let svg_formatted_values = self.svg_formatted_values;
         let (built, layout) = self.prepare(w, h)?;
         let pa = layout.plot_area.clone();
         let mut backend = crate::render::svg_backend::SvgBackend::new(w, h, pa.clone());
-        if svg_root_data {
-            backend.set_root_attrs(crate::render::svg_backend::root_data_attrs(&built));
+        backend.set_formatted_values(svg_formatted_values);
+        let existing_root_attrs = if svg_root_data {
+            let attrs = crate::render::svg_backend::root_data_attrs(&built);
+            backend.set_root_attrs(attrs.clone());
+            // `data-plot` itself is a literal in `root_open`, not part of
+            // `root_data_attrs`'s output, but it is written whenever
+            // `svg_root_data` is on — reserve it too.
+            let mut reserved = attrs;
+            reserved.push(("data-plot".to_string(), String::new()));
+            reserved
         } else {
             backend.without_plot_attr();
-        }
+            Vec::new()
+        };
         PlotRenderer::render(&built, &mut backend).map_err(GGError::Render)?;
         let mut warnings = built.warnings;
         warnings.extend(backend.take_warnings());
+
+        let mut reserved = existing_root_attrs;
+        if svg_warnings_attr {
+            reserved.push(("data-warnings".to_string(), String::new()));
+        }
+        let extra = crate::render::svg_backend::validate_root_attrs(
+            &root_attrs,
+            &reserved,
+            "plot",
+            &mut warnings,
+        );
+        backend.extend_root_attrs(extra);
+        if svg_warnings_attr {
+            backend.extend_root_attrs(vec![(
+                "data-warnings".to_string(),
+                crate::render::svg_backend::warnings_json(&warnings),
+            )]);
+        }
         Ok((backend, warnings, pa))
     }
 

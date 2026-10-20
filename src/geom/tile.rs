@@ -187,12 +187,13 @@ impl Geom for GeomTile {
                 .map(|c| super::tip_value(&c[i]))
                 .filter(|s| !s.is_empty());
             let raw = fill_col.and_then(|c| super::raw_value(&c[i]));
-            if let Some(key) = date_key.map(|c| super::tip_value(&c[i])) {
+            let x_raw_for_fmt = if let Some(key) = date_key.map(|c| super::tip_value(&c[i])) {
                 let tip = match value {
                     Some(v) => format!("{key}: {v}"),
                     None => key.clone(),
                 };
-                super::set_mark(backend, Some(tip), Some(key), None, raw);
+                super::set_mark(backend, Some(tip), Some(key), None, raw.clone());
+                date_key.and_then(|c| c.get(i))
             } else {
                 let xs = super::tip_value(&x_col[i]);
                 let ys = super::tip_value(&y_col[i]);
@@ -200,8 +201,16 @@ impl Geom for GeomTile {
                     Some(v) => format!("{xs}, {ys}: {v}"),
                     None => format!("{xs}, {ys}"),
                 };
-                super::set_mark(backend, Some(tip), Some(xs), Some(ys), raw);
-            }
+                super::set_mark(backend, Some(tip), Some(xs), Some(ys), raw.clone());
+                Some(&x_col[i])
+            };
+            super::set_mark_formatted(
+                backend,
+                scales,
+                x_raw_for_fmt,
+                &Aesthetic::Fill,
+                fill_col.map(|c| &c[i]),
+            );
             super::set_row_extras(backend, data, i);
 
             backend.draw_rect(
@@ -240,6 +249,10 @@ impl Geom for GeomTile {
 
     fn name(&self) -> &str {
         "tile"
+    }
+
+    fn consumes_tooltips(&self) -> bool {
+        true
     }
 
     fn setup_data(&self, data: &mut DataFrame) {

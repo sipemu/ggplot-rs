@@ -120,6 +120,13 @@ impl Geom for GeomHex {
                 None,
                 fill_col.and_then(|c| super::raw_value(&c[i])),
             );
+            super::set_mark_formatted(
+                backend,
+                scales,
+                None,
+                &Aesthetic::Fill,
+                fill_col.map(|c| &c[i]),
+            );
             super::set_row_extras(backend, data, i);
 
             // Vertices in data space, each individually mapped + projected —
@@ -173,6 +180,10 @@ impl Geom for GeomHex {
 
     fn name(&self) -> &str {
         "hex"
+    }
+
+    fn consumes_tooltips(&self) -> bool {
+        true
     }
 }
 

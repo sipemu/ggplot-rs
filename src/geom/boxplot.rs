@@ -84,12 +84,20 @@ impl Geom for GeomBoxplot {
             } else {
                 format!("{group}: median {} ({}–{})", r(middle), r(lower), r(upper))
             };
+            let middle_value = Value::Float(middle);
             super::set_mark(
                 backend,
                 Some(tip),
                 Some(group.clone()).filter(|g| !g.is_empty()),
                 super::series_key(data, i).or(Some(group).filter(|g| !g.is_empty())),
-                super::raw_value(&Value::Float(middle)),
+                super::raw_value(&middle_value),
+            );
+            super::set_mark_formatted(
+                backend,
+                scales,
+                Some(&x_col[i]),
+                &Aesthetic::Y,
+                Some(&middle_value),
             );
 
             // Box (IQR) — honour a mapped `fill` (e.g. by group), else the default.
@@ -223,6 +231,15 @@ impl Geom for GeomBoxplot {
 
     fn name(&self) -> &str {
         "boxplot"
+    }
+
+    fn apply_element_geom(&mut self, el: &crate::theme::elements::ElementGeom) {
+        if let (true, Some(ink)) = (self.color == (50, 50, 50), el.ink) {
+            self.color = ink;
+        }
+        if let (true, Some(paper)) = (self.fill == (255, 255, 255), el.paper) {
+            self.fill = paper;
+        }
     }
 
     fn set_series_color(&mut self, color: (u8, u8, u8)) {

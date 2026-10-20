@@ -103,6 +103,7 @@ pub(crate) fn draw_bands(
             .unwrap_or(fill);
         let series = super::series_key(data, first);
         super::set_mark(backend, series.clone(), None, series, None);
+        super::set_mark_formatted(backend, scales, None, &Aesthetic::Y, None);
         backend.draw_polygon(
             &polygon,
             &RectStyle {

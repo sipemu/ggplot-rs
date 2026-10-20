@@ -122,13 +122,16 @@ impl PlotRenderer {
         // A layer whose data is empty (no input rows, or a stat that produced
         // nothing) simply draws nothing.
         for layer in built.layers.iter().filter(|l| l.data.nrows() > 0) {
-            layer.geom.draw(
+            backend.set_mark_geom(Some(layer.geom.name()));
+            let drawn = layer.geom.draw(
                 &layer.data,
                 built.coord.as_ref(),
                 &built.scales,
                 theme,
                 backend,
-            )?;
+            );
+            backend.set_mark_geom(None);
+            drawn?;
         }
 
         // 5b. Gridlines on top of the data (R's panel.ontop).
@@ -144,6 +147,7 @@ impl PlotRenderer {
             &built.scales,
             built.coord.as_ref(),
             &plot_area,
+            theme,
             backend,
         )?;
 
@@ -562,13 +566,17 @@ impl PlotRenderer {
                             inner: backend,
                             panel_rect: panel_rect.clone(),
                         };
-                        built.layers[li].geom.draw(
+                        let geom = &built.layers[li].geom;
+                        panel_backend.set_mark_geom(Some(geom.name()));
+                        let drawn = geom.draw(
                             layer_data,
                             built.coord.as_ref(),
                             panel_scale_set,
                             theme,
                             &mut panel_backend,
-                        )?;
+                        );
+                        panel_backend.set_mark_geom(None);
+                        drawn?;
                     }
                 }
             }
@@ -650,6 +658,7 @@ impl PlotRenderer {
             &built.scales,
             built.coord.as_ref(),
             &plot_area,
+            theme,
             backend,
         )?;
 
@@ -674,6 +683,7 @@ impl PlotRenderer {
         scales: &crate::scale::ScaleSet,
         coord: &dyn crate::coord::Coord,
         plot_area: &crate::render::Rect,
+        theme: &crate::theme::Theme,
         backend: &mut dyn DrawBackend,
     ) -> Result<(), RenderError> {
         use crate::data::Value;
@@ -701,7 +711,7 @@ impl PlotRenderer {
                             size: *size,
                             anchor: TextAnchor::Middle,
                             angle: 0.0,
-                            family: None,
+                            family: crate::geom::resolve_font_family("", theme),
                             face: crate::render::backend::FontFace::Plain,
                         },
                     )?;
@@ -840,6 +850,9 @@ impl<'a> DrawBackend for PanelBackendAdapter<'a> {
     fn set_mark_value(&mut self, value: Option<String>) {
         self.inner.set_mark_value(value)
     }
+    fn set_mark_geom(&mut self, geom: Option<&str>) {
+        self.inner.set_mark_geom(geom)
+    }
     fn warn(&mut self, message: String) {
         self.inner.warn(message)
     }
@@ -848,6 +861,15 @@ impl<'a> DrawBackend for PanelBackendAdapter<'a> {
     }
     fn set_mark_attrs(&mut self, attrs: Vec<(String, String)>) {
         self.inner.set_mark_attrs(attrs)
+    }
+    fn wants_formatted_values(&self) -> bool {
+        self.inner.wants_formatted_values()
+    }
+    fn set_mark_fvalue(&mut self, value: Option<String>) {
+        self.inner.set_mark_fvalue(value)
+    }
+    fn set_mark_fx(&mut self, value: Option<String>) {
+        self.inner.set_mark_fx(value)
     }
     fn total_area(&self) -> crate::render::Rect {
         self.inner.total_area()

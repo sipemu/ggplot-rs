@@ -79,7 +79,15 @@ impl Geom for GeomErrorbar {
             // point by point so it is correct under coord_flip too.
             let c = self.cap_width;
             let t = |p: (f64, f64)| coord.transform(p, &plot_area);
-            super::support::mark_interval(backend, data, i, &x_col[i], &ymin_col[i], &ymax_col[i]);
+            super::support::mark_interval(
+                backend,
+                scales,
+                data,
+                i,
+                &x_col[i],
+                &ymin_col[i],
+                &ymax_col[i],
+            );
             backend.draw_line(
                 &[
                     t((nx - c, ny_max)),

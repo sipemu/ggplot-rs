@@ -6,6 +6,7 @@
 use ggplot_rs::aes::Aes;
 use ggplot_rs::data::Value;
 use ggplot_rs::geom::smooth::GeomSmooth;
+use ggplot_rs::prelude::*;
 use ggplot_rs::stat::smooth::SmoothMethod;
 use ggplot_rs::GGPlot;
 
@@ -248,5 +249,233 @@ fn log_of_zero_is_dropped_not_drawn() {
         .unwrap();
     assert_eq!(count(&svg, "<circle"), 2);
     assert_eq!(warnings.len(), 1);
+    assert_finite_attrs(&svg);
+}
+
+// ─── B2-1: non-finite guard ─────────────────────────────────────────────
+//
+// `draw_line` now splits at non-finite vertices into separate `<polyline>`
+// runs instead of silently dropping the bad row and joining the finite
+// points across the gap — line/path/step opt into keeping the row (as a
+// break) via `Geom::keeps_na_as_break`.
+
+#[test]
+fn a_nan_in_the_middle_of_a_line_splits_it_into_separate_polylines() {
+    // Review PR#141 finding 7: a run shorter than 2 points is dropped
+    // (ggplot2 drops a one-observation path piece), so this isn't simply
+    // "N breaks give N+1 polylines" — the lone `3` between the two breaks
+    // vanishes, leaving exactly the two real (>=2-point) runs.
+    //
+    // `geom_step` is deliberately not in this loop: `stepped()` inserts an
+    // extra corner point (the previous row's y at the current row's x, or
+    // vice versa) between every pair of *adjacent source rows*, finite or
+    // not, so a row next to a break still ends up paired with a corner
+    // derived from its finite neighbour instead of standing alone as a
+    // length-1 run. Its own break behaviour is covered by the dedicated
+    // `geom_step_with_a_nan_row_breaks_the_line...` test below.
+    let data = frame(vec![
+        ("x", floats(&[0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0])),
+        ("y", floats(&[1.0, 2.0, f64::NAN, 3.0, f64::NAN, 4.0, 5.0])),
+    ]);
+    for (geom, plot) in [
+        (
+            "line",
+            GGPlot::new(data.clone())
+                .aes(Aes::new().x("x").y("y"))
+                .geom_line(),
+        ),
+        (
+            "path",
+            GGPlot::new(data.clone())
+                .aes(Aes::new().x("x").y("y"))
+                .geom_path(),
+        ),
+    ] {
+        let svg = plot.render_svg_native_with_size(300, 200).unwrap();
+        assert_eq!(
+            count(&svg, "class=\"gg-mark gg-line\""),
+            2,
+            "{geom}: [1,2,NaN,3,NaN,4,5] should give 2 polylines (the lone 3 is dropped): {svg}"
+        );
+        assert_finite_attrs(&svg);
+    }
+}
+
+#[test]
+fn a_run_of_one_finite_point_between_breaks_draws_nothing() {
+    // x=2 is the only finite point between two NaN neighbours (and x=4 is
+    // isolated at the end the same way): too short to be a line segment
+    // (ggplot2 drops a one-observation path piece too), so it draws
+    // nothing rather than an invisible 1-point mark that would still carry
+    // a `<title>` and hover attributes. y has two distinct finite values
+    // (2.0, 8.0) so the y scale's domain isn't degenerate — a degenerate
+    // (single-value) domain would make `map()` return a constant 0.5
+    // regardless of input, masking the very NaNs this test checks.
+    let data = frame(vec![
+        ("x", floats(&[1.0, 2.0, 3.0, 4.0])),
+        ("y", floats(&[f64::NAN, 2.0, f64::NAN, 8.0])),
+    ]);
+    let svg = GGPlot::new(data)
+        .aes(Aes::new().x("x").y("y"))
+        .geom_line()
+        .render_svg_native_with_size(300, 200)
+        .unwrap();
+    assert_eq!(
+        count(&svg, "class=\"gg-mark gg-line\""),
+        0,
+        "a lone finite point between two breaks draws nothing: {svg}"
+    );
+    assert_finite_attrs(&svg);
+}
+
+#[test]
+fn geom_step_with_a_nan_row_breaks_the_line_not_a_phantom_spike_to_the_edge() {
+    // Review PR#141 finding 1 (HIGH): GeomStep used to clamp *every*
+    // non-finite pixel coordinate to the panel edge (a leftover from
+    // stat_ecdf's +-Inf padding), so the NaN row became a phantom vertical
+    // spike to the top of the panel instead of a break. Only +-Inf may
+    // still clamp to the edge; NaN must split the line.
+    let data = frame(vec![
+        ("x", floats(&[0.0, 1.0, 2.0, 3.0])),
+        ("y", floats(&[1.0, f64::NAN, 3.0, 4.0])),
+    ]);
+    let svg = GGPlot::new(data)
+        .aes(Aes::new().x("x").y("y"))
+        .geom_step()
+        .render_svg_native_with_size(300, 200)
+        .unwrap();
+    // `stepped()`'s corner insertion turns the break at x=1 into two
+    // genuine 2-point runs — (x=0,y=1)-(x=1,y=1) and
+    // (x=2,y=3)-(x=3,y=3)-(x=3,y=4) — rather than one polyline spanning
+    // the whole panel with a spike at the NaN row (the pre-fix bug).
+    assert_eq!(count(&svg, "class=\"gg-mark gg-line\""), 2, "{svg}");
+    assert_finite_attrs(&svg);
+    // No vertex should ever sit at the bare panel-top edge (y = plot_area.y)
+    // as a stand-in for NaN — the only legitimate edge-clamped coordinate
+    // is +-Inf, which this plot never produces, and none of this data's
+    // mapped y values (1, 3, 4, under a y domain of roughly [1, 4] with the
+    // usual expansion) land exactly on the panel edge.
+    let plot_area_top = svg
+        .split("data-plot=\"")
+        .nth(1)
+        .and_then(|s| s.split('"').next())
+        .and_then(|s| s.split(' ').nth(1))
+        .expect("data-plot's y");
+    let needle = format!(",{plot_area_top} ");
+    let needle_end = format!(",{plot_area_top}\"");
+    for p in count_all_tags(&svg, "polyline") {
+        if !p.contains("gg-mark") {
+            continue; // grid line
+        }
+        assert!(
+            !p.contains(&needle) && !p.ends_with(&needle_end),
+            "a data polyline should not touch the bare top edge from a clamped NaN: {p}"
+        );
+    }
+}
+
+/// Every `<tag …>` start tag in `svg` whose name is `tag`.
+fn count_all_tags<'a>(svg: &'a str, tag: &str) -> Vec<&'a str> {
+    let open = format!("<{tag} ");
+    svg.match_indices(&open)
+        .map(|(i, _)| {
+            let rest = &svg[i..];
+            &rest[..rest.find('>').map_or(rest.len(), |e| e + 1)]
+        })
+        .collect()
+}
+
+#[test]
+fn constant_single_row_and_nonfinite_data_render_through_every_connecting_geom() {
+    let constant = frame(vec![
+        ("x", floats(&[1.0, 1.0, 1.0])),
+        ("y", floats(&[2.0, 2.0, 2.0])),
+    ]);
+    let single = frame(vec![("x", floats(&[1.0])), ("y", floats(&[2.0]))]);
+    let with_gap = frame(vec![
+        ("x", floats(&[0.0, 1.0, 2.0, 3.0])),
+        ("y", floats(&[0.0, f64::NAN, f64::INFINITY, 3.0])),
+    ]);
+    for data in [constant, single, with_gap] {
+        for plot in [
+            GGPlot::new(data.clone())
+                .aes(Aes::new().x("x").y("y"))
+                .geom_line(),
+            GGPlot::new(data.clone())
+                .aes(Aes::new().x("x").y("y"))
+                .geom_path(),
+            GGPlot::new(data.clone())
+                .aes(Aes::new().x("x").y("y"))
+                .geom_step(),
+            GGPlot::new(data.clone())
+                .aes(Aes::new().x("x").y("y").xend("x").yend("y"))
+                .geom_segment(),
+            GGPlot::new(data.clone())
+                .aes(Aes::new().x("x").y("y").xend("x").yend("y"))
+                .geom_curve(),
+        ] {
+            let svg = plot.render_svg_native_with_size(300, 200).unwrap();
+            assert_finite_attrs(&svg);
+        }
+    }
+}
+
+#[test]
+fn arrows_drop_entirely_on_a_nonfinite_or_zero_length_path() {
+    // A segment with a non-finite endpoint gets no arrowhead at all, not a
+    // partial/NaN one.
+    let data = frame(vec![
+        ("x", floats(&[0.0, 0.0])),
+        ("y", floats(&[0.0, 0.0])),
+        ("xend", floats(&[f64::NAN, 0.0])),
+        ("yend", floats(&[1.0, 0.0])),
+    ]);
+    let svg = GGPlot::new(data)
+        .aes(Aes::new().x("x").y("y").xend("xend").yend("yend"))
+        .geom_segment_with(GeomSegment::default().arrow(arrow().closed()))
+        .render_svg_native_with_size(300, 200)
+        .unwrap();
+    assert_eq!(count(&svg, "data-part=\"arrow\""), 0);
+    assert_finite_attrs(&svg);
+}
+
+#[test]
+fn hexbin_handles_constant_single_row_and_nonfinite_weight() {
+    let constant = frame(vec![
+        ("x", floats(&[1.0, 1.0, 1.0])),
+        ("y", floats(&[1.0, 1.0, 1.0])),
+    ]);
+    let single = frame(vec![("x", floats(&[1.0])), ("y", floats(&[1.0]))]);
+    let with_bad = frame(vec![
+        ("x", floats(&[0.0, 1.0, f64::NAN])),
+        ("y", floats(&[0.0, 1.0, f64::INFINITY])),
+    ]);
+    for data in [constant, single, with_bad] {
+        let svg = GGPlot::new(data)
+            .aes(Aes::new().x("x").y("y"))
+            .geom_hex()
+            .render_svg_native_with_size(300, 200)
+            .unwrap();
+        assert_finite_attrs(&svg);
+    }
+}
+
+#[test]
+fn degenerate_data_renders_through_plotgrid_too() {
+    // Two real (>=2-point) runs on each side of the break.
+    let with_gap = frame(vec![
+        ("x", floats(&[0.0, 1.0, 2.0, 3.0, 4.0])),
+        ("y", floats(&[0.0, 1.0, f64::NAN, 2.0, 3.0])),
+    ]);
+    let p = || {
+        GGPlot::new(with_gap.clone())
+            .aes(Aes::new().x("x").y("y"))
+            .geom_line()
+    };
+    let svg = (p() | p()).render_svg_native_with_size(600, 300).unwrap();
+    assert!(
+        count(&svg, "class=\"gg-mark gg-line\"") >= 4,
+        "2 split runs per cell, 2 cells: {svg}"
+    );
     assert_finite_attrs(&svg);
 }

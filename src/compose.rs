@@ -183,6 +183,14 @@ pub struct PlotGrid {
     spacing: f64,
     theme: Theme,
     op: Option<Op>,
+    /// Extra root `<svg>` attributes requested via [`PlotGrid::svg_attr`]/
+    /// [`PlotGrid::svg_attrs`], validated and applied at render time.
+    root_attrs: Vec<(String, String)>,
+    /// Whether to emit a `data-warnings` JSON array of the panels'
+    /// combined build warnings on the root `<svg>`
+    /// ([`PlotGrid::svg_warnings_attr`]). Default off; byte-identical
+    /// output when off.
+    svg_warnings_attr: bool,
 }
 
 impl Default for PlotGrid {
@@ -205,6 +213,8 @@ impl Default for PlotGrid {
             spacing: 0.0,
             theme: Theme::default(),
             op: None,
+            root_attrs: Vec::new(),
+            svg_warnings_attr: false,
         }
     }
 }
@@ -323,6 +333,31 @@ impl PlotGrid {
         self
     }
 
+    /// Add one extra attribute to the root `<svg>` element — see
+    /// [`GGPlot::svg_attr`](crate::plot::GGPlot::svg_attr), same allow-list
+    /// (`data-*`, `aria-*`, `role`, `id`, `class`, `lang`) and the same
+    /// "ignored with a warning" rule for anything else or a collision with
+    /// what ggplot-rs already writes (`data-grid`, or `data-warnings` when
+    /// [`svg_warnings_attr`](Self::svg_warnings_attr) is also on).
+    pub fn svg_attr(mut self, name: impl Into<String>, value: impl Into<String>) -> Self {
+        self.root_attrs.push((name.into(), value.into()));
+        self
+    }
+
+    /// [`svg_attr`](Self::svg_attr) for several attributes at once.
+    pub fn svg_attrs(mut self, attrs: impl IntoIterator<Item = (String, String)>) -> Self {
+        self.root_attrs.extend(attrs);
+        self
+    }
+
+    /// Emit a `data-warnings` attribute on the root `<svg>` — a JSON array
+    /// of every panel's combined build warnings, `[]` when there are none.
+    /// Default off, and omitted entirely when off.
+    pub fn svg_warnings_attr(mut self, on: bool) -> Self {
+        self.svg_warnings_attr = on;
+        self
+    }
+
     /// Number of cells (plots, nested grids and spacers).
     pub fn len(&self) -> usize {
         self.cells.len()
@@ -368,6 +403,8 @@ impl PlotGrid {
         theme.resolve_inheritance();
         let collect = self.collect_legends;
         let legend_pos = self.legend_position;
+        let root_attrs = self.root_attrs.clone();
+        let svg_warnings_attr = self.svg_warnings_attr;
 
         // Phase 1 (size-independent): build every plot, assign tags and
         // capture legends to collect.
@@ -394,7 +431,8 @@ impl PlotGrid {
         let mut page = SvgBackend::new(w, h, full.clone());
         page.without_plot_attr();
         let (rows, cols) = prepared.dims();
-        page.set_root_attrs(vec![("data-grid".into(), format!("{rows} {cols}"))]);
+        let data_grid_attr = ("data-grid".to_string(), format!("{rows} {cols}"));
+        page.set_root_attrs(vec![data_grid_attr.clone()]);
         if let Some(fill) = theme
             .plot_background
             .fill
@@ -449,6 +487,24 @@ impl PlotGrid {
         // Phase 3: render cells into their rects.
         let mut warnings = Vec::new();
         render_prepared(prepared, &body, &mut page, &mut warnings)?;
+
+        let mut reserved = vec![data_grid_attr];
+        if svg_warnings_attr {
+            reserved.push(("data-warnings".to_string(), String::new()));
+        }
+        let extra = crate::render::svg_backend::validate_root_attrs(
+            &root_attrs,
+            &reserved,
+            "grid",
+            &mut warnings,
+        );
+        page.extend_root_attrs(extra);
+        if svg_warnings_attr {
+            page.extend_root_attrs(vec![(
+                "data-warnings".to_string(),
+                crate::render::svg_backend::warnings_json(&warnings),
+            )]);
+        }
         Ok((page, warnings))
     }
 }
@@ -485,6 +541,14 @@ struct PreparedPlot {
     built: crate::build::BuiltPlot,
     meta: RenderMeta,
     panel: String,
+    /// The cell's own `GGPlot::svg_formatted_values` setting (review
+    /// PR#141 finding 6, LOW): `build_for_render` consumes the `GGPlot`
+    /// and discards this field (it only matters at render time, and
+    /// `PlotGrid` builds its cells independently of
+    /// `GGPlot::render_native`, the only place that previously read it),
+    /// so it has to be captured here and carried to the cell's own
+    /// backend in `render_prepared`.
+    svg_formatted_values: bool,
 }
 
 enum Prepared {
@@ -583,6 +647,7 @@ fn prepare_plot(mut plot: GGPlot, ctx: &mut PrepCtx) -> Result<PreparedPlot, GGE
     if collect.is_some() {
         plot.theme.legend_position = LegendPosition::None;
     }
+    let svg_formatted_values = plot.svg_formatted_values;
     let (built, mut meta) = plot.build_for_render()?;
     if let Some(pos) = collect {
         meta.has_legend = false;
@@ -592,7 +657,12 @@ fn prepare_plot(mut plot: GGPlot, ctx: &mut PrepCtx) -> Result<PreparedPlot, GGE
             }
         }
     }
-    Ok(PreparedPlot { built, meta, panel })
+    Ok(PreparedPlot {
+        built,
+        meta,
+        panel,
+        svg_formatted_values,
+    })
 }
 
 /// Draw a built plot's legend in isolation, measuring its extent.
@@ -720,6 +790,7 @@ fn render_prepared(
                 mut built,
                 meta,
                 panel,
+                svg_formatted_values,
             } = *p;
             let (cw, ch) = (
                 area.width.floor().max(1.0) as u32,
@@ -727,6 +798,7 @@ fn render_prepared(
             );
             let layout = GGPlot::layout_built(&mut built, &meta, cw, ch);
             let mut backend = SvgBackend::new(cw, ch, layout.plot_area.clone());
+            backend.set_formatted_values(svg_formatted_values);
             let mut attrs = root_data_attrs(&built);
             attrs.push(("data-panel".into(), panel.clone()));
             backend.set_root_attrs(attrs);
@@ -935,11 +1007,23 @@ impl DrawBackend for Measure<'_> {
     fn warn(&mut self, m: String) {
         self.inner.warn(m)
     }
+    fn set_mark_geom(&mut self, geom: Option<&str>) {
+        self.inner.set_mark_geom(geom)
+    }
     fn set_mark_part(&mut self, part: Option<&str>) {
         self.inner.set_mark_part(part)
     }
     fn set_mark_attrs(&mut self, attrs: Vec<(String, String)>) {
         self.inner.set_mark_attrs(attrs)
+    }
+    fn wants_formatted_values(&self) -> bool {
+        self.inner.wants_formatted_values()
+    }
+    fn set_mark_fvalue(&mut self, value: Option<String>) {
+        self.inner.set_mark_fvalue(value)
+    }
+    fn set_mark_fx(&mut self, value: Option<String>) {
+        self.inner.set_mark_fx(value)
     }
 }
 
@@ -1041,12 +1125,17 @@ mod tests {
             height: 100.0,
         };
         let mut backend = SvgBackend::new(100, 100, pa.clone());
+        backend.set_formatted_values(true);
         let mut meas = Measure::new(&mut backend, pa);
 
         assert!(meas.extent().is_none());
-
+        // B2-4: Measure forwards the formatted-values query/setters too.
+        assert!(meas.wants_formatted_values());
+        meas.set_mark_geom(Some("line"));
         meas.set_mark_part(Some("arrow"));
         meas.set_mark_attrs(vec![("data-x".to_string(), "v".to_string())]);
+        meas.set_mark_fvalue(Some("1,234.5".to_string()));
+        meas.set_mark_fx(Some("2026-10-12".to_string()));
         meas.draw_quadratic(
             (10.0, 20.0),
             (90.0, 5.0),
@@ -1054,16 +1143,23 @@ mod tests {
             &LineStyle::default(),
         )
         .unwrap();
+        meas.set_mark_geom(None);
         meas.set_mark_part(None);
         meas.set_mark_attrs(Vec::new());
+        meas.set_mark_fvalue(None);
+        meas.set_mark_fx(None);
 
         let (x0, y0, x1, y1) = meas.extent().expect("extent after drawing");
         assert_eq!((x0, y0, x1, y1), (10.0, 5.0, 90.0, 80.0));
 
-        // The marks actually reached the inner SvgBackend (data-part and
-        // the data_attr both appear in its output).
+        // The marks actually reached the inner SvgBackend (data-part, the
+        // data_attr, the mark class and the formatted values all appear in
+        // its output).
         let svg = backend.finish();
         assert!(svg.contains("data-part=\"arrow\""));
         assert!(svg.contains("data-x=\"v\""));
+        assert!(svg.contains("gg-arrow"));
+        assert!(svg.contains("data-fvalue=\"1,234.5\""));
+        assert!(svg.contains("data-fx=\"2026-10-12\""));
     }
 }

@@ -72,6 +72,16 @@ impl Geom for GeomPoint {
         "point"
     }
 
+    fn consumes_tooltips(&self) -> bool {
+        true
+    }
+
+    fn apply_element_geom(&mut self, el: &crate::theme::elements::ElementGeom) {
+        if let (true, Some(ink)) = (self.color == (0, 0, 0), el.ink) {
+            self.color = ink;
+        }
+    }
+
     fn set_series_color(&mut self, color: (u8, u8, u8)) {
         self.color = color;
     }
@@ -150,6 +160,13 @@ pub(crate) fn draw_points(
             Some(super::tip_value(&x_col[i])),
             super::series_key(data, i),
             super::measured_value(data, i),
+        );
+        super::set_mark_formatted(
+            backend,
+            scales,
+            Some(&x_col[i]),
+            &Aesthetic::Y,
+            super::measured_raw(data, i),
         );
         super::set_row_extras(backend, data, i);
 

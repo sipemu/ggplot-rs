@@ -386,8 +386,11 @@ impl Aes {
 /// `set_mark_attrs` dedup — reserved so a user mapping can never collide and
 /// produce a duplicate attribute. `"part"` is `DrawBackend::set_mark_part`
 /// (arrowheads: `data-part="arrow"`), written directly in `push_mark`, not
-/// through the built-ins list `set_mark_attrs` dedups against.
-const RESERVED_DATA_ATTR_NAMES: &[&str] = &["part"];
+/// through the built-ins list `set_mark_attrs` dedups against. `"geom"` is
+/// `SvgBackend::mark_class`'s `data-geom="<layer geom>"`, written the same
+/// way, always last, alongside the `gg-mark` class. `"fvalue"`/`"fx"` are
+/// `DrawBackend::set_mark_fvalue`/`set_mark_fx` (B2-4), written the same way.
+const RESERVED_DATA_ATTR_NAMES: &[&str] = &["part", "geom", "fvalue", "fx"];
 
 /// `[a-z0-9][a-z0-9-]*`, excluding [`RESERVED_DATA_ATTR_NAMES`] — a valid,
 /// non-colliding HTML custom-data-attribute suffix.
@@ -452,7 +455,7 @@ mod data_attr_name_tests {
 
     #[test]
     fn accepts_lowercase_alnum_and_hyphen() {
-        for ok in ["x", "row", "data-ish", "a1", "0a", "fvalue"] {
+        for ok in ["x", "row", "data-ish", "a1", "0a", "value"] {
             assert!(is_valid_data_attr_name(ok), "{ok} should be valid");
         }
     }
@@ -468,6 +471,20 @@ mod data_attr_name_tests {
     fn rejects_the_reserved_part_name() {
         assert!(!is_valid_data_attr_name("part"));
         assert_eq!(validated_data_attr_internal_name("data-part"), None);
+    }
+
+    #[test]
+    fn rejects_the_reserved_geom_fvalue_and_fx_names() {
+        // B2-0's `data-geom` and B2-4's `data-fvalue`/`data-fx` are written
+        // directly in `push_mark`, the same way `data-part` is — a
+        // `data_attr` mapping under any of these names would duplicate it.
+        for name in ["geom", "fvalue", "fx"] {
+            assert!(!is_valid_data_attr_name(name), "{name} should be reserved");
+            assert_eq!(
+                validated_data_attr_internal_name(&format!("data-{name}")),
+                None
+            );
+        }
     }
 
     #[test]

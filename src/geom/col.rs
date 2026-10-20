@@ -172,6 +172,13 @@ impl Geom for GeomCol {
                 super::series_key(data, i),
                 raw,
             );
+            super::set_mark_formatted(
+                backend,
+                scales,
+                Some(&x_col[i]),
+                &Aesthetic::Y,
+                super::measured_raw(data, i),
+            );
             super::set_row_extras(backend, data, i);
 
             if coord.is_polar() {
@@ -221,6 +228,10 @@ impl Geom for GeomCol {
 
     fn name(&self) -> &str {
         "col"
+    }
+
+    fn consumes_tooltips(&self) -> bool {
+        true
     }
 
     fn include_zero_baseline(&self) -> bool {

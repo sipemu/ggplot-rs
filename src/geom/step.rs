@@ -79,22 +79,30 @@ impl Geom for GeomStep {
                 .iter()
                 .map(|&(nx, ny)| {
                     let (px, py) = coord.transform((nx, ny), &plot_area);
-                    // Clamp non-finite coords (e.g. stat_ecdf's ±Inf padding, which
-                    // extends the step to the panel edge) to the panel border so the
-                    // flat segments draw to the edge instead of off-canvas.
-                    let px = if px.is_finite() {
+                    // Clamp an *infinite* coord (e.g. stat_ecdf's ±Inf padding,
+                    // which extends the step to the panel edge) to the panel
+                    // border so the flat segments draw to the edge instead of
+                    // off-canvas. A NaN coord is left as NaN — not clamped to
+                    // an edge — so `draw_line` splits the step there (B2-1's
+                    // break semantics) instead of drawing a phantom spike to
+                    // whichever edge the sign-comparison happened to pick.
+                    let px = if px.is_infinite() {
+                        if nx < 0.0 {
+                            plot_area.x
+                        } else {
+                            plot_area.x + plot_area.width
+                        }
+                    } else {
                         px
-                    } else if nx < 0.0 {
-                        plot_area.x
-                    } else {
-                        plot_area.x + plot_area.width
                     };
-                    let py = if py.is_finite() {
-                        py
-                    } else if ny < 0.0 {
-                        plot_area.y + plot_area.height
+                    let py = if py.is_infinite() {
+                        if ny < 0.0 {
+                            plot_area.y + plot_area.height
+                        } else {
+                            plot_area.y
+                        }
                     } else {
-                        plot_area.y
+                        py
                     };
                     (px, py)
                 })
@@ -111,6 +119,7 @@ impl Geom for GeomStep {
                 .unwrap_or(Linetype::Solid);
             let series = super::series_key(data, first);
             super::set_mark(backend, series.clone(), None, series, None);
+            super::set_mark_formatted(backend, scales, None, &Aesthetic::Y, None);
 
             if points.len() >= 2 {
                 backend.draw_line(
@@ -152,6 +161,10 @@ impl Geom for GeomStep {
 
     /// stat_ecdf pads the step with ±Inf (ggplot2), drawn to the panel edge.
     fn allows_infinite(&self) -> bool {
+        true
+    }
+
+    fn keeps_na_as_break(&self) -> bool {
         true
     }
 

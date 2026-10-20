@@ -100,6 +100,25 @@ pub trait Geom: Send + Sync {
     /// default is a no-op; series geoms override it.
     fn set_series_color(&mut self, _color: (u8, u8, u8)) {}
 
+    /// Recolour this geom's *built-in default* colour/fill from the theme's
+    /// ink/paper/accent palette (B2-7's `element_geom`), called once per
+    /// layer before [`set_series_color`](Self::set_series_color) — and only
+    /// when the layer was *not* configured explicitly (`geom_*_with(...)`;
+    /// the build pipeline gates the call on the same `explicit_style` flag
+    /// `set_series_color`'s brand-colour application is gated on). That
+    /// gate, not a field-value comparison, is what keeps an explicit colour
+    /// untouched: a geom that honours this replaces a field still at its
+    /// own hard-coded default (black/`(50, 50, 50)` → `ink`, white →
+    /// `paper`) by comparing its *value*, which cannot by itself tell an
+    /// explicitly-set colour that happens to equal that default (e.g.
+    /// `GeomPoint { color: (0, 0, 0), .. }` under `geom_point_with`) apart
+    /// from one that was simply never touched — only skipping the call
+    /// entirely for an explicitly-configured layer closes that gap (review
+    /// PR#141 finding 4). Default no-op; `None` fields of `ElementGeom`
+    /// change nothing, so the default theme (no ink/paper/accent set)
+    /// stays byte-identical.
+    fn apply_element_geom(&mut self, _el: &crate::theme::elements::ElementGeom) {}
+
     /// Whether this geom draws from a 0 baseline, so the Y scale should include
     /// 0 even when `y` is explicitly mapped (bars/columns/area/histograms — as
     /// in ggplot2). Default false.
@@ -110,8 +129,37 @@ pub trait Geom: Send + Sync {
     /// Whether `-Inf`/`Inf` position values are meaningful for this geom
     /// (ggplot2: "extend to the panel edge"). Rows with infinite positions are
     /// otherwise dropped with a warning before stats run. `NaN` is always
-    /// dropped. Default false; `geom_rect` returns true.
+    /// dropped — unless [`Geom::keeps_na_as_break`] says otherwise. Default
+    /// false; `geom_rect` returns true.
     fn allows_infinite(&self) -> bool {
+        false
+    }
+
+    /// Whether a row with a non-finite position is a *break* rather than a
+    /// removal (ggplot2's `GeomPath`/`GeomLine` NA handling): the row still
+    /// counts toward the "removed N rows" warning, but it is **not** deleted
+    /// from the built `DataFrame`, so the geom's own per-group point list
+    /// still contains it — as a non-finite pixel position after the scale
+    /// and coordinate transform, which [`crate::render::backend::DrawBackend::draw_line`]
+    /// splits on into separate polylines (ggplot2's NA-break semantics)
+    /// instead of silently joining the finite points across the gap.
+    /// Default false (the row is dropped, as for every other geom);
+    /// line/path/step return true.
+    fn keeps_na_as_break(&self) -> bool {
+        false
+    }
+
+    /// Whether this geom calls [`set_row_extras`] (so it reads
+    /// [`Aes::tooltip`](crate::aes::Aes::tooltip) and
+    /// [`Aes::data_attr`](crate::aes::Aes::data_attr), and a
+    /// [`GGPlot::tooltip`](crate::plot::GGPlot::tooltip) template on it has
+    /// a visible effect). Default false; the build pipeline warns when a
+    /// `tooltip()` template is set on a layer whose geom returns false
+    /// here (review PR#141 finding 6, LOW: a template silently did nothing
+    /// on e.g. `geom_area`/`geom_boxplot`/`geom_ribbon`). Point, segment,
+    /// curve, path, line, hex, polygon, sf, rect/tile and col/bar/
+    /// histogram return true.
+    fn consumes_tooltips(&self) -> bool {
         false
     }
 
@@ -189,10 +237,15 @@ pub(crate) fn series_key(data: &DataFrame, i: usize) -> Option<String> {
 /// The raw measured y of row `i`. Stacked/filled positions overwrite `y` with
 /// the cumulative top, so prefer the pre-position value they preserve.
 pub(crate) fn measured_value(data: &DataFrame, i: usize) -> Option<String> {
+    measured_raw(data, i).and_then(raw_value)
+}
+
+/// [`measured_value`], but the raw `Value` itself (for `Scale::format_value`,
+/// B2-4) instead of its display string.
+pub(crate) fn measured_raw(data: &DataFrame, i: usize) -> Option<&crate::data::Value> {
     data.column(crate::position::RAW_Y_COL)
         .or_else(|| data.column("y"))
         .and_then(|c| c.get(i))
-        .and_then(raw_value)
 }
 
 /// Set all per-mark metadata (tooltip, `data-x`, `data-series`, `data-value`)
@@ -210,9 +263,65 @@ pub(crate) fn set_mark(
     backend.set_mark_value(value);
 }
 
+/// Resolve the font family for a text-drawing geom (text, label, repel,
+/// bracket, annotations) — B2-6/B2-7's three-tier order: `geom_family`
+/// (the geom's own `fontfamily`, e.g. `GeomText::with_fontfamily`) when
+/// set, else `theme.geom.family` (B2-7's `element_geom`), else
+/// `theme.text.family` (read after `Theme::resolve_inheritance`, so an
+/// inherited value is already resolved), else `None` (the SVG backend's
+/// own `"sans-serif"` default). `ElementText::family` defaults to
+/// `"sans-serif"` itself and `theme.geom.family` defaults to `None`, so
+/// with nothing configured anywhere this already returns
+/// `Some("sans-serif")` — the same string the backend would have defaulted
+/// to, so default output stays byte-identical.
+pub(crate) fn resolve_font_family(geom_family: &str, theme: &Theme) -> Option<String> {
+    if !geom_family.is_empty() {
+        Some(geom_family.to_string())
+    } else if let Some(family) = &theme.geom.family {
+        Some(family.clone())
+    } else if theme.text.family.is_empty() {
+        None
+    } else {
+        Some(theme.text.family.clone())
+    }
+}
+
 /// Clear all per-mark metadata after a geom has drawn its marks.
 pub(crate) fn clear_mark(backend: &mut dyn DrawBackend) {
     set_mark(backend, None, None, None, None);
+    backend.set_mark_fvalue(None);
+    backend.set_mark_fx(None);
+}
+
+/// Set `data-fvalue`/`data-fx` (B2-4) for the mark `set_mark` just
+/// configured, formatted through the relevant scale — `value_aes`'s (Y for
+/// most geoms, Fill for hex/tile) for `data-fvalue`, X for `data-fx`.
+/// Always sets both (even to `None`), so a row without a formattable value
+/// doesn't inherit an earlier row's — the same per-row reset discipline as
+/// [`set_row_extras`]. A no-op query (`wants_formatted_values`) short-
+/// circuits the scale lookups entirely when
+/// [`crate::plot::GGPlot::svg_formatted_values`] is off (the default), so
+/// this costs nothing and changes nothing when never turned on.
+pub(crate) fn set_mark_formatted(
+    backend: &mut dyn DrawBackend,
+    scales: &crate::scale::ScaleSet,
+    x_raw: Option<&crate::data::Value>,
+    value_aes: &Aesthetic,
+    value_raw: Option<&crate::data::Value>,
+) {
+    if !backend.wants_formatted_values() {
+        backend.set_mark_fvalue(None);
+        backend.set_mark_fx(None);
+        return;
+    }
+    let fvalue = value_raw
+        .filter(|v| !v.is_na())
+        .and_then(|v| scales.get(value_aes).and_then(|s| s.format_value(v)));
+    backend.set_mark_fvalue(fvalue);
+    let fx = x_raw
+        .filter(|v| !v.is_na())
+        .and_then(|v| scales.get(&Aesthetic::X).and_then(|s| s.format_value(v)));
+    backend.set_mark_fx(fx);
 }
 
 /// Apply one row's interactive aesthetics (B1-7: `Aes::tooltip`,

@@ -308,8 +308,12 @@ fn gradient2_diverging_around_midpoint() {
     let above = s.map_to_color(&Value::Float(5.0)).unwrap();
     assert!(above.0 > above.2); // still reddish
 
-    // Non-numeric returns None (map_to_color uses `?`).
-    assert_eq!(s.map_to_color(&Value::Str("x".into())), None);
+    // Non-numeric -> na_value (review PR#141 finding 3: ggplot2 renders a
+    // missing/unusable value in its na.value grey, not a bare `None`).
+    assert_eq!(
+        s.map_to_color(&Value::Str("x".into())),
+        Some((127, 127, 127))
+    );
     assert!(!s.breaks().is_empty());
 }
 

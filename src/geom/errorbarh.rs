@@ -97,6 +97,9 @@ impl Geom for GeomErrorbarh {
                     .zip(super::raw_value(&xmax_col[i]))
                     .map(|(a, b)| format!("{a} {b}")),
             );
+            // The "value" here is an [xmin, xmax] range, not a single raw
+            // value `Scale::format_value` can take — reset only.
+            super::set_mark_formatted(backend, scales, None, &Aesthetic::X, None);
             let h = self.cap_height;
             let t = |p: (f64, f64)| coord.transform(p, &plot_area);
             // One connected polyline per bar (cap, bar, cap) so each

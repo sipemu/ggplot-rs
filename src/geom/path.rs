@@ -210,6 +210,20 @@ impl Geom for GeomPath {
         "path"
     }
 
+    fn consumes_tooltips(&self) -> bool {
+        true
+    }
+
+    fn keeps_na_as_break(&self) -> bool {
+        true
+    }
+
+    fn apply_element_geom(&mut self, el: &crate::theme::elements::ElementGeom) {
+        if let (true, Some(ink)) = (self.color == (0, 0, 0), el.ink) {
+            self.color = ink;
+        }
+    }
+
     fn set_series_color(&mut self, color: (u8, u8, u8)) {
         self.color = color;
     }

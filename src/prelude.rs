@@ -89,6 +89,7 @@ pub use crate::scale::shape_manual::ScaleShapeManual;
 pub use crate::scale::size::ScaleSizeContinuous;
 pub use crate::scale::steps::ScaleColorSteps;
 pub use crate::scale::transform::ScaleTransform;
+pub use crate::scale::Oob;
 pub use crate::stat::bin::StatBin;
 pub use crate::stat::calendar::StatCalendar;
 #[cfg(feature = "ggpubr")]
@@ -112,7 +113,7 @@ pub use crate::stat::sum::StatSum;
 pub use crate::stat::summary::{StatSummary, SummaryData, SummaryFun};
 pub use crate::stat::summary2d::StatSummary2d;
 pub use crate::stat::summary_bin::StatSummaryBin;
-pub use crate::theme::elements::{ElementLine, ElementRect, ElementText};
+pub use crate::theme::elements::{ElementGeom, ElementLine, ElementRect, ElementText};
 pub use crate::theme::presets::{
     theme_bw, theme_bw_base, theme_classic, theme_classic_base, theme_dark, theme_dark_base,
     theme_gray, theme_gray_base, theme_light, theme_light_base, theme_linedraw,

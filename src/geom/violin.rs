@@ -96,6 +96,7 @@ impl Geom for GeomViolin {
                 super::series_key(data, first),
                 None,
             );
+            super::set_mark_formatted(backend, scales, Some(&x_col[first]), &Aesthetic::Y, None);
 
             // Right side (top→bottom) then left side reversed to close the polygon.
             let mut right_side: Vec<(f64, f64)> = Vec::with_capacity(idxs.len());

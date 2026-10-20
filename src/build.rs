@@ -97,6 +97,92 @@ fn train_intercepts(scale: &mut Box<dyn crate::scale::Scale>, values: &[crate::d
     scale.train(values);
 }
 
+/// Map a canonical column name to the aesthetic whose scale formats it
+/// (B2-5 tooltip templates / B2-4 `data-fvalue`-style formatting). Columns
+/// outside this list (group, label, or a stat output like `count`) have no
+/// scale of their own: [`render_tooltip_template`] falls back to the plain
+/// display format for them.
+fn column_aesthetic(name: &str) -> Option<Aesthetic> {
+    match name {
+        "x" => Some(Aesthetic::X),
+        "y" => Some(Aesthetic::Y),
+        "fill" => Some(Aesthetic::Fill),
+        "color" | "colour" => Some(Aesthetic::Color),
+        "size" => Some(Aesthetic::Size),
+        "linewidth" => Some(Aesthetic::Linewidth),
+        "alpha" => Some(Aesthetic::Alpha),
+        _ => None,
+    }
+}
+
+/// Render one row of a `GGPlot::tooltip` template: `{column}` is filled
+/// from `data`'s row `row`, formatted through that column's scale when
+/// [`column_aesthetic`] names one and it has a
+/// [`Scale::format_value`](crate::scale::Scale::format_value) (else the
+/// plain display format); a column that doesn't exist on this layer is
+/// empty, not literally `{column}`. `{{`/`}}` are literal braces.
+fn render_tooltip_template(
+    template: &str,
+    data: &DataFrame,
+    scales: &ScaleSet,
+    row: usize,
+) -> String {
+    let mut out = String::new();
+    let mut chars = template.chars().peekable();
+    while let Some(c) = chars.next() {
+        match c {
+            '{' if chars.peek() == Some(&'{') => {
+                chars.next();
+                out.push('{');
+            }
+            '}' if chars.peek() == Some(&'}') => {
+                chars.next();
+                out.push('}');
+            }
+            '{' => {
+                let mut name = String::new();
+                let mut closed = false;
+                for nc in chars.by_ref() {
+                    if nc == '}' {
+                        closed = true;
+                        break;
+                    }
+                    name.push(nc);
+                }
+                if closed {
+                    out.push_str(&render_placeholder(&name, data, scales, row));
+                } else {
+                    // Unterminated `{…` to end of string: not a placeholder,
+                    // kept literally.
+                    out.push('{');
+                    out.push_str(&name);
+                }
+            }
+            c => out.push(c),
+        }
+    }
+    out
+}
+
+fn render_placeholder(name: &str, data: &DataFrame, scales: &ScaleSet, row: usize) -> String {
+    let Some(col) = data.column(name) else {
+        return String::new();
+    };
+    let Some(v) = col.get(row) else {
+        return String::new();
+    };
+    if v.is_na() {
+        return String::new();
+    }
+    if let Some(formatted) = column_aesthetic(name)
+        .and_then(|aes| scales.get(&aes))
+        .and_then(|s| s.format_value(v))
+    {
+        return formatted;
+    }
+    crate::geom::tip_value(v)
+}
+
 /// The grammar pipeline: transforms a GGPlot specification into render-ready data.
 pub struct PlotBuilder;
 
@@ -117,6 +203,9 @@ impl PlotBuilder {
             default_aspect_ratio,
             locale,
             svg_root_data: _,
+            root_attrs: _,
+            svg_warnings_attr: _,
+            svg_formatted_values: _,
         } = plot;
         let mut theme = theme;
         if theme.aspect_ratio.is_none() {
@@ -152,7 +241,7 @@ impl PlotBuilder {
                 &plot_data,
                 &plot_mapping,
                 &mut scale_set,
-                theme.primary,
+                &theme,
                 &facet_vars,
                 &mut warnings,
             )?;
@@ -308,7 +397,12 @@ impl PlotBuilder {
     /// Drop rows with a non-finite value in any position column (`NaN` always;
     /// `±Inf` unless the geom gives infinities meaning). Returns the number of
     /// rows removed.
-    fn drop_non_finite(data: &mut DataFrame, allow_infinite: bool) -> usize {
+    /// `keep_as_break`: for a connecting geom ([`Geom::keeps_na_as_break`]),
+    /// a bad row is counted (for the warning) but not deleted — it stays in
+    /// `data` as a non-finite pixel position, which `DrawBackend::draw_line`
+    /// splits the polyline on, instead of being spliced out and silently
+    /// joining the finite points across the gap.
+    fn drop_non_finite(data: &mut DataFrame, allow_infinite: bool, keep_as_break: bool) -> usize {
         let n = data.nrows();
         let mut keep = vec![true; n];
         for col in POSITION_COLS {
@@ -324,7 +418,7 @@ impl PlotBuilder {
             }
         }
         let removed = keep.iter().filter(|&&k| !k).count();
-        if removed > 0 {
+        if removed > 0 && !keep_as_break {
             Self::retain_rows(data, &keep);
         }
         removed
@@ -533,10 +627,12 @@ impl PlotBuilder {
         plot_data: &DataFrame,
         plot_mapping: &Aes,
         scale_set: &mut ScaleSet,
-        primary: Option<(u8, u8, u8)>,
+        theme: &Theme,
         facet_vars: &[String],
         warnings: &mut Vec<String>,
     ) -> Result<BuiltLayer, GGError> {
+        let primary = theme.primary;
+        let geom_theme = &theme.geom;
         let Layer {
             data: layer_data,
             mapping: layer_mapping,
@@ -546,6 +642,7 @@ impl PlotBuilder {
             params: _,
             show_legend,
             explicit_style,
+            tooltip_template,
         } = layer;
 
         // Step 1: Resolve data — use layer data if provided, else plot data
@@ -561,6 +658,19 @@ impl PlotBuilder {
         } else {
             layer_mapping.clone()
         };
+
+        // B2-7: geom ink/paper/accent palette, applied before the brand
+        // colour below so a primary colour still wins when both are set.
+        // Skipped when the layer was configured explicitly
+        // (`geom_*_with(...)`) — the same `explicit_style` gate
+        // `set_series_color` uses below, and for the same reason: a
+        // field-value comparison against the hard-coded default (e.g.
+        // `color == (0, 0, 0)`) can't tell an explicitly-set black apart
+        // from a black that was simply never touched (review PR#141
+        // finding 4), but `explicit_style` can.
+        if !explicit_style {
+            geom.apply_element_geom(geom_theme);
+        }
 
         // Brand/primary color: apply to a single-series geom only when the layer
         // maps neither color nor fill (an explicit aesthetic always wins) and
@@ -635,7 +745,11 @@ impl PlotBuilder {
         // reads infinities as "panel edge"), like ggplot2's
         // "Removed n rows containing non-finite values".
         let geom_label = format!("geom_{}", geom.name());
-        let removed = Self::drop_non_finite(&mut working_data, geom.allows_infinite());
+        let removed = Self::drop_non_finite(
+            &mut working_data,
+            geom.allows_infinite(),
+            geom.keeps_na_as_break(),
+        );
         if removed > 0 {
             warnings.push(format!(
                 "{geom_label}: removed {removed} row{} containing non-finite values",
@@ -694,7 +808,11 @@ impl PlotBuilder {
 
         // Stat output can contain NaN (e.g. a fit on degenerate input): drop
         // those rows too, so nothing non-finite reaches a geom.
-        let removed = Self::drop_non_finite(&mut working_data, geom.allows_infinite());
+        let removed = Self::drop_non_finite(
+            &mut working_data,
+            geom.allows_infinite(),
+            geom.keeps_na_as_break(),
+        );
         if removed > 0 {
             warnings.push(format!(
                 "{geom_label}: removed {removed} row{} containing missing values (stat_{} output)",
@@ -806,6 +924,33 @@ impl PlotBuilder {
                     scale.train(values);
                 }
             }
+        }
+
+        // Step 9 (B2-5): render a `tooltip()` template against the built
+        // (post-stat) data, into the same internal column `Aes::tooltip`
+        // uses — so it replaces the geom's default `<title>` the same way,
+        // with no further geom-level plumbing.
+        if let Some(template) = &tooltip_template {
+            // Review PR#141 finding 6 (LOW): a template on a geom that
+            // never reads that internal column (`set_row_extras`) did
+            // nothing, silently — e.g. `geom_area`/`geom_boxplot`/
+            // `geom_ribbon`.
+            if !geom.consumes_tooltips() {
+                warnings.push(format!(
+                    "{geom_label}: tooltip(\"{template}\") has no effect — this geom doesn't read tooltips"
+                ));
+            }
+            let rendered: Vec<crate::data::Value> = (0..working_data.nrows())
+                .map(|i| {
+                    crate::data::Value::Str(render_tooltip_template(
+                        template,
+                        &working_data,
+                        scale_set,
+                        i,
+                    ))
+                })
+                .collect();
+            working_data.add_column(crate::aes::TOOLTIP_INTERNAL_NAME.to_string(), rendered);
         }
 
         Ok(BuiltLayer {

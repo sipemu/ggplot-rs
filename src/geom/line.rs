@@ -112,6 +112,7 @@ impl Geom for GeomLine {
                 // Tag each line with its series (for hover + linked highlighting).
                 let series = Some(super::tip_value(&cc[first_idx]));
                 super::set_mark(backend, series.clone(), None, series, None);
+                super::set_mark_formatted(backend, scales, None, &Aesthetic::Y, None);
                 super::set_row_extras(backend, data, first_idx);
 
                 let lt = linetype_col
@@ -239,6 +240,20 @@ impl Geom for GeomLine {
 
     fn name(&self) -> &str {
         "line"
+    }
+
+    fn consumes_tooltips(&self) -> bool {
+        true
+    }
+
+    fn keeps_na_as_break(&self) -> bool {
+        true
+    }
+
+    fn apply_element_geom(&mut self, el: &crate::theme::elements::ElementGeom) {
+        if let (true, Some(ink)) = (self.color == (0, 0, 0), el.ink) {
+            self.color = ink;
+        }
     }
 
     fn set_series_color(&mut self, color: (u8, u8, u8)) {

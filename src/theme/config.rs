@@ -65,6 +65,9 @@ pub struct ThemeConfig {
     pub strip_background: Option<RectCfg>,
 
     pub legend: Option<LegendCfg>,
+
+    /// Geom ink/paper/accent/family palette (B2-7's `element_geom`).
+    pub geom: Option<GeomCfg>,
 }
 
 #[derive(Deserialize, Default)]
@@ -99,6 +102,17 @@ pub struct RectCfg {
     pub color: Option<[u8; 3]>,
     pub width: Option<f64>,
     pub visible: Option<bool>,
+}
+
+/// `geom.ink`/`geom.paper`/`geom.accent`/`geom.family` config keys for
+/// [`ElementGeom`](super::elements::ElementGeom) (B2-7).
+#[derive(Deserialize, Default)]
+#[serde(default, deny_unknown_fields)]
+pub struct GeomCfg {
+    pub ink: Option<[u8; 3]>,
+    pub paper: Option<[u8; 3]>,
+    pub accent: Option<[u8; 3]>,
+    pub family: Option<String>,
 }
 
 #[derive(Deserialize, Default)]
@@ -186,6 +200,20 @@ impl ThemeConfig {
         }
         if let Some(l) = &self.legend {
             t.legend_position = legend_position(l)?;
+        }
+        if let Some(cfg) = &self.geom {
+            if let Some([r, g, b]) = cfg.ink {
+                t.geom.ink = Some((r, g, b));
+            }
+            if let Some([r, g, b]) = cfg.paper {
+                t.geom.paper = Some((r, g, b));
+            }
+            if let Some([r, g, b]) = cfg.accent {
+                t.geom.accent = Some((r, g, b));
+            }
+            if let Some(f) = &cfg.family {
+                t.geom.family = Some(f.clone());
+            }
         }
         Ok(t)
     }

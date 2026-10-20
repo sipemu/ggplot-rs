@@ -200,7 +200,8 @@ fn explicit_geom_colours_beat_primary_color() {
         .primary_color((0x12, 0x34, 0x56))
         .render_svg_native_with_size(300, 200)
         .unwrap();
-    assert!(svg.contains("fill=\"#FFFFFF\" fill-opacity=\"1.000\" stroke"));
+    // fill-opacity is omitted at the default (1.0) — B2-2.
+    assert!(svg.contains("fill=\"#FFFFFF\" stroke"));
     assert!(!svg.contains("#123456"));
 }
 
@@ -226,8 +227,12 @@ fn sorted_discrete_scale_is_order_independent() {
     };
     for svg in [render(&["c", "a", "b"]), render(&["b", "c", "a"])] {
         // "a" → first palette colour, "c" → third, whatever the data order.
-        assert!(svg.contains(r##"fill="#110000" fill-opacity="1.000" stroke="#323232" stroke-width="0.50" data-x="a""##), "{svg}");
-        assert!(svg.contains(r##"fill="#330000" fill-opacity="1.000" stroke="#323232" stroke-width="0.50" data-x="c""##));
+        // fill-opacity is omitted at the default (1.0) — B2-2.
+        assert!(
+            svg.contains(r##"fill="#110000" stroke="#323232" stroke-width="0.50" data-x="a""##),
+            "{svg}"
+        );
+        assert!(svg.contains(r##"fill="#330000" stroke="#323232" stroke-width="0.50" data-x="c""##));
     }
 
     // Convenience form with the default palette.

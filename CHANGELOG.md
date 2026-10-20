@@ -3,6 +3,162 @@
 All notable changes to this project are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.21.0] — 2026-10-20
+
+Minor bump: the SVG mark contract. Default output is byte-identical except
+for four deliberate changes: `fill-opacity`/`stroke-opacity` omitted at
+1.000, `draw_line` splitting into separate `<polyline>`s at non-finite
+vertices, every data mark gaining a `gg-mark gg-<kind>` class, and `GeomText`
+honouring a theme/geom font family it previously ignored. `Layer` and
+`Theme`/`ThemeUpdate` gain new public fields, so struct literals without
+`..Default::default()` need them added.
+
+### Added
+
+- SVG data marks carry a stable class: every element a layer draws gets
+  `class="gg-mark gg-<kind>"` (`gg-point`, `gg-line`, `gg-band`, `gg-bar`,
+  `gg-text`, by primitive) and `data-geom="<geom name>"`, so a host can select
+  marks without matching grid lines, axes or legends, which stay unclassed
+  (#121). While a mark part is set (e.g. an arrow head), the part is the
+  effective kind, so arrow heads carry `gg-mark gg-arrow` rather than their
+  parent's `gg-band`/`gg-line`. `data-geom` on reference lines reads `hline`,
+  `vline` or `abline`. New `DrawBackend::set_mark_geom` hook (default no-op),
+  forwarded by `compose::Measure` as well as the panel backend adapter, so
+  `PlotGrid` marks are classed too.
+- New default `Geom::keeps_na_as_break` hook (default `false`; `GeomLine`/
+  `GeomPath`/`GeomStep` return `true`): a row whose position is non-finite is
+  no longer deleted from the built data for these geoms, so `draw_line`'s
+  per-vertex split (below) actually has a gap to split on, instead of the
+  row being spliced out and its finite neighbours silently joined across it.
+- `GGPlot::svg_attr(name, value)`/`svg_attrs(iter)` — and the same API on
+  `PlotGrid` — add caller attributes to the root `<svg>`: `data-*`/`aria-*`
+  (the same charset-restricted suffix `Aes::data_attr` uses), or the fixed
+  names `role`/`id`/`class`/`lang`. Anything else, or a name ggplot-rs
+  already writes to the same root, is dropped with a build warning rather
+  than silently overwriting or duplicating it.
+- `GGPlot::svg_warnings_attr(bool)` (and on `PlotGrid`) emits `data-warnings`
+  as a JSON array of the build warnings, `[]` when there are none.
+- Per-mark formatted values: new default `Scale::format_value(&Value) ->
+  Option<String>`, overridden by `ScaleContinuous` (`with_value_formatter`,
+  falling back to the label formatter then the locale, and inverting the
+  scale's own transform first — `scale_y_log10`'s `data-fvalue` shows
+  `"100"`, not the transformed-space `"2"`), `ScaleDateTime` (`with_date_
+  labels`, else the locale date format, else plain ISO — the same order
+  the axis break labels already use), and the size/linewidth/colour-
+  continuous scales (their own formatter). `GGPlot::svg_formatted_values
+  (bool)` (default off) turns on `data-fvalue` (the value aesthetic's
+  scale — y for most geoms, fill for hex/tile/bin2d) and `data-fx` (the x
+  scale, written only when it differs from the plain `data-x`) on marks.
+  New `DrawBackend::wants_formatted_values`/`set_mark_fvalue`/
+  `set_mark_fx` hooks (all default no-ops). A vline/hline's `data-x` and
+  tooltip show the matching scale's formatted value too (e.g. an ISO date
+  on a datetime x) when the flag is on.
+- `GGPlot::tooltip(template)`: a `{column}` tooltip template for the most
+  recently added layer, replacing its default `<title>`. Each placeholder
+  is filled from the *built* (post-stat) layer data — so it can reference
+  a stat-computed column, e.g. a hex's `count` — formatted through the
+  column's scale when it has one. An absent column renders empty, not
+  literally `{column}`; `{{`/`}}` are literal braces.
+- Geom text inherits the theme font: `GeomText`/`GeomLabel`/`GeomTextRepel`/
+  `GeomLabelRepel`/`GeomBracket`/text annotations resolve their font family
+  as the geom's own `fontfamily` (previously a dead field on `GeomText`/
+  `GeomLabel`), else `theme.geom.family`, else `theme.text.family`, else
+  `"sans-serif"`.
+- `#[non_exhaustive] ElementGeom { ink, paper, accent, family }` (ggplot2
+  4.0's `element_geom`), plus `Theme.geom`, `ThemeUpdate.geom`,
+  `Theme::set_geom`/`with_ink_paper`, and `ThemeConfig`'s `geom.ink`/
+  `geom.paper`/`geom.accent`/`geom.family` config keys. A new default
+  `Geom::apply_element_geom` (a no-op) is called once per layer before the
+  brand/primary colour, and only for a layer *not* configured explicitly
+  via `geom_*_with(...)` (the same `explicit_style` gate the brand colour
+  already uses — review PR#141 finding 4: a field-*value* comparison
+  against the hard-coded default can't tell an explicitly-set colour that
+  happens to equal it apart from one nobody touched, so the gate skips the
+  call entirely instead). Covered geoms: `GeomPoint`/`GeomLine`/
+  `GeomPath`/`GeomText`/`GeomLabel`/`GeomBoxplot` recolour their built-in
+  black/`(50, 50, 50)`/white defaults from `ink`/`paper`, and `GeomSmooth`
+  from `accent`. The legend key swatch colour is now
+  `theme.geom.ink.unwrap_or((50, 50, 50))`. Every other geom (segment,
+  curve, reference lines, errorbar/linerange/pointrange, step, rect/tile
+  outlines, density/violin/area outlines, crossbar) does not yet honour
+  `ElementGeom` — tracked at sipemu/ggplot-rs#142.
+- `ScaleColorContinuous`/`ScaleColorGradient2`/`ScaleColorGradientN` gain
+  `with_limits(lo, hi)`, fixing the colour domain (not just the legend) to
+  a range independent of the trained data — e.g. `[-1, 1]` for a
+  correlation matrix. New `Oob` enum (`Censor`, the default: an
+  out-of-range value renders in the scale's `na_value`; `Squish`, opt-in
+  via `with_oob`: clamped to the nearest limit).
+- The same three scales gain `na_value` (default `(127, 127, 127)`,
+  ggplot2's `"grey50"`) and a `with_na_value` builder: a genuinely missing
+  (`NA`) or non-finite value, and a value censored by `Oob::Censor`, all
+  render in `na_value` instead of a bare `None` the geom silently papers
+  over with its own unrelated default colour.
+- New default `Geom::consumes_tooltips` hook (default `false`; the 13
+  geoms that actually read a per-row tooltip — bar/col/histogram/hex/
+  line/path/point/polygon/rect/sf/segment/curve/tile — return `true`):
+  `GGPlot::tooltip(template)` on a layer whose geom ignores tooltips now
+  pushes a build warning instead of silently having no effect.
+
+### Fixed
+
+- `Scale::format_value` on `ScaleContinuous` now inverts the scale's own
+  transform (`scale_x_log10`, etc.) before formatting: `data-fvalue` and a
+  `{y}` tooltip-template placeholder on a log-scaled `y = 100` showed `"2"`
+  (the transformed-space value the built data actually holds) instead of
+  `"100"`, while the axis labels correctly showed the inverse already.
+- `ScaleDateTime::format_value` now honours `with_date_labels` (falling
+  back to the locale date format, then plain ISO) instead of always
+  ISO/locale regardless of it — the axis break labels already did. This
+  also un-breaks `data-fx` on a datetime x with `with_date_labels` set: it
+  was suppressed as "equal to `data-x`" because the un-formatted ISO
+  fallback happened to be the only thing compared.
+- `PlotGrid` cells each honour their own `svg_formatted_values` flag
+  (previously only a top-level `GGPlot::render_svg_native*` call applied
+  it; a plot composed into a grid lost `data-fvalue`/`data-fx` even with
+  the flag set on that cell).
+- `ScaleColorContinuous`/`ScaleColorGradient2`/`ScaleColorGradientN`'s
+  `with_limits(lo, hi)` with `lo > hi` (e.g. a typo) no longer panics
+  under `Oob::Squish` (`f64::clamp` panics when `min > max`) — every
+  value is treated as censored (`na_value`) regardless of the configured
+  `Oob`, same as `Oob::Censor` already did, and `Scale::validate` now
+  pushes a build warning naming the inverted limits.
+- The root/`PlotGrid` `svg_attr` collision warning now distinguishes a
+  name ggplot-rs itself writes (`data-plot`, `data-grid`, …) from a
+  *second* `svg_attr`/`svg_attrs` call for the same name — the latter
+  previously said "collides with an attribute ggplot-rs already writes
+  to the root", which wrongly blamed ggplot-rs for the caller's own
+  earlier call; it now says "was already set by an earlier svg_attr
+  call".
+
+### Changed
+
+- **Missing colour values render grey** on continuous colour/fill scales (`na_value`, default grey50, as in ggplot2), also without limits. Previously NaN rendered black and NA the low end of the gradient.
+- `fill-opacity`/`stroke-opacity` is written only when the value isn't
+  `1.000` (the SVG default); it was previously written unconditionally on
+  every mark.
+- `draw_line` splits at a non-finite vertex into separate `<polyline>`
+  marks instead of silently dropping the bad vertex and joining its finite
+  neighbours across the gap (ggplot2's NA-break semantics) — for
+  `geom_line`/`geom_path`/`geom_step` only (see `keeps_na_as_break` above).
+  A run shorter than 2 points is dropped, the same as ggplot2 drops a
+  one-observation path piece, rather than becoming an invisible 1-point
+  polyline mark. `GeomStep` clamps only an *infinite* pixel coordinate to
+  the panel edge (`stat_ecdf`'s `±Inf` padding); a `NaN` coordinate is left
+  alone so it breaks the line instead of being clamped to an edge it was
+  never meant to reach.
+- `"geom"`, `"fvalue"` and `"fx"` join `"part"` as reserved `data_attr`
+  names (alongside the attributes they already name): a mapping under any
+  of these is rejected with a build warning, the same as `"part"` already
+  was, so no element can ever carry two `data-geom`/`data-fvalue`/`data-fx`
+  attributes.
+
+### Breaking
+
+- `Layer` gains a public `tooltip_template: Option<String>` field.
+- `Theme` gains a public `geom: ElementGeom` field; `ThemeUpdate` gains a
+  public `geom: Option<ElementGeom>` field. Struct literals for either
+  without `..Default::default()` need the new field added.
+
 ## [0.20.0] — 2026-10-20
 
 Minor bump: new public API (arrows, linewidth, hex binning in data units,

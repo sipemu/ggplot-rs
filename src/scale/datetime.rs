@@ -339,6 +339,20 @@ impl Scale for ScaleDateTime {
         self.locale.as_ref()
     }
 
+    fn format_value(&self, value: &Value) -> Option<String> {
+        let f = value.as_f64()?;
+        if !f.is_finite() {
+            return None;
+        }
+        // Review PR#141 finding 5: honour `with_date_labels` (and locale)
+        // the same way the axis break labels already do, via the shared
+        // `label` helper — not just the bare ISO/locale-date fallback.
+        // `label`'s `step` parameter only affects the no-format/no-locale
+        // branch's precision choice, which is irrelevant for a single
+        // point value, so 0.0 is fine.
+        Some(self.label(f, 0.0))
+    }
+
     fn aesthetic(&self) -> Aesthetic {
         self.aesthetic.clone()
     }
@@ -534,6 +548,36 @@ impl Scale for ScaleDateTime {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn format_value_is_plain_iso_without_a_locale_and_locale_formatted_with_one() {
+        let s = ScaleDateTime::new();
+        // 2026-10-12T00:00:00Z.
+        assert_eq!(
+            s.format_value(&Value::Float(1_791_763_200.0)),
+            Some("2026-10-12".to_string())
+        );
+        assert_eq!(s.format_value(&Value::Float(f64::NAN)), None);
+
+        let mut with_locale = ScaleDateTime::new();
+        with_locale.set_default_locale(&crate::locale::Locale::de_de());
+        let formatted = with_locale
+            .format_value(&Value::Float(1_791_763_200.0))
+            .unwrap();
+        assert_ne!(formatted, "2026-10-12");
+    }
+
+    #[test]
+    fn format_value_honours_with_date_labels() {
+        // Review PR#141 finding 5: format_value ignored with_date_labels
+        // entirely, always falling back to ISO/locale — the axis break
+        // labels (via the private `label` helper) already honoured it.
+        let s = ScaleDateTime::new().with_date_labels("%d.%m.%Y");
+        assert_eq!(
+            s.format_value(&Value::Float(1_791_763_200.0)), // 2026-10-12
+            Some("12.10.2026".to_string())
+        );
+    }
 
     #[test]
     fn civil_roundtrip() {

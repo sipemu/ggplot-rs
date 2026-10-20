@@ -222,6 +222,13 @@ pub trait DrawBackend {
     /// marks — SVG emits it as `data-value`. Default: no-op.
     fn set_mark_value(&mut self, _value: Option<String>) {}
 
+    /// Tag subsequently drawn elements as data marks of the named geom (the
+    /// layer's `Geom::name`) until cleared with `None`. SVG emits
+    /// `class="gg-mark gg-<kind>"` (kind from the primitive: `point`, `line`,
+    /// `band`, `bar`, `text`) plus `data-geom`, so a host can select data
+    /// marks without matching axes, grid lines or legends. Default: no-op.
+    fn set_mark_geom(&mut self, _geom: Option<&str>) {}
+
     /// Report a non-fatal problem found while drawing (e.g. labels a repel
     /// layout had to drop). Backends that collect warnings (the native SVG
     /// backend) append it to the render warnings. Default: ignored.
@@ -242,6 +249,30 @@ pub trait DrawBackend {
     /// `data-value`) replaces it rather than duplicating it. An empty
     /// `Vec` clears any previously set attrs. Default: no-op.
     fn set_mark_attrs(&mut self, _attrs: Vec<(String, String)>) {}
+
+    /// Whether the caller asked for per-mark formatted values
+    /// ([`crate::plot::GGPlot::svg_formatted_values`], B2-4) — a query a
+    /// geom checks before doing the (otherwise pointless) work of resolving
+    /// a scale's formatter for `set_mark_fvalue`/`set_mark_fx`. Default
+    /// false, so the feature is byte-identical when never turned on.
+    fn wants_formatted_values(&self) -> bool {
+        false
+    }
+
+    /// `data-fvalue` on subsequently-drawn marks: the "value" aesthetic's
+    /// raw data value (y for most geoms, fill for hex/tile), formatted
+    /// through that aesthetic's scale (`Scale::format_value`) — e.g. a
+    /// de-DE currency string. Only meaningful while
+    /// [`wants_formatted_values`](Self::wants_formatted_values) is true;
+    /// `None` clears any previous mark's value, per row. Default: no-op.
+    fn set_mark_fvalue(&mut self, _value: Option<String>) {}
+
+    /// `data-fx` on subsequently-drawn marks: the x value formatted through
+    /// the x scale (e.g. a datetime axis's ISO/locale date). The SVG
+    /// backend omits it when it matches the already-written `data-x`, so a
+    /// plain numeric x doesn't get a redundant duplicate attribute. Default:
+    /// no-op.
+    fn set_mark_fx(&mut self, _value: Option<String>) {}
 
     /// Draw a point with a specific shape. Default delegates to draw_circle for Circle.
     fn draw_shape(

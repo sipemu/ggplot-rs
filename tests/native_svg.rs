@@ -171,3 +171,233 @@ fn mismatched_column_lengths_are_a_validation_error_not_a_panic() {
         .render_svg_native();
     assert!(matches!(r, Err(GGError::ValidationError(_))), "{r:?}");
 }
+
+/// Every `<tag …>` start tag in `svg` whose name is `tag`.
+fn tags<'a>(svg: &'a str, tag: &str) -> Vec<&'a str> {
+    let open = format!("<{tag} ");
+    svg.match_indices(&open)
+        .map(|(i, _)| {
+            let rest = &svg[i..];
+            &rest[..rest.find('>').map_or(rest.len(), |e| e + 1)]
+        })
+        .collect()
+}
+
+#[test]
+fn data_marks_carry_a_stable_class() {
+    let cases: Vec<(&str, GGPlot, &str, &str)> = vec![
+        ("point", xy().geom_point(), "circle", "gg-point"),
+        ("line", xy().geom_line(), "polyline", "gg-line"),
+        ("path", xy().geom_path(), "polyline", "gg-line"),
+        ("step", xy().geom_step(), "polyline", "gg-line"),
+        ("area", xy().geom_area(), "polygon", "gg-band"),
+        ("smooth", xy().geom_smooth(), "polygon", "gg-band"),
+        ("col", gy().geom_col(), "rect", "gg-bar"),
+        (
+            "bar",
+            GGPlot::new(data()).aes(Aes::new().x("g")).geom_bar(),
+            "rect",
+            "gg-bar",
+        ),
+        (
+            "text",
+            GGPlot::new(data())
+                .aes(Aes::new().x("x").y("y").label("g"))
+                .geom_text(),
+            "text",
+            "gg-text",
+        ),
+    ];
+    for (geom, plot, tag, class) in cases {
+        let svg = check(plot, geom);
+        let want = format!("class=\"gg-mark {class}\"");
+        assert!(
+            tags(&svg, tag).iter().any(|t| t.contains(&want)),
+            "{geom}: no <{tag}> carries {want}"
+        );
+        assert!(
+            svg.contains(&format!("data-geom=\"{geom}\"")),
+            "{geom}: data-geom missing"
+        );
+    }
+}
+
+#[test]
+fn grid_axes_and_legends_carry_no_mark_class() {
+    // Lines + legend (colour) + facets: every mark-classed element must come
+    // from a layer, so the grid polylines, axis text and legend keys stay bare.
+    for plot in [
+        xy().geom_line(),
+        GGPlot::new(data())
+            .aes(Aes::new().x("x").y("y").color("g"))
+            .geom_line(),
+        xy().geom_line().facet_wrap("g", None),
+    ] {
+        let svg = check(plot, "line");
+        let lines = tags(&svg, "polyline");
+        let bare: Vec<_> = lines.iter().filter(|t| !t.contains("gg-mark")).collect();
+        assert!(!bare.is_empty(), "grid lines are drawn");
+        assert!(
+            lines
+                .iter()
+                .any(|t| t.contains("class=\"gg-mark gg-line\"")),
+            "the data line is classed"
+        );
+        // Without a text layer, no text element is a data mark.
+        assert!(!svg.contains("gg-text"), "axis/legend text is unclassed");
+        // A line layer draws no rects: backgrounds, strips and legend keys
+        // stay unclassed.
+        assert!(tags(&svg, "rect").iter().all(|t| !t.contains("gg-mark")));
+    }
+}
+
+/// B2-0 fix #3: while a mark part (e.g. an arrowhead) is set, the part is
+/// the effective `gg-mark` kind, not the parent mark's own kind.
+#[test]
+fn arrow_heads_carry_gg_arrow_not_the_parents_kind() {
+    let svg = GGPlot::new(vec![
+        ("x".into(), vec![Value::Float(0.0), Value::Float(0.2)]),
+        ("y".into(), vec![Value::Float(0.0), Value::Float(1.0)]),
+        ("xend".into(), vec![Value::Float(1.0), Value::Float(0.8)]),
+        ("yend".into(), vec![Value::Float(0.5), Value::Float(0.3)]),
+    ])
+    .aes(Aes::new().x("x").y("y").xend("xend").yend("yend"))
+    .geom_segment_with(GeomSegment::default().arrow(arrow().closed()))
+    .render_svg_native_with_size(200, 200)
+    .unwrap();
+    let heads: Vec<&str> = tags(&svg, "polygon")
+        .into_iter()
+        .filter(|t| t.contains("data-part=\"arrow\""))
+        .collect();
+    assert_eq!(heads.len(), 2, "one arrowhead per row: {svg}");
+    for head in &heads {
+        assert!(
+            head.contains("class=\"gg-mark gg-arrow\""),
+            "arrowhead should carry gg-arrow, not the parent segment's kind: {head}"
+        );
+        assert!(
+            head.contains("data-geom=\"segment\""),
+            "arrowhead keeps the parent layer's data-geom: {head}"
+        );
+    }
+}
+
+/// B2-0 fix #4: no element — including an arrowhead, which carries both a
+/// user-visible `data-part` and the automatic `gg-mark` class — ever ends up
+/// with two `class` attributes (an XML parse error).
+#[test]
+fn no_element_ever_carries_two_class_attributes() {
+    let plots: Vec<(&str, String)> = vec![
+        (
+            "segment+arrow",
+            GGPlot::new(vec![
+                ("x".into(), vec![Value::Float(0.0), Value::Float(0.2)]),
+                ("y".into(), vec![Value::Float(0.0), Value::Float(1.0)]),
+                ("xend".into(), vec![Value::Float(1.0), Value::Float(0.8)]),
+                ("yend".into(), vec![Value::Float(0.5), Value::Float(0.3)]),
+            ])
+            .aes(Aes::new().x("x").y("y").xend("xend").yend("yend"))
+            .geom_segment_with(GeomSegment::default().arrow(arrow().closed()))
+            .render_svg_native_with_size(200, 200)
+            .unwrap(),
+        ),
+        (
+            "colour legend",
+            GGPlot::new(data())
+                .aes(Aes::new().x("x").y("y").color("g"))
+                .geom_point()
+                .render_svg_native_with_size(400, 300)
+                .unwrap(),
+        ),
+        (
+            "facets",
+            xy().geom_line()
+                .facet_wrap("g", None)
+                .render_svg_native_with_size(400, 300)
+                .unwrap(),
+        ),
+    ];
+    for (name, svg) in plots {
+        for tag in ["circle", "polyline", "polygon", "rect", "path", "text"] {
+            for t in tags(&svg, tag) {
+                let n = t.matches("class=\"").count();
+                assert!(n <= 1, "{name}: {tag} has {n} class attributes: {t}");
+            }
+        }
+    }
+}
+
+/// B2-0 acceptance: a `PlotGrid` composition classes marks in every cell
+/// (forwarded through `compose::Measure`'s `set_mark_geom`).
+#[test]
+fn plotgrid_marks_are_classed() {
+    let p = || GGPlot::new(data()).aes(Aes::new().x("x").y("y"));
+    let svg = (p().geom_point() | p().geom_line())
+        .render_svg_native_with_size(600, 300)
+        .unwrap();
+    assert!(!svg.contains("NaN"));
+    assert!(
+        tags(&svg, "circle")
+            .iter()
+            .any(|t| t.contains("class=\"gg-mark gg-point\"")),
+        "left cell's points are classed: {svg}"
+    );
+    assert!(
+        tags(&svg, "polyline")
+            .iter()
+            .any(|t| t.contains("class=\"gg-mark gg-line\"")),
+        "right cell's line is classed"
+    );
+}
+
+/// B2-0 acceptance: reference lines carry the specific `data-geom`, not a
+/// generic name — this falls out of `Geom::name()` driving `mark_class`,
+/// with no refline-specific code.
+#[test]
+fn reflines_carry_their_specific_data_geom() {
+    let base = || {
+        GGPlot::new(data())
+            .aes(Aes::new().x("x").y("y"))
+            .geom_point()
+    };
+    let hline = base()
+        .geom_hline(1.0)
+        .render_svg_native_with_size(200, 200)
+        .unwrap();
+    assert!(hline.contains("data-geom=\"hline\""));
+    let vline = base()
+        .geom_vline(1.0)
+        .render_svg_native_with_size(200, 200)
+        .unwrap();
+    assert!(vline.contains("data-geom=\"vline\""));
+    let abline = base()
+        .geom_abline(1.0, 0.0)
+        .render_svg_native_with_size(200, 200)
+        .unwrap();
+    assert!(abline.contains("data-geom=\"abline\""));
+}
+
+/// B2-2: `fill-opacity`/`stroke-opacity` is the SVG default (fully opaque)
+/// and is omitted rather than written as `"1.000"`; an explicit non-default
+/// alpha still writes it.
+#[test]
+fn default_opacity_is_omitted_but_a_set_alpha_still_writes_it() {
+    let default_svg = GGPlot::new(data())
+        .aes(Aes::new().x("x").y("y"))
+        .geom_point()
+        .geom_line()
+        .render_svg_native_with_size(300, 200)
+        .unwrap();
+    assert!(!default_svg.contains("-opacity=\"1.000\""), "{default_svg}");
+    assert!(!default_svg.contains("-opacity="), "{default_svg}");
+
+    let faded_svg = GGPlot::new(data())
+        .aes(Aes::new().x("x").y("y"))
+        .geom_point_with(GeomPoint {
+            alpha: 0.4,
+            ..Default::default()
+        })
+        .render_svg_native_with_size(300, 200)
+        .unwrap();
+    assert!(faded_svg.contains("fill-opacity=\"0.400\""), "{faded_svg}");
+}

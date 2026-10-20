@@ -163,6 +163,10 @@ impl Geom for GeomSegment {
         "segment"
     }
 
+    fn consumes_tooltips(&self) -> bool {
+        true
+    }
+
     fn set_series_color(&mut self, color: (u8, u8, u8)) {
         self.color = color;
     }
@@ -209,6 +213,10 @@ impl Geom for GeomCalendarBorder {
     }
     fn name(&self) -> &str {
         "segment"
+    }
+
+    fn consumes_tooltips(&self) -> bool {
+        true
     }
 }
 
