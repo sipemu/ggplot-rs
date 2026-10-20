@@ -170,3 +170,50 @@ fn a_log10_y_tooltip_template_also_shows_the_inverse_transformed_value() {
         .unwrap();
     assert!(svg.contains("<title>y = 100</title>"), "{svg}");
 }
+
+#[test]
+fn a_date_x_with_date_labels_gives_data_fx_in_that_format() {
+    // Review PR#141 finding 5: data-fx was suppressed entirely when
+    // with_date_labels was set, because it ignored the format and fell
+    // back to ISO, which then equalled the plain data-x and got dropped
+    // as redundant.
+    let data = frame(vec![("x", floats(&[OCT_12_2026])), ("y", floats(&[1.0]))]);
+    let svg = GGPlot::new(data)
+        .aes(Aes::new().x("x").y("y"))
+        .geom_point()
+        .scale_x_datetime(ScaleDateTime::new().with_date_labels("%d.%m.%Y"))
+        .svg_formatted_values(true)
+        .render_svg_native_with_size(300, 200)
+        .unwrap();
+    assert!(svg.contains("data-fx=\"12.10.2026\""), "{svg}");
+}
+
+#[test]
+fn a_vline_at_a_datetime_x_with_date_labels_shows_that_format() {
+    let base = || {
+        GGPlot::new(frame(vec![("x", floats(&[1.0])), ("y", floats(&[1.0]))]))
+            .aes(Aes::new().x("x").y("y"))
+            .geom_point()
+            .scale_x_datetime(ScaleDateTime::new().with_date_labels("%d.%m.%Y"))
+    };
+    let svg = base()
+        .geom_vline(OCT_12_2026)
+        .svg_formatted_values(true)
+        .render_svg_native_with_size(300, 200)
+        .unwrap();
+    assert!(svg.contains("data-x=\"12.10.2026\""), "{svg}");
+    assert!(svg.contains("x = 12.10.2026"), "tooltip: {svg}");
+}
+
+#[test]
+fn an_x_tooltip_template_on_a_datetime_scale_with_date_labels_uses_that_format() {
+    let data = frame(vec![("x", floats(&[OCT_12_2026])), ("y", floats(&[1.0]))]);
+    let svg = GGPlot::new(data)
+        .aes(Aes::new().x("x").y("y"))
+        .geom_point()
+        .scale_x_datetime(ScaleDateTime::new().with_date_labels("%d.%m.%Y"))
+        .tooltip("{x}")
+        .render_svg_native_with_size(300, 200)
+        .unwrap();
+    assert!(svg.contains("<title>12.10.2026</title>"), "{svg}");
+}

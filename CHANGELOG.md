@@ -40,8 +40,11 @@ honouring a theme/geom font family it previously ignored. `Layer` and
   as a JSON array of the build warnings, `[]` when there are none.
 - Per-mark formatted values: new default `Scale::format_value(&Value) ->
   Option<String>`, overridden by `ScaleContinuous` (`with_value_formatter`,
-  falling back to the label formatter then the locale), `ScaleDateTime`
-  (locale date format, else plain ISO), and the size/linewidth/colour-
+  falling back to the label formatter then the locale, and inverting the
+  scale's own transform first — `scale_y_log10`'s `data-fvalue` shows
+  `"100"`, not the transformed-space `"2"`), `ScaleDateTime` (`with_date_
+  labels`, else the locale date format, else plain ISO — the same order
+  the axis break labels already use), and the size/linewidth/colour-
   continuous scales (their own formatter). `GGPlot::svg_formatted_values
   (bool)` (default off) turns on `data-fvalue` (the value aesthetic's
   scale — y for most geoms, fill for hex/tile/bin2d) and `data-fx` (the x
@@ -98,6 +101,12 @@ honouring a theme/geom font family it previously ignored. `Layer` and
   `{y}` tooltip-template placeholder on a log-scaled `y = 100` showed `"2"`
   (the transformed-space value the built data actually holds) instead of
   `"100"`, while the axis labels correctly showed the inverse already.
+- `ScaleDateTime::format_value` now honours `with_date_labels` (falling
+  back to the locale date format, then plain ISO) instead of always
+  ISO/locale regardless of it — the axis break labels already did. This
+  also un-breaks `data-fx` on a datetime x with `with_date_labels` set: it
+  was suppressed as "equal to `data-x`" because the un-formatted ISO
+  fallback happened to be the only thing compared.
 
 ### Changed
 

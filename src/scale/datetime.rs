@@ -344,15 +344,13 @@ impl Scale for ScaleDateTime {
         if !f.is_finite() {
             return None;
         }
-        let secs = f as i64;
-        Some(match &self.locale {
-            Some(loc) => loc.format_datetime(secs),
-            // No locale set: the plain ISO date (plus time-of-day away from
-            // midnight), not the en-US preset's "Oct 12, 2026" — `locale()`
-            // being `None` here means "no locale was configured", not
-            // "assume en-US".
-            None => crate::data::format_epoch_secs(secs),
-        })
+        // Review PR#141 finding 5: honour `with_date_labels` (and locale)
+        // the same way the axis break labels already do, via the shared
+        // `label` helper — not just the bare ISO/locale-date fallback.
+        // `label`'s `step` parameter only affects the no-format/no-locale
+        // branch's precision choice, which is irrelevant for a single
+        // point value, so 0.0 is fine.
+        Some(self.label(f, 0.0))
     }
 
     fn aesthetic(&self) -> Aesthetic {
@@ -567,6 +565,18 @@ mod tests {
             .format_value(&Value::Float(1_791_763_200.0))
             .unwrap();
         assert_ne!(formatted, "2026-10-12");
+    }
+
+    #[test]
+    fn format_value_honours_with_date_labels() {
+        // Review PR#141 finding 5: format_value ignored with_date_labels
+        // entirely, always falling back to ISO/locale — the axis break
+        // labels (via the private `label` helper) already honoured it.
+        let s = ScaleDateTime::new().with_date_labels("%d.%m.%Y");
+        assert_eq!(
+            s.format_value(&Value::Float(1_791_763_200.0)), // 2026-10-12
+            Some("12.10.2026".to_string())
+        );
     }
 
     #[test]
