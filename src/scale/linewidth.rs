@@ -10,10 +10,11 @@ use super::Scale;
 /// Continuous linewidth scale — maps data values to a stroke-width range
 /// (R's `scale_linewidth`). Unlike the position (x/y) scales, `with_limits`
 /// squishes out-of-range values to the nearest limit rather than filtering
-/// them, and `with_transform` reshapes the normalized `[0, 1]` fraction
-/// inside [`map`](Scale::map) / [`map_to_size`](Scale::map_to_size) — it does
-/// *not* override [`Scale::transform`] (that's for pre-stat domain
-/// transforms like `scale_x_log10`, which linewidth has no use for).
+/// them. `with_transform` is applied to the value and the limits *before*
+/// rescaling into `range`, inside [`map`](Scale::map) /
+/// [`map_to_size`](Scale::map_to_size) — it does *not* override
+/// [`Scale::transform`] (that's for pre-stat domain transforms like
+/// `scale_x_log10`, which linewidth has no use for).
 #[derive(Clone)]
 pub struct ScaleLinewidthContinuous {
     name: String,
@@ -67,10 +68,14 @@ impl ScaleLinewidthContinuous {
         self
     }
 
-    /// Reshape the normalized `[0, 1]` fraction before it is scaled into
-    /// `range` — e.g. `Sqrt` so stroke width scales with the square root of
-    /// the data value (closer to equal visual "ink" per unit, like
-    /// ggplot2's default `scale_size`/`scale_linewidth` area transform).
+    /// Transform the value and the (untransformed) `with_limits` domain
+    /// before rescaling into `range` (ggplot2's order for a scale `trans`):
+    /// `t = (T(v) - T(min)) / (T(max) - T(min))`. Default `Identity`, which
+    /// matches ggplot2's own default for `scale_linewidth` — a *linear*
+    /// `rescale_pal`, unlike `scale_size`'s default `area_pal` (sqrt-like,
+    /// since visual area grows with the square of a linear dimension).
+    /// Pass `Sqrt` to opt into that area-proportional look for linewidth
+    /// too.
     pub fn with_transform(mut self, transform: ScaleTransform) -> Self {
         self.scale_transform = transform;
         self
@@ -119,23 +124,37 @@ impl ScaleLinewidthContinuous {
         }
     }
 
-    /// Normalized fraction in `[0, 1]`: squished by the (possibly fixed)
-    /// domain, then reshaped by `scale_transform`.
+    /// Normalized fraction in `[0, 1]`, ggplot2's order: transform the value
+    /// *and* the (untransformed) limits, then rescale over the transformed
+    /// range — not the other way around. Transforming an already-rescaled
+    /// `[0, 1]` fraction (the previous, incorrect implementation) collapses
+    /// most transforms: e.g. `Log10`/`Reverse`/`Exp` of values near 0 and 1
+    /// all land near the same couple of outputs, regardless of the input.
+    /// The transformed limits are sorted ascending before rescaling, so a
+    /// transform that reverses order (`Reverse`, or `Reciprocal` on
+    /// positive limits) still produces the expected result: the domain
+    /// minimum gets the *larger* output, since its transformed value is the
+    /// larger of the two transformed limits.
     fn fraction(&self, value: &Value) -> f64 {
         let f = match value.as_f64() {
             Some(f) => f,
             None => return 0.0,
         };
+        if !f.is_finite() {
+            return 0.0;
+        }
         if !self.trained || !self.min.is_finite() || !self.max.is_finite() {
             return 0.5;
         }
-        let range = self.max - self.min;
-        let t = if range.abs() < f64::EPSILON {
-            0.5
-        } else {
-            ((f - self.min) / range).clamp(0.0, 1.0)
-        };
-        self.scale_transform.apply(t).clamp(0.0, 1.0)
+        let t_min = self.scale_transform.apply(self.min);
+        let t_max = self.scale_transform.apply(self.max);
+        let t_v = self.scale_transform.apply(f);
+        let (lo, hi) = (t_min.min(t_max), t_min.max(t_max));
+        let range = hi - lo;
+        if !t_v.is_finite() || !range.is_finite() || range.abs() < f64::EPSILON {
+            return 0.5;
+        }
+        ((t_v - lo) / range).clamp(0.0, 1.0)
     }
 }
 
@@ -226,6 +245,14 @@ impl Scale for ScaleLinewidthContinuous {
     }
 
     fn map_to_size(&self, value: &Value) -> Option<f64> {
+        // NA / non-numeric / non-finite: no width to report, so the caller
+        // (every geom calls this through `.unwrap_or(self.width)`) falls
+        // back to the geom's own configured width instead of silently
+        // getting the scale's minimum.
+        let f = value.as_f64()?;
+        if !f.is_finite() {
+            return None;
+        }
         let t = self.fraction(value);
         let (lo, hi) = self.range;
         Some(lo + t * (hi - lo))
@@ -300,5 +327,72 @@ mod tests {
         scale.train(&[Value::Float(0.0), Value::Float(10.0)]);
         assert_eq!(scale.map_to_size(&Value::Float(0.0)), Some(1.0));
         assert_eq!(scale.map_to_size(&Value::Float(10.0)), Some(6.0));
+    }
+
+    // ─── Review finding #4: transform the value and the limits first, then
+    // rescale (ggplot2's order) — not the previous, incorrect order that
+    // transformed the already-rescaled [0,1] fraction, which collapsed
+    // every transform except Sqrt-with-a-zero-lower-limit. ───
+
+    #[test]
+    fn log10_transform_with_a_nonzero_lower_limit() {
+        let scale = ScaleLinewidthContinuous::new()
+            .with_range(1.0, 6.0)
+            .with_transform(ScaleTransform::Log10)
+            .with_limits(1.0, 100.0);
+        // log10(1)=0, log10(100)=2: v=10 (log10=1) is exactly the midpoint.
+        let cases = [(1.0, 1.0), (10.0, 3.5), (100.0, 6.0)];
+        for (v, expected) in cases {
+            let width = scale.map_to_size(&Value::Float(v)).unwrap();
+            assert!(
+                (width - expected).abs() < 1e-9,
+                "v={v}: width={width}, expected={expected}"
+            );
+        }
+    }
+
+    #[test]
+    fn reverse_transform_flips_which_end_gets_the_larger_width() {
+        let scale = ScaleLinewidthContinuous::new()
+            .with_range(1.0, 6.0)
+            .with_transform(ScaleTransform::Reverse)
+            .with_limits(1.0, 100.0);
+        // The domain minimum gets the *larger* output under Reverse.
+        let min_width = scale.map_to_size(&Value::Float(1.0)).unwrap();
+        let max_width = scale.map_to_size(&Value::Float(100.0)).unwrap();
+        assert!((min_width - 6.0).abs() < 1e-9, "min_width={min_width}");
+        assert!((max_width - 1.0).abs() < 1e-9, "max_width={max_width}");
+    }
+
+    #[test]
+    fn sqrt_transform_with_a_nonzero_lower_limit() {
+        let scale = ScaleLinewidthContinuous::new()
+            .with_range(1.0, 6.0)
+            .with_transform(ScaleTransform::Sqrt)
+            .with_limits(4.0, 100.0);
+        // sqrt(4)=2, sqrt(100)=10, sqrt(16)=4 -> fraction (4-2)/8 = 0.25.
+        let cases = [(4.0, 1.0), (16.0, 2.25), (100.0, 6.0)];
+        for (v, expected) in cases {
+            let width = scale.map_to_size(&Value::Float(v)).unwrap();
+            assert!(
+                (width - expected).abs() < 1e-9,
+                "v={v}: width={width}, expected={expected}"
+            );
+        }
+    }
+
+    /// Review finding #6: NA / non-numeric / non-finite input must not map
+    /// to the minimum width — the scale has no width to report, so callers
+    /// (`scales.map_linewidth(..).unwrap_or(self.width)`) fall back to the
+    /// geom's own configured width instead.
+    #[test]
+    fn na_or_non_finite_input_returns_none_not_the_minimum() {
+        let scale = ScaleLinewidthContinuous::new()
+            .with_range(1.0, 6.0)
+            .with_limits(0.0, 10.0);
+        assert_eq!(scale.map_to_size(&Value::Na), None);
+        assert_eq!(scale.map_to_size(&Value::Str("x".into())), None);
+        assert_eq!(scale.map_to_size(&Value::Float(f64::NAN)), None);
+        assert_eq!(scale.map_to_size(&Value::Float(f64::INFINITY)), None);
     }
 }

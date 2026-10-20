@@ -144,7 +144,18 @@ impl StatBinHex {
     ///   minimum (ggplot2) — or at `origin`, if given without `binwidth`.
     pub fn lattice(&self, xs: &[f64], ys: &[f64]) -> HexLattice {
         if let Some((w, h)) = self.binwidth {
-            return HexLattice::new(w, h, self.origin.unwrap_or((0.0, 0.0)));
+            if w.is_finite() && w > 0.0 && h.is_finite() && h > 0.0 {
+                return HexLattice::new(w, h, self.origin.unwrap_or((0.0, 0.0)));
+            }
+            // NaN, zero or negative: using it as-is would produce a
+            // degenerate (every point in one cell) or non-finite (NaN
+            // centres/vertices) lattice with no visible diagnosis — fall
+            // back to the range/bins lattice instead of staying silent.
+            eprintln!(
+                "ggplot-rs: StatBinHex::binwidth({w}, {h}) must be finite and \
+                 positive; falling back to bins({}, {})",
+                self.bins_x, self.bins_y
+            );
         }
         let (x_min, x_max) = minmax(xs);
         let (y_min, y_max) = minmax(ys);
@@ -556,6 +567,54 @@ mod tests {
                 xs[i],
                 ys[i]
             );
+        }
+    }
+
+    /// Review finding #6 (binwidth validation): NaN, zero or negative
+    /// `binwidth` must fall back to the range/bins lattice (finite,
+    /// non-degenerate cells), not silently produce NaN or a single
+    /// everything-in-one-cell bin.
+    #[test]
+    fn invalid_binwidth_falls_back_to_bins_instead_of_degenerating() {
+        let mut data = DataFrame::new();
+        let x: Vec<Value> = (0..100).map(|i| Value::Float(i as f64 / 10.0)).collect();
+        let y: Vec<Value> = (0..100).map(|i| Value::Float(i as f64 / 5.0)).collect();
+        data.add_column("x".to_string(), x.clone());
+        data.add_column("y".to_string(), y.clone());
+        let scales = ScaleSet::new();
+
+        let xs: Vec<f64> = x.iter().map(|v| v.as_f64().unwrap()).collect();
+        let ys: Vec<f64> = y.iter().map(|v| v.as_f64().unwrap()).collect();
+
+        for (w, h) in [
+            (f64::NAN, f64::NAN),
+            (0.0, 0.0),
+            (-1.0, 2.0),
+            (1.0, f64::INFINITY),
+        ] {
+            let stat = StatBinHex::new().bins_xy(5, 5).binwidth(w, h);
+            let lattice = stat.lattice(&xs, &ys);
+            assert!(lattice.w.is_finite() && lattice.w > 0.0, "w={}", lattice.w);
+            assert!(lattice.h.is_finite() && lattice.h > 0.0, "h={}", lattice.h);
+
+            let result = stat.compute_group(&data, &scales);
+            assert!(
+                result.nrows() > 1,
+                "expected multiple cells, got {}",
+                result.nrows()
+            );
+            for col in ["x", "y", "count"] {
+                for v in result.column(col).unwrap() {
+                    assert!(v.as_f64().unwrap().is_finite());
+                }
+            }
+            let total: f64 = result
+                .column("count")
+                .unwrap()
+                .iter()
+                .map(|v| v.as_f64().unwrap())
+                .sum();
+            assert_eq!(total, 100.0);
         }
     }
 }

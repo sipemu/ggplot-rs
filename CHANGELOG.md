@@ -10,10 +10,9 @@ interactive aesthetics). `LineStyle` gains a `lineend` field, and
 `GeomSegment`/`GeomCurve`/`GeomPath`/`GeomLine` gain `arrow`/`lineend` fields,
 so struct literals without `..Default::default()` need them added.
 `StatBinHex`'s fields and output columns are not back-compat with 0.19.0's.
-Default output is otherwise unchanged, except hexbin cell geometry, curve
+Default output is otherwise unchanged, except hexbin cell geometry and curve
 rendering (a native quadratic Bézier `<path>` instead of a flattened
-polyline), and `theme_void`'s axis ticks reserving no layout space (already
-true on `main`, carried over here).
+polyline).
 
 ### Added
 
@@ -66,8 +65,6 @@ true on `main`, carried over here).
 - `geom_curve` draws a native quadratic Bézier `<path d="M.. Q..">`
   instead of a flattened `<polyline>`; `ncp` is now ignored by SVG
   (documented) since a single control point fully determines the curve.
-- `theme_void`'s `axis_ticks_length: 0.0` (blank ticks reserve no layout
-  space) — already the case on `main`; carried over, not a new change here.
 
 ### Breaking
 
@@ -78,6 +75,11 @@ true on `main`, carried over here).
 - `Aesthetic` gains `Linewidth`, `Tooltip` and `DataAttr(String)`
   variants — an exhaustive match on `Aesthetic` needs a catch-all or the
   new arms.
+- `Aes` gains a private `warnings` field (build warnings from
+  `Aes::data_attr`, e.g. an invalid or reserved name). A struct literal
+  that names every field explicitly — `Aes { mappings, after_scale }`,
+  without `..Default::default()` — no longer compiles (E0451, "field
+  `warnings` of struct `Aes` is private"); add `..Default::default()`.
 
 ## [0.19.0] — 2026-10-16
 
