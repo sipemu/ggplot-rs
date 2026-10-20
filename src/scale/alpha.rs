@@ -126,6 +126,11 @@ impl Scale for ScaleAlphaContinuous {
         Some(lo + t * (hi - lo))
     }
 
+    fn map_fraction_to_alpha(&self, fraction: f64) -> Option<f64> {
+        let (lo, hi) = self.range;
+        Some(lo + fraction.clamp(0.0, 1.0) * (hi - lo))
+    }
+
     fn clone_box(&self) -> Box<dyn Scale> {
         Box::new(self.clone())
     }

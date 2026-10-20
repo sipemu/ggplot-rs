@@ -96,6 +96,10 @@ impl Geom for GeomDotplot {
         "dotplot"
     }
 
+    // `color` isn't covered by `apply_element_geom`: it's unused dead config
+    // (see `draw` above — only `fill` is ever painted), not a hard-coded
+    // visible default, so there's nothing for `ink` to recolour.
+
     fn set_series_color(&mut self, color: (u8, u8, u8)) {
         self.fill = color;
     }

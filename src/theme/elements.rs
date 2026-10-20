@@ -116,16 +116,28 @@ impl Default for ElementRect {
 /// hard-coded default, which can't otherwise tell an explicitly-set black
 /// apart from a black nobody touched.
 ///
-/// **Geoms covered (0.21.0):** `GeomPoint`, `GeomLine`, `GeomPath`,
-/// `GeomText`, `GeomLabel` and `GeomBoxplot` (`ink` for a black/
-/// `(50, 50, 50)` line, text or outline; `paper` for a white fill) and
-/// `GeomSmooth` (`accent` for its default blue line and ribbon fill) — plus
-/// the legend key swatch colour, which reads `ink` directly rather than
-/// going through this trait method. Every other geom (segment, curve,
-/// reference lines, errorbar/linerange/pointrange, step, rect/tile
-/// outlines, density/violin/area outlines, crossbar, …) does not yet
-/// honour `ElementGeom` and keeps its hard-coded colour regardless —
-/// tracked at sipemu/ggplot-rs#142.
+/// **Geoms covered:** `GeomPoint`, `GeomLine`, `GeomPath`, `GeomText`,
+/// `GeomLabel`, `GeomBoxplot`, `GeomSegment`, `GeomCurve`, the reference
+/// lines (`GeomHline`/`GeomVline`/`GeomAbline`), `GeomErrorbar`/
+/// `GeomErrorbarh`/`GeomLinerange`/`GeomPointrange`, `GeomStep`, the
+/// outline colour of `GeomRect`/`GeomTile`/`GeomBar`/`GeomCol`/
+/// `GeomPolygon`/`GeomViolin`/`GeomDensity`/`GeomArea`/`GeomCount`/
+/// `GeomHex`/`GeomContour`/`GeomHistogram`/`GeomDensity2d`/`GeomBin2d`/
+/// `GeomSf` (feature `sf`), `GeomCrossbar`, `GeomTextRepel`,
+/// `GeomLabelRepel`, `GeomSpoke`, `GeomRug`, `GeomBracket`, `GeomJitter`,
+/// `GeomQQ`, `GeomCensorMarks` and `GeomFreqpoly` (`ink` for a black/
+/// `(50, 50, 50)` line, text or outline; `paper` for a white fill, on
+/// `GeomBoxplot`/`GeomLabel`/`GeomCrossbar`/`GeomLabelRepel`) and
+/// `GeomSmooth` (`accent` for its default blue line and ribbon fill) —
+/// plus the legend key swatch colour, which reads `ink` directly rather
+/// than going through this trait method. A handful of geoms are left
+/// uncovered on purpose: `GeomDotplot`'s `color` field is dead config
+/// (never drawn); `GeomQQLine`/`GeomCandlestick`/`GeomOhlc`'s defaults are
+/// deliberate semantic colours, not neutral ones; `GeomQQBand`'s mid-grey
+/// fill doesn't match this type's black/white checks; and
+/// `GeomCalendarBorder` already reads its colour from the dedicated
+/// [`Theme::calendar_month_border`](super::Theme::calendar_month_border)
+/// element. See sipemu/ggplot-rs#142.
 #[non_exhaustive]
 #[derive(Clone, Debug, Default)]
 pub struct ElementGeom {

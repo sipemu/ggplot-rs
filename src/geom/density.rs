@@ -205,6 +205,12 @@ impl Geom for GeomDensity {
         "density"
     }
 
+    fn apply_element_geom(&mut self, el: &crate::theme::elements::ElementGeom) {
+        if let (true, Some(ink)) = (self.color == (50, 50, 50), el.ink) {
+            self.color = ink;
+        }
+    }
+
     fn set_series_color(&mut self, color: (u8, u8, u8)) {
         self.fill = color;
     }

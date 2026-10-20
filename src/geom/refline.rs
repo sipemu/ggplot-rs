@@ -212,6 +212,11 @@ impl Geom for GeomHline {
     fn inherit_aes(&self) -> bool {
         false
     }
+    fn apply_element_geom(&mut self, el: &crate::theme::elements::ElementGeom) {
+        if let (true, Some(ink)) = (self.color == (0, 0, 0), el.ink) {
+            self.color = ink;
+        }
+    }
 }
 
 /// Vertical reference line spanning the panel height.
@@ -300,6 +305,11 @@ impl Geom for GeomVline {
     }
     fn inherit_aes(&self) -> bool {
         false
+    }
+    fn apply_element_geom(&mut self, el: &crate::theme::elements::ElementGeom) {
+        if let (true, Some(ink)) = (self.color == (0, 0, 0), el.ink) {
+            self.color = ink;
+        }
     }
 }
 
@@ -478,6 +488,11 @@ impl Geom for GeomAbline {
     }
     fn inherit_aes(&self) -> bool {
         false
+    }
+    fn apply_element_geom(&mut self, el: &crate::theme::elements::ElementGeom) {
+        if let (true, Some(ink)) = (self.color == (0, 0, 0), el.ink) {
+            self.color = ink;
+        }
     }
 }
 
