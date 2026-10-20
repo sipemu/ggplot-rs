@@ -74,8 +74,21 @@ honouring a theme/geom font family it previously ignored. `Layer` and
   `with_limits(lo, hi)`, fixing the colour domain (not just the legend) to
   a range independent of the trained data — e.g. `[-1, 1]` for a
   correlation matrix. New `Oob` enum (`Censor`, the default: an
-  out-of-range value gets no colour, so the geom falls back to its own
-  default; `Squish`, opt-in via `with_oob`: clamped to the nearest limit).
+  out-of-range value renders in the scale's `na_value`; `Squish`, opt-in
+  via `with_oob`: clamped to the nearest limit).
+- The same three scales gain `na_value` (default `(127, 127, 127)`,
+  ggplot2's `"grey50"`) and a `with_na_value` builder: a genuinely missing
+  (`NA`) or non-finite value, and a value censored by `Oob::Censor`, all
+  render in `na_value` instead of a bare `None` the geom silently papers
+  over with its own unrelated default colour.
+
+### Fixed
+
+- `Scale::format_value` on `ScaleContinuous` now inverts the scale's own
+  transform (`scale_x_log10`, etc.) before formatting: `data-fvalue` and a
+  `{y}` tooltip-template placeholder on a log-scaled `y = 100` showed `"2"`
+  (the transformed-space value the built data actually holds) instead of
+  `"100"`, while the axis labels correctly showed the inverse already.
 
 ### Changed
 

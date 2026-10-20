@@ -24,6 +24,10 @@ pub struct ScaleColorGradientN {
     /// Out-of-bounds policy for `limits` ([`with_oob`](Self::with_oob)).
     /// Default [`Oob::Censor`](super::Oob::Censor).
     oob: super::Oob,
+    /// Colour for a genuinely missing or out-of-bounds-and-censored value
+    /// ([`with_na_value`](Self::with_na_value)). Default ggplot2's
+    /// `"grey50"`, `(127, 127, 127)`.
+    na_value: (u8, u8, u8),
 }
 
 impl ScaleColorGradientN {
@@ -41,12 +45,13 @@ impl ScaleColorGradientN {
             locale: None,
             limits: None,
             oob: super::Oob::Censor,
+            na_value: super::DEFAULT_NA_VALUE,
         }
     }
 
     /// Fix the colour domain to `[lo, hi]` instead of whatever the data
     /// happens to span. Out-of-range values follow
-    /// [`with_oob`](Self::with_oob) (default: no colour).
+    /// [`with_oob`](Self::with_oob) (default: `na_value`).
     pub fn with_limits(mut self, lo: f64, hi: f64) -> Self {
         self.limits = Some((lo, hi));
         self
@@ -57,6 +62,14 @@ impl ScaleColorGradientN {
     /// [`Oob::Squish`](super::Oob::Squish).
     pub fn with_oob(mut self, oob: super::Oob) -> Self {
         self.oob = oob;
+        self
+    }
+
+    /// Colour for a genuinely missing (`NA`) value, or one censored by
+    /// `with_limits`'s default [`Oob::Censor`]. Default ggplot2's
+    /// `"grey50"`, `(127, 127, 127)`.
+    pub fn with_na_value(mut self, color: (u8, u8, u8)) -> Self {
+        self.na_value = color;
         self
     }
 
@@ -202,12 +215,22 @@ impl Scale for ScaleColorGradientN {
     }
 
     fn map_to_color(&self, value: &Value) -> Option<(u8, u8, u8)> {
-        // Only a finite numeric value can be out of the fixed `limits` —
-        // non-numeric / non-finite keeps the pre-existing contract of
-        // falling through to `map`'s own 0.0 fallback instead of `None`.
+        // A genuinely missing or non-finite value, and a value censored
+        // by `with_limits`, render as `na_value` (ggplot2's own
+        // behaviour) instead of a plausible-looking colour (review PR#141
+        // finding 3). A non-numeric-but-present value (e.g. the wrong
+        // column type) keeps the pre-existing contract of falling through
+        // to `map`'s own 0.0 fallback instead — this type's `map_to_color`
+        // always returned `Some` for it before `with_limits`/`Oob` existed.
+        if value.is_na() {
+            return Some(self.na_value);
+        }
         if let Some(f) = value.as_f64() {
-            if f.is_finite() {
-                super::resolve_oob(f, self.limits, self.oob)?;
+            if !f.is_finite() {
+                return Some(self.na_value);
+            }
+            if super::resolve_oob(f, self.limits, self.oob).is_none() {
+                return Some(self.na_value);
             }
         }
         let t = self.map(value);

@@ -221,6 +221,16 @@ impl Scale for ScaleContinuous {
         if !f.is_finite() {
             return None;
         }
+        // The built data holds the value in the scale's transformed space
+        // (e.g. `scale_y_log10` stores `log10(y)`), but `data-fvalue`/a
+        // tooltip template is meant to be the human-readable number —
+        // `y = 100` under log10, not `2` — the same inverse the break
+        // labels already apply (`breaks()` below calls `format_label`
+        // with `scale_transform.inverse(v)`, never raw `v`).
+        let f = self.scale_transform.inverse(f);
+        if !f.is_finite() {
+            return None;
+        }
         Some(match &self.value_formatter {
             Some(fmt) => fmt(f),
             None => self.format_label(f),

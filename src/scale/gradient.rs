@@ -25,6 +25,10 @@ pub struct ScaleColorGradient2 {
     /// Out-of-bounds policy for `limits` ([`with_oob`](Self::with_oob)).
     /// Default [`Oob::Censor`](super::Oob::Censor).
     oob: super::Oob,
+    /// Colour for a genuinely missing or out-of-bounds-and-censored value
+    /// ([`with_na_value`](Self::with_na_value)). Default ggplot2's
+    /// `"grey50"`, `(127, 127, 127)`.
+    na_value: (u8, u8, u8),
 }
 
 impl ScaleColorGradient2 {
@@ -41,6 +45,7 @@ impl ScaleColorGradient2 {
             locale: None,
             limits: None,
             oob: super::Oob::Censor,
+            na_value: super::DEFAULT_NA_VALUE,
         }
     }
 
@@ -58,7 +63,7 @@ impl ScaleColorGradient2 {
 
     /// Fix the colour domain to `[lo, hi]` instead of whatever the data
     /// happens to span. Out-of-range values follow
-    /// [`with_oob`](Self::with_oob) (default: no colour).
+    /// [`with_oob`](Self::with_oob) (default: `na_value`).
     pub fn with_limits(mut self, lo: f64, hi: f64) -> Self {
         self.limits = Some((lo, hi));
         self
@@ -69,6 +74,14 @@ impl ScaleColorGradient2 {
     /// [`Oob::Squish`](super::Oob::Squish).
     pub fn with_oob(mut self, oob: super::Oob) -> Self {
         self.oob = oob;
+        self
+    }
+
+    /// Colour for a genuinely missing (`NA`) value, or one censored by
+    /// `with_limits`'s default [`Oob::Censor`]. Default ggplot2's
+    /// `"grey50"`, `(127, 127, 127)`.
+    pub fn with_na_value(mut self, color: (u8, u8, u8)) -> Self {
+        self.na_value = color;
         self
     }
 }
@@ -162,12 +175,24 @@ impl Scale for ScaleColorGradient2 {
     }
 
     fn map_to_color(&self, value: &Value) -> Option<(u8, u8, u8)> {
-        let f = value.as_f64()?;
+        // A genuinely missing, non-numeric or non-finite value, and a
+        // value censored by `with_limits`, all render as `na_value`
+        // (ggplot2's own behaviour) instead of a plausible-looking colour
+        // or a bare `None` the geom silently papers over with its own
+        // unrelated default (review PR#141 finding 3).
+        if value.is_na() {
+            return Some(self.na_value);
+        }
+        let Some(f) = value.as_f64() else {
+            return Some(self.na_value);
+        };
         if !f.is_finite() {
-            return None;
+            return Some(self.na_value);
         }
         let (lo, hi) = self.limits.unwrap_or((self.min, self.max));
-        let f = super::resolve_oob(f, self.limits, self.oob)?;
+        let Some(f) = super::resolve_oob(f, self.limits, self.oob) else {
+            return Some(self.na_value);
+        };
 
         // Map relative to midpoint
         let c = if f <= self.midpoint {

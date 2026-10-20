@@ -2,9 +2,12 @@
 //! PR #324): `with_limits(lo, hi)` on `ScaleColorContinuous`,
 //! `ScaleColorGradient2` and `ScaleColorGradientN` fixes the *colour*
 //! domain (not just the legend) to `[lo, hi]`, with ggplot2's out-of-bounds
-//! semantics: `Oob::Censor` (default) drops the colour for an out-of-range
-//! value, `Oob::Squish` (opt-in via `with_oob`) clamps it to the nearest
-//! limit instead.
+//! semantics: `Oob::Censor` (default) renders an out-of-range value in the
+//! scale's `na_value` (ggplot2's own `na.value`, default grey — review
+//! PR#141 finding 3, not a bare `None` the geom silently papers over with
+//! its own unrelated default colour), `Oob::Squish` (opt-in via
+//! `with_oob`) clamps it to the nearest limit instead. The same `na_value`
+//! is used for a genuinely missing (`NA`) or non-finite value.
 
 use ggplot_rs::aes::Aesthetic;
 use ggplot_rs::prelude::*;
@@ -39,13 +42,36 @@ fn with_limits_the_domain_is_fixed_and_training_does_not_widen_it() {
 }
 
 #[test]
-fn oob_censor_is_the_default_and_drops_out_of_range_colours() {
+fn oob_censor_is_the_default_and_uses_na_value_for_out_of_range_colours() {
     let s = ScaleColorContinuous::new(Aesthetic::Fill)
         .with_colors(RGBAColor::new(0, 0, 255), RGBAColor::new(255, 0, 0))
         .with_limits(-1.0, 1.0);
     assert_eq!(s.map_to_color(&c(0.5)), Some((191, 0, 63)));
-    assert_eq!(s.map_to_color(&c(1.5)), None, "oob: no colour by default");
-    assert_eq!(s.map_to_color(&c(-1.5)), None);
+    assert_eq!(
+        s.map_to_color(&c(1.5)),
+        Some((127, 127, 127)),
+        "oob: ggplot2's grey na_value by default, not a plausible colour"
+    );
+    assert_eq!(s.map_to_color(&c(-1.5)), Some((127, 127, 127)));
+}
+
+#[test]
+fn na_value_is_also_used_for_a_genuinely_missing_or_non_finite_value() {
+    let s = ScaleColorContinuous::new(Aesthetic::Fill)
+        .with_colors(RGBAColor::new(0, 0, 255), RGBAColor::new(255, 0, 0));
+    assert_eq!(s.map_to_color(&Value::Na), Some((127, 127, 127)));
+    assert_eq!(s.map_to_color(&c(f64::NAN)), Some((127, 127, 127)));
+    assert_eq!(s.map_to_color(&c(f64::INFINITY)), Some((127, 127, 127)));
+}
+
+#[test]
+fn with_na_value_overrides_the_default_grey() {
+    let s = ScaleColorContinuous::new(Aesthetic::Fill)
+        .with_colors(RGBAColor::new(0, 0, 255), RGBAColor::new(255, 0, 0))
+        .with_limits(-1.0, 1.0)
+        .with_na_value((9, 9, 9));
+    assert_eq!(s.map_to_color(&c(5.0)), Some((9, 9, 9)));
+    assert_eq!(s.map_to_color(&Value::Na), Some((9, 9, 9)));
 }
 
 #[test]
@@ -76,7 +102,11 @@ fn gradient2_respects_limits_and_oob_around_the_midpoint() {
     assert_eq!(s.map_to_color(&c(0.0)), Some((255, 255, 255)));
     assert_eq!(s.map_to_color(&c(-1.0)), Some((0, 0, 255)));
     assert_eq!(s.map_to_color(&c(1.0)), Some((255, 0, 0)));
-    assert_eq!(s.map_to_color(&c(2.0)), None, "censored by default");
+    assert_eq!(
+        s.map_to_color(&c(2.0)),
+        Some((127, 127, 127)),
+        "censored by default (na_value)"
+    );
 
     let squished = s.with_oob(Oob::Squish);
     assert_eq!(squished.map_to_color(&c(2.0)), Some((255, 0, 0)));
@@ -93,7 +123,11 @@ fn gradientn_respects_limits_and_oob() {
     let s = ScaleColorGradientN::new(Aesthetic::Fill, stops).with_limits(0.0, 10.0);
     assert_eq!(s.map_to_color(&c(0.0)), Some((0, 0, 255)));
     assert_eq!(s.map_to_color(&c(10.0)), Some((255, 0, 0)));
-    assert_eq!(s.map_to_color(&c(20.0)), None, "censored by default");
+    assert_eq!(
+        s.map_to_color(&c(20.0)),
+        Some((127, 127, 127)),
+        "censored by default (na_value)"
+    );
 
     let squished = s.with_oob(Oob::Squish);
     assert_eq!(squished.map_to_color(&c(20.0)), Some((255, 0, 0)));

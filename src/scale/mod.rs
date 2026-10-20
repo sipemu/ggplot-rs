@@ -36,15 +36,21 @@ use crate::render::backend::{Linetype, PointShape};
 /// to span.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub enum Oob {
-    /// A value outside the limits maps to no colour (ggplot2's default):
-    /// `map_to_color` returns `None`, so the geom falls back to its own
-    /// default colour for that row.
+    /// A value outside the limits maps to the scale's `na_value` (default
+    /// grey, ggplot2's `"grey50"`/`(127, 127, 127)`) — its own
+    /// `with_na_value`, not the geom's default colour, the same way a
+    /// genuinely missing (`NA`) value is rendered.
     #[default]
     Censor,
     /// A value outside the limits is clamped to the nearest limit before
-    /// mapping, so it still gets the end colour instead of none at all.
+    /// mapping, so it still gets the end colour instead of `na_value`.
     Squish,
 }
+
+/// Default `na_value` for the gradient colour scales — ggplot2's
+/// `"grey50"`. Used for a genuinely missing (`NA`) or non-finite value, and
+/// for a value censored by [`Oob::Censor`] under `with_limits`.
+pub(crate) const DEFAULT_NA_VALUE: (u8, u8, u8) = (127, 127, 127);
 
 /// Resolve one value against a scale's optional fixed `(lo, hi)` limits and
 /// [`Oob`] policy, for `map_to_color` on the gradient scales. `limits: None`

@@ -268,6 +268,10 @@ pub struct ScaleColorContinuous {
     /// Out-of-bounds policy for `limits` ([`with_oob`](Self::with_oob)).
     /// Default [`Oob::Censor`].
     oob: super::Oob,
+    /// Colour for a genuinely missing or out-of-bounds-and-censored value
+    /// ([`with_na_value`](Self::with_na_value)). Default ggplot2's
+    /// `"grey50"`, `(127, 127, 127)`.
+    na_value: (u8, u8, u8),
 }
 
 impl ScaleColorContinuous {
@@ -282,6 +286,7 @@ impl ScaleColorContinuous {
             locale: None,
             limits: None,
             oob: super::Oob::Censor,
+            na_value: super::DEFAULT_NA_VALUE,
         }
     }
 
@@ -294,7 +299,7 @@ impl ScaleColorContinuous {
     /// Fix the colour domain to `[lo, hi]` — e.g. `(-1.0, 1.0)` for a
     /// correlation matrix — instead of whatever the data happens to span.
     /// Out-of-range values follow [`with_oob`](Self::with_oob) (default:
-    /// no colour, i.e. the geom's own default).
+    /// `na_value`, not the geom's own default colour).
     pub fn with_limits(mut self, lo: f64, hi: f64) -> Self {
         self.limits = Some((lo, hi));
         self
@@ -305,6 +310,14 @@ impl ScaleColorContinuous {
     /// [`Oob::Squish`].
     pub fn with_oob(mut self, oob: super::Oob) -> Self {
         self.oob = oob;
+        self
+    }
+
+    /// Colour for a genuinely missing (`NA`) value, or one censored by
+    /// `with_limits`'s default [`Oob::Censor`]. Default ggplot2's
+    /// `"grey50"`, `(127, 127, 127)`.
+    pub fn with_na_value(mut self, color: (u8, u8, u8)) -> Self {
+        self.na_value = color;
         self
     }
 
@@ -405,14 +418,23 @@ impl Scale for ScaleColorContinuous {
     }
 
     fn map_to_color(&self, value: &Value) -> Option<(u8, u8, u8)> {
-        // Only a finite numeric value can be out of the fixed `limits` —
-        // non-numeric / non-finite keeps the pre-existing contract of
-        // falling through to `map`'s own 0.0 fallback instead of `None`
-        // (unlike `ScaleColorGradient2`, this type's `map_to_color` always
-        // returned `Some` before `with_limits`/`Oob` existed).
+        // A genuinely missing value, or a non-finite one (NaN/+-Inf),
+        // renders as `na_value` — ggplot2's own behaviour, and review
+        // PR#141 finding 3. A non-numeric-but-present value (e.g. the
+        // wrong column type) keeps the pre-existing contract of falling
+        // through to `map`'s own 0.0 fallback instead (this type's
+        // `map_to_color` always returned `Some` before `with_limits`/`Oob`
+        // existed, and nothing here can tell "wrong type" apart from
+        // "never had a numeric concept to begin with").
+        if value.is_na() {
+            return Some(self.na_value);
+        }
         if let Some(f) = value.as_f64() {
-            if f.is_finite() {
-                super::resolve_oob(f, self.limits, self.oob)?;
+            if !f.is_finite() {
+                return Some(self.na_value);
+            }
+            if super::resolve_oob(f, self.limits, self.oob).is_none() {
+                return Some(self.na_value);
             }
         }
         let t = self.map(value);

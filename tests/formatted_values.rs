@@ -133,3 +133,40 @@ fn a_hex_fvalue_comes_from_the_fill_aesthetic() {
         .unwrap();
     assert!(svg.contains("data-fvalue=\"3\""), "{svg}");
 }
+
+#[test]
+fn a_log10_y_scale_formats_the_inverse_transformed_value() {
+    // Review PR#141 finding 2: data-fvalue/{y} templates must show the
+    // human-readable value (y = 100), not the transformed-space number
+    // the built data actually holds (log10(100) = 2).
+    let data = frame(vec![
+        ("x", floats(&[1.0, 2.0, 3.0])),
+        ("y", floats(&[10.0, 100.0, 1000.0])),
+    ]);
+    let svg = GGPlot::new(data)
+        .aes(Aes::new().x("x").y("y"))
+        .geom_point()
+        .scale_y_log10()
+        .svg_formatted_values(true)
+        .render_svg_native_with_size(300, 200)
+        .unwrap();
+    assert!(svg.contains("data-fvalue=\"100\""), "{svg}");
+    assert!(svg.contains("data-fvalue=\"10\""), "{svg}");
+    assert!(svg.contains("data-fvalue=\"1000\""), "{svg}");
+    assert!(!svg.contains("data-fvalue=\"1\""), "{svg}");
+    assert!(!svg.contains("data-fvalue=\"2\""), "{svg}");
+    assert!(!svg.contains("data-fvalue=\"3\""), "{svg}");
+}
+
+#[test]
+fn a_log10_y_tooltip_template_also_shows_the_inverse_transformed_value() {
+    let data = frame(vec![("x", floats(&[1.0])), ("y", floats(&[100.0]))]);
+    let svg = GGPlot::new(data)
+        .aes(Aes::new().x("x").y("y"))
+        .geom_point()
+        .scale_y_log10()
+        .tooltip("y = {y}")
+        .render_svg_native_with_size(300, 200)
+        .unwrap();
+    assert!(svg.contains("<title>y = 100</title>"), "{svg}");
+}
