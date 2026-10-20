@@ -236,7 +236,7 @@ impl Geom for GeomCandlestick {
     fn name(&self) -> &str {
         "candlestick"
     }
-    fn setup_data(&self, data: &mut DataFrame) {
+    fn setup_data(&self, data: &mut DataFrame, _warnings: &mut Vec<String>) {
         ohlc_setup(data);
     }
 }
@@ -281,7 +281,7 @@ impl Geom for GeomOhlc {
     fn name(&self) -> &str {
         "ohlc"
     }
-    fn setup_data(&self, data: &mut DataFrame) {
+    fn setup_data(&self, data: &mut DataFrame, _warnings: &mut Vec<String>) {
         ohlc_setup(data);
     }
 }

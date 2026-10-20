@@ -31,6 +31,32 @@ impl Default for GeomBoxplot {
     }
 }
 
+/// Parse a boxplot `outliers` cell (B3-5, D4 extension): a comma list,
+/// optionally wrapped in `[...]`/`(...)` (`"7, 9"` or `"[7, 9]"`).
+/// Returns the successfully-parsed values and whether any part was
+/// unparsable (skipped).
+fn parse_outliers(s: &str) -> (Vec<f64>, bool) {
+    let trimmed = s.trim();
+    let inner = trimmed
+        .strip_prefix('[')
+        .and_then(|t| t.strip_suffix(']'))
+        .or_else(|| trimmed.strip_prefix('(').and_then(|t| t.strip_suffix(')')))
+        .unwrap_or(trimmed);
+    let mut out = Vec::new();
+    let mut bad = false;
+    for part in inner.split(',') {
+        let part = part.trim();
+        if part.is_empty() {
+            continue;
+        }
+        match part.parse::<f64>() {
+            Ok(v) if v.is_finite() => out.push(v),
+            _ => bad = true,
+        }
+    }
+    (out, bad)
+}
+
 impl Geom for GeomBoxplot {
     fn draw(
         &self,
@@ -76,7 +102,10 @@ impl Geom for GeomBoxplot {
 
             let map_y = |v: f64| y_scale.map(|s| s.map(&Value::Float(v))).unwrap_or(0.0);
 
-            // Hover tooltip for the whole box: group + median (IQR).
+            // Hover tooltip for the whole box: group + median (IQR) — the
+            // geom's own default. B3-5: `set_row_extras` below overrides it
+            // with a mapped `Aes::tooltip`/`data_attr`, if any, same as
+            // every other tooltip-consuming geom.
             let group = super::tip_value(&x_col[i]);
             let r = |v: f64| (v * 100.0).round() / 100.0;
             let tip = if group.is_empty() {
@@ -99,6 +128,7 @@ impl Geom for GeomBoxplot {
                 &Aesthetic::Y,
                 Some(&middle_value),
             );
+            super::set_row_extras(backend, data, i);
 
             // Box (IQR) — honour a mapped `fill` (e.g. by group), else the default.
             let box_fill = fill_col
@@ -186,7 +216,9 @@ impl Geom for GeomBoxplot {
                 },
             )?;
 
-            // Outliers
+            // Outliers — `setup_data` has already normalised this cell to a
+            // clean, bracket-free "v1, v2" list (any unparsable part was
+            // warned on and dropped there), so a plain split/parse suffices.
             if let Some(oc) = outliers_col {
                 if let Value::Str(s) = &oc[i] {
                     for part in s.split(',') {
@@ -209,12 +241,17 @@ impl Geom for GeomBoxplot {
             }
         }
         super::clear_mark(backend);
+        super::clear_row_extras(backend);
 
         Ok(())
     }
 
     fn required_aes(&self) -> Vec<Aesthetic> {
-        vec![Aesthetic::X, Aesthetic::Y]
+        // B3-5: `x` is always required; whether `y` or `lower`/`middle`/
+        // `upper` is required depends on the stat (identity vs the default
+        // `StatBoxplot`) — see `validate_layer`, which build.rs calls
+        // separately because `required_aes` has no access to the stat.
+        vec![Aesthetic::X]
     }
 
     fn default_stat(&self) -> Box<dyn Stat> {
@@ -244,5 +281,95 @@ impl Geom for GeomBoxplot {
 
     fn set_series_color(&mut self, color: (u8, u8, u8)) {
         self.fill = color;
+    }
+
+    fn mapped_only_columns(&self) -> &'static [&'static str] {
+        &["lower", "middle", "upper", "outliers"]
+    }
+
+    fn validate_layer(&self, pre_stat_columns: &[String], stat_name: &str) -> Result<(), String> {
+        let has = |c: &str| pre_stat_columns.iter().any(|x| x == c);
+        if stat_name == "identity" {
+            for c in ["lower", "middle", "upper"] {
+                if !has(c) {
+                    return Err(format!(
+                        "geom_boxplot requires aesthetic '{c}' under stat=\"identity\" but it was not provided"
+                    ));
+                }
+            }
+        } else if !has("y") {
+            return Err("geom_boxplot requires aesthetic 'y' but it was not provided".to_string());
+        }
+        Ok(())
+    }
+
+    fn consumes_tooltips(&self) -> bool {
+        true
+    }
+
+    /// B3-5: normalise the `outliers` cell (strip brackets, drop unparsable
+    /// parts with one warning) and widen `ymin_final`/`ymax_final` to
+    /// include every outlier, so the y scale trains on the full extent
+    /// (allowed #6) instead of silently clipping outliers that fall
+    /// outside the whiskers.
+    fn setup_data(&self, data: &mut DataFrame, warnings: &mut Vec<String>) {
+        if !data.has_column("outliers") {
+            return;
+        }
+        let n = data.nrows();
+        let outliers_col = data
+            .column("outliers")
+            .map(|c| c.to_vec())
+            .unwrap_or_default();
+        let ymin_col = data.column("ymin").map(|c| c.to_vec());
+        let ymax_col = data.column("ymax").map(|c| c.to_vec());
+
+        let mut cleaned = Vec::with_capacity(n);
+        let mut ymin_final = Vec::with_capacity(n);
+        let mut ymax_final = Vec::with_capacity(n);
+        let mut had_unparsable = false;
+
+        for i in 0..n {
+            let (vals, cleaned_cell) = match outliers_col.get(i) {
+                Some(Value::Str(s)) => {
+                    let (vals, bad) = parse_outliers(s);
+                    had_unparsable |= bad;
+                    let joined = vals
+                        .iter()
+                        .map(|v| v.to_string())
+                        .collect::<Vec<_>>()
+                        .join(", ");
+                    (vals, Value::Str(joined))
+                }
+                Some(other) => (Vec::new(), other.clone()),
+                None => (Vec::new(), Value::Na),
+            };
+            cleaned.push(cleaned_cell);
+
+            let mut lo = ymin_col
+                .as_ref()
+                .and_then(|c| c.get(i))
+                .and_then(|v| v.as_f64());
+            let mut hi = ymax_col
+                .as_ref()
+                .and_then(|c| c.get(i))
+                .and_then(|v| v.as_f64());
+            for v in &vals {
+                lo = Some(lo.map_or(*v, |l| l.min(*v)));
+                hi = Some(hi.map_or(*v, |h| h.max(*v)));
+            }
+            ymin_final.push(lo.map(Value::Float).unwrap_or(Value::Na));
+            ymax_final.push(hi.map(Value::Float).unwrap_or(Value::Na));
+        }
+
+        if had_unparsable {
+            warnings.push(
+                "geom_boxplot: outliers(...) contained an unparsable value; skipped".to_string(),
+            );
+        }
+
+        data.add_column("outliers".to_string(), cleaned);
+        data.add_column("ymin_final".to_string(), ymin_final);
+        data.add_column("ymax_final".to_string(), ymax_final);
     }
 }

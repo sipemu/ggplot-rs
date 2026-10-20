@@ -34,8 +34,39 @@ guarded by `tests/default_output_022.rs`.
   (not radius) is proportional to the data, with 0 mapping to 0. NA/non-
   finite input maps to `None`. A non-finite or non-positive `max_size`
   warns and falls back to 6.
+- `geom_boxplot(stat = "identity")`: new `Lower`/`Middle`/`Upper`/
+  `Outliers` aesthetics (`Aes::lower`/`middle`/`upper`/`outliers`, D4
+  extensions) let a layer supply the five-number summary directly instead
+  of ggplot-rs computing it, matching ggplot2 (#149). `outliers` takes a
+  comma list with optional brackets (`"7, 9"` or `"[7, 9]"`); an
+  unparsable part is skipped with one warning. The boxplot now consumes
+  `tooltip()`/`data_attr()` (`consumes_tooltips` is true).
+- `Geom::mapped_only_columns()` (D3, default empty — `GeomBoxplot` returns
+  `lower`/`middle`/`upper`/`outliers`): a raw column of that name is
+  dropped right after `resolve_mappings` unless the aesthetic was
+  actually mapped, so a column that merely happens to share the name
+  (e.g. a SQL alias) can't be mistaken for a mapped one.
+- `Geom::validate_layer(pre_stat_columns, stat_name)` (default no-op):
+  stat-dependent validation beyond `required_aes`. Under
+  `stat = "identity"`, `geom_boxplot` requires `lower`/`middle`/`upper`
+  to be mapped (a `ValidationError` otherwise); under the default stat,
+  it requires `y`.
 
 ### Changed
+
+- Tooltip-template placeholders for every position column
+  (`xmin`/`xmax`/`xend`/`ymin`/`ymax`/`yend`/`lower`/`middle`/`upper`,
+  D9 allowed #7) are now formatted through the x/y scale, the same as the
+  bare `x`/`y` they're derived from — previously they fell back to the
+  plain display format, ignoring a custom formatter or a log-transformed
+  scale's inverse transform. A `tooltip()` template that names one of
+  these columns on a transformed scale, or with a custom number
+  formatter, now shows a different (correct) value.
+- `geom_boxplot` outliers now widen the trained y domain to include every
+  outlier value instead of silently leaving it at the whiskers' extent
+  (allowed #6; confirmed as a real bug with a failing test before the
+  fix landed — see `tests/boxplot_identity.rs`). A boxplot whose outliers
+  fall outside `ymin`/`ymax` renders with a taller y axis.
 
 - A faceted `position_stack`/`position_fill` now computes per panel
   instead of on the rows pooled across panels before faceting, matching
@@ -56,6 +87,15 @@ guarded by `tests/default_output_022.rs`.
   `PositionFill { .. }` struct-literal pattern no longer compiles (the
   bare value `PositionStack`/`PositionFill` still does, via a `const` of
   the same name — dodge.rs's existing `PositionDodge` precedent).
+- New `Aesthetic` variants `Lower`/`Middle`/`Upper`/`Outliers`: an
+  exhaustive external `match` on `Aesthetic` no longer compiles.
+- `Geom::setup_data` gained a second parameter,
+  `warnings: &mut Vec<String>` (a deviation from the plan, needed so
+  `GeomBoxplot::setup_data` can warn on an unparsable outlier value
+  through the existing warnings channel rather than a new one or
+  `eprintln!`): `fn setup_data(&self, data: &mut DataFrame)` becomes
+  `fn setup_data(&self, data: &mut DataFrame, warnings: &mut Vec<String>)`.
+  An external `Geom` impl overriding it needs the new parameter.
 
 - The `arrow` feature now pins `arrow = "59"` (was `"53"`), still with
   `default-features = false`. `GGPlot::new(batch)` and the `GGData` impl for

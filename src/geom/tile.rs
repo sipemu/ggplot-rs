@@ -261,7 +261,7 @@ impl Geom for GeomTile {
         true
     }
 
-    fn setup_data(&self, data: &mut DataFrame) {
+    fn setup_data(&self, data: &mut DataFrame, _warnings: &mut Vec<String>) {
         add_extents(data, "x", "xmin", "xmax", self.width);
         add_extents(data, "y", "ymin", "ymax", self.height);
     }

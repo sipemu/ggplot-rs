@@ -53,6 +53,18 @@ pub enum Aesthetic {
     Yintercept,
     Slope,
     Intercept,
+    /// Boxplot `stat="identity"` aesthetics (B3-5; ggplot2 extension, D4):
+    /// the box's lower/middle/upper hinges. Live on the y scale (D-style,
+    /// like `ymin`/`ymax`) — [`crate::scale::ScaleSet::ensure_scale`] gives
+    /// them no scale of their own.
+    Lower,
+    Middle,
+    Upper,
+    /// A comma-separated list of outlier values, optionally bracketed
+    /// (`"7, 9"` or `"[7, 9]"`) — ggplot2 extension, D4. Unparsable parts
+    /// are skipped with one warning. Lives on the y scale, like `Lower`/
+    /// `Middle`/`Upper`.
+    Outliers,
 }
 
 impl Aesthetic {
@@ -89,6 +101,10 @@ impl Aesthetic {
             Aesthetic::Yintercept => "yintercept",
             Aesthetic::Slope => "slope",
             Aesthetic::Intercept => "intercept",
+            Aesthetic::Lower => "lower",
+            Aesthetic::Middle => "middle",
+            Aesthetic::Upper => "upper",
+            Aesthetic::Outliers => "outliers",
         }
     }
 }
@@ -256,6 +272,23 @@ impl Aes {
     /// Stroke width for segment/curve/path/line (R's `linewidth`).
     pub fn linewidth(self, col: &str) -> Self {
         self.push(col, Aesthetic::Linewidth)
+    }
+    /// Boxplot `stat="identity"` lower hinge (B3-5).
+    pub fn lower(self, col: &str) -> Self {
+        self.push(col, Aesthetic::Lower)
+    }
+    /// Boxplot `stat="identity"` middle (median) line (B3-5).
+    pub fn middle(self, col: &str) -> Self {
+        self.push(col, Aesthetic::Middle)
+    }
+    /// Boxplot `stat="identity"` upper hinge (B3-5).
+    pub fn upper(self, col: &str) -> Self {
+        self.push(col, Aesthetic::Upper)
+    }
+    /// Boxplot `stat="identity"` outlier values, as a comma list with
+    /// optional brackets (`"7, 9"` or `"[7, 9]"`) (B3-5).
+    pub fn outliers(self, col: &str) -> Self {
+        self.push(col, Aesthetic::Outliers)
     }
 
     /// A custom `<title>` hover tooltip from `col`, replacing the geom's

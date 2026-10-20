@@ -86,18 +86,21 @@ fn facet_fill_matches_r_per_panel() {
         .render_svg_native_with_size(600, 300)
         .unwrap();
 
+    // `ymin` is now also formatted through the y scale (D9 allowed #7,
+    // landed with B3-5), so it picks up the same 3-decimal accuracy as
+    // `y` instead of the plain fallback's trimmed digits.
     for expect in [
         "<title>1.000/0.625</title>",
-        "<title>0.625/0</title>",
-        "<title>1.000/0.2</title>",
+        "<title>0.625/0.000</title>",
+        "<title>1.000/0.200</title>",
     ] {
         assert!(svg.contains(expect), "missing {expect} in {svg}");
     }
     // Q's g2 ymin is 0.2 - 0.2, which floating subtraction leaves as a
-    // tiny negative value that rounds to "-0" rather than "0" — still
-    // correctly zero to any real precision.
+    // tiny negative value that rounds to "-0.000" rather than "0.000" —
+    // still correctly zero to any real precision.
     assert!(
-        svg.contains("<title>0.200/-0</title>") || svg.contains("<title>0.200/0</title>"),
+        svg.contains("<title>0.200/-0.000</title>") || svg.contains("<title>0.200/0.000</title>"),
         "{svg}"
     );
 }

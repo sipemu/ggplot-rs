@@ -116,6 +116,12 @@ impl DataFrame {
         self.columns.get_mut(name)
     }
 
+    /// Remove a column, returning its values if it existed. Row count
+    /// (`nrows`) is unaffected (B3-5's D3 "mapped-only columns" drop).
+    pub fn remove_column(&mut self, name: &str) -> Option<Vec<Value>> {
+        self.columns.shift_remove(name)
+    }
+
     /// Group by one or more key columns. Returns a Vec of DataFrames, one per group.
     pub fn group_by(&self, keys: &[&str]) -> Vec<DataFrame> {
         if self.nrows == 0 {

@@ -67,6 +67,12 @@ const POSITION_COLS: &[&str] = &[
     "yintercept",
     "slope",
     "intercept",
+    // Boxplot stat="identity" hinges (B3-5). `outliers` is a comma-list
+    // string, not a position value, so it's not listed here — a non-finite
+    // outlier is skipped individually with its own warning when parsed.
+    "lower",
+    "middle",
+    "upper",
 ];
 
 /// Columns a position scale's transformation applies to (pre-stat).
@@ -81,6 +87,9 @@ const Y_FAMILY: &[&str] = &[
     "low",
     "close",
     "yintercept",
+    "lower",
+    "middle",
+    "upper",
 ];
 
 /// Reference-line intercept columns and the position scale they train
@@ -111,6 +120,10 @@ fn column_aesthetic(name: &str) -> Option<Aesthetic> {
         "size" => Some(Aesthetic::Size),
         "linewidth" => Some(Aesthetic::Linewidth),
         "alpha" => Some(Aesthetic::Alpha),
+        // Position columns (B3-5, D9 allowed #7): formatted through the
+        // x/y scale, same as the bare `x`/`y` they're derived from.
+        "xmin" | "xmax" | "xend" => Some(Aesthetic::X),
+        "ymin" | "ymax" | "yend" | "lower" | "middle" | "upper" => Some(Aesthetic::Y),
         _ => None,
     }
 }
@@ -686,6 +699,20 @@ impl PlotBuilder {
         // Step 3: Evaluate aes — rename columns to canonical names
         let mut working_data = resolve_mappings(source_data, &merged_mapping, warnings);
 
+        // D3 (B3-5): drop a "mapped-only" column (e.g. `lower`/`middle`/
+        // `upper`/`outliers` for the boxplot) unless the user actually
+        // mapped that aesthetic — so a raw column that merely happens to
+        // share the name (a SQL alias, say) is never mistaken for one.
+        for col in geom.mapped_only_columns() {
+            let is_mapped = merged_mapping
+                .mappings
+                .iter()
+                .any(|m| m.aesthetic.col_name() == *col);
+            if !is_mapped {
+                working_data.remove_column(col);
+            }
+        }
+
         // Remember which columns the user actually supplied (pre-stat). A required
         // aesthetic is satisfied if it was present here OR is synthesized by the
         // stat (checked after Step 6) — e.g. boxplot maps `y` then the stat turns
@@ -695,6 +722,14 @@ impl PlotBuilder {
             .iter()
             .map(|s| s.to_string())
             .collect();
+
+        // B3-5: stat-dependent validation beyond `required_aes` (e.g.
+        // `geom_boxplot` requires lower/middle/upper under stat="identity",
+        // else y) — before Step 4, so a bad mapping fails before any scale
+        // work happens.
+        if let Err(msg) = geom.validate_layer(&pre_stat_columns, stat.name()) {
+            return Err(GGError::ValidationError(msg));
+        }
 
         // Step 4: Ensure scales exist for each mapped aesthetic
         for m in &merged_mapping.mappings {
@@ -876,6 +911,15 @@ impl PlotBuilder {
             ("xmax", Aesthetic::X),
             ("ymin", Aesthetic::Y),
             ("ymax", Aesthetic::Y),
+            // Boxplot stat="identity" hinges (B3-5): live on the y scale.
+            ("lower", Aesthetic::Y),
+            ("middle", Aesthetic::Y),
+            ("upper", Aesthetic::Y),
+            // Boxplot outlier extent (B3-5, allowed #6): `GeomBoxplot::
+            // setup_data` adds these from the parsed `outliers` column so
+            // the y scale trains on them too (step 8b below).
+            ("ymin_final", Aesthetic::Y),
+            ("ymax_final", Aesthetic::Y),
         ];
         for (col, aes) in &stat_aes {
             if working_data.has_column(col) {
@@ -910,7 +954,7 @@ impl PlotBuilder {
 
         // Step 7b: Geom-specific setup (e.g. tile/candlestick extents), then
         // make sure position scales exist for any extent columns it added.
-        geom.setup_data(&mut working_data);
+        geom.setup_data(&mut working_data, warnings);
         for (col, aes) in &stat_aes {
             if working_data.has_column(col) {
                 scale_set.ensure_scale(aes, &working_data);
