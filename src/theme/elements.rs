@@ -152,3 +152,21 @@ impl ElementGeom {
         self
     }
 }
+
+#[cfg(test)]
+mod element_geom_tests {
+    use super::ElementGeom;
+
+    #[test]
+    fn builders_set_every_field() {
+        let el = ElementGeom::default()
+            .with_ink((1, 2, 3))
+            .with_paper((4, 5, 6))
+            .with_accent((7, 8, 9))
+            .with_family("Georgia");
+        assert_eq!(el.ink, Some((1, 2, 3)));
+        assert_eq!(el.paper, Some((4, 5, 6)));
+        assert_eq!(el.accent, Some((7, 8, 9)));
+        assert_eq!(el.family, Some("Georgia".to_string()));
+    }
+}

@@ -350,6 +350,27 @@ mod tests {
     use super::*;
 
     #[test]
+    fn format_value_formats_a_finite_number_and_rejects_non_finite() {
+        let g = ScaleColorGradientN::new(Aesthetic::Color, vec![(0.0, RGBAColor::new(0, 0, 0))]);
+        assert_eq!(g.format_value(&Value::Float(42.0)), Some("42".to_string()));
+        assert_eq!(g.format_value(&Value::Float(f64::INFINITY)), None);
+    }
+
+    #[test]
+    fn with_limits_fixes_the_domain_and_training_does_not_widen_it() {
+        let mut g = ScaleColorGradientN::new(
+            Aesthetic::Color,
+            vec![
+                (0.0, RGBAColor::new(0, 0, 0)),
+                (1.0, RGBAColor::new(255, 255, 255)),
+            ],
+        )
+        .with_limits(0.0, 10.0);
+        g.train(&[Value::Float(-1000.0), Value::Float(1000.0)]);
+        assert_eq!(g.domain(), Some((0.0, 10.0)));
+    }
+
+    #[test]
     fn test_gradient_n_interpolation() {
         let g = ScaleColorGradientN::new(
             Aesthetic::Color,

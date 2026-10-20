@@ -552,6 +552,24 @@ mod tests {
     use super::*;
 
     #[test]
+    fn format_value_is_plain_iso_without_a_locale_and_locale_formatted_with_one() {
+        let s = ScaleDateTime::new();
+        // 2026-10-12T00:00:00Z.
+        assert_eq!(
+            s.format_value(&Value::Float(1_791_763_200.0)),
+            Some("2026-10-12".to_string())
+        );
+        assert_eq!(s.format_value(&Value::Float(f64::NAN)), None);
+
+        let mut with_locale = ScaleDateTime::new();
+        with_locale.set_default_locale(&crate::locale::Locale::de_de());
+        let formatted = with_locale
+            .format_value(&Value::Float(1_791_763_200.0))
+            .unwrap();
+        assert_ne!(formatted, "2026-10-12");
+    }
+
+    #[test]
     fn civil_roundtrip() {
         // 2021-03-15 12:30:45 UTC = 1615811445
         let p = civil_from_secs(1_615_811_445);

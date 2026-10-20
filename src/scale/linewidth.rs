@@ -350,6 +350,16 @@ mod tests {
     use super::*;
 
     #[test]
+    fn format_value_falls_back_to_format_label_and_rejects_non_finite() {
+        let s = ScaleLinewidthContinuous::new().with_label_formatter(|v| format!("{v:.1}mm"));
+        assert_eq!(
+            s.format_value(&Value::Float(2.0)),
+            Some("2.0mm".to_string())
+        );
+        assert_eq!(s.format_value(&Value::Float(f64::NAN)), None);
+    }
+
+    #[test]
     fn range_transform_and_limits_match_the_documented_formula() {
         let vmax = 10.0;
         let scale = ScaleLinewidthContinuous::new()

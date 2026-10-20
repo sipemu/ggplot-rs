@@ -440,3 +440,17 @@ impl Scale for ScaleColorContinuous {
         self.max = f64::NEG_INFINITY;
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::aes::Aesthetic;
+
+    #[test]
+    fn continuous_format_value_rejects_non_finite() {
+        let s = ScaleColorContinuous::new(Aesthetic::Fill);
+        assert_eq!(s.format_value(&Value::Float(3.5)), Some("3.5".to_string()));
+        assert_eq!(s.format_value(&Value::Float(f64::NAN)), None);
+        assert_eq!(s.format_value(&Value::Na), None);
+    }
+}

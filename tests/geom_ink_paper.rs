@@ -154,3 +154,37 @@ fn accent_recolours_the_smooth_line() {
     assert!(svg.contains("#C8320A"), "{svg}");
     assert!(!svg.contains("#3366CC"), "{svg}");
 }
+
+#[test]
+fn ink_recolours_geom_path() {
+    let data = frame(vec![("x", floats(&[1.0, 2.0])), ("y", floats(&[1.0, 2.0]))]);
+    let svg = GGPlot::new(data)
+        .aes(Aes::new().x("x").y("y"))
+        .geom_path()
+        .theme(Theme::default().with_ink_paper(WHITE, BLACK))
+        .render_svg_native_with_size(300, 200)
+        .unwrap();
+    assert!(svg.contains("stroke=\"#FFFFFF\""), "{svg}");
+}
+
+#[test]
+fn ink_and_paper_recolour_geom_label() {
+    let data = frame(vec![
+        ("x", floats(&[1.0])),
+        ("y", floats(&[1.0])),
+        ("label", strs(&["hi"])),
+    ]);
+    let svg = GGPlot::new(data)
+        .aes(Aes::new().x("x").y("y").label("label"))
+        .geom_label()
+        .theme(Theme::default().with_ink_paper(WHITE, BLACK))
+        .render_svg_native_with_size(300, 200)
+        .unwrap();
+    let rects = tags(&svg, "rect");
+    assert!(
+        rects.iter().any(|r| r.contains("fill=\"#000000\"")),
+        "label background should be paper: {svg}"
+    );
+    assert!(svg.contains("fill=\"#FFFFFF\""), "{svg}");
+    assert!(svg.contains(">hi</text>"), "{svg}");
+}

@@ -239,5 +239,24 @@ mod default_trait_method_tests {
             scale.map_to_color(&Value::Str("#FFFFFF".into())),
             Some((255, 255, 255))
         );
+        // format_value's default (B2-4): a scale with nothing meaningful to
+        // format (an identity colour scale has no numeric formatter) gets
+        // `None` rather than a missing-method compile error.
+        assert_eq!(scale.format_value(&Value::Str("#FFFFFF".into())), None);
+    }
+
+    /// `resolve_oob` (B2-7.5's gradient `with_limits`): `limits: None` never
+    /// rejects a value — the no-op path every scale takes before
+    /// `with_limits` is ever called.
+    #[test]
+    fn resolve_oob_without_limits_always_passes_through() {
+        assert_eq!(
+            super::resolve_oob(42.0, None, super::Oob::Censor),
+            Some(42.0)
+        );
+        assert_eq!(
+            super::resolve_oob(-5.0, None, super::Oob::Squish),
+            Some(-5.0)
+        );
     }
 }

@@ -144,3 +144,19 @@ impl Scale for ScaleSizeContinuous {
         self.trained = false;
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn format_value_formats_a_finite_number_and_rejects_non_finite() {
+        let s = ScaleSizeContinuous::new();
+        assert_eq!(
+            s.format_value(&Value::Float(1234.0)),
+            Some("1234".to_string())
+        );
+        assert_eq!(s.format_value(&Value::Float(f64::NAN)), None);
+        assert_eq!(s.format_value(&Value::Na), None);
+    }
+}

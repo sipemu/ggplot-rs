@@ -145,3 +145,29 @@ fn theme_text_family_changes_text_annotations() {
         .unwrap();
     assert!(svg.contains("font-family=\"Georgia\""), "{svg}");
 }
+
+#[test]
+fn theme_geom_family_sits_between_the_geom_and_theme_text_family() {
+    let data = frame(vec![
+        ("x", floats(&[1.0])),
+        ("y", floats(&[1.0])),
+        ("label", strs(&["hi"])),
+    ]);
+    // theme.geom.family wins over theme.text.family when both are set.
+    let svg = GGPlot::new(data.clone())
+        .aes(Aes::new().x("x").y("y").label("label"))
+        .geom_text()
+        .theme(theme_with_family("Verdana").set_geom(ElementGeom::default().with_family("Courier")))
+        .render_svg_native_with_size(300, 200)
+        .unwrap();
+    assert!(svg.contains("font-family=\"Courier\""), "{svg}");
+
+    // theme.geom.family alone (no theme.text.family override) still applies.
+    let svg2 = GGPlot::new(data)
+        .aes(Aes::new().x("x").y("y").label("label"))
+        .geom_text()
+        .theme(Theme::default().set_geom(ElementGeom::default().with_family("Courier")))
+        .render_svg_native_with_size(300, 200)
+        .unwrap();
+    assert!(svg2.contains("font-family=\"Courier\""), "{svg2}");
+}

@@ -178,3 +178,17 @@ fn without_any_svg_attr_calls_output_is_unaffected() {
     let svg = base_plot().render_svg_native_with_size(300, 200).unwrap();
     assert!(!svg.contains("data-warnings"));
 }
+
+#[test]
+fn plotgrid_svg_attrs_sets_several_at_once() {
+    let p = || base_plot();
+    let svg = (p() | p())
+        .svg_attrs(vec![
+            ("data-a".to_string(), "1".to_string()),
+            ("data-b".to_string(), "2".to_string()),
+        ])
+        .render_svg_native_with_size(600, 300)
+        .unwrap();
+    assert_eq!(root_attr(&svg, "data-a"), Some("1"));
+    assert_eq!(root_attr(&svg, "data-b"), Some("2"));
+}

@@ -1109,12 +1109,17 @@ mod tests {
             height: 100.0,
         };
         let mut backend = SvgBackend::new(100, 100, pa.clone());
+        backend.set_formatted_values(true);
         let mut meas = Measure::new(&mut backend, pa);
 
         assert!(meas.extent().is_none());
-
+        // B2-4: Measure forwards the formatted-values query/setters too.
+        assert!(meas.wants_formatted_values());
+        meas.set_mark_geom(Some("line"));
         meas.set_mark_part(Some("arrow"));
         meas.set_mark_attrs(vec![("data-x".to_string(), "v".to_string())]);
+        meas.set_mark_fvalue(Some("1,234.5".to_string()));
+        meas.set_mark_fx(Some("2026-10-12".to_string()));
         meas.draw_quadratic(
             (10.0, 20.0),
             (90.0, 5.0),
@@ -1122,16 +1127,23 @@ mod tests {
             &LineStyle::default(),
         )
         .unwrap();
+        meas.set_mark_geom(None);
         meas.set_mark_part(None);
         meas.set_mark_attrs(Vec::new());
+        meas.set_mark_fvalue(None);
+        meas.set_mark_fx(None);
 
         let (x0, y0, x1, y1) = meas.extent().expect("extent after drawing");
         assert_eq!((x0, y0, x1, y1), (10.0, 5.0, 90.0, 80.0));
 
-        // The marks actually reached the inner SvgBackend (data-part and
-        // the data_attr both appear in its output).
+        // The marks actually reached the inner SvgBackend (data-part, the
+        // data_attr, the mark class and the formatted values all appear in
+        // its output).
         let svg = backend.finish();
         assert!(svg.contains("data-part=\"arrow\""));
         assert!(svg.contains("data-x=\"v\""));
+        assert!(svg.contains("gg-arrow"));
+        assert!(svg.contains("data-fvalue=\"1,234.5\""));
+        assert!(svg.contains("data-fx=\"2026-10-12\""));
     }
 }

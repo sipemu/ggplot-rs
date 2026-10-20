@@ -116,3 +116,32 @@ fn without_a_tooltip_call_output_is_unaffected() {
         .unwrap();
     assert!(svg.contains("<title>(1, 2)</title>"), "{svg}");
 }
+
+#[test]
+fn an_unterminated_brace_is_kept_literally() {
+    let data = frame(vec![("x", floats(&[1.0])), ("y", floats(&[2.0]))]);
+    let svg = GGPlot::new(data)
+        .aes(Aes::new().x("x").y("y"))
+        .geom_point()
+        .tooltip("end {unterminated")
+        .render_svg_native_with_size(300, 200)
+        .unwrap();
+    assert!(svg.contains("<title>end {unterminated</title>"), "{svg}");
+}
+
+#[test]
+fn a_placeholder_for_an_na_value_renders_empty() {
+    let data = frame(vec![
+        ("x", floats(&[1.0, 2.0])),
+        ("y", floats(&[1.0, 2.0])),
+        ("label", vec![Value::Na, Value::Str("b".into())]),
+    ]);
+    let svg = GGPlot::new(data)
+        .aes(Aes::new().x("x").y("y").label("label"))
+        .geom_point()
+        .tooltip("[{label}]")
+        .render_svg_native_with_size(300, 200)
+        .unwrap();
+    assert!(svg.contains("<title>[]</title>"), "{svg}");
+    assert!(svg.contains("<title>[b]</title>"), "{svg}");
+}

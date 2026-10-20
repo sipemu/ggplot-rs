@@ -84,6 +84,14 @@ impl Scale for ScaleColorGradient2 {
         self.locale.as_ref()
     }
 
+    fn format_value(&self, value: &Value) -> Option<String> {
+        let f = value.as_f64()?;
+        if !f.is_finite() {
+            return None;
+        }
+        Some(super::util::format_number_opt(f, self.locale.as_ref()))
+    }
+
     fn aesthetic(&self) -> Aesthetic {
         self.aesthetic.clone()
     }
@@ -201,5 +209,24 @@ impl Scale for ScaleColorGradient2 {
     fn reset_training(&mut self) {
         self.min = f64::INFINITY;
         self.max = f64::NEG_INFINITY;
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn format_value_formats_a_finite_number_and_rejects_non_finite() {
+        let s = ScaleColorGradient2::new(Aesthetic::Color);
+        assert_eq!(s.format_value(&Value::Float(7.0)), Some("7".to_string()));
+        assert_eq!(s.format_value(&Value::Float(f64::NEG_INFINITY)), None);
+    }
+
+    #[test]
+    fn with_limits_fixes_the_domain_and_training_does_not_widen_it() {
+        let mut s = ScaleColorGradient2::new(Aesthetic::Fill).with_limits(-2.0, 2.0);
+        s.train(&[Value::Float(-50.0), Value::Float(50.0)]);
+        assert_eq!(s.domain(), Some((-2.0, 2.0)));
     }
 }
