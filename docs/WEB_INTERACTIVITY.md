@@ -107,9 +107,12 @@ part), not its parent's `gg-line`/`gg-band`.
 into separate marks instead of silently dropping the bad point and joining
 its finite neighbours across the gap — `geom_line`/`geom_path`/`geom_step`
 treat a non-finite row as a break, matching ggplot2's NA-break handling for
-connected lines. A lone finite vertex between two breaks is still its own
-(single-point, invisible) mark rather than vanishing, so hover/data
-attributes stay consistent across runs.
+connected lines. A run shorter than 2 points (e.g. a lone finite vertex
+between two breaks) is dropped entirely, the same as ggplot2 drops a
+one-observation path piece, rather than becoming an invisible 1-point mark
+that would still carry a title and hover attributes. `geom_step` clamps
+only an *infinite* pixel coordinate to the panel edge (`stat_ecdf`'s `±Inf`
+padding); a `NaN` coordinate is left alone so it breaks the line.
 
 **`data-fvalue` / `data-fx` — formatted values (opt-in via
 `GGPlot::svg_formatted_values(true)`, default off).** `data-fvalue` is the

@@ -86,8 +86,12 @@ honouring a theme/geom font family it previously ignored. `Layer` and
   marks instead of silently dropping the bad vertex and joining its finite
   neighbours across the gap (ggplot2's NA-break semantics) — for
   `geom_line`/`geom_path`/`geom_step` only (see `keeps_na_as_break` above).
-  A lone finite vertex between two breaks still becomes its own
-  (geometrically invisible, single-point) polyline mark, not nothing.
+  A run shorter than 2 points is dropped, the same as ggplot2 drops a
+  one-observation path piece, rather than becoming an invisible 1-point
+  polyline mark. `GeomStep` clamps only an *infinite* pixel coordinate to
+  the panel edge (`stat_ecdf`'s `±Inf` padding); a `NaN` coordinate is left
+  alone so it breaks the line instead of being clamped to an edge it was
+  never meant to reach.
 - `"geom"`, `"fvalue"` and `"fx"` join `"part"` as reserved `data_attr`
   names (alongside the attributes they already name): a mapping under any
   of these is rejected with a build warning, the same as `"part"` already

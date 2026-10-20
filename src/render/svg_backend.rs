@@ -515,13 +515,14 @@ fn finite_pts(pts: &[(f64, f64)]) -> Vec<(f64, f64)> {
         .collect()
 }
 
-/// Split `pts` into maximal runs of consecutive finite vertices. Matches
-/// ggplot2's NA-break handling for lines: a non-finite vertex breaks the
-/// line instead of being silently skipped, which would otherwise visually
-/// bridge across the gap. A lone finite vertex between two breaks still
-/// becomes its own (geometrically invisible, single-point) `<polyline>`
-/// mark — same element count and hover metadata as any other run, rather
-/// than vanishing — instead of being swallowed into its neighbour's run.
+/// Split `pts` into maximal runs of consecutive finite vertices, dropping
+/// any run shorter than 2 points. Matches ggplot2's NA-break handling for
+/// lines: a non-finite vertex breaks the line instead of being silently
+/// skipped, which would otherwise visually bridge across the gap — but a
+/// single remaining observation isn't a line segment either (ggplot2 drops
+/// a one-point path piece the same way), so it draws nothing rather than
+/// an invisible 1-point `<polyline>` that would still carry a `<title>`
+/// and hover attributes.
 fn finite_runs(pts: &[(f64, f64)]) -> Vec<Vec<(f64, f64)>> {
     let mut runs = Vec::new();
     let mut cur: Vec<(f64, f64)> = Vec::new();
@@ -529,10 +530,14 @@ fn finite_runs(pts: &[(f64, f64)]) -> Vec<Vec<(f64, f64)>> {
         if x.is_finite() && y.is_finite() {
             cur.push((x, y));
         } else if !cur.is_empty() {
-            runs.push(std::mem::take(&mut cur));
+            if cur.len() >= 2 {
+                runs.push(std::mem::take(&mut cur));
+            } else {
+                cur.clear();
+            }
         }
     }
-    if !cur.is_empty() {
+    if cur.len() >= 2 {
         runs.push(cur);
     }
     runs
