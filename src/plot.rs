@@ -1442,7 +1442,7 @@ impl GGPlot {
 
     /// `scale_size_area(max_size)` (ggplot2, B3-6): size scale where
     /// *area*, not radius, is proportional to the value, and 0 maps to 0.
-    /// See [`ScaleSizeContinuous::area`].
+    /// See [`ScaleSizeContinuous::area`](crate::scale::size::ScaleSizeContinuous::area).
     pub fn scale_size_area(mut self, max_size: f64) -> Self {
         self.scales.push(Box::new(
             crate::scale::size::ScaleSizeContinuous::new().area(max_size),
@@ -1904,7 +1904,7 @@ impl GGPlot {
     }
 
     /// How an outer x-axis label that would cross the SVG edge is handled
-    /// (B3-1, D6): [`AxisLabelFit::Reserve`] (default), `Shift`, or `Clip`
+    /// (B3-1, D6): [`AxisLabelFit::Reserve`](crate::theme::AxisLabelFit::Reserve) (default), `Shift`, or `Clip`
     /// (the 0.21 behaviour). Use `Shift` for panels that must stay
     /// pixel-aligned with other elements (e.g. a host's own aligned strip).
     pub fn axis_text_x_fit(mut self, fit: crate::theme::AxisLabelFit) -> Self {

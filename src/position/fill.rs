@@ -6,7 +6,7 @@ use crate::data::{DataFrame, Value};
 use super::{Position, PositionParams};
 
 /// Normalized stacking to 100% (ggplot2's `position_fill(vjust = )`) —
-/// like [`PositionStack`](crate::position::stack::PositionStack) but
+/// like [`PositionStack`](struct@crate::position::stack::PositionStack) but
 /// scaled to `[0, 1]` per x group.
 ///
 /// `vjust` places the row's `y` within its stacked segment, same as

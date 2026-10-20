@@ -766,7 +766,7 @@ pub(crate) fn plan_legend(
     }
 }
 
-/// Draw all legends for the plot, honouring a B3-2 [`plan_legend`] layout
+/// Draw all legends for the plot, honouring a B3-2 `plan_legend` layout
 /// when one changes anything (explicit `nrow`/`ncol`, or an overflowing
 /// horizontal legend). Falls back to the unchanged [`draw_legend`] path —
 /// same calls, same order — whenever `plan_legend` would return `None`,

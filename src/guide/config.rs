@@ -16,8 +16,8 @@ pub struct GuideLegend {
     /// Cap on the number of rows an auto-wrapped horizontal legend may grow
     /// to (B3-2); entries beyond the cap collapse into a trailing "+N more"
     /// label. `None` (the default) uses `1 + floor(total_height / 3 /
-    /// key_height)`. `Some(0)` is invalid (see [`validate`](Self::validate))
-    /// and is treated as `Some(1)`.
+    /// key_height)`. `Some(0)` is invalid (see `validated`, internal) and
+    /// is treated as `Some(1)`.
     pub max_rows: Option<usize>,
 }
 

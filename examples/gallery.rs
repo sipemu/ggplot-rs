@@ -85,6 +85,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     calendar()?;
     #[cfg(feature = "sf")]
     spatial()?;
+    legend_wrap()?;
+    boxplot_identity()?;
     themes()?;
 
     println!("Gallery written to assets/gallery/");
@@ -612,6 +614,74 @@ fn spatial() -> Result<(), Box<dyn std::error::Error>> {
         .title("Choropleth")
         .theme(theme)
         .save_with_size(&out("spatial"), W, H)?;
+    Ok(())
+}
+
+/// An overflowing horizontal legend auto-wraps (B3-2, 0.22): too many
+/// groups for one row at this width, so it grows to a second row instead
+/// of running off the panel.
+fn legend_wrap() -> Result<(), Box<dyn std::error::Error>> {
+    let mut r = seeded(7);
+    let n_groups = 14;
+    let (mut x, mut y, mut group) = (Vec::new(), Vec::new(), Vec::new());
+    for g in 0..n_groups {
+        for i in 0..6 {
+            x.push(i as f64);
+            y.push(round2(
+                (g as f64 * 0.3).sin() * 3.0 + i as f64 * 0.4 + randn(&mut r) * 0.3,
+            ));
+            group.push(format!("Series {:02}", g + 1));
+        }
+    }
+    let df = df! { "x" => x, "y" => y, "group" => group }?;
+    GGPlot::new(df)
+        .aes(Aes::new().x("x").y("y").color("group"))
+        .geom_line()
+        .geom_point()
+        .title("Auto-wrapped legend (14 series)")
+        .xlab("x")
+        .ylab("y")
+        .theme_bw()
+        .legend_position(LegendPosition::Bottom)
+        .save_with_size(&out("legend_wrap"), W, H)?;
+    Ok(())
+}
+
+/// `geom_boxplot(stat = "identity")` (B3-5, 0.22): the five-number summary
+/// supplied directly instead of computed from raw observations, with
+/// outliers that widen the y axis to fit them.
+fn boxplot_identity() -> Result<(), Box<dyn std::error::Error>> {
+    let df = df! {
+        "group" => vec!["A", "B", "C"],
+        "lower" => vec![3.2, 5.0, 2.1],
+        "middle" => vec![4.5, 6.4, 3.3],
+        "upper" => vec![5.8, 7.9, 4.6],
+        "ymin" => vec![1.9, 3.6, 0.8],
+        "ymax" => vec![7.1, 9.5, 6.0],
+        "outliers" => vec!["9.8, 10.4", "", "7.2"],
+    }?;
+    GGPlot::new(df)
+        .aes(
+            Aes::new()
+                .x("group")
+                .lower("lower")
+                .middle("middle")
+                .upper("upper")
+                .ymin("ymin")
+                .ymax("ymax")
+                .outliers("outliers"),
+        )
+        .geom_boxplot_with(GeomBoxplot {
+            fill: (255, 165, 79),
+            ..Default::default()
+        })
+        .stat(StatIdentity)
+        .tooltip("{group}: {lower}–{middle}–{upper}")
+        .title("Boxplot, stat = \"identity\"")
+        .xlab("Group")
+        .ylab("Value")
+        .theme_bw()
+        .save_with_size(&out("boxplot_identity"), W, H)?;
     Ok(())
 }
 

@@ -170,6 +170,27 @@ gg-arrow"/>` (no `<title>`).
 output** — the mark-attribute machinery (`geom::set_row_extras`) is a no-op
 when the built data has neither column.
 
+**`geom_boxplot` consumes tooltips and `data_attr` too (0.22).** Each box
+carries a geom-computed default title (`"<group>: median <m> (<q1>–<q3>)"`),
+which `GGPlot::tooltip(template)`/`Aes::tooltip` override and
+`Aes::data_attr` augments, the same as any other tooltip-consuming geom. The
+five-number-summary recipe:
+
+```rust
+GGPlot::new(df)
+    .aes(Aes::new().x("group").lower("q1").middle("median").upper("q3")
+        .ymin("lo").ymax("hi"))
+    .geom_boxplot()
+    .stat(StatIdentity)
+    .tooltip("{group}: {lower}–{middle}–{upper} ({ymin}, {ymax})")
+    .render_svg_native_with_size(600, 400)?;
+```
+
+Every placeholder here is a position column (`lower`/`middle`/`upper`/
+`ymin`/`ymax`), so each is formatted through the y scale (0.22 — see
+"Formatted values" above): on a `scale_y_log10()` plot the template still
+shows the human-readable numbers, not their log-space built values.
+
 ## Root attributes and page-level styling
 
 **`GGPlot::svg_attr(name, value)`/`svg_attrs(iter)` — and the same API on
