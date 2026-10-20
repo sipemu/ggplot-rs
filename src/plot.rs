@@ -88,6 +88,9 @@ pub struct Layer {
     /// The geom was configured explicitly (`geom_*_with(...)`), so its colours
     /// are deliberate and the theme's `primary_color` must not override them.
     pub explicit_style: bool,
+    /// A `{column}` tooltip template ([`GGPlot::tooltip`]), rendered per row
+    /// from the *built* layer data (post-stat) once that's available.
+    pub tooltip_template: Option<String>,
 }
 
 /// The top-level plot specification — builder pattern.
@@ -1056,6 +1059,7 @@ impl GGPlot {
             params,
             show_legend: None,
             explicit_style: false,
+            tooltip_template: None,
         });
         self
     }
@@ -1091,6 +1095,23 @@ impl GGPlot {
         self.warnings.extend(mapping.warnings.iter().cloned());
         if let Some(layer) = self.layers.last_mut() {
             layer.mapping = mapping;
+        }
+        self
+    }
+
+    /// A `{column}` tooltip template for the most recently added layer
+    /// (B2-5), replacing its default `<title>`. Each placeholder is filled
+    /// from the *built* layer data (so it can reference a stat-computed
+    /// column, e.g. a hex's `count`) at that row, formatted through the
+    /// column's scale when it has one
+    /// ([`Scale::format_value`](crate::scale::Scale::format_value)) — the same
+    /// `data-fvalue` logic, but written into the tooltip text. A column
+    /// that doesn't exist on this layer renders as empty, not literally
+    /// `{column}`. `{{`/`}}` are literal braces. The result is escaped the
+    /// same way any other tooltip is — this is plain text, not markup.
+    pub fn tooltip(mut self, template: &str) -> Self {
+        if let Some(layer) = self.layers.last_mut() {
+            layer.tooltip_template = Some(template.to_string());
         }
         self
     }

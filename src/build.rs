@@ -97,6 +97,92 @@ fn train_intercepts(scale: &mut Box<dyn crate::scale::Scale>, values: &[crate::d
     scale.train(values);
 }
 
+/// Map a canonical column name to the aesthetic whose scale formats it
+/// (B2-5 tooltip templates / B2-4 `data-fvalue`-style formatting). Columns
+/// outside this list (group, label, or a stat output like `count`) have no
+/// scale of their own: [`render_tooltip_template`] falls back to the plain
+/// display format for them.
+fn column_aesthetic(name: &str) -> Option<Aesthetic> {
+    match name {
+        "x" => Some(Aesthetic::X),
+        "y" => Some(Aesthetic::Y),
+        "fill" => Some(Aesthetic::Fill),
+        "color" | "colour" => Some(Aesthetic::Color),
+        "size" => Some(Aesthetic::Size),
+        "linewidth" => Some(Aesthetic::Linewidth),
+        "alpha" => Some(Aesthetic::Alpha),
+        _ => None,
+    }
+}
+
+/// Render one row of a `GGPlot::tooltip` template: `{column}` is filled
+/// from `data`'s row `row`, formatted through that column's scale when
+/// [`column_aesthetic`] names one and it has a
+/// [`Scale::format_value`](crate::scale::Scale::format_value) (else the
+/// plain display format); a column that doesn't exist on this layer is
+/// empty, not literally `{column}`. `{{`/`}}` are literal braces.
+fn render_tooltip_template(
+    template: &str,
+    data: &DataFrame,
+    scales: &ScaleSet,
+    row: usize,
+) -> String {
+    let mut out = String::new();
+    let mut chars = template.chars().peekable();
+    while let Some(c) = chars.next() {
+        match c {
+            '{' if chars.peek() == Some(&'{') => {
+                chars.next();
+                out.push('{');
+            }
+            '}' if chars.peek() == Some(&'}') => {
+                chars.next();
+                out.push('}');
+            }
+            '{' => {
+                let mut name = String::new();
+                let mut closed = false;
+                for nc in chars.by_ref() {
+                    if nc == '}' {
+                        closed = true;
+                        break;
+                    }
+                    name.push(nc);
+                }
+                if closed {
+                    out.push_str(&render_placeholder(&name, data, scales, row));
+                } else {
+                    // Unterminated `{…` to end of string: not a placeholder,
+                    // kept literally.
+                    out.push('{');
+                    out.push_str(&name);
+                }
+            }
+            c => out.push(c),
+        }
+    }
+    out
+}
+
+fn render_placeholder(name: &str, data: &DataFrame, scales: &ScaleSet, row: usize) -> String {
+    let Some(col) = data.column(name) else {
+        return String::new();
+    };
+    let Some(v) = col.get(row) else {
+        return String::new();
+    };
+    if v.is_na() {
+        return String::new();
+    }
+    if let Some(formatted) = column_aesthetic(name)
+        .and_then(|aes| scales.get(&aes))
+        .and_then(|s| s.format_value(v))
+    {
+        return formatted;
+    }
+    crate::geom::tip_value(v)
+}
+
 /// The grammar pipeline: transforms a GGPlot specification into render-ready data.
 pub struct PlotBuilder;
 
@@ -554,6 +640,7 @@ impl PlotBuilder {
             params: _,
             show_legend,
             explicit_style,
+            tooltip_template,
         } = layer;
 
         // Step 1: Resolve data — use layer data if provided, else plot data
@@ -822,6 +909,24 @@ impl PlotBuilder {
                     scale.train(values);
                 }
             }
+        }
+
+        // Step 9 (B2-5): render a `tooltip()` template against the built
+        // (post-stat) data, into the same internal column `Aes::tooltip`
+        // uses — so it replaces the geom's default `<title>` the same way,
+        // with no further geom-level plumbing.
+        if let Some(template) = &tooltip_template {
+            let rendered: Vec<crate::data::Value> = (0..working_data.nrows())
+                .map(|i| {
+                    crate::data::Value::Str(render_tooltip_template(
+                        template,
+                        &working_data,
+                        scale_set,
+                        i,
+                    ))
+                })
+                .collect();
+            working_data.add_column(crate::aes::TOOLTIP_INTERNAL_NAME.to_string(), rendered);
         }
 
         Ok(BuiltLayer {
