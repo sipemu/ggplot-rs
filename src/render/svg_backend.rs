@@ -227,11 +227,11 @@ impl SvgBackend {
             LineEnd::Square => " stroke-linecap=\"square\"",
         };
         let attrs = format!(
-            "points=\"{}\" fill=\"none\" stroke=\"{}\" stroke-width=\"{:.2}\" stroke-opacity=\"{:.3}\"{}{}",
+            "points=\"{}\" fill=\"none\" stroke=\"{}\" stroke-width=\"{:.2}\"{}{}{}",
             points(pts),
             rgb(style.color),
             finite_or(style.width, 1.0),
-            finite_or(style.alpha, 1.0),
+            opacity_attr("stroke", style.alpha),
             dash,
             linecap
         );
@@ -254,6 +254,20 @@ fn finite_or(v: f64, fallback: f64) -> f64 {
         v
     } else {
         fallback
+    }
+}
+
+/// ` {prefix}-opacity="{alpha:.3}"` (with its own leading space), or the
+/// empty string when `alpha` — after the usual non-finite fallback to fully
+/// opaque — formats to `"1.000"`. Full opacity is the SVG default, so
+/// omitting it keeps default output byte-identical; an explicit `alpha = 1`
+/// is indistinguishable from "not set" and also omits the no-op attribute.
+fn opacity_attr(prefix: &str, alpha: f64) -> String {
+    let a = finite_or(alpha, 1.0);
+    if format!("{a:.3}") == "1.000" {
+        String::new()
+    } else {
+        format!(" {prefix}-opacity=\"{a:.3}\"")
     }
 }
 
@@ -473,10 +487,10 @@ impl DrawBackend for SvgBackend {
             return Ok(());
         }
         let attrs = format!(
-            "cx=\"{cx:.2}\" cy=\"{cy:.2}\" r=\"{:.2}\" fill=\"{}\" fill-opacity=\"{:.3}\"",
+            "cx=\"{cx:.2}\" cy=\"{cy:.2}\" r=\"{:.2}\" fill=\"{}\"{}",
             radius.max(0.0),
             rgb(style.color),
-            finite_or(style.alpha, 1.0)
+            opacity_attr("fill", style.alpha)
         );
         self.push_mark("circle", "point", &attrs);
         Ok(())
@@ -496,16 +510,14 @@ impl DrawBackend for SvgBackend {
         }
         let r = radius.max(0.0);
         let color = rgb(style.color);
-        let alpha = finite_or(style.alpha, 1.0);
+        let fill_opacity = opacity_attr("fill", style.alpha);
+        let stroke_opacity = opacity_attr("stroke", style.alpha);
         let poly = |pts: &[(f64, f64)]| {
             if style.filled {
-                format!(
-                    "points=\"{}\" fill=\"{color}\" fill-opacity=\"{alpha:.3}\"",
-                    points(pts)
-                )
+                format!("points=\"{}\" fill=\"{color}\"{fill_opacity}", points(pts))
             } else {
                 format!(
-                    "points=\"{}\" fill=\"none\" stroke=\"{color}\" stroke-opacity=\"{alpha:.3}\"",
+                    "points=\"{}\" fill=\"none\" stroke=\"{color}\"{stroke_opacity}",
                     points(pts)
                 )
             }
@@ -552,8 +564,7 @@ impl DrawBackend for SvgBackend {
                     )
                 };
                 let a = format!(
-                    "d=\"{d}\" fill=\"none\" stroke=\"{color}\" stroke-width=\"{:.2}\" \
-                     stroke-opacity=\"{alpha:.3}\"",
+                    "d=\"{d}\" fill=\"none\" stroke=\"{color}\" stroke-width=\"{:.2}\"{stroke_opacity}",
                     (r / 2.5).clamp(1.0, 3.0)
                 );
                 self.push_mark("path", "point", &a);
@@ -614,10 +625,10 @@ impl DrawBackend for SvgBackend {
             p0.0, p0.1, ctrl.0, ctrl.1, p1.0, p1.1
         );
         let attrs = format!(
-            "d=\"{d}\" fill=\"none\" stroke=\"{}\" stroke-width=\"{:.2}\" stroke-opacity=\"{:.3}\"{}{}",
+            "d=\"{d}\" fill=\"none\" stroke=\"{}\" stroke-width=\"{:.2}\"{}{}{}",
             rgb(style.color),
             finite_or(style.width, 1.0),
-            finite_or(style.alpha, 1.0),
+            opacity_attr("stroke", style.alpha),
             dash,
             linecap
         );
@@ -639,9 +650,9 @@ impl DrawBackend for SvgBackend {
         let fill = style.fill.map(rgb).unwrap_or_else(|| "none".into());
         let stroke = style.stroke.map(rgb).unwrap_or_else(|| "none".into());
         let attrs = format!(
-            "x=\"{x:.2}\" y=\"{y:.2}\" width=\"{w:.2}\" height=\"{h:.2}\" fill=\"{fill}\" \
-             fill-opacity=\"{:.3}\" stroke=\"{stroke}\" stroke-width=\"{:.2}\"",
-            finite_or(style.alpha, 1.0),
+            "x=\"{x:.2}\" y=\"{y:.2}\" width=\"{w:.2}\" height=\"{h:.2}\" fill=\"{fill}\"{} \
+             stroke=\"{stroke}\" stroke-width=\"{:.2}\"",
+            opacity_attr("fill", style.alpha),
             finite_or(style.stroke_width, 0.0)
         );
         self.push_mark("rect", "bar", &attrs);
@@ -656,9 +667,9 @@ impl DrawBackend for SvgBackend {
         let fill = style.fill.map(rgb).unwrap_or_else(|| "none".into());
         let stroke = style.stroke.map(rgb).unwrap_or_else(|| "none".into());
         let attrs = format!(
-            "points=\"{}\" fill=\"{fill}\" fill-opacity=\"{:.3}\" stroke=\"{stroke}\" stroke-width=\"{:.2}\"",
+            "points=\"{}\" fill=\"{fill}\"{} stroke=\"{stroke}\" stroke-width=\"{:.2}\"",
             points(&pts),
-            finite_or(style.alpha, 1.0),
+            opacity_attr("fill", style.alpha),
             finite_or(style.stroke_width, 0.0)
         );
         self.push_mark("polygon", "band", &attrs);

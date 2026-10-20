@@ -376,3 +376,28 @@ fn reflines_carry_their_specific_data_geom() {
         .unwrap();
     assert!(abline.contains("data-geom=\"abline\""));
 }
+
+/// B2-2: `fill-opacity`/`stroke-opacity` is the SVG default (fully opaque)
+/// and is omitted rather than written as `"1.000"`; an explicit non-default
+/// alpha still writes it.
+#[test]
+fn default_opacity_is_omitted_but_a_set_alpha_still_writes_it() {
+    let default_svg = GGPlot::new(data())
+        .aes(Aes::new().x("x").y("y"))
+        .geom_point()
+        .geom_line()
+        .render_svg_native_with_size(300, 200)
+        .unwrap();
+    assert!(!default_svg.contains("-opacity=\"1.000\""), "{default_svg}");
+    assert!(!default_svg.contains("-opacity="), "{default_svg}");
+
+    let faded_svg = GGPlot::new(data())
+        .aes(Aes::new().x("x").y("y"))
+        .geom_point_with(GeomPoint {
+            alpha: 0.4,
+            ..Default::default()
+        })
+        .render_svg_native_with_size(300, 200)
+        .unwrap();
+    assert!(faded_svg.contains("fill-opacity=\"0.400\""), "{faded_svg}");
+}
