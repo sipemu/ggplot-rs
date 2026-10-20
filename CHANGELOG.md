@@ -3,7 +3,7 @@
 All notable changes to this project are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
-## [0.22.0] — unreleased
+## [0.22.0] — 2026-10-20
 
 Minor bump: layout and stats (upstream batch 2). Default output stays
 byte-identical except for the deliberate changes under "Changed", each
@@ -82,6 +82,11 @@ guarded by `tests/default_output_022.rs`.
 
 ### Breaking
 
+- `guide::axis::draw_x_axis` gained a `canvas: &Rect` parameter (the full
+  SVG viewport, not just the panel) — a deviation from the plan, needed
+  for the outer-label-fit edge checks (B3-1): an off-canvas label can't
+  be detected from the panel rect alone. An external direct caller of
+  `draw_x_axis` needs to pass it (`backend.total_area()`).
 - `PositionStack`/`PositionFill` are now structs with a `vjust` field
   instead of unit structs — an external `PositionStack { .. }`/
   `PositionFill { .. }` struct-literal pattern no longer compiles (the
