@@ -218,7 +218,7 @@ impl PlotRenderer {
         }
 
         // 9. Draw legend
-        legend::draw_legend(
+        legend::draw_legend_planned(
             &built.scales,
             theme,
             &plot_area,
@@ -677,7 +677,7 @@ impl PlotRenderer {
         )?;
 
         // Draw legend
-        legend::draw_legend(
+        legend::draw_legend_planned(
             &built.scales,
             theme,
             &plot_area,

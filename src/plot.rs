@@ -2588,6 +2588,73 @@ impl GGPlot {
             }
         }
 
+        // B3-2 (D7): a single discrete legend's `nrow`/`ncol` grid, or an
+        // overflowing horizontal legend's auto-wrap, reserves extra legend
+        // rows. Scoped to exactly one discrete guide, matching
+        // `draw_legend_planned`'s own gate — several simultaneous guides
+        // are a follow-up (sipemu/ggplot-rs#155).
+        if has_legend
+            && !matches!(
+                built.theme.legend_position,
+                crate::theme::LegendPosition::None
+            )
+        {
+            let legend_aes =
+                crate::guide::legend::legend_scales_for(&built.scales, &built.suppressed_aes);
+            if legend_aes.len() == 1 {
+                if let Some(scale) = built.scales.get(&legend_aes[0]) {
+                    if scale.is_discrete() {
+                        let breaks = scale.breaks();
+                        let layout0 = PlotLayout::compute_with_extras(
+                            w as f64,
+                            h as f64,
+                            &built.theme,
+                            has_title,
+                            has_subtitle,
+                            has_caption,
+                            has_legend,
+                            x_axis_top,
+                            y_label_width,
+                            x_label_height,
+                            extras,
+                        );
+                        let (legend_x0, _, mut is_horizontal) =
+                            crate::guide::legend::legend_position(&built.theme, &layout0.plot_area);
+                        if let Some(dir) = built.theme.legend_direction {
+                            is_horizontal =
+                                matches!(dir, crate::theme::LegendDirection::Horizontal);
+                        }
+                        let avail_width =
+                            (layout0.plot_area.x + layout0.plot_area.width - legend_x0).max(0.0);
+                        let mut legend_warnings = Vec::new();
+                        let validated_guide = built
+                            .guide_legend
+                            .validated(breaks.len(), &mut legend_warnings);
+                        let plan = crate::guide::legend::plan_legend(
+                            &breaks,
+                            &validated_guide,
+                            &built.theme,
+                            avail_width,
+                            layout0.plot_area.height,
+                            is_horizontal,
+                        );
+                        built.warnings.extend(legend_warnings);
+                        if let Some(plan) = &plan {
+                            extras.legend_extra_rows = plan.rows.saturating_sub(1);
+                            if let Some(ov) = &plan.overflow {
+                                let n = breaks.len();
+                                let shown = n - ov.dropped;
+                                built.warnings.push(format!(
+                                    "legend: {} of {n} entries don't fit the chart; the legend shows {shown} and \"+{} more\"",
+                                    ov.dropped, ov.dropped
+                                ));
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
         PlotLayout::compute_with_extras(
             w as f64,
             h as f64,
