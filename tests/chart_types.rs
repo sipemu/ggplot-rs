@@ -224,6 +224,7 @@ fn half_donut_gauge_fills_the_panel() {
             color: (30, 30, 30),
             width: 3.0,
             alpha: 1.0,
+            ..Default::default()
         })
         .layer_data(needle)
         .layer_aes(Aes::new().x("v").xend("v").y("r0").yend("r1"))

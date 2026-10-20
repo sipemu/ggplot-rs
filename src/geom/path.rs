@@ -1,9 +1,10 @@
 use crate::aes::Aesthetic;
 use crate::coord::Coord;
 use crate::data::DataFrame;
+use crate::geom::arrow::{draw_heads, heads, Arrow};
 use crate::position::identity::PositionIdentity;
 use crate::position::Position;
-use crate::render::backend::{DrawBackend, LineStyle, Linetype};
+use crate::render::backend::{DrawBackend, LineEnd, LineStyle, Linetype};
 use crate::render::RenderError;
 use crate::scale::ScaleSet;
 use crate::stat::identity::StatIdentity;
@@ -17,6 +18,11 @@ pub struct GeomPath {
     pub color: (u8, u8, u8),
     pub width: f64,
     pub alpha: f64,
+    /// An optional arrowhead drawn at the end(s) of each drawn polyline
+    /// (one head set per group).
+    pub arrow: Option<Arrow>,
+    /// Line cap style (R grid's `lineend`).
+    pub lineend: LineEnd,
 }
 
 impl Default for GeomPath {
@@ -25,7 +31,37 @@ impl Default for GeomPath {
             color: (0, 0, 0),
             width: 1.5,
             alpha: 1.0,
+            arrow: None,
+            lineend: LineEnd::Butt,
         }
+    }
+}
+
+impl GeomPath {
+    pub fn color(mut self, color: (u8, u8, u8)) -> Self {
+        self.color = color;
+        self
+    }
+
+    /// Sets `width` (the stroke width in pixels).
+    pub fn linewidth(mut self, width: f64) -> Self {
+        self.width = width;
+        self
+    }
+
+    pub fn alpha(mut self, alpha: f64) -> Self {
+        self.alpha = alpha;
+        self
+    }
+
+    pub fn arrow(mut self, arrow: Arrow) -> Self {
+        self.arrow = Some(arrow);
+        self
+    }
+
+    pub fn lineend(mut self, lineend: LineEnd) -> Self {
+        self.lineend = lineend;
+        self
     }
 }
 
@@ -89,9 +125,13 @@ impl Geom for GeomPath {
                             alpha: self.alpha,
                             width: self.width,
                             linetype: lt,
-                            ..Default::default()
+                            lineend: self.lineend,
                         },
                     )?;
+                    if let Some(arrow) = &self.arrow {
+                        let hs = heads(&points, arrow, self.width);
+                        draw_heads(backend, &hs, arrow, line_color, self.alpha, self.width)?;
+                    }
                 }
             }
         } else {
@@ -121,9 +161,13 @@ impl Geom for GeomPath {
                         alpha: self.alpha,
                         width: self.width,
                         linetype: lt,
-                        ..Default::default()
+                        lineend: self.lineend,
                     },
                 )?;
+                if let Some(arrow) = &self.arrow {
+                    let hs = heads(&points, arrow, self.width);
+                    draw_heads(backend, &hs, arrow, self.color, self.alpha, self.width)?;
+                }
             }
         }
 
@@ -152,5 +196,52 @@ impl Geom for GeomPath {
 
     fn set_series_color(&mut self, color: (u8, u8, u8)) {
         self.color = color;
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::data::Value;
+    use crate::geom::arrow::arrow;
+    use crate::prelude::*;
+
+    fn plot() -> GGPlot {
+        let n = 6;
+        let x: Vec<Value> = (0..n).map(|i| Value::Float(i as f64)).collect();
+        let y: Vec<Value> = (0..n)
+            .map(|i| Value::Float((i as f64 * 0.37).sin()))
+            .collect();
+        GGPlot::new(vec![("x".into(), x), ("y".into(), y)]).aes(Aes::new().x("x").y("y"))
+    }
+
+    /// Byte-identical default output: an exact polyline string recorded
+    /// before adding `arrow`/`lineend` to `GeomPath`.
+    #[test]
+    fn default_path_output_is_unchanged() {
+        let svg = plot()
+            .geom_path_with(GeomPath::default())
+            .render_svg_native_with_size(100, 60)
+            .unwrap();
+        let points = svg
+            .split("<polyline")
+            .filter_map(|p| p.split("points=\"").nth(1))
+            .filter_map(|p| p.split('"').next())
+            .find(|p| p.split(' ').count() == 6)
+            .expect("the 6-point data polyline");
+        assert_eq!(
+            points,
+            "64.32,53.23 73.41,36.72 82.50,22.45 91.60,12.35 100.69,7.77 109.78,9.35"
+        );
+        assert!(!svg.contains("stroke-linecap"));
+        assert!(!svg.contains("data-part"));
+    }
+
+    #[test]
+    fn path_with_arrow_tags_one_head_for_the_single_polyline() {
+        let svg = plot()
+            .geom_path_with(GeomPath::default().arrow(arrow().closed()))
+            .render_svg_native_with_size(100, 60)
+            .unwrap();
+        assert_eq!(svg.matches("data-part=\"arrow\"").count(), 1);
     }
 }

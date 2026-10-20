@@ -114,11 +114,6 @@ pub fn arrow() -> Arrow {
 }
 
 /// One computed arrowhead, in the same pixel space as `path_px`.
-///
-/// `heads`/`draw_heads` are crate-internal plumbing wired into the
-/// segment/curve/path/line geoms in B1-3; `#[allow(dead_code)]` here is
-/// temporary until that lands.
-#[allow(dead_code)]
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub(crate) struct ArrowHead {
     pub tip: (f64, f64),
@@ -126,7 +121,6 @@ pub(crate) struct ArrowHead {
     pub right: (f64, f64),
 }
 
-#[allow(dead_code)]
 fn rotate((x, y): (f64, f64), radians: f64) -> (f64, f64) {
     let (s, c) = radians.sin_cos();
     (x * c - y * s, x * s + y * c)
@@ -136,7 +130,6 @@ fn rotate((x, y): (f64, f64), radians: f64) -> (f64, f64) {
 ///
 /// Returns no heads for a path with fewer than two points, any non-finite
 /// point, or zero total arc length (a degenerate, single-point path).
-#[allow(dead_code)]
 pub(crate) fn heads(path_px: &[(f64, f64)], arrow: &Arrow, linewidth: f64) -> Vec<ArrowHead> {
     if path_px.len() < 2
         || path_px
@@ -232,7 +225,6 @@ pub(crate) fn heads(path_px: &[(f64, f64)], arrow: &Arrow, linewidth: f64) -> Ve
 /// see [`DrawBackend::set_mark_part`]). `Closed` draws a filled triangle with
 /// fill equal to the stroke colour; `Open` draws the two wings as a single
 /// 3-point open polyline.
-#[allow(dead_code)]
 pub(crate) fn draw_heads(
     backend: &mut dyn DrawBackend,
     heads: &[ArrowHead],

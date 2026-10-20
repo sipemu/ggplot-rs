@@ -164,6 +164,7 @@ fn line_and_path_family() {
                 color: (10, 100, 200),
                 width: 2.0,
                 alpha: 0.8,
+                ..Default::default()
             }),
         "line_with",
     );
@@ -178,6 +179,7 @@ fn line_and_path_family() {
                 color: (20, 20, 20),
                 width: 1.5,
                 alpha: 0.9,
+                ..Default::default()
             }),
         "path_with",
     );
@@ -572,6 +574,7 @@ fn segment_family() {
                 color: (0, 0, 0),
                 width: 1.5,
                 alpha: 0.9,
+                ..Default::default()
             }),
         "segment_with",
     );
@@ -590,6 +593,7 @@ fn segment_family() {
                 alpha: 1.0,
                 curvature: 0.5,
                 ncp: 8,
+                ..Default::default()
             }),
         "curve_with",
     );
