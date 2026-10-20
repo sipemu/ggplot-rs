@@ -110,8 +110,23 @@ pub trait Geom: Send + Sync {
     /// Whether `-Inf`/`Inf` position values are meaningful for this geom
     /// (ggplot2: "extend to the panel edge"). Rows with infinite positions are
     /// otherwise dropped with a warning before stats run. `NaN` is always
-    /// dropped. Default false; `geom_rect` returns true.
+    /// dropped — unless [`Geom::keeps_na_as_break`] says otherwise. Default
+    /// false; `geom_rect` returns true.
     fn allows_infinite(&self) -> bool {
+        false
+    }
+
+    /// Whether a row with a non-finite position is a *break* rather than a
+    /// removal (ggplot2's `GeomPath`/`GeomLine` NA handling): the row still
+    /// counts toward the "removed N rows" warning, but it is **not** deleted
+    /// from the built `DataFrame`, so the geom's own per-group point list
+    /// still contains it — as a non-finite pixel position after the scale
+    /// and coordinate transform, which [`crate::render::backend::DrawBackend::draw_line`]
+    /// splits on into separate polylines (ggplot2's NA-break semantics)
+    /// instead of silently joining the finite points across the gap.
+    /// Default false (the row is dropped, as for every other geom);
+    /// line/path/step return true.
+    fn keeps_na_as_break(&self) -> bool {
         false
     }
 

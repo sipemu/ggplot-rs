@@ -203,6 +203,40 @@ impl SvgBackend {
         let open = self.root_open(&format!("x=\"{}\" y=\"{}\" ", num(x), num(y)));
         format!("{open}{}</svg>", self.body)
     }
+
+    /// Emit one `<polyline>` for an already-finite run of points — see
+    /// [`DrawBackend::draw_line`]'s splitting at non-finite vertices.
+    fn draw_line_run(&mut self, pts: &[(f64, f64)], style: &LineStyle) {
+        let dash = match style
+            .linetype
+            .pattern()
+            .iter()
+            .flat_map(|(d, g)| [*d, *g])
+            .map(|v| format!("{v}"))
+            .collect::<Vec<_>>()
+            .join(",")
+        {
+            s if s.is_empty() => String::new(),
+            s => format!(" stroke-dasharray=\"{s}\""),
+        };
+        // `Butt` is SVG's own default: omitting the attribute keeps default
+        // output byte-identical.
+        let linecap = match style.lineend {
+            LineEnd::Butt => "",
+            LineEnd::Round => " stroke-linecap=\"round\"",
+            LineEnd::Square => " stroke-linecap=\"square\"",
+        };
+        let attrs = format!(
+            "points=\"{}\" fill=\"none\" stroke=\"{}\" stroke-width=\"{:.2}\" stroke-opacity=\"{:.3}\"{}{}",
+            points(pts),
+            rgb(style.color),
+            finite_or(style.width, 1.0),
+            finite_or(style.alpha, 1.0),
+            dash,
+            linecap
+        );
+        self.push_mark("polyline", "line", &attrs);
+    }
 }
 
 /// Format a coordinate with two decimals; non-finite becomes `0` (callers
@@ -366,6 +400,29 @@ fn finite_pts(pts: &[(f64, f64)]) -> Vec<(f64, f64)> {
         .collect()
 }
 
+/// Split `pts` into maximal runs of consecutive finite vertices. Matches
+/// ggplot2's NA-break handling for lines: a non-finite vertex breaks the
+/// line instead of being silently skipped, which would otherwise visually
+/// bridge across the gap. A lone finite vertex between two breaks still
+/// becomes its own (geometrically invisible, single-point) `<polyline>`
+/// mark — same element count and hover metadata as any other run, rather
+/// than vanishing — instead of being swallowed into its neighbour's run.
+fn finite_runs(pts: &[(f64, f64)]) -> Vec<Vec<(f64, f64)>> {
+    let mut runs = Vec::new();
+    let mut cur: Vec<(f64, f64)> = Vec::new();
+    for &(x, y) in pts {
+        if x.is_finite() && y.is_finite() {
+            cur.push((x, y));
+        } else if !cur.is_empty() {
+            runs.push(std::mem::take(&mut cur));
+        }
+    }
+    if !cur.is_empty() {
+        runs.push(cur);
+    }
+    runs
+}
+
 impl DrawBackend for SvgBackend {
     fn plot_area(&self) -> Rect {
         self.plot_area.clone()
@@ -506,39 +563,14 @@ impl DrawBackend for SvgBackend {
     }
 
     fn draw_line(&mut self, pts: &[(f64, f64)], style: &LineStyle) -> Result<(), RenderError> {
-        let pts = finite_pts(pts);
-        if pts.len() < 2 {
-            return Ok(());
+        // Split at non-finite vertices instead of silently dropping them:
+        // dropping-and-joining would visually bridge the gap, but ggplot2
+        // treats a non-finite (NA) vertex as a break in the line (see
+        // `finite_runs`). Each run becomes its own `<polyline>` mark, with
+        // the same style and the same data-x/series/value/part attrs.
+        for run in finite_runs(pts) {
+            self.draw_line_run(&run, style);
         }
-        let dash = match style
-            .linetype
-            .pattern()
-            .iter()
-            .flat_map(|(d, g)| [*d, *g])
-            .map(|v| format!("{v}"))
-            .collect::<Vec<_>>()
-            .join(",")
-        {
-            s if s.is_empty() => String::new(),
-            s => format!(" stroke-dasharray=\"{s}\""),
-        };
-        // `Butt` is SVG's own default: omitting the attribute keeps default
-        // output byte-identical.
-        let linecap = match style.lineend {
-            LineEnd::Butt => "",
-            LineEnd::Round => " stroke-linecap=\"round\"",
-            LineEnd::Square => " stroke-linecap=\"square\"",
-        };
-        let attrs = format!(
-            "points=\"{}\" fill=\"none\" stroke=\"{}\" stroke-width=\"{:.2}\" stroke-opacity=\"{:.3}\"{}{}",
-            points(&pts),
-            rgb(style.color),
-            finite_or(style.width, 1.0),
-            finite_or(style.alpha, 1.0),
-            dash,
-            linecap
-        );
-        self.push_mark("polyline", "line", &attrs);
         Ok(())
     }
 

@@ -308,7 +308,12 @@ impl PlotBuilder {
     /// Drop rows with a non-finite value in any position column (`NaN` always;
     /// `±Inf` unless the geom gives infinities meaning). Returns the number of
     /// rows removed.
-    fn drop_non_finite(data: &mut DataFrame, allow_infinite: bool) -> usize {
+    /// `keep_as_break`: for a connecting geom ([`Geom::keeps_na_as_break`]),
+    /// a bad row is counted (for the warning) but not deleted — it stays in
+    /// `data` as a non-finite pixel position, which `DrawBackend::draw_line`
+    /// splits the polyline on, instead of being spliced out and silently
+    /// joining the finite points across the gap.
+    fn drop_non_finite(data: &mut DataFrame, allow_infinite: bool, keep_as_break: bool) -> usize {
         let n = data.nrows();
         let mut keep = vec![true; n];
         for col in POSITION_COLS {
@@ -324,7 +329,7 @@ impl PlotBuilder {
             }
         }
         let removed = keep.iter().filter(|&&k| !k).count();
-        if removed > 0 {
+        if removed > 0 && !keep_as_break {
             Self::retain_rows(data, &keep);
         }
         removed
@@ -635,7 +640,11 @@ impl PlotBuilder {
         // reads infinities as "panel edge"), like ggplot2's
         // "Removed n rows containing non-finite values".
         let geom_label = format!("geom_{}", geom.name());
-        let removed = Self::drop_non_finite(&mut working_data, geom.allows_infinite());
+        let removed = Self::drop_non_finite(
+            &mut working_data,
+            geom.allows_infinite(),
+            geom.keeps_na_as_break(),
+        );
         if removed > 0 {
             warnings.push(format!(
                 "{geom_label}: removed {removed} row{} containing non-finite values",
@@ -694,7 +703,11 @@ impl PlotBuilder {
 
         // Stat output can contain NaN (e.g. a fit on degenerate input): drop
         // those rows too, so nothing non-finite reaches a geom.
-        let removed = Self::drop_non_finite(&mut working_data, geom.allows_infinite());
+        let removed = Self::drop_non_finite(
+            &mut working_data,
+            geom.allows_infinite(),
+            geom.keeps_na_as_break(),
+        );
         if removed > 0 {
             warnings.push(format!(
                 "{geom_label}: removed {removed} row{} containing missing values (stat_{} output)",

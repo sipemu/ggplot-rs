@@ -155,6 +155,10 @@ impl Geom for GeomStep {
         true
     }
 
+    fn keeps_na_as_break(&self) -> bool {
+        true
+    }
+
     fn set_series_color(&mut self, color: (u8, u8, u8)) {
         self.color = color;
     }

@@ -6,6 +6,7 @@
 use ggplot_rs::aes::Aes;
 use ggplot_rs::data::Value;
 use ggplot_rs::geom::smooth::GeomSmooth;
+use ggplot_rs::prelude::*;
 use ggplot_rs::stat::smooth::SmoothMethod;
 use ggplot_rs::GGPlot;
 
@@ -248,5 +249,155 @@ fn log_of_zero_is_dropped_not_drawn() {
         .unwrap();
     assert_eq!(count(&svg, "<circle"), 2);
     assert_eq!(warnings.len(), 1);
+    assert_finite_attrs(&svg);
+}
+
+// ─── B2-1: non-finite guard ─────────────────────────────────────────────
+//
+// `draw_line` now splits at non-finite vertices into separate `<polyline>`
+// runs instead of silently dropping the bad row and joining the finite
+// points across the gap — line/path/step opt into keeping the row (as a
+// break) via `Geom::keeps_na_as_break`.
+
+#[test]
+fn a_nan_in_the_middle_of_a_line_splits_it_into_two_polylines() {
+    let data = frame(vec![
+        ("x", floats(&[1.0, 2.0, 3.0, 4.0])),
+        ("y", floats(&[1.0, f64::NAN, 3.0, 4.0])),
+    ]);
+    for (geom, plot) in [
+        (
+            "line",
+            GGPlot::new(data.clone())
+                .aes(Aes::new().x("x").y("y"))
+                .geom_line(),
+        ),
+        (
+            "path",
+            GGPlot::new(data.clone())
+                .aes(Aes::new().x("x").y("y"))
+                .geom_path(),
+        ),
+    ] {
+        let svg = plot.render_svg_native_with_size(300, 200).unwrap();
+        assert_eq!(
+            count(&svg, "class=\"gg-mark gg-line\""),
+            2,
+            "{geom}: y=[1,NaN,3,4] should give 2 polylines: {svg}"
+        );
+        assert_finite_attrs(&svg);
+    }
+}
+
+#[test]
+fn a_run_of_one_finite_point_between_breaks_is_its_own_degenerate_polyline() {
+    // x=2 is the only finite point between two NaN neighbours: it still
+    // becomes its own single-point `<polyline>` mark (geometrically
+    // invisible, but present — same element/hover-metadata contract as
+    // any other run) rather than being merged into a neighbour.
+    let data = frame(vec![
+        ("x", floats(&[1.0, 2.0, 3.0])),
+        ("y", floats(&[f64::NAN, 2.0, f64::NAN])),
+    ]);
+    let svg = GGPlot::new(data)
+        .aes(Aes::new().x("x").y("y"))
+        .geom_line()
+        .render_svg_native_with_size(300, 200)
+        .unwrap();
+    assert_eq!(count(&svg, "class=\"gg-mark gg-line\""), 1, "{svg}");
+    assert_finite_attrs(&svg);
+}
+
+#[test]
+fn constant_single_row_and_nonfinite_data_render_through_every_connecting_geom() {
+    let constant = frame(vec![
+        ("x", floats(&[1.0, 1.0, 1.0])),
+        ("y", floats(&[2.0, 2.0, 2.0])),
+    ]);
+    let single = frame(vec![("x", floats(&[1.0])), ("y", floats(&[2.0]))]);
+    let with_gap = frame(vec![
+        ("x", floats(&[0.0, 1.0, 2.0, 3.0])),
+        ("y", floats(&[0.0, f64::NAN, f64::INFINITY, 3.0])),
+    ]);
+    for data in [constant, single, with_gap] {
+        for plot in [
+            GGPlot::new(data.clone())
+                .aes(Aes::new().x("x").y("y"))
+                .geom_line(),
+            GGPlot::new(data.clone())
+                .aes(Aes::new().x("x").y("y"))
+                .geom_path(),
+            GGPlot::new(data.clone())
+                .aes(Aes::new().x("x").y("y"))
+                .geom_step(),
+            GGPlot::new(data.clone())
+                .aes(Aes::new().x("x").y("y").xend("x").yend("y"))
+                .geom_segment(),
+            GGPlot::new(data.clone())
+                .aes(Aes::new().x("x").y("y").xend("x").yend("y"))
+                .geom_curve(),
+        ] {
+            let svg = plot.render_svg_native_with_size(300, 200).unwrap();
+            assert_finite_attrs(&svg);
+        }
+    }
+}
+
+#[test]
+fn arrows_drop_entirely_on_a_nonfinite_or_zero_length_path() {
+    // A segment with a non-finite endpoint gets no arrowhead at all, not a
+    // partial/NaN one.
+    let data = frame(vec![
+        ("x", floats(&[0.0, 0.0])),
+        ("y", floats(&[0.0, 0.0])),
+        ("xend", floats(&[f64::NAN, 0.0])),
+        ("yend", floats(&[1.0, 0.0])),
+    ]);
+    let svg = GGPlot::new(data)
+        .aes(Aes::new().x("x").y("y").xend("xend").yend("yend"))
+        .geom_segment_with(GeomSegment::default().arrow(arrow().closed()))
+        .render_svg_native_with_size(300, 200)
+        .unwrap();
+    assert_eq!(count(&svg, "data-part=\"arrow\""), 0);
+    assert_finite_attrs(&svg);
+}
+
+#[test]
+fn hexbin_handles_constant_single_row_and_nonfinite_weight() {
+    let constant = frame(vec![
+        ("x", floats(&[1.0, 1.0, 1.0])),
+        ("y", floats(&[1.0, 1.0, 1.0])),
+    ]);
+    let single = frame(vec![("x", floats(&[1.0])), ("y", floats(&[1.0]))]);
+    let with_bad = frame(vec![
+        ("x", floats(&[0.0, 1.0, f64::NAN])),
+        ("y", floats(&[0.0, 1.0, f64::INFINITY])),
+    ]);
+    for data in [constant, single, with_bad] {
+        let svg = GGPlot::new(data)
+            .aes(Aes::new().x("x").y("y"))
+            .geom_hex()
+            .render_svg_native_with_size(300, 200)
+            .unwrap();
+        assert_finite_attrs(&svg);
+    }
+}
+
+#[test]
+fn degenerate_data_renders_through_plotgrid_too() {
+    let with_gap = frame(vec![
+        ("x", floats(&[0.0, 1.0, 2.0, 3.0])),
+        ("y", floats(&[0.0, f64::NAN, 2.0, 3.0])),
+    ]);
+    let p = || {
+        GGPlot::new(with_gap.clone())
+            .aes(Aes::new().x("x").y("y"))
+            .geom_line()
+    };
+    let svg = (p() | p()).render_svg_native_with_size(600, 300).unwrap();
+    assert!(
+        count(&svg, "class=\"gg-mark gg-line\"") >= 4,
+        "2 split runs per cell, 2 cells: {svg}"
+    );
     assert_finite_attrs(&svg);
 }
