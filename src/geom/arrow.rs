@@ -359,4 +359,36 @@ mod tests {
         assert_eq!(hs.len(), 1);
         assert!((hs[0].tip.0 - 0.0).abs() < 1e-9);
     }
+
+    #[test]
+    fn kind_and_open_builders_set_the_arrow_type() {
+        let a = Arrow::default().kind(ArrowType::Closed);
+        assert_eq!(a.kind, ArrowType::Closed);
+        // `.open()` is the shorthand back to the (already-default) Open kind.
+        let a = a.open();
+        assert_eq!(a.kind, ArrowType::Open);
+    }
+
+    /// A zero-length segment in the *middle* of an otherwise normal path
+    /// (not a wholly degenerate path) must not produce a NaN/garbage tip —
+    /// `point_at`'s `seg_len <= 0` fallback is exercised here.
+    #[test]
+    fn a_zero_length_segment_mid_path_does_not_produce_a_degenerate_head() {
+        let path = [(0.0, 0.0), (0.0, 0.0), (10.0, 0.0)];
+        let hs = heads(&path, &Arrow::default(), 1.0);
+        assert_eq!(hs.len(), 1);
+        assert!(hs[0].tip.0.is_finite() && hs[0].tip.1.is_finite());
+        // position 1.0 (default) still lands on the true endpoint.
+        assert!((hs[0].tip.0 - 10.0).abs() < 1e-9);
+    }
+
+    /// Positioning the head exactly on a degenerate (zero-length) leading
+    /// segment gives a zero tangent — `make_head` must recognise it and
+    /// produce no head, not a NaN direction.
+    #[test]
+    fn position_on_a_degenerate_segment_gives_no_head() {
+        let path = [(0.0, 0.0), (0.0, 0.0), (10.0, 0.0)];
+        let a = Arrow::default().position(0.0);
+        assert!(heads(&path, &a, 1.0).is_empty());
+    }
 }

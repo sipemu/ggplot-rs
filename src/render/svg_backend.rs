@@ -716,4 +716,42 @@ mod tests {
         let svg2 = b2.finish();
         assert!(svg2.contains("stroke-linecap=\"round\""));
     }
+
+    #[test]
+    fn square_linecap_is_written_on_both_draw_line_and_draw_quadratic() {
+        let style = LineStyle {
+            lineend: LineEnd::Square,
+            ..Default::default()
+        };
+        let mut b = backend();
+        b.draw_line(&[(0.0, 0.0), (10.0, 10.0)], &style).unwrap();
+        assert!(b.finish().contains("stroke-linecap=\"square\""));
+
+        let mut b2 = backend();
+        b2.draw_quadratic((0.0, 0.0), (5.0, 10.0), (10.0, 0.0), &style)
+            .unwrap();
+        assert!(b2.finish().contains("stroke-linecap=\"square\""));
+    }
+
+    /// `push_mark`'s defence-in-depth gate: even if an invalid name reaches
+    /// `set_mark_attrs` directly (bypassing `Aes::data_attr`'s own
+    /// validation — `set_mark_attrs` is a public `DrawBackend` method any
+    /// caller could invoke), it's dropped before it reaches the wire.
+    #[test]
+    fn set_mark_attrs_defence_in_depth_drops_invalid_names() {
+        let mut b = backend();
+        b.set_mark_attrs(vec![
+            ("not-data-prefixed".to_string(), "x".to_string()),
+            ("data-".to_string(), "x".to_string()), // empty suffix
+            ("data-Upper".to_string(), "x".to_string()), // uppercase
+            ("data-ok".to_string(), "valid".to_string()), // the one legitimate entry
+        ]);
+        b.draw_circle((1.0, 1.0), 1.0, &PointStyle::default())
+            .unwrap();
+        let svg = b.finish();
+        assert!(!svg.contains("not-data-prefixed"));
+        assert!(!svg.contains("data-Upper"));
+        assert!(!svg.contains("data-=\""));
+        assert!(svg.contains("data-ok=\"valid\""));
+    }
 }

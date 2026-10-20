@@ -290,4 +290,52 @@ mod tests {
         assert!(!svg.contains("stroke-linecap"));
         assert!(!svg.contains("data-part"));
     }
+
+    /// `.color()`/`.alpha()`/`.linewidth()` builders actually change the
+    /// rendered stroke, not just the struct's fields.
+    #[test]
+    fn color_alpha_and_linewidth_builders_change_the_rendered_stroke() {
+        let svg = plot()
+            .geom_segment_with(
+                GeomSegment::default()
+                    .color((10, 20, 30))
+                    .alpha(0.4)
+                    .linewidth(5.0),
+            )
+            .render_svg_native_with_size(200, 200)
+            .unwrap();
+        assert!(svg.contains("stroke=\"#0A141E\""));
+        assert!(svg.contains("stroke-opacity=\"0.400\""));
+        assert!(svg.contains("stroke-width=\"5.00\""));
+    }
+
+    /// `ScaleSet::ensure_scale` auto-creates a `ScaleLinewidthContinuous`
+    /// when `linewidth` is mapped without an explicit `.scale_linewidth(...)`
+    /// — the common case (most callers never configure the scale by hand).
+    #[test]
+    fn mapping_linewidth_without_an_explicit_scale_still_renders_a_range_of_widths() {
+        let svg = GGPlot::new(vec![
+            ("x".into(), vec![Value::Float(0.0), Value::Float(0.0)]),
+            ("y".into(), vec![Value::Float(0.0), Value::Float(1.0)]),
+            ("xend".into(), vec![Value::Float(1.0), Value::Float(1.0)]),
+            ("yend".into(), vec![Value::Float(0.5), Value::Float(0.3)]),
+            ("w".into(), vec![Value::Float(1.0), Value::Float(10.0)]),
+        ])
+        .aes(
+            Aes::new()
+                .x("x")
+                .y("y")
+                .xend("xend")
+                .yend("yend")
+                .linewidth("w"),
+        )
+        .geom_segment()
+        // No .scale_linewidth(...) call: ensure_scale must supply the
+        // default ScaleLinewidthContinuous (range 1.0..6.0).
+        .render_svg_native_with_size(200, 200)
+        .unwrap();
+
+        assert!(svg.contains("stroke-width=\"1.00\""));
+        assert!(svg.contains("stroke-width=\"6.00\""));
+    }
 }

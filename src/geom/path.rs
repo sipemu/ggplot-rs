@@ -260,4 +260,66 @@ mod tests {
             .unwrap();
         assert_eq!(svg.matches("data-part=\"arrow\"").count(), 1);
     }
+
+    /// `.color()`/`.alpha()`/`.linewidth()` builders actually change the
+    /// rendered stroke (the ungrouped — no `color` aesthetic mapped — path).
+    #[test]
+    fn color_alpha_and_linewidth_builders_change_the_rendered_stroke() {
+        let svg = plot()
+            .geom_path_with(
+                GeomPath::default()
+                    .color((10, 20, 30))
+                    .alpha(0.4)
+                    .linewidth(5.0),
+            )
+            .render_svg_native_with_size(100, 60)
+            .unwrap();
+        assert!(svg.contains("stroke=\"#0A141E\""));
+        assert!(svg.contains("stroke-opacity=\"0.400\""));
+        assert!(svg.contains("stroke-width=\"5.00\""));
+    }
+
+    /// The grouped branch (a `color` aesthetic mapped): one polyline per
+    /// group, each with its own mapped colour.
+    #[test]
+    fn grouped_path_draws_one_polyline_per_colour_group() {
+        let svg = GGPlot::new(vec![
+            (
+                "x".into(),
+                vec![
+                    Value::Float(0.0),
+                    Value::Float(1.0),
+                    Value::Float(0.0),
+                    Value::Float(1.0),
+                ],
+            ),
+            (
+                "y".into(),
+                vec![
+                    Value::Float(0.0),
+                    Value::Float(1.0),
+                    Value::Float(1.0),
+                    Value::Float(0.0),
+                ],
+            ),
+            (
+                "g".into(),
+                vec![
+                    Value::Str("a".into()),
+                    Value::Str("a".into()),
+                    Value::Str("b".into()),
+                    Value::Str("b".into()),
+                ],
+            ),
+        ])
+        .aes(Aes::new().x("x").y("y").color("g"))
+        .geom_path_with(GeomPath::default().lineend(crate::render::backend::LineEnd::Round))
+        .render_svg_native_with_size(100, 100)
+        .unwrap();
+
+        // Two groups ("a", "b") -> two data polylines, each with the
+        // round linecap (only our data uses it; gridlines stay Butt, which
+        // omits the attribute entirely).
+        assert_eq!(svg.matches("stroke-linecap=\"round\"").count(), 2);
+    }
 }

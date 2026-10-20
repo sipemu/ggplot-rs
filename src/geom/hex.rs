@@ -179,9 +179,7 @@ impl Geom for GeomHex {
 #[cfg(test)]
 mod tests {
     use super::fallback_hex_size;
-    #[cfg(feature = "sf")]
     use crate::data::Value;
-    #[cfg(feature = "sf")]
     use crate::prelude::*;
 
     /// Review finding #5: `w = 2*res(x)`, `h = 2*res(y)/sqrt(3)` — not the
@@ -263,5 +261,44 @@ mod tests {
         for e in &edges {
             assert!((e - first).abs() < 0.05, "edges should be equal: {edges:?}");
         }
+    }
+
+    /// `.color()`/`.linewidth()` builders actually change the rendered hex
+    /// outline, not just the struct's fields.
+    #[test]
+    fn color_and_linewidth_builders_change_the_rendered_outline() {
+        let svg = GGPlot::new(vec![
+            ("x".into(), vec![Value::Float(0.0), Value::Float(1.0)]),
+            ("y".into(), vec![Value::Float(0.0), Value::Float(1.0)]),
+        ])
+        .aes(Aes::new().x("x").y("y"))
+        .geom_hex_with(GeomHex::default().color((10, 20, 30)).linewidth(3.0))
+        .render_svg_native_with_size(200, 200)
+        .unwrap();
+        assert!(svg.contains("stroke=\"#0A141E\""));
+        assert!(svg.contains("stroke-width=\"3.00\""));
+    }
+
+    /// A row with a non-numeric x/y is skipped, not rendered as a
+    /// degenerate hexagon at the origin or a NaN polygon.
+    #[test]
+    fn a_row_with_non_numeric_position_is_skipped() {
+        let svg = GGPlot::new(vec![
+            (
+                "x".into(),
+                vec![Value::Float(0.0), Value::Na, Value::Float(5.0)],
+            ),
+            (
+                "y".into(),
+                vec![Value::Float(0.0), Value::Float(1.0), Value::Float(5.0)],
+            ),
+        ])
+        .aes(Aes::new().x("x").y("y"))
+        .geom_hex_with(GeomHex::default())
+        .stat(crate::stat::identity::StatIdentity)
+        .render_svg_native_with_size(200, 200)
+        .unwrap();
+        assert!(!svg.contains("NaN"));
+        assert_eq!(svg.matches("<polygon").count(), 2);
     }
 }

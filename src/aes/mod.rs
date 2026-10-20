@@ -486,3 +486,38 @@ mod data_attr_name_tests {
         assert!(internal.ends_with("data-orig"));
     }
 }
+
+#[cfg(test)]
+mod aesthetic_and_aes_tests {
+    use super::{Aes, Aesthetic};
+
+    /// `col_name()` for `Tooltip`/`DataAttr` is never actually used for
+    /// storage (both are special-cased in `aes::mapping`), but it should
+    /// still return a sane, documented fallback for a direct caller.
+    #[test]
+    fn col_name_for_tooltip_and_data_attr() {
+        assert_eq!(Aesthetic::Tooltip.col_name(), "tooltip");
+        assert_eq!(
+            Aesthetic::DataAttr("data-orig".to_string()).col_name(),
+            "data-orig"
+        );
+    }
+
+    #[test]
+    fn data_attr_warning_text_distinguishes_invalid_from_reserved() {
+        let invalid = Aes::new().data_attr("Not Valid!", "col");
+        assert_eq!(invalid.warnings.len(), 1);
+        assert!(invalid.warnings[0].contains("invalid"));
+        assert!(!invalid.warnings[0].contains("reserved"));
+
+        let reserved = Aes::new().data_attr("part", "col");
+        assert_eq!(reserved.warnings.len(), 1);
+        assert!(reserved.warnings[0].contains("reserved"));
+    }
+
+    #[test]
+    fn after_stat_linewidth_maps_a_stat_computed_column() {
+        let aes = Aes::new().after_stat_linewidth("weight");
+        assert_eq!(aes.get_mapping(&Aesthetic::Linewidth), Some("weight"));
+    }
+}

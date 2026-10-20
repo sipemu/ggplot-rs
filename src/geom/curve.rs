@@ -274,6 +274,37 @@ mod tests {
         assert!((ctrl.1 - 2.0).abs() < 1e-9);
     }
 
+    /// `.color()`/`.alpha()`/`.linewidth()`/`.curvature()`/`.ncp()` builders
+    /// actually change the rendered output, not just the struct's fields.
+    #[test]
+    fn builders_change_the_rendered_curve() {
+        let flat = plot()
+            .geom_curve_with(GeomCurve::default().curvature(0.0))
+            .render_svg_native_with_size(200, 200)
+            .unwrap();
+        let bent = plot()
+            .geom_curve_with(GeomCurve::default().curvature(0.8))
+            .render_svg_native_with_size(200, 200)
+            .unwrap();
+        assert_ne!(flat, bent, "curvature should change the control point");
+
+        let styled = plot()
+            .geom_curve_with(
+                GeomCurve::default()
+                    .color((10, 20, 30))
+                    .alpha(0.4)
+                    .linewidth(5.0)
+                    // `ncp` is ignored by SVG rendering (documented), but
+                    // the builder itself must still work.
+                    .ncp(12),
+            )
+            .render_svg_native_with_size(200, 200)
+            .unwrap();
+        assert!(styled.contains("stroke=\"#0A141E\""));
+        assert!(styled.contains("stroke-opacity=\"0.400\""));
+        assert!(styled.contains("stroke-width=\"5.00\""));
+    }
+
     // ─── B1-7: interactive aesthetics ──────────────────────────────────
 
     fn plot_with_extras() -> GGPlot {

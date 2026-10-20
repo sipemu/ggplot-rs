@@ -1028,4 +1028,42 @@ mod tests {
         let t = tracks(&[], 3, 30.0, 100.0);
         assert!(t.iter().all(|(p, s)| p.is_finite() && *s == 0.0));
     }
+
+    /// `Measure` (the legend bbox pre-pass) forwards every `DrawBackend`
+    /// method to its inner backend and grows its tracked extent to include
+    /// a quadratic curve's control points — not just straight lines/shapes.
+    #[test]
+    fn measure_forwards_draw_quadratic_and_mark_metadata_and_grows_its_extent() {
+        let pa = Rect {
+            x: 0.0,
+            y: 0.0,
+            width: 100.0,
+            height: 100.0,
+        };
+        let mut backend = SvgBackend::new(100, 100, pa.clone());
+        let mut meas = Measure::new(&mut backend, pa);
+
+        assert!(meas.extent().is_none());
+
+        meas.set_mark_part(Some("arrow"));
+        meas.set_mark_attrs(vec![("data-x".to_string(), "v".to_string())]);
+        meas.draw_quadratic(
+            (10.0, 20.0),
+            (90.0, 5.0),
+            (50.0, 80.0),
+            &LineStyle::default(),
+        )
+        .unwrap();
+        meas.set_mark_part(None);
+        meas.set_mark_attrs(Vec::new());
+
+        let (x0, y0, x1, y1) = meas.extent().expect("extent after drawing");
+        assert_eq!((x0, y0, x1, y1), (10.0, 5.0, 90.0, 80.0));
+
+        // The marks actually reached the inner SvgBackend (data-part and
+        // the data_attr both appear in its output).
+        let svg = backend.finish();
+        assert!(svg.contains("data-part=\"arrow\""));
+        assert!(svg.contains("data-x=\"v\""));
+    }
 }

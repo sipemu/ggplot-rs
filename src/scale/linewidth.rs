@@ -547,4 +547,146 @@ mod tests {
 
         assert!(warnings.iter().any(|w| w.contains("Log10")), "{warnings:?}");
     }
+
+    // ─── Coverage: builders and Scale trait methods not exercised above ───
+
+    #[test]
+    fn with_labels_overrides_the_formatted_label_for_each_break() {
+        let scale = ScaleLinewidthContinuous::new()
+            .with_name("flow size")
+            .with_breaks(vec![1.0, 2.0])
+            .with_labels(vec!["small".into(), "big".into()])
+            .with_limits(0.0, 10.0);
+        assert_eq!(scale.name(), "flow size");
+        let breaks = scale.breaks();
+        let labels: Vec<&str> = breaks.iter().map(|(_, l)| l.as_str()).collect();
+        assert_eq!(labels, vec!["small", "big"]);
+    }
+
+    #[test]
+    fn with_labels_shorter_than_breaks_falls_back_to_the_formatted_number() {
+        // Only the first break gets a custom label; the second falls back
+        // to `format_label` (no formatter, no locale -> plain number).
+        let scale = ScaleLinewidthContinuous::new()
+            .with_breaks(vec![1.0, 2.5])
+            .with_labels(vec!["small".into()])
+            .with_limits(0.0, 10.0);
+        let breaks = scale.breaks();
+        assert_eq!(breaks[0].1, "small");
+        assert_eq!(breaks[1].1, "2.5");
+    }
+
+    #[test]
+    fn with_label_formatter_formats_every_break() {
+        let scale = ScaleLinewidthContinuous::new()
+            .with_breaks(vec![1.0, 2.0])
+            .with_label_formatter(|v| format!("{v:.1}mm"))
+            .with_limits(0.0, 10.0);
+        let labels: Vec<String> = scale.breaks().into_iter().map(|(_, l)| l).collect();
+        assert_eq!(labels, vec!["1.0mm", "2.0mm"]);
+    }
+
+    #[test]
+    fn with_locale_formats_default_break_labels() {
+        let mut scale = ScaleLinewidthContinuous::new().with_locale(crate::locale::Locale::de_de());
+        scale.train(&[Value::Float(1000.0), Value::Float(2000.0)]);
+        let breaks = scale.breaks();
+        assert!(!breaks.is_empty());
+        // de-DE uses '.' as the thousands mark — at least one label should
+        // show it for a four-digit break value.
+        assert!(breaks.iter().any(|(_, l)| l.contains('.')), "{breaks:?}");
+    }
+
+    #[test]
+    fn set_default_locale_only_applies_when_no_locale_was_set() {
+        let mut with_own =
+            ScaleLinewidthContinuous::new().with_locale(crate::locale::Locale::de_de());
+        with_own.set_default_locale(&crate::locale::Locale::en_us());
+        assert_eq!(
+            with_own.locale().unwrap().tag,
+            crate::locale::Locale::de_de().tag
+        );
+
+        let mut without_own = ScaleLinewidthContinuous::new();
+        assert!(without_own.locale().is_none());
+        without_own.set_default_locale(&crate::locale::Locale::en_us());
+        assert_eq!(
+            without_own.locale().unwrap().tag,
+            crate::locale::Locale::en_us().tag
+        );
+    }
+
+    #[test]
+    fn degenerate_range_gives_a_single_break_at_the_midpoint() {
+        let mut scale = ScaleLinewidthContinuous::new();
+        scale.train(&[Value::Float(5.0), Value::Float(5.0)]);
+        let breaks = scale.breaks();
+        assert_eq!(breaks.len(), 1);
+        assert_eq!(breaks[0].0, 0.5);
+        assert_eq!(breaks[0].1, "5");
+    }
+
+    #[test]
+    fn untrained_scale_has_no_breaks() {
+        let scale = ScaleLinewidthContinuous::new();
+        assert!(scale.breaks().is_empty());
+    }
+
+    #[test]
+    fn clone_box_preserves_configuration() {
+        let scale = ScaleLinewidthContinuous::new()
+            .with_range(2.0, 9.0)
+            .with_name("w")
+            .with_limits(0.0, 5.0);
+        let cloned = scale.clone_box();
+        assert_eq!(cloned.name(), "w");
+        assert_eq!(
+            cloned.map_to_size(&Value::Float(5.0)),
+            scale.map_to_size(&Value::Float(5.0))
+        );
+    }
+
+    #[test]
+    fn reset_training_clears_an_auto_trained_domain_but_not_fixed_limits() {
+        let mut auto = ScaleLinewidthContinuous::new();
+        auto.train(&[Value::Float(1.0), Value::Float(9.0)]);
+        assert_eq!(auto.domain(), Some((1.0, 9.0)));
+        auto.reset_training();
+        assert_eq!(auto.domain(), None);
+
+        let mut fixed = ScaleLinewidthContinuous::new().with_limits(0.0, 10.0);
+        fixed.reset_training();
+        assert_eq!(fixed.domain(), Some((0.0, 10.0)));
+    }
+
+    #[test]
+    fn default_trait_impl_matches_new() {
+        let default_scale = ScaleLinewidthContinuous::default();
+        let new_scale = ScaleLinewidthContinuous::new();
+        assert_eq!(default_scale.name(), new_scale.name());
+        assert_eq!(default_scale.breaks(), new_scale.breaks());
+    }
+
+    #[test]
+    fn set_name_overrides_the_axis_legend_title() {
+        let mut scale = ScaleLinewidthContinuous::new();
+        scale.set_name("custom title");
+        assert_eq!(scale.name(), "custom title");
+    }
+
+    // `map` (the `Scale` trait method) calls `fraction` directly, without
+    // `map_to_size`'s own NA/non-finite/broken-domain short-circuits — so
+    // it has to handle those cases itself too, and always returns a finite
+    // `[0, 1]` number (never panics, never NaN) for any caller that needs
+    // a plain position rather than a width.
+    #[test]
+    fn map_handles_na_non_finite_and_untrained_without_panicking() {
+        let untrained = ScaleLinewidthContinuous::new();
+        assert_eq!(untrained.map(&Value::Float(5.0)), 0.5);
+
+        let trained = ScaleLinewidthContinuous::new().with_limits(0.0, 10.0);
+        assert_eq!(trained.map(&Value::Na), 0.0);
+        assert_eq!(trained.map(&Value::Str("x".into())), 0.0);
+        assert_eq!(trained.map(&Value::Float(f64::NAN)), 0.0);
+    }
 }

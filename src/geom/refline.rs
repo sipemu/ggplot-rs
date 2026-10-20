@@ -451,3 +451,33 @@ impl Geom for GeomAbline {
         false
     }
 }
+
+#[cfg(test)]
+mod fixed_value_tests {
+    use crate::data::Value;
+    use crate::prelude::*;
+
+    /// A plain `geom_hline`/`geom_vline`/`geom_abline` with a fixed value
+    /// (no per-row data mapping) takes the "no row" branch of `row_style`'s
+    /// match — just the geom's own configured colour/width/linetype/alpha,
+    /// not a per-row override.
+    #[test]
+    fn fixed_value_reflines_render_without_a_data_mapping() {
+        let svg = GGPlot::new(vec![
+            ("x".into(), vec![Value::Float(0.0), Value::Float(1.0)]),
+            ("y".into(), vec![Value::Float(0.0), Value::Float(1.0)]),
+        ])
+        .aes(Aes::new().x("x").y("y"))
+        .geom_point()
+        .geom_hline(0.5)
+        .geom_vline(0.5)
+        .geom_abline(1.0, 0.0)
+        .render_svg_native_with_size(200, 200)
+        .unwrap();
+
+        assert!(!svg.contains("NaN"));
+        // 3 reference lines + the data polyline-less point layer: at least
+        // 3 extra polylines beyond gridlines/axes exist.
+        assert!(svg.matches("<polyline").count() >= 3);
+    }
+}

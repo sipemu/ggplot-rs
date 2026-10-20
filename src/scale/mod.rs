@@ -163,3 +163,33 @@ pub trait Scale: Send + Sync {
     /// Default: no-op.
     fn validate(&self, _warnings: &mut Vec<String>) {}
 }
+
+#[cfg(test)]
+mod default_trait_method_tests {
+    use super::Scale;
+    use crate::aes::Aesthetic;
+    use crate::data::Value;
+
+    /// Scales that don't override `set_expand`/`map_fraction_to_size`
+    /// (e.g. an identity scale, which has no expansion or numeric output
+    /// at all) get the documented no-op/`None` defaults rather than a
+    /// missing-method compile error.
+    #[test]
+    fn set_expand_and_map_fraction_to_size_defaults_are_harmless() {
+        let mut scale = crate::scale::identity::ScaleColorIdentity::new(Aesthetic::Color);
+        // No panic, no effect — there's no expansion concept for a
+        // colour-identity scale.
+        scale.set_expand(0.1, 5.0);
+        assert_eq!(scale.map_fraction_to_size(0.5), None);
+        // validate() is also a no-op default; an identity scale never has
+        // anything to warn about.
+        let mut warnings = Vec::new();
+        scale.validate(&mut warnings);
+        assert!(warnings.is_empty());
+        // The scale is otherwise unaffected.
+        assert_eq!(
+            scale.map_to_color(&Value::Str("#FFFFFF".into())),
+            Some((255, 255, 255))
+        );
+    }
+}

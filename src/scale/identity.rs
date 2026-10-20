@@ -110,6 +110,31 @@ mod tests {
         assert!(scale.breaks().is_empty());
     }
 
+    /// `scale_color_identity()` (American spelling alias) and
+    /// `scale_colour_identity()` both apply to the `color` aesthetic.
+    #[test]
+    fn scale_color_identity_alias_applies_to_the_color_aesthetic() {
+        use crate::data::Value;
+        use crate::prelude::*;
+
+        let svg = GGPlot::new(vec![
+            ("x".into(), vec![Value::Float(0.0), Value::Float(1.0)]),
+            ("y".into(), vec![Value::Float(0.0), Value::Float(1.0)]),
+            (
+                "c".into(),
+                vec![Value::Str("#00FF00".into()), Value::Str("#0000FF".into())],
+            ),
+        ])
+        .aes(Aes::new().x("x").y("y").color("c"))
+        .geom_point()
+        .scale_color_identity()
+        .render_svg_native_with_size(200, 200)
+        .unwrap();
+
+        assert!(svg.contains("#00FF00"));
+        assert!(svg.contains("#0000FF"));
+    }
+
     #[test]
     fn renders_through_the_plot_with_no_legend_and_falls_back_on_invalid_values() {
         use crate::data::Value;
@@ -135,5 +160,32 @@ mod tests {
         assert!(svg.contains("#FF0000"));
         // No legend: the "fill" scale produces no breaks, so no legend title.
         assert!(!svg.contains(">fill<"));
+    }
+
+    /// The identity-scale contract: no domain to train (ignores whatever
+    /// it's given), no name/legend breaks, `map` is a constant (it's never
+    /// actually used for positioning — only `map_to_color` matters), and
+    /// `clone_box` preserves which aesthetic it's for.
+    #[test]
+    fn scale_trait_contract_has_no_training_name_or_legend() {
+        let mut scale = ScaleColorIdentity::new(Aesthetic::Fill);
+        scale.train(&[Value::Str("#FF0000".into()), Value::Float(1.0)]);
+        assert_eq!(scale.name(), "");
+        scale.set_name("ignored");
+        assert_eq!(
+            scale.name(),
+            "",
+            "set_name is a no-op for an identity scale"
+        );
+        assert_eq!(scale.map(&Value::Str("#FF0000".into())), 0.0);
+        assert_eq!(scale.map(&Value::Na), 0.0);
+        assert!(scale.breaks().is_empty());
+
+        let cloned = scale.clone_box();
+        assert_eq!(cloned.aesthetic(), Aesthetic::Fill);
+        assert_eq!(
+            cloned.map_to_color(&Value::Str("#112233".into())),
+            Some((0x11, 0x22, 0x33))
+        );
     }
 }

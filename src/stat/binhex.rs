@@ -356,6 +356,89 @@ mod tests {
     }
 
     #[test]
+    fn bins_builder_sets_both_axes_to_the_same_count() {
+        let via_bins = StatBinHex::new().bins(3);
+        let via_bins_xy = StatBinHex::new().bins_xy(3, 3);
+        assert_eq!(via_bins.bins_x, via_bins_xy.bins_x);
+        assert_eq!(via_bins.bins_y, via_bins_xy.bins_y);
+
+        let mut data = DataFrame::new();
+        data.add_column(
+            "x".to_string(),
+            (0..30).map(|i| Value::Float(i as f64)).collect(),
+        );
+        data.add_column(
+            "y".to_string(),
+            (0..30).map(|i| Value::Float(i as f64)).collect(),
+        );
+        let scales = ScaleSet::new();
+        assert_eq!(
+            via_bins.compute_group(&data, &scales).nrows(),
+            via_bins_xy.compute_group(&data, &scales).nrows()
+        );
+    }
+
+    #[test]
+    fn missing_x_or_y_column_gives_an_empty_result_not_a_panic() {
+        let stat = StatBinHex::new();
+        let scales = ScaleSet::new();
+
+        let mut only_y = DataFrame::new();
+        only_y.add_column("y".to_string(), vec![Value::Float(1.0)]);
+        assert_eq!(stat.compute_group(&only_y, &scales).nrows(), 0);
+
+        let mut only_x = DataFrame::new();
+        only_x.add_column("x".to_string(), vec![Value::Float(1.0)]);
+        assert_eq!(stat.compute_group(&only_x, &scales).nrows(), 0);
+    }
+
+    #[test]
+    fn non_numeric_and_non_finite_rows_are_skipped_not_counted() {
+        let mut data = DataFrame::new();
+        data.add_column(
+            "x".to_string(),
+            vec![
+                Value::Float(0.0),
+                Value::Str("nope".into()),
+                Value::Float(f64::NAN),
+                Value::Float(f64::INFINITY),
+                Value::Float(1.0),
+            ],
+        );
+        data.add_column(
+            "y".to_string(),
+            vec![
+                Value::Float(0.0),
+                Value::Float(0.0),
+                Value::Float(0.0),
+                Value::Float(0.0),
+                Value::Float(1.0),
+            ],
+        );
+        let stat = StatBinHex::new().binwidth(1.0, 1.0).origin(0.0, 0.0);
+        let scales = ScaleSet::new();
+        let result = stat.compute_group(&data, &scales);
+        let total_n: i64 = result
+            .column("n")
+            .unwrap()
+            .iter()
+            .map(|v| v.as_f64().unwrap() as i64)
+            .sum();
+        // Only the 2 finite numeric rows (0.0 and 1.0) count.
+        assert_eq!(total_n, 2);
+    }
+
+    #[test]
+    fn all_rows_filtered_out_gives_an_empty_result() {
+        let mut data = DataFrame::new();
+        data.add_column("x".to_string(), vec![Value::Str("a".into())]);
+        data.add_column("y".to_string(), vec![Value::Float(f64::NAN)]);
+        let stat = StatBinHex::new();
+        let scales = ScaleSet::new();
+        assert_eq!(stat.compute_group(&data, &scales).nrows(), 0);
+    }
+
+    #[test]
     fn output_order_is_deterministic_and_conserves_the_total() {
         let mut data = DataFrame::new();
         let x: Vec<Value> = (0..500)

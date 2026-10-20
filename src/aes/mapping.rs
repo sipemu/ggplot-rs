@@ -133,3 +133,63 @@ pub fn apply_after_stat(data: &mut DataFrame, mapping: &Aes, warnings: &mut Vec<
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::aes::AesMapping;
+    use crate::data::Value;
+
+    /// An invalid/reserved `DataAttr` target — bypassing `Aes::data_attr`'s
+    /// own validation by pushing the mapping directly — is dropped with a
+    /// warning in `resolve_mappings` (the single authoritative gate),
+    /// rather than silently resolved.
+    #[test]
+    fn resolve_mappings_drops_an_invalid_data_attr_target_with_a_warning() {
+        let mut data = DataFrame::new();
+        data.add_column("x".to_string(), vec![Value::Float(1.0)]);
+        data.add_column("v".to_string(), vec![Value::Str("payload".into())]);
+
+        let mut aes = Aes::new();
+        aes.mappings.push(AesMapping {
+            column: "v".to_string(),
+            aesthetic: Aesthetic::DataAttr("data-part".to_string()), // reserved
+            stage: MappingStage::BeforeStat,
+        });
+
+        let mut warnings = Vec::new();
+        let result = resolve_mappings(&data, &aes, &mut warnings);
+
+        assert_eq!(warnings.len(), 1);
+        assert!(warnings[0].contains("reserved"));
+        // No internal data-attr column was created for it.
+        assert!(!result
+            .column_names()
+            .iter()
+            .any(|n| n.starts_with(crate::aes::DATA_ATTR_INTERNAL_PREFIX)));
+    }
+
+    /// Same gate, reached via `apply_after_stat` (a `DataAttr` mapping
+    /// pushed with `MappingStage::AfterStat` directly).
+    #[test]
+    fn apply_after_stat_drops_an_invalid_data_attr_target_with_a_warning() {
+        let mut data = DataFrame::new();
+        data.add_column("count".to_string(), vec![Value::Float(5.0)]);
+
+        let mut aes = Aes::new();
+        aes.mappings.push(AesMapping {
+            column: "count".to_string(),
+            aesthetic: Aesthetic::DataAttr("data-Bad Name".to_string()),
+            stage: MappingStage::AfterStat,
+        });
+
+        let mut warnings = Vec::new();
+        apply_after_stat(&mut data, &aes, &mut warnings);
+
+        assert_eq!(warnings.len(), 1);
+        assert!(!data
+            .column_names()
+            .iter()
+            .any(|n| n.starts_with(crate::aes::DATA_ATTR_INTERNAL_PREFIX)));
+    }
+}

@@ -296,4 +296,101 @@ mod tests {
             .unwrap();
         assert!(svg.contains("stroke-linecap=\"round\""));
     }
+
+    /// `.color()`/`.alpha()`/`.linewidth()` builders actually change the
+    /// rendered stroke (the ungrouped — no `color` aesthetic mapped — line).
+    #[test]
+    fn color_alpha_and_linewidth_builders_change_the_rendered_stroke() {
+        let svg = plot()
+            .geom_line_with(
+                GeomLine::default()
+                    .color((10, 20, 30))
+                    .alpha(0.4)
+                    .linewidth(5.0),
+            )
+            .render_svg_native_with_size(100, 60)
+            .unwrap();
+        assert!(svg.contains("stroke=\"#0A141E\""));
+        assert!(svg.contains("stroke-opacity=\"0.400\""));
+        assert!(svg.contains("stroke-width=\"5.00\""));
+    }
+
+    /// The grouped branch (a `color` aesthetic mapped): one polyline per
+    /// group, each tagged with its series for hover grouping.
+    #[test]
+    fn grouped_line_draws_one_polyline_per_colour_group_with_series_tags() {
+        let svg = GGPlot::new(vec![
+            (
+                "x".into(),
+                vec![
+                    Value::Float(0.0),
+                    Value::Float(1.0),
+                    Value::Float(0.0),
+                    Value::Float(1.0),
+                ],
+            ),
+            (
+                "y".into(),
+                vec![
+                    Value::Float(0.0),
+                    Value::Float(1.0),
+                    Value::Float(1.0),
+                    Value::Float(0.0),
+                ],
+            ),
+            (
+                "g".into(),
+                vec![
+                    Value::Str("a".into()),
+                    Value::Str("a".into()),
+                    Value::Str("b".into()),
+                    Value::Str("b".into()),
+                ],
+            ),
+        ])
+        .aes(Aes::new().x("x").y("y").color("g"))
+        .geom_line_with(GeomLine::default().lineend(crate::render::backend::LineEnd::Round))
+        .render_svg_native_with_size(100, 100)
+        .unwrap();
+
+        assert_eq!(svg.matches("stroke-linecap=\"round\"").count(), 2);
+        assert!(svg.contains("data-series=\"a\""));
+        assert!(svg.contains("data-series=\"b\""));
+    }
+
+    /// `draw_polyline_with_linewidth` (B1-4): when the mapped `linewidth`
+    /// varies within a group, a single stroked polyline can't represent
+    /// that — it falls back to drawing segment-by-segment, one
+    /// `<polyline>` per consecutive point pair, each at its own width.
+    #[test]
+    fn varying_linewidth_within_a_group_draws_segment_by_segment() {
+        let svg = GGPlot::new(vec![
+            (
+                "x".into(),
+                vec![Value::Float(0.0), Value::Float(1.0), Value::Float(2.0)],
+            ),
+            (
+                "y".into(),
+                vec![Value::Float(0.0), Value::Float(1.0), Value::Float(0.0)],
+            ),
+            (
+                "w".into(),
+                vec![Value::Float(1.0), Value::Float(5.0), Value::Float(9.0)],
+            ),
+        ])
+        .aes(Aes::new().x("x").y("y").linewidth("w"))
+        .geom_line()
+        .scale_linewidth(ScaleLinewidthContinuous::new().with_range(2.0, 9.0))
+        .render_svg_native_with_size(100, 100)
+        .unwrap();
+
+        // 3 points -> 2 segments, each its own 2-point polyline at the
+        // width mapped for its *starting* point (1.0 -> width 1, 5.0 ->
+        // width 5) — not one 3-point polyline at a single width.
+        assert_eq!(svg.matches("stroke-width=\"2.00\"").count(), 1);
+        assert_eq!(svg.matches("stroke-width=\"5.50\"").count(), 1);
+        // The last point's mapped width (9) is never used as a stroke
+        // width here — there's no arrow to resolve it for.
+        assert!(!svg.contains("stroke-width=\"9.00\""));
+    }
 }

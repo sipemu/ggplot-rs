@@ -303,17 +303,20 @@ mod tests {
 
     /// A minimal backend that does not override `draw_quadratic`, to exercise
     /// the trait's default flattening implementation.
+    #[derive(Default)]
     struct RecordingBackend {
         lines: RefCell<Vec<Vec<(f64, f64)>>>,
+        circles: RefCell<Vec<((f64, f64), f64)>>,
     }
 
     impl DrawBackend for RecordingBackend {
         fn draw_circle(
             &mut self,
-            _center: (f64, f64),
-            _radius: f64,
+            center: (f64, f64),
+            radius: f64,
             _style: &PointStyle,
         ) -> Result<(), RenderError> {
+            self.circles.borrow_mut().push((center, radius));
             Ok(())
         }
         fn draw_line(
@@ -362,9 +365,7 @@ mod tests {
 
     #[test]
     fn default_draw_quadratic_flattens_to_33_points() {
-        let mut b = RecordingBackend {
-            lines: RefCell::new(Vec::new()),
-        };
+        let mut b = RecordingBackend::default();
         b.draw_quadratic((0.0, 0.0), (5.0, 10.0), (10.0, 0.0), &LineStyle::default())
             .unwrap();
         let lines = b.lines.borrow();
@@ -381,9 +382,7 @@ mod tests {
 
     #[test]
     fn default_draw_quadratic_drops_non_finite() {
-        let mut b = RecordingBackend {
-            lines: RefCell::new(Vec::new()),
-        };
+        let mut b = RecordingBackend::default();
         b.draw_quadratic(
             (f64::NAN, 0.0),
             (5.0, 10.0),
@@ -392,5 +391,48 @@ mod tests {
         )
         .unwrap();
         assert!(b.lines.borrow().is_empty());
+    }
+
+    /// The default `draw_shape` falls back to `draw_circle` for every
+    /// `PointShape` (not just `Circle`) on a backend that doesn't override
+    /// it — e.g. a minimal backend that only implements the required
+    /// methods.
+    #[test]
+    fn default_draw_shape_falls_back_to_draw_circle_for_every_point_shape() {
+        let mut b = RecordingBackend::default();
+        for shape in PointShape::ALL {
+            b.draw_shape(
+                (1.0, 2.0),
+                3.0,
+                &PointStyle {
+                    shape: *shape,
+                    ..Default::default()
+                },
+            )
+            .unwrap();
+        }
+        assert_eq!(b.circles.borrow().len(), PointShape::ALL.len());
+        for (center, radius) in b.circles.borrow().iter() {
+            assert_eq!(*center, (1.0, 2.0));
+            assert_eq!(*radius, 3.0);
+        }
+    }
+
+    #[test]
+    fn recording_backend_areas_and_remaining_draw_methods_behave_as_declared() {
+        let mut b = RecordingBackend::default();
+        let pa = b.plot_area();
+        let ta = b.total_area();
+        assert_eq!(
+            (pa.x, pa.y, pa.width, pa.height),
+            (ta.x, ta.y, ta.width, ta.height)
+        );
+        assert_eq!((pa.x, pa.y, pa.width, pa.height), (0.0, 0.0, 100.0, 100.0));
+        b.draw_rect((0.0, 0.0), (1.0, 1.0), &RectStyle::default())
+            .unwrap();
+        b.draw_text("label", (0.0, 0.0), &TextStyle::default())
+            .unwrap();
+        b.draw_polygon(&[(0.0, 0.0), (1.0, 0.0), (0.0, 1.0)], &RectStyle::default())
+            .unwrap();
     }
 }

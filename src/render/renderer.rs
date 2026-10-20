@@ -853,3 +853,52 @@ impl<'a> DrawBackend for PanelBackendAdapter<'a> {
         self.inner.total_area()
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::render::backend::LineStyle;
+    use crate::render::svg_backend::SvgBackend;
+
+    /// `PanelBackendAdapter` (every geom draws through one — see the panel
+    /// loop in `PlotRenderer::render`) forwards `draw_quadratic`,
+    /// `set_mark_part` and `set_mark_attrs` to its inner backend, and
+    /// reports the *panel* rect (not the inner backend's full area) as its
+    /// `plot_area`.
+    #[test]
+    fn panel_backend_adapter_forwards_quadratic_and_mark_metadata() {
+        let total = crate::render::Rect {
+            x: 0.0,
+            y: 0.0,
+            width: 200.0,
+            height: 200.0,
+        };
+        let panel_rect = crate::render::Rect {
+            x: 10.0,
+            y: 10.0,
+            width: 80.0,
+            height: 80.0,
+        };
+        let mut backend = SvgBackend::new(200, 200, total);
+        let mut adapter = PanelBackendAdapter {
+            inner: &mut backend,
+            panel_rect: panel_rect.clone(),
+        };
+
+        assert_eq!(adapter.plot_area().x, panel_rect.x);
+        assert_eq!(adapter.plot_area().width, panel_rect.width);
+
+        adapter.set_mark_part(Some("arrow"));
+        adapter.set_mark_attrs(vec![("data-x".to_string(), "v".to_string())]);
+        adapter
+            .draw_quadratic((0.0, 0.0), (5.0, 10.0), (10.0, 0.0), &LineStyle::default())
+            .unwrap();
+        adapter.set_mark_part(None);
+        adapter.set_mark_attrs(Vec::new());
+
+        let svg = backend.finish();
+        assert!(svg.contains("<path"));
+        assert!(svg.contains("data-part=\"arrow\""));
+        assert!(svg.contains("data-x=\"v\""));
+    }
+}
