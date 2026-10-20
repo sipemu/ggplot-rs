@@ -271,7 +271,7 @@ const EXPECTED: &[(&str, u64)] = &[
     ("violin", 0x68cd485311890ec4),
     ("errorbar", 0xe7abdb6d7e210a85),
     ("errorbar_dodge", 0xb84cd4b0733c711c),
-    ("size", 0x68a90ae86fc838a4),
+    ("size", 0xa5314ef4d0585c40),
     ("wide_axis", 0x9d4188248632b19f),
     ("big_legend", 0x0a625a0466236f03),
 ];
