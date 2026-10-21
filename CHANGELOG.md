@@ -3,6 +3,37 @@
 All notable changes to this project are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.22.1] — 2026-10-21
+
+Patch: discrete-axis auto-rotate (#162).
+
+### Fixed
+
+- The crowded-discrete-axis auto-rotate heuristic (0.22) counted every
+  break in `breaks()`, including entries a `with_labels` override blanks
+  (`""`) to thin a crowded axis while keeping every discrete position —
+  over-triggering 45°/90° rotation over labels that would fit flat. The
+  crowding count and the label-width estimate now only consider the
+  labels actually drawn, measured with `render::text::text_width`
+  (sipemu/ggplot-rs#162).
+- Rotated bottom-axis labels — whether rotated by the auto-rotate
+  heuristic or by an explicit `axis_text_x_angle` — could overlap the
+  panel: the layout reserved a blind constant height that didn't grow with
+  the label's real rotated extent, and the rotation anchor itself was
+  placed at a fixed small offset from the axis line regardless of how
+  much was reserved, so a long enough label's far end swung right back
+  over the panel. `layout_built`'s reservation and `draw_x_axis`'s
+  rotation-anchor placement now both derive from the same measured,
+  per-label rotated bounding boxes (`render::text::rotated_label_rise_fall`),
+  for both auto-rotated and explicitly-angled labels, on bottom and top
+  axes alike.
+- **Changed rendering:** auto-rotated crowded discrete axes now use −45°
+  (was +45° in 0.22.0), ggplot2's `angle = 45, hjust = 1` look mirrored to
+  this library's angle sign. Every rotated label, auto or explicit, is
+  anchored so its near-axis end sits at its own tick, on bottom and top
+  axes (`render::text::rotated_anchor_frac`). Crowded discrete axes
+  therefore render differently from 0.22.0.
+
 ## [0.22.0] — 2026-10-20
 
 Minor bump: layout and stats (upstream batch 2). Default output stays

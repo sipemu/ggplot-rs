@@ -80,7 +80,11 @@ pub fn draw_x_axis(
     let label_draw: Vec<Option<f64>> = if theme.axis_text_x.visible {
         let angle = theme.axis_text_x.angle;
         let rotated = angle.abs() > 10.0;
-        let anchor_frac = if rotated { 1.0 } else { 0.5 };
+        let anchor_frac = if rotated {
+            crate::render::text::rotated_anchor_frac(angle, dir)
+        } else {
+            0.5
+        };
         let fit = theme.axis_text_x_fit;
         let canvas_lo = canvas.x;
         let canvas_hi = canvas.x + canvas.width;
@@ -162,10 +166,49 @@ pub fn draw_x_axis(
     } else {
         Some(theme.axis_text_x.family.clone())
     };
-    let anchor = if theme.axis_text_x.angle.abs() > 10.0 {
+    let rotated = theme.axis_text_x.angle.abs() > 10.0;
+    // Which end of the text pins to the tick, so the near-axis end stays
+    // there instead of the whole label sliding away (sipemu/ggplot-rs#163)
+    // — depends on both the rotation's direction and which side of the
+    // axis line the panel is on (`dir`); see `rotated_anchor_frac`.
+    let draw_anchor_frac = if rotated {
+        crate::render::text::rotated_anchor_frac(theme.axis_text_x.angle, dir)
+    } else {
+        0.5
+    };
+    let anchor = if !rotated {
+        TextAnchor::Middle
+    } else if draw_anchor_frac >= 1.0 {
         TextAnchor::End
     } else {
-        TextAnchor::Middle
+        TextAnchor::Start
+    };
+    // A rotated label's far end swings back *toward* the panel on one side
+    // and away from it on the other (sipemu/ggplot-rs#162) — toward the
+    // panel is `rise` for a bottom axis (`dir > 0`, the panel sits above
+    // the axis line) and `fall` for a top axis (`dir < 0`, the panel sits
+    // below it). Reserving only `rotated_label_rise_fall`'s sum (as
+    // `layout_built` does, for the *other* side's on-canvas extent) isn't
+    // enough on its own: this offset must actually place the rotation
+    // anchor that far from the axis line, or a long enough label swings
+    // right back over the panel no matter how much height was reserved.
+    let rotation_margin = if rotated {
+        let (rise, fall) = crate::render::text::rotated_label_rise_fall(
+            breaks
+                .iter()
+                .filter(|(_, l)| !l.is_empty())
+                .map(|(_, l)| l.as_str()),
+            theme.axis_text_x.size,
+            theme.axis_text_x.angle,
+            draw_anchor_frac,
+        );
+        if dir > 0.0 {
+            rise
+        } else {
+            fall
+        }
+    } else {
+        0.0
     };
     for (i, (pos, label)) in breaks.iter().enumerate() {
         let px = along_x(coord, *pos, plot_area);
@@ -191,7 +234,8 @@ pub fn draw_x_axis(
                     * (tick_len
                         + theme.legend_spacing / 2.0
                         + theme.axis_text_x.size / 2.0
-                        + row_offset);
+                        + row_offset
+                        + rotation_margin);
             backend.draw_text(
                 label,
                 (*lx, ly),
