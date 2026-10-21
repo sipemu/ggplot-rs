@@ -65,6 +65,37 @@ pub(crate) fn label_bbox(
     b
 }
 
+/// For rotated bottom-axis tick labels, the extra vertical *rise* (above
+/// the un-rotated anchor point) and *fall* (below it) the rotated bounding
+/// boxes need, maxed over `labels` (sipemu/ggplot-rs#162). A label
+/// end-anchored at a point just below the panel and rotated toward the
+/// panel (e.g. the usual 45° "reads up-and-to-the-right" tilt) swings its
+/// far end — `rise` — back up by roughly `width · sin(angle)`; a label
+/// rotated away from the panel (e.g. 270°, hanging straight down) has no
+/// rise at all, only `fall`.
+///
+/// Both `GGPlot::layout_built` (to reserve enough panel-bottom margin that
+/// `fall` stays on-canvas) and `draw_x_axis` (to place the rotation anchor
+/// `rise` further from the axis line than the flat-label offset, so the
+/// rotated label never swings back over the panel) need the *same*
+/// numbers — this is their one shared source, so the two can never drift
+/// apart.
+pub(crate) fn rotated_label_rise_fall<'a>(
+    labels: impl Iterator<Item = &'a str>,
+    size: f64,
+    angle: f64,
+    anchor: f64,
+) -> (f64, f64) {
+    let mut rise = 0.0_f64;
+    let mut fall = 0.0_f64;
+    for label in labels {
+        let b = label_bbox(label, size, 0.0, 0.0, angle, anchor);
+        rise = rise.max(-b[1]);
+        fall = fall.max(b[3]);
+    }
+    (rise.max(0.0), fall.max(0.0))
+}
+
 /// ggplot2's `check.overlap` draw order (its internal `label_priority`):
 /// always keep the first and last breaks, then recursively bisect the
 /// remaining range (midpoint first, then its two halves), so thinning drops

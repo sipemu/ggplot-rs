@@ -162,10 +162,38 @@ pub fn draw_x_axis(
     } else {
         Some(theme.axis_text_x.family.clone())
     };
-    let anchor = if theme.axis_text_x.angle.abs() > 10.0 {
+    let rotated = theme.axis_text_x.angle.abs() > 10.0;
+    let anchor = if rotated {
         TextAnchor::End
     } else {
         TextAnchor::Middle
+    };
+    // A rotated label's far end swings back *toward* the panel on one side
+    // and away from it on the other (sipemu/ggplot-rs#162) — toward the
+    // panel is `rise` for a bottom axis (`dir > 0`, the panel sits above
+    // the axis line) and `fall` for a top axis (`dir < 0`, the panel sits
+    // below it). Reserving only `rotated_label_rise_fall`'s sum (as
+    // `layout_built` does, for the *other* side's on-canvas extent) isn't
+    // enough on its own: this offset must actually place the rotation
+    // anchor that far from the axis line, or a long enough label swings
+    // right back over the panel no matter how much height was reserved.
+    let rotation_margin = if rotated {
+        let (rise, fall) = crate::render::text::rotated_label_rise_fall(
+            breaks
+                .iter()
+                .filter(|(_, l)| !l.is_empty())
+                .map(|(_, l)| l.as_str()),
+            theme.axis_text_x.size,
+            theme.axis_text_x.angle,
+            1.0, // matches `anchor` (`TextAnchor::End`) above, used whenever rotated
+        );
+        if dir > 0.0 {
+            rise
+        } else {
+            fall
+        }
+    } else {
+        0.0
     };
     for (i, (pos, label)) in breaks.iter().enumerate() {
         let px = along_x(coord, *pos, plot_area);
@@ -191,7 +219,8 @@ pub fn draw_x_axis(
                     * (tick_len
                         + theme.legend_spacing / 2.0
                         + theme.axis_text_x.size / 2.0
-                        + row_offset);
+                        + row_offset
+                        + rotation_margin);
             backend.draw_text(
                 label,
                 (*lx, ly),

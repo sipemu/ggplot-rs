@@ -2476,43 +2476,84 @@ impl GGPlot {
             crate::aes::Aesthetic::Y
         };
 
+        // The bottom-axis break labels that are actually drawn — a
+        // `with_labels` override can blank some entries ("" ) to thin a
+        // crowded discrete axis while keeping every position (sipemu/
+        // ggplot-rs#162); a blanked entry is never drawn, so it never
+        // competes for horizontal room or vertical drop below. Shared by
+        // the auto-rotate decision and the rotated-label height reservation
+        // just below, so both agree on what's actually on the canvas.
+        let drawn_x_labels: Vec<(f64, String)> = built
+            .scales
+            .get(&h_aes)
+            .map(|hs| {
+                hs.breaks()
+                    .into_iter()
+                    .filter(|(_, label)| !label.is_empty())
+                    .collect()
+            })
+            .unwrap_or_default();
+        let h_is_discrete = built
+            .scales
+            .get(&h_aes)
+            .map(|hs| hs.is_discrete())
+            .unwrap_or(false);
+
         // Crowded discrete bottom-axis labels overlap when drawn flat. Rotate
-        // them — 45° if that de-collides, otherwise vertical (90°) — and reserve
-        // the bottom space they actually need. Only when no explicit angle was set.
-        let x_rot: Option<(f64, f64)> =
-            if built.theme.axis_text_x.visible && built.theme.axis_text_x.angle.abs() < 1.0 {
-                built.scales.get(&h_aes).and_then(|hs| {
-                    if !hs.is_discrete() {
-                        return None;
-                    }
-                    let breaks = hs.breaks();
-                    let n = breaks.len().max(1) as f64;
-                    let max_ch = breaks
-                        .iter()
-                        .map(|(_, l)| l.chars().count())
-                        .max()
-                        .unwrap_or(0) as f64;
-                    let font = built.theme.axis_text_x.size;
-                    let label_w = max_ch * font * 0.6; // horizontal extent, drawn flat
-                    let spacing = 0.9 * w as f64 / n; // ~px between adjacent ticks
-                    if label_w <= spacing {
-                        return None; // fits flat — leave it
-                    }
-                    // 45° shrinks the horizontal footprint by cos45; if that fits,
-                    // use it, else go vertical (270° = reads bottom-to-top, hanging
-                    // below the axis like the y-axis title). Reserve the drop height.
-                    let vertical = label_w * 0.707 > spacing;
-                    let angle = if vertical { 270.0 } else { 45.0 };
-                    let drop = if vertical { label_w } else { label_w * 0.707 };
-                    Some((angle, drop + font + 4.0))
-                })
-            } else {
-                None
-            };
-        let x_label_height = x_rot.map(|(_, drop)| drop);
-        if let Some((angle, _)) = x_rot {
-            built.theme.axis_text_x.angle = angle;
+        // them — 45° if that de-collides, otherwise vertical (270°) — only
+        // when no explicit angle was set (angle.abs() < 1.0 reads as
+        // "unset"). Sized from the real, measured widths of the labels that
+        // are actually drawn (`render::text::text_width`), both for the
+        // label-width estimate and the crowding count `n` — #162's bug was
+        // counting every break, blanked or not, which over-triggered the
+        // rotation.
+        if built.theme.axis_text_x.visible
+            && built.theme.axis_text_x.angle.abs() < 1.0
+            && h_is_discrete
+            && !drawn_x_labels.is_empty()
+        {
+            let font = built.theme.axis_text_x.size;
+            let max_w = drawn_x_labels
+                .iter()
+                .map(|(_, l)| crate::render::text::text_width(l, font))
+                .fold(0.0_f64, f64::max);
+            let n = drawn_x_labels.len() as f64;
+            let spacing = 0.9 * w as f64 / n; // ~px between adjacent *drawn* labels
+            if max_w > spacing {
+                // 45° shrinks the horizontal footprint by cos45; if that
+                // still doesn't fit, go vertical (270° = reads bottom-to-
+                // top, hanging below the axis like the y-axis title).
+                let vertical = max_w * std::f64::consts::FRAC_1_SQRT_2 > spacing;
+                built.theme.axis_text_x.angle = if vertical { 270.0 } else { 45.0 };
+            }
         }
+
+        // Whenever the bottom-axis labels end up rotated — by the
+        // auto-rotate decision just above, or by an explicit
+        // `axis_text_x_angle` call — reserve the real bottom space their
+        // rotated bounding boxes need, so they never overlap the panel
+        // (#162 also asked for this: an explicit angle reserved nothing).
+        // `rotated_label_rise_fall` is the same helper `draw_x_axis` calls
+        // to place its rotation anchor — `rise` must be reserved (as well
+        // as placed) or a long enough label's far end swings right back up
+        // over the panel regardless of how much height is reserved here;
+        // `fall` just needs reserving so the label stays on-canvas.
+        let x_label_height = if built.theme.axis_text_x.visible
+            && built.theme.axis_text_x.angle.abs() > 10.0
+            && !drawn_x_labels.is_empty()
+        {
+            let font = built.theme.axis_text_x.size;
+            let angle = built.theme.axis_text_x.angle;
+            let (rise, fall) = crate::render::text::rotated_label_rise_fall(
+                drawn_x_labels.iter().map(|(_, l)| l.as_str()),
+                font,
+                angle,
+                1.0,
+            );
+            Some(built.theme.legend_spacing / 2.0 + font / 2.0 + rise + fall)
+        } else {
+            None
+        };
 
         // Reserve the left-axis width from the actual label lengths so long
         // category names (a flipped bar chart's rows) aren't clipped. Never
