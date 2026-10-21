@@ -27,6 +27,18 @@ Patch: discrete-axis auto-rotate (#162).
   per-label rotated bounding boxes (`render::text::rotated_label_rise_fall`),
   for both auto-rotated and explicitly-angled labels, on bottom and top
   axes alike.
+- The fix above initially always ended the rotated text at the tick
+  (`TextAnchor::End`) and pushed the whole label down by its rotated rise
+  to clear the panel — correct for a counter-clockwise rotation, but for a
+  clockwise one (the auto-rotate heuristic's own +45°, or an explicit
+  positive angle) it put the label's end near its tick but far below the
+  axis, while its start — the end nearest the axis — landed shifted
+  sideways under the *previous* category. The auto-rotate heuristic now
+  picks −45° (ggplot2's own `angle = 45, hjust = 1` idiom, mirrored to
+  this library's angle sign) instead of +45°, and any clockwise (positive)
+  angle anchors with `TextAnchor::Start` instead (new
+  `render::text::rotated_anchor_frac`), so in both cases the label's
+  near-axis end stays pinned at its own tick.
 
 ## [0.22.0] — 2026-10-20
 

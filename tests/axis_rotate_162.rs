@@ -1,17 +1,33 @@
-//! Regression tests for sipemu/ggplot-rs#162: the discrete-axis auto-rotate
-//! heuristic counted every grid column (`breaks.len()`), not just the
-//! labels actually drawn, so a `with_labels`-thinned axis over-rotated even
-//! when the printed labels would fit flat — and whenever labels did end up
-//! rotated (by auto-rotate *or* by an explicit `axis_text_x_angle`), the
-//! layout never reserved the bottom space the rotated bboxes need, so they
-//! could overlap the panel.
+//! Regression tests for sipemu/ggplot-rs#162 and #163.
+//!
+//! #162: the discrete-axis auto-rotate heuristic counted every grid column
+//! (`breaks.len()`), not just the labels actually drawn, so a
+//! `with_labels`-thinned axis over-rotated even when the printed labels
+//! would fit flat.
+//!
+//! #163 (a regression introduced by the first #162 fix, PR #163's review):
+//! whenever labels did end up rotated (by auto-rotate *or* by an explicit
+//! `axis_text_x_angle`), the layout didn't reserve the bottom space the
+//! rotated bboxes need, so they could overlap the panel — but the first
+//! attempt at reserving that space always ended the text at the tick
+//! (`TextAnchor::End`) and pushed the whole label down by its rotated
+//! rise, which is right for a counter-clockwise (e.g. −45°) rotation but
+//! wrong for a clockwise one (e.g. +45°, +90°): the label's *end* landed
+//! near its tick but far below the axis, while its *start* — the end
+//! nearest the axis — ended up shifted sideways under the *previous*
+//! category. The fix: auto-rotate now picks −45° (ggplot2's own
+//! `angle = 45, hjust = 1` idiom, mirrored to this library's angle sign)
+//! instead of +45°, and any clockwise (positive) angle anchors with
+//! `TextAnchor::Start` instead, so in both cases the label's near-axis end
+//! stays pinned at its own tick.
 //!
 //! `render::text::label_bbox` (the production bbox helper `layout_built`
 //! and `draw_x_axis` both use) is `pub(crate)`, not reachable from an
 //! integration test, so `local_label_bbox` below is a verbatim copy of its
 //! geometry — plain trigonometry over the publicly-available
 //! `render::text::text_width`, not a re-implementation of any decision
-//! logic — used only to check the *rendered* SVG's own numbers for overlap.
+//! logic — used only to check the *rendered* SVG's own numbers for overlap
+//! and anchor placement.
 
 use ggplot_rs::prelude::*;
 use ggplot_rs::render::text::text_width;
@@ -100,6 +116,14 @@ fn label_geometry(svg: &str, label: &str) -> (f64, f64, f64, f64, f64) {
     (x, y, size, anchor, angle)
 }
 
+/// The x pixel of the `i`-th (0-indexed, of `n`) discrete category's tick,
+/// for a plain (unflipped) Cartesian coord: `ScaleDiscrete::map` places
+/// category `i` at normalized position `(i + 0.5) / n`, which a linear
+/// Cartesian transform maps straight onto `[area.x, area.x + area.width]`.
+fn tick_x_for_category(area: [f64; 4], i: usize, n: usize) -> f64 {
+    area[0] + (i as f64 + 0.5) / n as f64 * area[2]
+}
+
 /// 9 discrete day-of-data x categories, thinned to 5 printed labels via
 /// `with_labels` (the documented way to keep every discrete *position*
 /// while only printing a subset) — the exact device from #162's own repro.
@@ -156,7 +180,7 @@ fn issue_162_repro_thinned_labels_fit_flat_at_1200px() {
     let svg = render(thinned_date_plot(), 1200, 320);
 
     assert!(
-        !svg.contains("rotate(45.0") && !svg.contains("rotate(270.0"),
+        !svg.contains("rotate(-45.0") && !svg.contains("rotate(270.0"),
         "a thinned (with_labels-blanked) discrete axis must not auto-rotate \
          when the printed labels comfortably fit flat: {svg}"
     );
@@ -204,7 +228,7 @@ fn genuinely_crowded_discrete_axis_still_rotates_without_overlapping_the_panel()
     let panel_bottom = area[1] + area[3];
 
     assert!(
-        svg.contains("rotate(45.0") || svg.contains("rotate(270.0"),
+        svg.contains("rotate(-45.0") || svg.contains("rotate(270.0"),
         "10 long category labels in a {W}px canvas must still auto-rotate: {svg}"
     );
 
@@ -299,5 +323,67 @@ fn explicit_angle_on_a_top_axis_reserves_height_on_the_fall_side() {
             bottom_of_label <= panel_top + OVERLAP_EPS,
             "label {label:?} overlaps the panel from above: bbox={bbox:?} panel_top={panel_top}"
         );
+    }
+}
+
+/// #163's review: the overlap fix must not just stop the panel overlap, it
+/// must anchor the *near-axis end* of each rotated label at its own tick —
+/// not shift the whole label down (and sideways, under the previous
+/// category) to clear the panel. The SVG `<text x=".." y="..">`'s own
+/// `(x, y)` *is* that near-axis end (it's the point `text-anchor` pins and
+/// the rotation pivots around), so this checks it directly against each
+/// category's own tick x, and against a small, fixed y-offset below (or,
+/// for a top axis, above) the panel edge — not the ~45-53px an End-anchored
+/// clockwise rotation used to misplace it by.
+#[test]
+fn near_axis_end_stays_at_the_tick_for_auto_and_explicit_rotations() {
+    const W: u32 = 260;
+    const H: u32 = 220;
+    const N: usize = 10;
+    let cats: Vec<String> = (0..N).map(|i| format!("Category Alpha {i:02}")).collect();
+
+    // `None` angle = auto-rotate (crowded_category_plot() always triggers
+    // it at this width); `Some(a)` = an explicit angle.
+    let cases: [(&str, Option<f64>); 4] = [
+        ("auto-rotate", None),
+        ("explicit +45", Some(45.0)),
+        ("explicit -45", Some(-45.0)),
+        ("explicit +90", Some(90.0)),
+    ];
+
+    for (name, angle) in cases {
+        let plot = match angle {
+            Some(a) => crowded_category_plot().axis_text_x_angle(a),
+            None => crowded_category_plot(),
+        };
+        let (svg, area) = render_with_area(plot, W, H);
+        let panel_bottom = area[1] + area[3];
+
+        assert!(
+            svg.contains("rotate("),
+            "{name}: must render rotated: {svg}"
+        );
+
+        for (i, cat) in cats.iter().enumerate() {
+            let (x, y, size, _anchor, _angle) = label_geometry(&svg, cat);
+            let expected_tick_x = tick_x_for_category(area, i, N);
+            let dx = (x - expected_tick_x).abs();
+            assert!(
+                dx <= size * 1.5,
+                "{name}: label {cat:?}'s near-axis end at x={x} is {dx:.1}px from \
+                 its own tick x={expected_tick_x:.1} (font size {size}) — it has \
+                 shifted toward a neighbouring category"
+            );
+            // Just below the axis (a small, roughly rotation-independent
+            // offset), never the ~45-53px the clockwise-anchoring bug used
+            // to push it down by.
+            let dy = y - panel_bottom;
+            assert!(
+                (0.0..=size * 2.5).contains(&dy),
+                "{name}: label {cat:?}'s near-axis end at y={y} is {dy:.1}px below \
+                 the panel bottom ({panel_bottom}) — expected a small offset, not a \
+                 large push-down"
+            );
+        }
     }
 }

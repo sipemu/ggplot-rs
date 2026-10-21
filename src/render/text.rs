@@ -96,6 +96,35 @@ pub(crate) fn rotated_label_rise_fall<'a>(
     (rise.max(0.0), fall.max(0.0))
 }
 
+/// Which end of a rotated axis-tick label should pin to the tick
+/// (sipemu/ggplot-rs#163): `1.0` (`TextAnchor::End`, the label's *last*
+/// character at the tick) for a counter-clockwise (SVG-negative) angle,
+/// `0.0` (`TextAnchor::Start`, its *first* character at the tick) for a
+/// clockwise (SVG-positive) one.
+///
+/// Anchoring by the rotation's own direction — rather than always ending
+/// the text at the tick — is what keeps the label's near-axis end pinned
+/// there in both cases: a counter-clockwise label (e.g. −45°) naturally
+/// swings its far end away from the panel when its *last* character sits
+/// at the tick (ggplot2's familiar `angle = 45, hjust = 1` look, mirrored
+/// to this library's angle sign); a clockwise label (e.g. +45°, +90°)
+/// needs the opposite — its *first* character at the tick — for the same
+/// effect. Picking the wrong one for a given sign pushes the whole label
+/// down by its rotated width instead (0.22.1's bug): the tick-anchored end
+/// stays near the tick but the free end swings into the previous
+/// category's space instead of away from the axis.
+///
+/// Only meaningful when the caller already knows the label is rotated
+/// (`angle.abs() > 10.0`); the flat case uses `0.5` (`TextAnchor::Middle`)
+/// unconditionally, never this function.
+pub(crate) fn rotated_anchor_frac(angle: f64) -> f64 {
+    if angle.to_radians().sin() < 0.0 {
+        1.0
+    } else {
+        0.0
+    }
+}
+
 /// ggplot2's `check.overlap` draw order (its internal `label_priority`):
 /// always keep the first and last breaks, then recursively bisect the
 /// remaining range (midpoint first, then its two halves), so thinning drops

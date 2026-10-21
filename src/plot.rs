@@ -2500,13 +2500,17 @@ impl GGPlot {
             .unwrap_or(false);
 
         // Crowded discrete bottom-axis labels overlap when drawn flat. Rotate
-        // them — 45° if that de-collides, otherwise vertical (270°) — only
+        // them — −45° if that de-collides, otherwise vertical (270°) — only
         // when no explicit angle was set (angle.abs() < 1.0 reads as
         // "unset"). Sized from the real, measured widths of the labels that
         // are actually drawn (`render::text::text_width`), both for the
         // label-width estimate and the crowding count `n` — #162's bug was
         // counting every break, blanked or not, which over-triggered the
-        // rotation.
+        // rotation. −45° (not +45°) is ggplot2's own idiom (`angle = 45,
+        // hjust = 1`, mirrored to this library's angle sign, sipemu/
+        // ggplot-rs#163): it ends each label at its own tick and slants
+        // down-left, rather than +45°'s down-right slant, which — anchored
+        // the same way — would start under the *previous* category.
         if built.theme.axis_text_x.visible
             && built.theme.axis_text_x.angle.abs() < 1.0
             && h_is_discrete
@@ -2524,7 +2528,7 @@ impl GGPlot {
                 // still doesn't fit, go vertical (270° = reads bottom-to-
                 // top, hanging below the axis like the y-axis title).
                 let vertical = max_w * std::f64::consts::FRAC_1_SQRT_2 > spacing;
-                built.theme.axis_text_x.angle = if vertical { 270.0 } else { 45.0 };
+                built.theme.axis_text_x.angle = if vertical { 270.0 } else { -45.0 };
             }
         }
 
@@ -2537,7 +2541,11 @@ impl GGPlot {
         // to place its rotation anchor — `rise` must be reserved (as well
         // as placed) or a long enough label's far end swings right back up
         // over the panel regardless of how much height is reserved here;
-        // `fall` just needs reserving so the label stays on-canvas.
+        // `fall` just needs reserving so the label stays on-canvas. Both
+        // here and in `draw_x_axis`, the anchor fraction must come from
+        // `rotated_anchor_frac(angle)` (sipemu/ggplot-rs#163) — not a
+        // blind `1.0` — or the reservation is sized for the wrong end of
+        // the label.
         let x_label_height = if built.theme.axis_text_x.visible
             && built.theme.axis_text_x.angle.abs() > 10.0
             && !drawn_x_labels.is_empty()
@@ -2548,7 +2556,7 @@ impl GGPlot {
                 drawn_x_labels.iter().map(|(_, l)| l.as_str()),
                 font,
                 angle,
-                1.0,
+                crate::render::text::rotated_anchor_frac(angle),
             );
             Some(built.theme.legend_spacing / 2.0 + font / 2.0 + rise + fall)
         } else {
@@ -2595,7 +2603,11 @@ impl GGPlot {
                 let breaks = hs.breaks();
                 if let (Some(first), Some(last)) = (breaks.first(), breaks.last()) {
                     let angle = built.theme.axis_text_x.angle;
-                    let anchor = if angle.abs() > 10.0 { 1.0 } else { 0.5 };
+                    let anchor = if angle.abs() > 10.0 {
+                        crate::render::text::rotated_anchor_frac(angle)
+                    } else {
+                        0.5
+                    };
                     let size = built.theme.axis_text_x.size;
                     const EDGE: f64 = 1.0;
                     for _ in 0..2 {

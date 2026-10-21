@@ -80,7 +80,11 @@ pub fn draw_x_axis(
     let label_draw: Vec<Option<f64>> = if theme.axis_text_x.visible {
         let angle = theme.axis_text_x.angle;
         let rotated = angle.abs() > 10.0;
-        let anchor_frac = if rotated { 1.0 } else { 0.5 };
+        let anchor_frac = if rotated {
+            crate::render::text::rotated_anchor_frac(angle)
+        } else {
+            0.5
+        };
         let fit = theme.axis_text_x_fit;
         let canvas_lo = canvas.x;
         let canvas_hi = canvas.x + canvas.width;
@@ -163,10 +167,20 @@ pub fn draw_x_axis(
         Some(theme.axis_text_x.family.clone())
     };
     let rotated = theme.axis_text_x.angle.abs() > 10.0;
-    let anchor = if rotated {
+    // Which end of the text pins to the tick: the label's last character
+    // for a counter-clockwise rotation, its first for a clockwise one
+    // (sipemu/ggplot-rs#163) — see `rotated_anchor_frac`.
+    let draw_anchor_frac = if rotated {
+        crate::render::text::rotated_anchor_frac(theme.axis_text_x.angle)
+    } else {
+        0.5
+    };
+    let anchor = if !rotated {
+        TextAnchor::Middle
+    } else if draw_anchor_frac >= 1.0 {
         TextAnchor::End
     } else {
-        TextAnchor::Middle
+        TextAnchor::Start
     };
     // A rotated label's far end swings back *toward* the panel on one side
     // and away from it on the other (sipemu/ggplot-rs#162) — toward the
@@ -185,7 +199,7 @@ pub fn draw_x_axis(
                 .map(|(_, l)| l.as_str()),
             theme.axis_text_x.size,
             theme.axis_text_x.angle,
-            1.0, // matches `anchor` (`TextAnchor::End`) above, used whenever rotated
+            draw_anchor_frac,
         );
         if dir > 0.0 {
             rise
