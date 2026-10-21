@@ -27,23 +27,12 @@ Patch: discrete-axis auto-rotate (#162).
   per-label rotated bounding boxes (`render::text::rotated_label_rise_fall`),
   for both auto-rotated and explicitly-angled labels, on bottom and top
   axes alike.
-- The fix above initially always ended the rotated text at the tick
-  (`TextAnchor::End`) and pushed the whole label down by its rotated rise
-  to clear the panel — correct for a counter-clockwise rotation on a
-  bottom axis, but wrong for a clockwise one (the auto-rotate heuristic's
-  own +45°, or an explicit positive angle): it put the label's end near
-  its tick but far below the axis, while its start — the end nearest the
-  axis — landed shifted sideways under the *previous* category (and, on a
-  top axis, the reverse pairing pushed the anchor itself tens of pixels
-  from the axis even though nothing overlapped). The auto-rotate
-  heuristic now picks −45° (ggplot2's own `angle = 45, hjust = 1` idiom,
-  mirrored to this library's angle sign) instead of +45°, and
-  `draw_x_axis` now anchors any rotated label with whichever of
-  `TextAnchor::Start`/`End` keeps its *far* end swinging away from the
-  panel rather than into it — a function of both the rotation's direction
-  and which side of the axis line the panel is on (new
-  `render::text::rotated_anchor_frac`) — so on both bottom and top axes
-  the label's near-axis end stays pinned at its own tick.
+- **Changed rendering:** auto-rotated crowded discrete axes now use −45°
+  (was +45° in 0.22.0), ggplot2's `angle = 45, hjust = 1` look mirrored to
+  this library's angle sign. Every rotated label, auto or explicit, is
+  anchored so its near-axis end sits at its own tick, on bottom and top
+  axes (`render::text::rotated_anchor_frac`). Crowded discrete axes
+  therefore render differently from 0.22.0.
 
 ## [0.22.0] — 2026-10-20
 
