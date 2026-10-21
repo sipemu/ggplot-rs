@@ -280,6 +280,33 @@ fn explicit_axis_text_x_angle_also_reserves_its_height() {
     }
 }
 
+/// A continuous x scale, 6 breaks `0..6`, placed on top
+/// (`with_position_opposite`), at a given explicit angle and
+/// `AxisLabelFit`. `Clip` (rather than the default `Reserve`) keeps the
+/// panel's horizontal geometry identical across different angles on this
+/// same plot — `Reserve`'s B3-1 left/right margin varies with how far a
+/// rotated vs. flat label's bbox reaches past the canvas edge, which would
+/// make tick x positions incomparable between an angled and a flat render
+/// of the same plot otherwise.
+fn top_axis_plot(labels: &[String], angle: f64) -> GGPlot {
+    let x: Vec<Value> = (0..labels.len()).map(|i| Value::Float(i as f64)).collect();
+    let y: Vec<Value> = (0..labels.len())
+        .map(|i| Value::Float((i % 3) as f64 + 1.0))
+        .collect();
+    let data = vec![("x".to_string(), x), ("y".to_string(), y)];
+    GGPlot::new(data)
+        .aes(Aes::new().x("x").y("y"))
+        .geom_point()
+        .scale_x_continuous(
+            ScaleContinuous::new()
+                .with_breaks((0..labels.len()).map(|i| i as f64).collect())
+                .with_labels(labels.to_vec())
+                .with_position_opposite(),
+        )
+        .axis_text_x_angle(angle)
+        .axis_text_x_fit(AxisLabelFit::Clip)
+}
+
 /// A rotated axis placed on *top* (`with_position_opposite`) swings its
 /// labels the opposite way: the panel sits *below* the axis line, so the
 /// overlap risk is from the label's `fall` (the corner swinging down,
@@ -291,22 +318,8 @@ fn explicit_angle_on_a_top_axis_reserves_height_on_the_fall_side() {
     const W: u32 = 260;
     const H: u32 = 220;
     let labels: Vec<String> = (0..6).map(|i| format!("Category Alpha {i:02}")).collect();
-    let x: Vec<Value> = (0..6).map(|i| Value::Float(i as f64)).collect();
-    let y: Vec<Value> = (0..6).map(|i| Value::Float((i % 3) as f64 + 1.0)).collect();
-    let data = vec![("x".to_string(), x), ("y".to_string(), y)];
 
-    let plot = GGPlot::new(data)
-        .aes(Aes::new().x("x").y("y"))
-        .geom_point()
-        .scale_x_continuous(
-            ScaleContinuous::new()
-                .with_breaks((0..6).map(|i| i as f64).collect())
-                .with_labels(labels.clone())
-                .with_position_opposite(),
-        )
-        .axis_text_x_angle(45.0);
-
-    let (svg, area) = render_with_area(plot, W, H);
+    let (svg, area) = render_with_area(top_axis_plot(&labels, 45.0), W, H);
     let panel_top = area[1];
 
     assert!(
@@ -322,6 +335,56 @@ fn explicit_angle_on_a_top_axis_reserves_height_on_the_fall_side() {
         assert!(
             bottom_of_label <= panel_top + OVERLAP_EPS,
             "label {label:?} overlaps the panel from above: bbox={bbox:?} panel_top={panel_top}"
+        );
+    }
+}
+
+/// #163's review: the overlap fix must not just stop the panel overlap, it
+/// must anchor the *near-axis end* of each rotated label at its own tick —
+/// not shift the whole label away to clear the panel. On a top axis this
+/// is *also* a direction-aware check (not just angle sign): a clockwise
+/// (+45°) angle there needs `TextAnchor::End`, the opposite of what the
+/// same angle needs on a bottom axis, or the un-fixed intermediate attempt
+/// (right overlap fix, wrong anchor for this side) still pushes the
+/// anchor itself ~64px from the axis even though nothing overlaps.
+/// Compare each flat tick's x (rendered with a sub-threshold 2° angle,
+/// both "flat" and middle-anchored at the exact tick pixel, with the same
+/// `Clip` fit so the panel geometry matches the rotated render) against
+/// the 45°-rotated version's near-axis-end x.
+#[test]
+fn near_axis_end_stays_at_the_tick_on_a_top_axis() {
+    const W: u32 = 260;
+    const H: u32 = 220;
+    let labels: Vec<String> = (0..6).map(|i| format!("Category Alpha {i:02}")).collect();
+
+    let (svg, area) = render_with_area(top_axis_plot(&labels, 45.0), W, H);
+    let panel_top = area[1];
+    let (flat_svg, flat_area) = render_with_area(top_axis_plot(&labels, 2.0), W, H);
+    // Only x/width need to match for the tick-x comparison below — y/height
+    // legitimately differ (a rotated label reserves more top margin than a
+    // flat one).
+    assert_eq!(
+        (area[0], area[2]),
+        (flat_area[0], flat_area[2]),
+        "Clip fit must give the flat and rotated renders the same horizontal panel geometry"
+    );
+
+    for label in &labels {
+        let (flat_x, ..) = label_geometry(&flat_svg, label);
+        let (x, y, size, ..) = label_geometry(&svg, label);
+        let dx = (x - flat_x).abs();
+        assert!(
+            dx <= size * 1.5,
+            "top axis: label {label:?}'s near-axis end at x={x} is {dx:.1}px from \
+             its flat tick x={flat_x:.1} (font size {size})"
+        );
+        // Just above the axis (a small offset), never the ~64px the
+        // direction-blind anchoring bug used to push it up by.
+        let dy = panel_top - y;
+        assert!(
+            (0.0..=size * 2.5).contains(&dy),
+            "top axis: label {label:?}'s near-axis end at y={y} is {dy:.1}px above \
+             the panel top ({panel_top}) — expected a small offset, not a large push-up"
         );
     }
 }

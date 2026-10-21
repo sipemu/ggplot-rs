@@ -2543,20 +2543,21 @@ impl GGPlot {
         // over the panel regardless of how much height is reserved here;
         // `fall` just needs reserving so the label stays on-canvas. Both
         // here and in `draw_x_axis`, the anchor fraction must come from
-        // `rotated_anchor_frac(angle)` (sipemu/ggplot-rs#163) — not a
+        // `rotated_anchor_frac(angle, dir)` (sipemu/ggplot-rs#163) — not a
         // blind `1.0` — or the reservation is sized for the wrong end of
-        // the label.
+        // the label; `dir` matches `draw_x_axis`'s own tick direction.
         let x_label_height = if built.theme.axis_text_x.visible
             && built.theme.axis_text_x.angle.abs() > 10.0
             && !drawn_x_labels.is_empty()
         {
             let font = built.theme.axis_text_x.size;
             let angle = built.theme.axis_text_x.angle;
+            let dir = if x_axis_top { -1.0 } else { 1.0 };
             let (rise, fall) = crate::render::text::rotated_label_rise_fall(
                 drawn_x_labels.iter().map(|(_, l)| l.as_str()),
                 font,
                 angle,
-                crate::render::text::rotated_anchor_frac(angle),
+                crate::render::text::rotated_anchor_frac(angle, dir),
             );
             Some(built.theme.legend_spacing / 2.0 + font / 2.0 + rise + fall)
         } else {
@@ -2604,7 +2605,8 @@ impl GGPlot {
                 if let (Some(first), Some(last)) = (breaks.first(), breaks.last()) {
                     let angle = built.theme.axis_text_x.angle;
                     let anchor = if angle.abs() > 10.0 {
-                        crate::render::text::rotated_anchor_frac(angle)
+                        let dir = if x_axis_top { -1.0 } else { 1.0 };
+                        crate::render::text::rotated_anchor_frac(angle, dir)
                     } else {
                         0.5
                     };

@@ -81,7 +81,7 @@ pub fn draw_x_axis(
         let angle = theme.axis_text_x.angle;
         let rotated = angle.abs() > 10.0;
         let anchor_frac = if rotated {
-            crate::render::text::rotated_anchor_frac(angle)
+            crate::render::text::rotated_anchor_frac(angle, dir)
         } else {
             0.5
         };
@@ -167,11 +167,12 @@ pub fn draw_x_axis(
         Some(theme.axis_text_x.family.clone())
     };
     let rotated = theme.axis_text_x.angle.abs() > 10.0;
-    // Which end of the text pins to the tick: the label's last character
-    // for a counter-clockwise rotation, its first for a clockwise one
-    // (sipemu/ggplot-rs#163) — see `rotated_anchor_frac`.
+    // Which end of the text pins to the tick, so the near-axis end stays
+    // there instead of the whole label sliding away (sipemu/ggplot-rs#163)
+    // — depends on both the rotation's direction and which side of the
+    // axis line the panel is on (`dir`); see `rotated_anchor_frac`.
     let draw_anchor_frac = if rotated {
-        crate::render::text::rotated_anchor_frac(theme.axis_text_x.angle)
+        crate::render::text::rotated_anchor_frac(theme.axis_text_x.angle, dir)
     } else {
         0.5
     };
