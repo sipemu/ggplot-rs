@@ -75,6 +75,12 @@ fn jitter_facet_data() -> Cols {
 }
 
 /// #154: a bar chart mixing positive and negative values at one x.
+/// `geom_col()` defaults to `PositionIdentity` (review #167 finding 3 —
+/// a pre-existing parity gap from ggplot2, which defaults `geom_col` to
+/// `position_stack`; see the follow-up issue), so exercising #154 needs
+/// an explicit `.position(PositionStack)` / `.position(PositionFill)` —
+/// without one, this data renders byte-identical to 0.22.2 and the case
+/// doesn't touch #154's code at all.
 fn mixed_sign_data() -> Cols {
     vec![
         ("x".into(), f(&[1.0, 1.0, 1.0, 1.0])),
@@ -169,7 +175,8 @@ fn expected() -> Vec<(&'static str, u64)> {
         ("dodge_facet", 0x87ca741c10e5d81f),
         ("dodge_single_panel", 0x60eede539d041c9f),
         ("jitter_facet", 0x2041b5e10e321c52),
-        ("stack_mixed_sign", 0xa3dd3e684c64f693),
+        ("stack_mixed_sign", 0xd89d244ba7f70ae2),
+        ("fill_mixed_sign", 0xf1c8fa0e2df7203a),
         ("all_positive_stack", 0x92ba5f6f174412ae),
         ("two_discrete_guides", 0x1c9247192286f120),
         ("one_discrete_guide", 0x98da47e69ace53db),
@@ -224,10 +231,23 @@ fn default_output_023_battery() {
             hash_svg(
                 GGPlot::new(mixed_sign_data())
                     .aes(Aes::new().x("x").y("y").fill("grp"))
-                    .geom_col(),
+                    .geom_col()
+                    .position(PositionStack),
                 320,
                 400,
                 "stack_mixed_sign",
+            ),
+        ),
+        (
+            "fill_mixed_sign",
+            hash_svg(
+                GGPlot::new(mixed_sign_data())
+                    .aes(Aes::new().x("x").y("y").fill("grp"))
+                    .geom_col()
+                    .position(PositionFill),
+                320,
+                400,
+                "fill_mixed_sign",
             ),
         ),
         (
