@@ -46,6 +46,22 @@ pub(crate) fn legend_scales_for(
 }
 
 /// Draw all legends for the plot.
+///
+/// No longer called internally: `compose::capture_legend` (the only
+/// caller) was rerouted to `draw_legend_planned` in 0.23 so a `PlotGrid`'s
+/// collected legend gets the same B3-2 wrap/grid treatment a single
+/// plot's legend does (sipemu/ggplot-rs#155). `draw_legend_planned` is
+/// crate-internal (`pub(crate)`), so there is no direct public
+/// replacement — legend drawing is otherwise handled automatically by
+/// `GGPlot`'s own render methods, which is the supported way to draw a
+/// legend; this function was never meant to be called by consumers for
+/// that purpose and will be removed in a later minor release.
+#[deprecated(
+    since = "0.23.0",
+    note = "unused internally since 0.23 (superseded by the crate-internal draw_legend_planned, \
+             sipemu/ggplot-rs#155); no direct public replacement — legends are drawn automatically \
+             by GGPlot's render methods. Will be removed in a later minor release."
+)]
 pub fn draw_legend(
     scales: &ScaleSet,
     theme: &Theme,

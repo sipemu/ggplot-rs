@@ -18,6 +18,18 @@ by a test.
   unaffected counterparts, hashed with FNV-1a. Wired into CI's `sf`,
   no-default-features test job alongside `default_output_022`.
 
+### Deprecated
+
+- `guide::legend::draw_legend` is deprecated (`#[deprecated(since = "0.23.0")]`)
+  and will be removed in a later minor release: it's unused internally as
+  of this release — #155's rerouting of `compose::capture_legend` to the
+  crate-internal `draw_legend_planned` (so a `PlotGrid`'s collected legend
+  gets the same wrap/grid treatment a single plot's legend does) removed
+  `draw_legend`'s only caller. There is no direct public replacement
+  (`draw_legend_planned` is `pub(crate)`); legends are drawn automatically
+  by `GGPlot`'s own render methods, which was always the supported way to
+  get a legend onto a plot.
+
 ### Changed
 
 - A faceted `position_dodge`/`position_dodge2` now computes each panel's
