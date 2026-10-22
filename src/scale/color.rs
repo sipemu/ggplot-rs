@@ -251,7 +251,7 @@ impl Scale for ScaleColorDiscrete {
 }
 
 /// Continuous gradient color scale.
-#[derive(Clone, Debug)]
+#[derive(Clone)]
 pub struct ScaleColorContinuous {
     aesthetic: Aesthetic,
     name: String,
@@ -272,6 +272,33 @@ pub struct ScaleColorContinuous {
     /// ([`with_na_value`](Self::with_na_value)). Default ggplot2's
     /// `"grey50"`, `(127, 127, 127)`.
     na_value: (u8, u8, u8),
+    /// Formatter for [`format_value`](super::Scale::format_value) (#164,
+    /// same shape as `ScaleContinuous::with_value_formatter`), distinct
+    /// from the axis-break label formatting this scale has none of. Falls
+    /// back to the plain locale-formatted number when unset. Wrapped in
+    /// [`UnwindSafeFormatter`](super::format::UnwindSafeFormatter) so this
+    /// field doesn't drop `UnwindSafe`/`RefUnwindSafe` from the struct.
+    value_formatter: Option<super::format::UnwindSafeFormatter>,
+}
+
+// Manual `Debug`, since `value_formatter` (an `Arc<dyn Fn>`) isn't
+// `Debug`; every other field is printed as the derive would.
+impl std::fmt::Debug for ScaleColorContinuous {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("ScaleColorContinuous")
+            .field("aesthetic", &self.aesthetic)
+            .field("name", &self.name)
+            .field("low", &self.low)
+            .field("high", &self.high)
+            .field("min", &self.min)
+            .field("max", &self.max)
+            .field("locale", &self.locale)
+            .field("limits", &self.limits)
+            .field("oob", &self.oob)
+            .field("na_value", &self.na_value)
+            .field("value_formatter", &self.value_formatter.is_some())
+            .finish()
+    }
 }
 
 impl ScaleColorContinuous {
@@ -287,7 +314,20 @@ impl ScaleColorContinuous {
             limits: None,
             oob: super::Oob::Censor,
             na_value: super::DEFAULT_NA_VALUE,
+            value_formatter: None,
         }
+    }
+
+    /// Set a formatter for [`format_value`](super::Scale::format_value) —
+    /// a per-mark `data-fvalue`/tooltip-template value for this fill/colour
+    /// scale (#164). Falls back to the plain locale-formatted number when
+    /// unset (byte-identical default output).
+    pub fn with_value_formatter<F>(mut self, f: F) -> Self
+    where
+        F: Fn(f64) -> String + Send + Sync + 'static,
+    {
+        self.value_formatter = Some(super::format::UnwindSafeFormatter(std::sync::Arc::new(f)));
+        self
     }
 
     pub fn with_colors(mut self, low: RGBAColor, high: RGBAColor) -> Self {
@@ -342,7 +382,10 @@ impl Scale for ScaleColorContinuous {
         if !f.is_finite() {
             return None;
         }
-        Some(super::util::format_number_opt(f, self.locale.as_ref()))
+        Some(match &self.value_formatter {
+            Some(fmt) => fmt.call(f),
+            None => super::util::format_number_opt(f, self.locale.as_ref()),
+        })
     }
 
     fn aesthetic(&self) -> Aesthetic {
@@ -484,5 +527,42 @@ mod tests {
         assert_eq!(s.format_value(&Value::Float(3.5)), Some("3.5".to_string()));
         assert_eq!(s.format_value(&Value::Float(f64::NAN)), None);
         assert_eq!(s.format_value(&Value::Na), None);
+    }
+
+    #[test]
+    fn continuous_with_value_formatter_overrides_format_value() {
+        let s =
+            ScaleColorContinuous::new(Aesthetic::Fill).with_value_formatter(|v| format!("${v:.2}"));
+        assert_eq!(
+            s.format_value(&Value::Float(1234.5)),
+            Some("$1234.50".to_string())
+        );
+        // Non-finite is still rejected before the formatter ever runs.
+        assert_eq!(s.format_value(&Value::Float(f64::NAN)), None);
+    }
+
+    #[test]
+    fn continuous_debug_reports_whether_a_formatter_is_set() {
+        let without = format!("{:?}", ScaleColorContinuous::new(Aesthetic::Fill));
+        assert!(without.contains("ScaleColorContinuous"));
+        assert!(without.contains("value_formatter: false"));
+        let with = format!(
+            "{:?}",
+            ScaleColorContinuous::new(Aesthetic::Fill).with_value_formatter(|v| v.to_string())
+        );
+        assert!(with.contains("value_formatter: true"));
+    }
+
+    /// #164 review: `value_formatter`'s `Arc<dyn Fn>` must not drop
+    /// `UnwindSafe`/`RefUnwindSafe` (or `Send`/`Sync`/`Clone`) from
+    /// `ScaleColorContinuous` — `cargo-semver-checks` flags losing an
+    /// auto trait as a major-version break, which a patch must not cause.
+    #[test]
+    fn scale_color_continuous_keeps_every_auto_trait() {
+        fn assert_traits<
+            T: Send + Sync + std::panic::UnwindSafe + std::panic::RefUnwindSafe + Clone,
+        >() {
+        }
+        assert_traits::<ScaleColorContinuous>();
     }
 }

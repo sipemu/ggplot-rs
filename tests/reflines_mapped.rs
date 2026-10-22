@@ -314,3 +314,33 @@ fn refline_series_are_escaped() {
         .unwrap();
     assert!(!svg.contains("<script>"));
 }
+
+/// Review PR #166 F1: a mapped reference line's `data_attr` must stay on
+/// its own marks, not leak onto whatever is drawn after it (annotations,
+/// gridlines drawn on top, legend keys).
+#[test]
+fn refline_data_attr_does_not_leak_into_later_marks() {
+    let plots = [
+        GGPlot::new(scatter())
+            .aes(Aes::new().x("x").y("y"))
+            .geom_hline_aes(Aes::new().yintercept("y").data_attr("k", "g")),
+        GGPlot::new(scatter())
+            .aes(Aes::new().x("x").y("y"))
+            .geom_vline_aes(Aes::new().xintercept("x").data_attr("k", "g")),
+        GGPlot::new(scatter())
+            .aes(Aes::new().x("x").y("y"))
+            .geom_abline_aes(Aes::new().slope("x").intercept("y").data_attr("k", "g")),
+    ];
+    // One tagged mark per drawn line and nothing else; two of the ablines
+    // (slopes 3 and 4) miss the panel and aren't drawn.
+    for (plot, drawn) in plots.into_iter().zip([4, 4, 2]) {
+        let svg = plot
+            .annotate_segment(1.0, 1.0, 2.0, 2.0)
+            .annotate_rect(2.0, 3.0, 2.0, 3.0)
+            .panel_ontop()
+            .render_svg_native_with_size(300, 200)
+            .unwrap();
+        // One mark per data row (4), nothing else.
+        assert_eq!(svg.matches("data-k=").count(), drawn, "{svg}");
+    }
+}

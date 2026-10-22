@@ -437,6 +437,42 @@ fn missing_ymin_ymax_under_identity_is_a_validation_error() {
     );
 }
 
+/// #160: a raw, *unmapped* `ymin`/`ymax` column must not satisfy
+/// `stat="identity"`'s five-number-summary requirement, the same way a
+/// raw, unmapped `lower`/`middle`/`upper` doesn't (see
+/// `raw_unmapped_lower_under_identity_is_a_validation_error` above).
+/// Checked against ggplot2 4.0.3 directly: `geom_boxplot(stat =
+/// "identity")` on a frame with `lower`/`middle`/`upper` mapped and a raw
+/// (unmapped) `ymin`/`ymax` column still errors with "requires the
+/// following missing aesthetics: ymin and ymax" — ggplot2 does not treat
+/// a same-named raw column as satisfying the aesthetic here, unlike the
+/// universal raw-y convention most other geoms get.
+#[test]
+fn raw_unmapped_ymin_ymax_under_identity_is_a_validation_error() {
+    let result = GGPlot::new(frame(vec![
+        ("x", strs(&["A"])),
+        ("lower", floats(&[3.0])),
+        ("middle", floats(&[5.0])),
+        ("upper", floats(&[7.0])),
+        ("ymin", floats(&[1.0])), // present, but never mapped
+        ("ymax", floats(&[9.0])), // present, but never mapped
+    ]))
+    .aes(
+        Aes::new()
+            .x("x")
+            .lower("lower")
+            .middle("middle")
+            .upper("upper"),
+    )
+    .geom_boxplot()
+    .stat(StatIdentity)
+    .render_svg_native_with_size(300, 300);
+    assert!(
+        matches!(result, Err(GGError::ValidationError(_))),
+        "{result:?}"
+    );
+}
+
 /// A numeric (not comma-list-string) `outliers` cell is a single outlier,
 /// not silently ignored (review #158 finding 5).
 #[test]

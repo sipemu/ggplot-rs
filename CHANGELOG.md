@@ -3,6 +3,62 @@
 All notable changes to this project are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.22.2] — 2026-10-22
+
+Patch: decorative layers, fill value formatter, refline tooltips,
+annotation ink, boxplot identity mapping.
+
+### Added
+
+- `GGPlot::decorative()` marks the most recently added layer as purely
+  decorative (#161): its drawn marks keep their own visual style but carry
+  no per-mark metadata — no `<title>`, no `data-x`/`data-series`/
+  `data-value`/`data-fvalue`, and no `data_attr` attributes — so an SVG
+  consumer that treats "has a non-empty `<title>`" as "is a selectable
+  data point" doesn't pick it up (e.g. a boxplot's own mean dot, drawn by
+  a separate `geom_point` layer purely to mark the spot). Implemented as a
+  private delegating `Geom` wrapper rather than a new `Layer` field, so it
+  adds no field to any public struct. A `.tooltip(...)` on a decorative
+  layer has no visible effect and warns, like the existing has-no-effect
+  warning. A decorative layer also defaults to hidden in the legend,
+  unless `show_legend(true)` is called to opt back in. Its marks are tagged
+  `data-part="decorative"` and `aria-hidden="true"` (keeping `data-geom`),
+  and their class is `gg-mark gg-decorative` instead of the geom's own
+  (`gg-point`, `gg-line`, …), so a stylesheet selecting on the geom class
+  doesn't restyle them as data marks.
+- `with_value_formatter` (same signature as
+  `ScaleContinuous::with_value_formatter`) on every continuous colour/fill
+  scale that implements `format_value`: `ScaleColorContinuous`,
+  `ScaleColorGradientN` and `ScaleColorGradient2` (#164). Falls back to
+  the plain locale-formatted number when unset (byte-identical default
+  output).
+
+### Fixed
+
+- `geom_hline`/`geom_vline`/`geom_abline` now implement `Geom::
+  consumes_tooltips` and read a layer's `tooltip()` template (e.g.
+  `.tooltip("{xintercept}")`), replacing their own default `"x = …"`/
+  `"y = …"` label the same way every other `consumes_tooltips` geom does;
+  previously the template was silently dropped with a has-no-effect
+  warning (#165). The default label (no template set) is unchanged.
+  A mapped reference line's `data_attr` attributes no longer carry over
+  onto the marks drawn after it (annotations, gridlines drawn on top,
+  legend keys).
+- `annotate_text`/`annotate_segment` now follow theme `element_geom` ink
+  when their colour is still at its hard-coded default, the same as every
+  other geom's default colour (#157, follow-up to #142) — previously they
+  stayed near-black and nearly invisible under a white-on-black theme.
+  `annotate_rect`'s fill is deliberately excluded, matching ggplot2
+  4.0.3's own behaviour (checked directly: its fill stays the hard-coded
+  grey under `element_geom(ink=, paper=)` too). Default theme (no ink set)
+  is byte-identical.
+- `geom_boxplot(stat = "identity")`: a raw, unmapped `ymin`/`ymax` column
+  no longer satisfies the five-number-summary requirement, matching
+  ggplot2 4.0.3 (checked directly) and the same "only when actually
+  mapped" treatment `lower`/`middle`/`upper`/`outliers` already got (#160,
+  follow-up to #158). Scoped to `GeomBoxplot` alone; the universal raw-y
+  convention for other geoms is unchanged.
+
 ## [0.22.1] — 2026-10-21
 
 Patch: discrete-axis auto-rotate (#162).
@@ -135,7 +191,7 @@ guarded by `tests/default_output_022.rs`.
   labels without a dodge are unaffected.
 - `geom_errorbar`'s whisker caps shrink by the dodge group count under a
   discrete `position_dodge`, so caps from adjacent groups no longer
-  visually overlap (#151). An un-dodged errorbar is unaffected.
+  visually overlap (#152). An un-dodged errorbar is unaffected.
 - A `Value::Na` (e.g. a SQL NULL) in a position column that is never
   legitimately discrete (`ymin`/`ymax`/`xend`/`yend`/`lower`/`middle`/
   `upper`/…, i.e. every position column except `x`/`y`, which may hold

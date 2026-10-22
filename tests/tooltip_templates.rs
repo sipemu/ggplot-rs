@@ -204,3 +204,64 @@ fn a_template_on_a_geom_that_reads_tooltips_does_not_warn() {
         "{warnings:?}"
     );
 }
+
+// #165: geom_hline/vline/abline now read a `tooltip()` template (via
+// `Geom::consumes_tooltips`), replacing their own default "x = …"/"y = …"
+// label, and no longer warn that the template "has no effect".
+
+#[test]
+fn geom_vline_tooltip_template_replaces_the_default_x_equals_label() {
+    let data = frame(vec![("x", floats(&[1.0])), ("y", floats(&[2.0]))]);
+    let (svg, warnings) = GGPlot::new(data)
+        .aes(Aes::new().x("x").y("y"))
+        .geom_point()
+        .geom_vline(2.0)
+        .tooltip("{xintercept}")
+        .render_svg_native_with_warnings(300, 200)
+        .unwrap();
+    assert!(svg.contains("<title>2</title>"), "{svg}");
+    assert!(!svg.contains("x = 2"), "{svg}");
+    assert!(
+        !warnings.iter().any(|w| w.contains("tooltip")),
+        "{warnings:?}"
+    );
+}
+
+#[test]
+fn geom_hline_tooltip_template_replaces_the_default_y_equals_label() {
+    let data = frame(vec![("x", floats(&[1.0])), ("y", floats(&[2.0]))]);
+    let svg = GGPlot::new(data)
+        .aes(Aes::new().x("x").y("y"))
+        .geom_point()
+        .geom_hline(3.0)
+        .tooltip("{yintercept}")
+        .render_svg_native_with_size(300, 200)
+        .unwrap();
+    assert!(svg.contains("<title>3</title>"), "{svg}");
+    assert!(!svg.contains("y = 3"), "{svg}");
+}
+
+#[test]
+fn geom_abline_tooltip_template_replaces_the_default_label() {
+    let data = frame(vec![("x", floats(&[1.0])), ("y", floats(&[2.0]))]);
+    let svg = GGPlot::new(data)
+        .aes(Aes::new().x("x").y("y"))
+        .geom_point()
+        .geom_abline(1.0, 0.5)
+        .tooltip("slope {slope}")
+        .render_svg_native_with_size(300, 200)
+        .unwrap();
+    assert!(svg.contains("<title>slope 1</title>"), "{svg}");
+}
+
+#[test]
+fn geom_vline_without_a_template_keeps_its_default_x_equals_label() {
+    let data = frame(vec![("x", floats(&[1.0])), ("y", floats(&[2.0]))]);
+    let svg = GGPlot::new(data)
+        .aes(Aes::new().x("x").y("y"))
+        .geom_point()
+        .geom_vline(2.0)
+        .render_svg_native_with_size(300, 200)
+        .unwrap();
+    assert!(svg.contains("<title>x = 2</title>"), "{svg}");
+}

@@ -1125,6 +1125,43 @@ impl GGPlot {
         self
     }
 
+    /// Mark the most recently added layer as purely decorative (#161): its
+    /// drawn marks keep their own visual style but carry **no** per-mark
+    /// metadata — no `<title>`, no `data-x`/`data-series`/`data-value`/
+    /// `data-fvalue`, and no [`data_attr`](crate::aes::Aes::data_attr)
+    /// attributes — so an SVG consumer that treats "has a non-empty
+    /// `<title>`" as "is a selectable data point" doesn't pick it up. Meant
+    /// for a layer that annotates another layer's mark rather than drawing
+    /// data in its own right (e.g. a boxplot's own mean dot, drawn by a
+    /// separate `geom_point` layer purely to mark the spot the box's own
+    /// tooltip already names). Each mark also carries
+    /// `data-part="decorative"` and `aria-hidden="true"` (`data-geom`
+    /// still names the real geom), so a consumer can select decorative
+    /// marks positively rather than only infer them from what they lack.
+    /// Their class is `gg-mark gg-decorative`, not the geom's own
+    /// (`gg-point`, `gg-line`, …).
+    ///
+    /// A `.tooltip(...)` template on a decorative layer has no visible
+    /// effect — the geom's marks carry no tooltip regardless — and warns,
+    /// like the existing has-no-effect warning for a geom that doesn't
+    /// read tooltips at all.
+    ///
+    /// A decorative layer also defaults to hidden in the legend (it's
+    /// annotating, not its own series), unless
+    /// [`show_legend`](Self::show_legend)`(true)` is called — before or
+    /// after `decorative()` — to opt back in; an explicit
+    /// `show_legend(false)` is left untouched either way.
+    pub fn decorative(mut self) -> Self {
+        if let Some(layer) = self.layers.last_mut() {
+            let geom = std::mem::replace(&mut layer.geom, Box::new(GeomBlank));
+            layer.geom = Box::new(crate::geom::decorative::Decorative(geom));
+            if layer.show_legend.is_none() {
+                layer.show_legend = Some(false);
+            }
+        }
+        self
+    }
+
     // ─── Scales ──────────────────────────────────────────────────
 
     pub fn scale_x_continuous(mut self, s: ScaleContinuous) -> Self {

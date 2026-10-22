@@ -136,6 +136,29 @@ fn add_commas(s: &str) -> String {
 /// return one directly.
 pub type LabelFormatter = Arc<dyn Fn(f64) -> String + Send + Sync>;
 
+/// A [`LabelFormatter`] stored in a scale's own `value_formatter` field
+/// (#164), wrapped so the scale keeps `UnwindSafe`/`RefUnwindSafe`: a
+/// `dyn Fn` trait object carries no auto-trait bounds of its own (only
+/// `Send`/`Sync`, which are explicit in `LabelFormatter`'s definition, not
+/// auto-derived), so storing a bare `Arc<dyn Fn...>` field would silently
+/// drop both from the containing struct — `cargo-semver-checks` flags
+/// that as a major-version break, which a patch release must not cause.
+/// The formatter closures this crate accepts (`Fn(f64) -> String + Send +
+/// Sync + 'static`) are a plain value-formatting callback never relied on
+/// to be unwind-safe by any caller, so asserting it here — the standard
+/// pattern for a stored callback field like this — changes no behaviour.
+#[derive(Clone)]
+pub(crate) struct UnwindSafeFormatter(pub(crate) LabelFormatter);
+
+impl std::panic::UnwindSafe for UnwindSafeFormatter {}
+impl std::panic::RefUnwindSafe for UnwindSafeFormatter {}
+
+impl UnwindSafeFormatter {
+    pub(crate) fn call(&self, v: f64) -> String {
+        (self.0)(v)
+    }
+}
+
 /// Round `v` to a multiple of `accuracy` and format with the implied decimals.
 fn format_accuracy(v: f64, accuracy: Option<f64>) -> String {
     match accuracy {
