@@ -436,6 +436,23 @@ mod tests {
     }
 
     #[test]
+    fn debug_reports_whether_a_formatter_is_set() {
+        let stops = vec![(0.0, RGBAColor::new(0, 0, 0))];
+        let without = format!(
+            "{:?}",
+            ScaleColorGradientN::new(Aesthetic::Color, stops.clone())
+        );
+        assert!(without.contains("ScaleColorGradientN"));
+        assert!(without.contains("value_formatter: false"));
+        let with = format!(
+            "{:?}",
+            ScaleColorGradientN::new(Aesthetic::Color, stops)
+                .with_value_formatter(|v| v.to_string())
+        );
+        assert!(with.contains("value_formatter: true"));
+    }
+
+    #[test]
     fn with_limits_fixes_the_domain_and_training_does_not_widen_it() {
         let mut g = ScaleColorGradientN::new(
             Aesthetic::Color,

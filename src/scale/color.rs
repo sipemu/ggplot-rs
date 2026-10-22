@@ -538,4 +538,16 @@ mod tests {
         // Non-finite is still rejected before the formatter ever runs.
         assert_eq!(s.format_value(&Value::Float(f64::NAN)), None);
     }
+
+    #[test]
+    fn continuous_debug_reports_whether_a_formatter_is_set() {
+        let without = format!("{:?}", ScaleColorContinuous::new(Aesthetic::Fill));
+        assert!(without.contains("ScaleColorContinuous"));
+        assert!(without.contains("value_formatter: false"));
+        let with = format!(
+            "{:?}",
+            ScaleColorContinuous::new(Aesthetic::Fill).with_value_formatter(|v| v.to_string())
+        );
+        assert!(with.contains("value_formatter: true"));
+    }
 }

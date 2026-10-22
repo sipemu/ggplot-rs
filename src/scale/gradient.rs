@@ -308,6 +308,18 @@ mod tests {
     }
 
     #[test]
+    fn debug_reports_whether_a_formatter_is_set() {
+        let without = format!("{:?}", ScaleColorGradient2::new(Aesthetic::Color));
+        assert!(without.contains("ScaleColorGradient2"));
+        assert!(without.contains("value_formatter: false"));
+        let with = format!(
+            "{:?}",
+            ScaleColorGradient2::new(Aesthetic::Color).with_value_formatter(|v| v.to_string())
+        );
+        assert!(with.contains("value_formatter: true"));
+    }
+
+    #[test]
     fn with_limits_fixes_the_domain_and_training_does_not_widen_it() {
         let mut s = ScaleColorGradient2::new(Aesthetic::Fill).with_limits(-2.0, 2.0);
         s.train(&[Value::Float(-50.0), Value::Float(50.0)]);
