@@ -219,11 +219,365 @@ mod tests {
     }
 
     #[test]
+    fn decorative_delegates_default_stat_position_and_params() {
+        let plain = GeomPoint::default();
+        let (stat_name, position_name) = (
+            plain.default_stat().name().to_string(),
+            plain.default_position().name().to_string(),
+        );
+        let wrapped = Decorative(Box::new(GeomPoint::default()));
+        assert_eq!(wrapped.default_stat().name(), stat_name);
+        assert_eq!(wrapped.default_position().name(), position_name);
+        // `GeomParams` has no `PartialEq`; compare via `Debug`.
+        assert_eq!(
+            format!("{:?}", wrapped.default_params()),
+            format!("{:?}", GeomPoint::default().default_params())
+        );
+    }
+
+    #[test]
     fn decorative_never_consumes_tooltips() {
         // GeomPoint itself consumes tooltips; the wrapper must not, since
         // the wrapped tooltip would have no visible effect.
         assert!(GeomPoint::default().consumes_tooltips());
         let wrapped = Decorative(Box::new(GeomPoint::default()));
         assert!(!wrapped.consumes_tooltips());
+    }
+
+    #[test]
+    fn decorative_delegates_set_series_color_and_apply_element_geom() {
+        // Neither `Geom` method is observable from outside the trait
+        // (no `as_any`/`Debug` on every geom), so exercise both through a
+        // full render: a decorative `geom_line` with no explicit colour
+        // still picks up the brand colour via `set_series_color`, and
+        // still recolours from theme ink via `apply_element_geom` when
+        // there's no brand colour — the same as a non-decorative layer.
+        use crate::aes::Aes;
+        use crate::data::Value;
+        use crate::plot::GGPlot;
+        let data = vec![
+            ("x".to_string(), vec![Value::Float(1.0), Value::Float(2.0)]),
+            ("y".to_string(), vec![Value::Float(1.0), Value::Float(2.0)]),
+        ];
+
+        let brand_svg = GGPlot::new(data.clone())
+            .aes(Aes::new().x("x").y("y"))
+            .geom_line()
+            .decorative()
+            .primary_color((9, 9, 9))
+            .render_svg_native_with_size(200, 200)
+            .unwrap();
+        assert!(brand_svg.contains("#090909"), "{brand_svg}");
+
+        let ink_svg = GGPlot::new(data)
+            .aes(Aes::new().x("x").y("y"))
+            .geom_line()
+            .decorative()
+            .theme(Theme::default().with_ink_paper((10, 20, 30), (255, 255, 255)))
+            .render_svg_native_with_size(200, 200)
+            .unwrap();
+        assert!(ink_svg.contains("#0A141E"), "{ink_svg}");
+    }
+
+    #[test]
+    fn decorative_delegates_include_zero_baseline_allows_infinite_and_keeps_na_as_break() {
+        use crate::geom::bar::GeomBar;
+        use crate::geom::line::GeomLine;
+        use crate::geom::rect::GeomRect;
+
+        let bar = Decorative(Box::new(GeomBar::default()));
+        assert!(bar.include_zero_baseline());
+        assert!(!Decorative(Box::new(GeomPoint::default())).include_zero_baseline());
+
+        let rect = Decorative(Box::new(GeomRect::default()));
+        assert!(rect.allows_infinite());
+        assert!(!Decorative(Box::new(GeomPoint::default())).allows_infinite());
+
+        let line = Decorative(Box::new(GeomLine::default()));
+        assert!(line.keeps_na_as_break());
+        assert!(!Decorative(Box::new(GeomPoint::default())).keeps_na_as_break());
+    }
+
+    #[test]
+    fn decorative_delegates_inherit_aes() {
+        use crate::geom::refline::GeomHline;
+        // Reference lines return false; an ordinary geom returns true.
+        assert!(!Decorative(Box::new(GeomHline::new(1.0))).inherit_aes());
+        assert!(Decorative(Box::new(GeomPoint::default())).inherit_aes());
+    }
+
+    #[test]
+    fn decorative_delegates_mapped_only_columns_and_validate_layer() {
+        use crate::geom::boxplot::GeomBoxplot;
+        let wrapped = Decorative(Box::new(GeomBoxplot::default()));
+        assert_eq!(
+            wrapped.mapped_only_columns(),
+            GeomBoxplot::default().mapped_only_columns()
+        );
+        // stat="identity" with none of the five-number-summary columns
+        // mapped must still error through the wrapper.
+        assert!(wrapped.validate_layer(&[], "identity").is_err());
+        assert!(wrapped
+            .validate_layer(&["y".to_string()], "boxplot")
+            .is_ok());
+    }
+
+    #[test]
+    fn decorative_delegates_setup_data() {
+        use crate::data::Value;
+        use crate::geom::boxplot::GeomBoxplot;
+
+        fn frame() -> DataFrame {
+            let mut d = DataFrame::new();
+            d.add_column("outliers".to_string(), vec![Value::Str("1,2".to_string())]);
+            d.add_column("ymin".to_string(), vec![Value::Float(0.0)]);
+            d.add_column("ymax".to_string(), vec![Value::Float(10.0)]);
+            d
+        }
+
+        let mut plain_data = frame();
+        let mut plain_warnings = Vec::new();
+        GeomBoxplot::default().setup_data(&mut plain_data, &mut plain_warnings);
+
+        let mut wrapped_data = frame();
+        let mut wrapped_warnings = Vec::new();
+        Decorative(Box::new(GeomBoxplot::default()))
+            .setup_data(&mut wrapped_data, &mut wrapped_warnings);
+
+        assert_eq!(
+            wrapped_data.column_names(),
+            plain_data.column_names(),
+            "setup_data must reach the wrapped geom, adding the same columns"
+        );
+    }
+
+    /// A minimal `DrawBackend` that records every call, so `MuteMarks`'s
+    /// forwarding (drawing/query calls) and muting (per-mark metadata) can
+    /// be asserted directly without going through a full plot render.
+    #[derive(Default)]
+    struct MockBackend {
+        circles: usize,
+        lines: usize,
+        rects: usize,
+        texts: usize,
+        polygons: usize,
+        mark_geom_calls: usize,
+        mark_part_calls: usize,
+        warn_calls: usize,
+        tooltip_calls: usize,
+        mark_axis_calls: usize,
+        mark_series_calls: usize,
+        mark_value_calls: usize,
+        mark_attrs_calls: usize,
+        mark_fvalue_calls: usize,
+        mark_fx_calls: usize,
+    }
+
+    impl DrawBackend for MockBackend {
+        fn draw_circle(
+            &mut self,
+            _center: (f64, f64),
+            _radius: f64,
+            _style: &PointStyle,
+        ) -> Result<(), RenderError> {
+            self.circles += 1;
+            Ok(())
+        }
+        fn draw_line(
+            &mut self,
+            _points: &[(f64, f64)],
+            _style: &LineStyle,
+        ) -> Result<(), RenderError> {
+            self.lines += 1;
+            Ok(())
+        }
+        fn draw_rect(
+            &mut self,
+            _tl: (f64, f64),
+            _br: (f64, f64),
+            _style: &RectStyle,
+        ) -> Result<(), RenderError> {
+            self.rects += 1;
+            Ok(())
+        }
+        fn draw_text(
+            &mut self,
+            _text: &str,
+            _pos: (f64, f64),
+            _style: &TextStyle,
+        ) -> Result<(), RenderError> {
+            self.texts += 1;
+            Ok(())
+        }
+        fn draw_polygon(
+            &mut self,
+            _points: &[(f64, f64)],
+            _style: &RectStyle,
+        ) -> Result<(), RenderError> {
+            self.polygons += 1;
+            Ok(())
+        }
+        fn plot_area(&self) -> crate::render::Rect {
+            crate::render::Rect {
+                x: 1.0,
+                y: 2.0,
+                width: 3.0,
+                height: 4.0,
+            }
+        }
+        fn total_area(&self) -> crate::render::Rect {
+            crate::render::Rect {
+                x: 5.0,
+                y: 6.0,
+                width: 7.0,
+                height: 8.0,
+            }
+        }
+        fn set_tooltip(&mut self, _tooltip: Option<String>) {
+            self.tooltip_calls += 1;
+        }
+        fn set_mark_axis(&mut self, _key: Option<String>) {
+            self.mark_axis_calls += 1;
+        }
+        fn set_mark_series(&mut self, _series: Option<String>) {
+            self.mark_series_calls += 1;
+        }
+        fn set_mark_value(&mut self, _value: Option<String>) {
+            self.mark_value_calls += 1;
+        }
+        fn set_mark_geom(&mut self, _geom: Option<&str>) {
+            self.mark_geom_calls += 1;
+        }
+        fn warn(&mut self, _message: String) {
+            self.warn_calls += 1;
+        }
+        fn set_mark_part(&mut self, _part: Option<&str>) {
+            self.mark_part_calls += 1;
+        }
+        fn set_mark_attrs(&mut self, _attrs: Vec<(String, String)>) {
+            self.mark_attrs_calls += 1;
+        }
+        fn wants_formatted_values(&self) -> bool {
+            true
+        }
+        fn set_mark_fvalue(&mut self, _value: Option<String>) {
+            self.mark_fvalue_calls += 1;
+        }
+        fn set_mark_fx(&mut self, _value: Option<String>) {
+            self.mark_fx_calls += 1;
+        }
+    }
+
+    #[test]
+    fn mute_marks_forwards_drawing_and_query_calls() {
+        let mut inner = MockBackend::default();
+        {
+            let mut muted = MuteMarks { inner: &mut inner };
+            muted
+                .draw_circle((0.0, 0.0), 1.0, &PointStyle::default())
+                .unwrap();
+            muted
+                .draw_line(&[(0.0, 0.0), (1.0, 1.0)], &LineStyle::default())
+                .unwrap();
+            muted
+                .draw_rect((0.0, 0.0), (1.0, 1.0), &RectStyle::default())
+                .unwrap();
+            muted
+                .draw_text("hi", (0.0, 0.0), &TextStyle::default())
+                .unwrap();
+            muted
+                .draw_polygon(&[(0.0, 0.0)], &RectStyle::default())
+                .unwrap();
+            assert_eq!(muted.plot_area().x, 1.0);
+            assert_eq!(muted.total_area().x, 5.0);
+            muted.set_mark_geom(Some("point"));
+            muted.set_mark_part(Some("arrow"));
+            muted.warn("oops".to_string());
+            assert!(muted.wants_formatted_values());
+        }
+        assert_eq!(inner.circles, 1);
+        assert_eq!(inner.lines, 1);
+        assert_eq!(inner.rects, 1);
+        assert_eq!(inner.texts, 1);
+        assert_eq!(inner.polygons, 1);
+        assert_eq!(inner.mark_geom_calls, 1);
+        assert_eq!(inner.mark_part_calls, 1);
+        assert_eq!(inner.warn_calls, 1);
+    }
+
+    #[test]
+    fn mute_marks_mutes_per_mark_metadata() {
+        let mut inner = MockBackend::default();
+        {
+            let mut muted = MuteMarks { inner: &mut inner };
+            muted.set_tooltip(Some("tip".to_string()));
+            muted.set_mark_axis(Some("1".to_string()));
+            muted.set_mark_series(Some("a".to_string()));
+            muted.set_mark_value(Some("1".to_string()));
+            muted.set_mark_attrs(vec![("x".to_string(), "y".to_string())]);
+            muted.set_mark_fvalue(Some("1".to_string()));
+            muted.set_mark_fx(Some("1".to_string()));
+        }
+        // None of these reached the inner backend.
+        assert_eq!(inner.tooltip_calls, 0);
+        assert_eq!(inner.mark_axis_calls, 0);
+        assert_eq!(inner.mark_series_calls, 0);
+        assert_eq!(inner.mark_value_calls, 0);
+        assert_eq!(inner.mark_attrs_calls, 0);
+        assert_eq!(inner.mark_fvalue_calls, 0);
+        assert_eq!(inner.mark_fx_calls, 0);
+    }
+
+    #[test]
+    fn mock_backend_itself_records_the_metadata_calls_mute_marks_suppresses() {
+        // Sanity on the mock used above: called directly (not through
+        // `MuteMarks`), its own per-mark-metadata methods do record —
+        // confirming `mute_marks_mutes_per_mark_metadata`'s zero counts
+        // come from `MuteMarks` muting them, not from the mock being a
+        // no-op itself.
+        let mut backend = MockBackend::default();
+        backend.set_tooltip(Some("tip".to_string()));
+        backend.set_mark_axis(Some("1".to_string()));
+        backend.set_mark_series(Some("a".to_string()));
+        backend.set_mark_value(Some("1".to_string()));
+        backend.set_mark_attrs(vec![("x".to_string(), "y".to_string())]);
+        backend.set_mark_fvalue(Some("1".to_string()));
+        backend.set_mark_fx(Some("1".to_string()));
+        assert_eq!(backend.tooltip_calls, 1);
+        assert_eq!(backend.mark_axis_calls, 1);
+        assert_eq!(backend.mark_series_calls, 1);
+        assert_eq!(backend.mark_value_calls, 1);
+        assert_eq!(backend.mark_attrs_calls, 1);
+        assert_eq!(backend.mark_fvalue_calls, 1);
+        assert_eq!(backend.mark_fx_calls, 1);
+    }
+
+    #[test]
+    fn decorative_draw_runs_the_wrapped_geom_through_mute_marks() {
+        // End-to-end sanity: `Decorative::draw` actually constructs a
+        // `MuteMarks` around the given backend and calls the wrapped
+        // geom's own `draw`, rather than skipping it.
+        use crate::coord::cartesian::CoordCartesian;
+        use crate::data::Value;
+
+        let mut data = DataFrame::new();
+        data.add_column("x".to_string(), vec![Value::Float(1.0)]);
+        data.add_column("y".to_string(), vec![Value::Float(1.0)]);
+        let coord = CoordCartesian::default();
+        let scales = ScaleSet::default();
+        let theme = Theme::default();
+        let mut backend = MockBackend::default();
+        let wrapped = Decorative(Box::new(GeomPoint::default()));
+        wrapped
+            .draw(&data, &coord, &scales, &theme, &mut backend)
+            .unwrap();
+        assert_eq!(
+            backend.circles, 1,
+            "the wrapped geom's own mark must still be drawn"
+        );
+        assert_eq!(
+            backend.tooltip_calls, 0,
+            "but its tooltip call must be muted"
+        );
     }
 }
