@@ -184,7 +184,7 @@ guarded by `tests/default_output_022.rs`.
   labels without a dodge are unaffected.
 - `geom_errorbar`'s whisker caps shrink by the dodge group count under a
   discrete `position_dodge`, so caps from adjacent groups no longer
-  visually overlap (#151). An un-dodged errorbar is unaffected.
+  visually overlap (#152). An un-dodged errorbar is unaffected.
 - A `Value::Na` (e.g. a SQL NULL) in a position column that is never
   legitimately discrete (`ymin`/`ymax`/`xend`/`yend`/`lower`/`middle`/
   `upper`/…, i.e. every position column except `x`/`y`, which may hold
