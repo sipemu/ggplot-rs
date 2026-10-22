@@ -271,19 +271,87 @@ fn vertical_legend_ncol_two_with_long_labels_stays_on_canvas() {
     );
 }
 
-/// Regression for review #158's second re-review (LOW): when a vertical
-/// multi-column grid is simply too wide for the canvas — many columns,
-/// long labels, a narrow chart — even after reserving `(cols - 1) *
-/// col_pitch`, it still runs off the canvas; the build must warn about
-/// it rather than silently clip.
+/// #159: a vertical multi-column grid that still runs off the canvas
+/// after reserving `(cols - 1) * col_pitch` first tries reducing its
+/// column count toward 1 — here that alone is enough: `ncol(4)` on a
+/// 300px chart has no room for 4 columns of long labels, but 1 column
+/// does fit, so the build no longer needs to warn or truncate (0.22
+/// warned unconditionally in this exact case; review #158's second
+/// re-review introduced that warning).
 #[test]
-fn vertical_legend_ncol_grid_too_wide_for_the_canvas_warns() {
+fn vertical_legend_ncol_grid_too_wide_reduces_columns_instead_of_warning() {
     let data = groups_with_labels(12, |i| format!("A Very Long Group Label Number {}", i + 1));
     let (svg, warnings) = GGPlot::new(data)
         .aes(Aes::new().x("x").y("y").color("g"))
         .geom_point()
         .guides(GuideLegend::new().with_ncol(4))
         .render_svg_native_with_warnings(300, 400)
+        .unwrap();
+    assert!(!svg.contains("NaN"), "{svg}");
+    assert!(
+        warnings
+            .iter()
+            .all(|w| !(w.contains("legend") && w.contains("doesn't fit"))),
+        "column reduction should have avoided the warning: {warnings:?}"
+    );
+}
+
+/// #159: when reducing columns isn't enough (labels so long even a
+/// single column overflows), labels are truncated with an ellipsis
+/// instead — the full label stays available via a `<title>` tooltip on
+/// the key, and no warning is needed since the truncated legend does fit.
+#[test]
+fn vertical_legend_with_very_long_labels_truncates_with_a_title_tooltip() {
+    let data = groups_with_labels(12, |i| {
+        format!(
+            "An Extremely Very Super Duper Long Group Label Number {} \
+             With Lots More Text Appended Here To Make It Even Longer",
+            i + 1
+        )
+    });
+    let (svg, warnings) = GGPlot::new(data)
+        .aes(Aes::new().x("x").y("y").color("g"))
+        .geom_point()
+        .guides(GuideLegend::new().with_ncol(6))
+        .render_svg_native_with_warnings(200, 400)
+        .unwrap();
+    assert!(!svg.contains("NaN"), "{svg}");
+    assert!(
+        svg.contains('…'),
+        "a label should have been truncated: {svg}"
+    );
+    // The full, untruncated label is still present verbatim inside a
+    // <title> tooltip for the key it belongs to.
+    assert!(
+        svg.contains("<title>An Extremely Very Super Duper Long Group Label Number 1 "),
+        "the full label should still be available via <title>: {svg}"
+    );
+    assert!(
+        warnings
+            .iter()
+            .all(|w| !(w.contains("legend") && w.contains("doesn't fit"))),
+        "truncation should have avoided the warning: {warnings:?}"
+    );
+}
+
+/// #159: when the chart is so narrow that even a truncated-to-an-
+/// ellipsis single column still can't fit, the build falls back to
+/// warning — the "only warn if it still overflows after both" tail of
+/// the fix.
+#[test]
+fn vertical_legend_warns_only_when_truncation_still_cant_fit() {
+    let data = groups_with_labels(12, |i| {
+        format!(
+            "An Extremely Very Super Duper Long Group Label Number {} \
+             With Lots More Text Appended Here To Make It Even Longer",
+            i + 1
+        )
+    });
+    let (svg, warnings) = GGPlot::new(data)
+        .aes(Aes::new().x("x").y("y").color("g"))
+        .geom_point()
+        .guides(GuideLegend::new().with_ncol(8))
+        .render_svg_native_with_warnings(60, 400)
         .unwrap();
     assert!(!svg.contains("NaN"), "{svg}");
     assert!(
@@ -346,6 +414,32 @@ fn byte_identical_cases_are_unaffected() {
         let svg = render(base(3).legend_position(pos), 800, 400);
         assert!(!svg.contains(" more<"), "a 3-key legend never overflows");
     }
+}
+
+/// #159: a vertical `ncol` grid that already fits renders byte-identically
+/// to the pre-#159 "warn only" version of this check — no column
+/// reduction, no truncated labels, no extra `<title>` tooltip, no
+/// warning. Two independent renders (identical input) must also match
+/// exactly, since the fix path is otherwise deterministic.
+#[test]
+fn a_vertical_grid_that_already_fits_is_byte_identical() {
+    let (svg1, warnings1) = base(4)
+        .guides(GuideLegend::new().with_ncol(2))
+        .render_svg_native_with_warnings(500, 400)
+        .unwrap();
+    let (svg2, warnings2) = base(4)
+        .guides(GuideLegend::new().with_ncol(2))
+        .render_svg_native_with_warnings(500, 400)
+        .unwrap();
+    assert_eq!(svg1, svg2, "identical input must render identically");
+    assert!(
+        !svg1.contains('…'),
+        "a fitting grid must not truncate: {svg1}"
+    );
+    assert!(
+        warnings1.is_empty() && warnings2.is_empty(),
+        "a fitting grid must not warn: {warnings1:?}"
+    );
 }
 
 /// The drawn "+N more" text, if any.

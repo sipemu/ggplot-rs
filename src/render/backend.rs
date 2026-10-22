@@ -200,6 +200,23 @@ pub trait DrawBackend {
     ) -> Result<(), RenderError>;
     fn draw_polygon(&mut self, points: &[(f64, f64)], style: &RectStyle)
         -> Result<(), RenderError>;
+
+    /// Like [`draw_text`](Self::draw_text), but with an optional `<title>`
+    /// tooltip carrying the *full* text when `text` itself has been
+    /// shortened (e.g. a truncated-with-ellipsis legend label, #159).
+    /// Default: ignores `title` and draws `text` plain — backends without
+    /// native tooltip support (anything but SVG) have no better option.
+    /// SVG overrides this to emit the `<title>` child, escaped the same
+    /// way every other text run is.
+    fn draw_text_with_title(
+        &mut self,
+        text: &str,
+        pos: (f64, f64),
+        style: &TextStyle,
+        _title: Option<&str>,
+    ) -> Result<(), RenderError> {
+        self.draw_text(text, pos, style)
+    }
     fn plot_area(&self) -> Rect;
     fn total_area(&self) -> Rect;
 

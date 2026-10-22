@@ -51,6 +51,20 @@ by a test.
   already fit is unaffected (`tests/legend_wrap.rs`'s
   `two_discrete_guides_each_auto_wrap` and
   `plotgrid_collected_legend_auto_wraps` cover the new cases).
+- A vertical legend's explicit `ncol` grid that still runs off the canvas
+  after reserving `(cols - 1) * col_pitch` (0.22's "warn only" check) now
+  tries harder before giving up (#159): it first reduces the column
+  count toward 1, keeping the first count that fits; if even one column
+  overflows, it truncates labels with an ellipsis instead (the full label
+  stays available via a `<title>` tooltip on the key, escaped the same
+  way every other text run is — `DrawBackend::draw_text_with_title`, new,
+  default no-op, SVG-only); only if it still doesn't fit after both does
+  it warn, as before. A grid that already fits renders byte-identical to
+  0.22.1 — no reduction, no truncation, no warning
+  (`tests/legend_wrap.rs`'s `a_vertical_grid_that_already_fits_is_byte_identical`,
+  plus the reduce/truncate/still-warns cases replacing
+  `vertical_legend_ncol_grid_too_wide_for_the_canvas_warns`, which
+  asserted the old "always warns" behaviour).
 
 ## [0.22.2] — 2026-10-22
 

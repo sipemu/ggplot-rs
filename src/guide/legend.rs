@@ -600,6 +600,13 @@ pub(crate) struct LegendEntry {
     pub break_idx: usize,
     pub row: usize,
     pub x_offset: f64,
+    /// A truncated-with-ellipsis display label (#159), set only when a
+    /// vertical multi-column grid still doesn't fit the canvas after
+    /// reducing its column count as far as it can go: the full label is
+    /// still available (e.g. for a `<title>` tooltip) via the scale's own
+    /// `breaks()[break_idx]`. `None` draws the break's label unchanged —
+    /// the common, byte-identical case.
+    pub label_override: Option<String>,
 }
 
 /// A trailing "+{k} more" marker when the legend doesn't have room for
@@ -691,6 +698,7 @@ pub(crate) fn plan_legend(
                     break_idx: i,
                     row,
                     x_offset: col as f64 * col_pitch,
+                    label_override: None,
                 }
             })
             .collect();
@@ -735,6 +743,7 @@ pub(crate) fn plan_legend(
             break_idx: i,
             row,
             x_offset: cur_x,
+            label_override: None,
         });
         cur_x += p;
     }
@@ -1055,8 +1064,12 @@ fn draw_discrete_legend_grid(
         } else {
             Some(theme.legend_text.family.clone())
         };
-        backend.draw_text(
-            label,
+        // #159: a label truncated to fit a vertical multi-column grid
+        // still shows its full text via a `<title>` tooltip (backends
+        // without tooltip support just render the truncated text).
+        let display = entry.label_override.as_deref().unwrap_or(label.as_str());
+        backend.draw_text_with_title(
+            display,
             (x + swatch_size + theme.legend_spacing, center_y),
             &TextStyle {
                 color: theme.legend_text.color,
@@ -1066,6 +1079,7 @@ fn draw_discrete_legend_grid(
                 family: label_family,
                 face: theme.legend_text.face,
             },
+            entry.label_override.as_deref().map(|_| label.as_str()),
         )?;
     }
 
