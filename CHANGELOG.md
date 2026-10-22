@@ -23,6 +23,21 @@ by a test.
   fixed facet scales. A plot with 2+ distinct facet panels and a dodge or
   jitter layer may render differently; an unfaceted plot, or one with a
   single panel, is unaffected (`tests/position_panels_r.rs`).
+- `position_stack`/`position_fill` now split a group's positive and
+  negative values at each x into two independent stacks instead of one
+  pooled running total (#154), matching ggplot2's internal `pos`/`neg`
+  split (`collide`/`pos_stack`): positives stack upward from 0 using only
+  the positive sum as the total (or `position_fill`'s normalisation
+  denominator), negatives stack downward from 0 using only the
+  (absolute) negative sum, each with its own `vjust` anchoring, verified
+  against
+  ggplot2 4.0.3 with `layer_data()` (a 4-group bar at one x with y = 3,
+  -2, 4, -1: `position_stack(vjust = 0.5)` gives y/ymin/ymax (5.5, 4, 7),
+  (-2, -3, -1), (2, 0, 4), (-0.5, -1, 0); `position_fill(vjust = 0)` gives
+  (4/7, 4/7, 1), (-1, -1, -1/3), (0, 0, 4/7), (-1/3, -1/3, 0)). All-
+  positive (or all-negative) data at an x is byte-identical — the other
+  sign's bucket is simply empty (`src/position/stack.rs`,
+  `src/position/fill.rs` unit tests).
 
 ## [0.22.2] — 2026-10-22
 
