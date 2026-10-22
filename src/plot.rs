@@ -2956,7 +2956,7 @@ impl GGPlot {
                         for (aes, new_plan) in updates {
                             plans.insert(aes, new_plan);
                         }
-                        // Review #167 finding 4 (LOW, left as-is — see
+                        // Review #167 finding 5 (LOW, #168; left as-is — see
                         // below): `extras.legend_extra_width` (set above,
                         // before this reduction loop ran) is deliberately
                         // *not* recomputed from `plans`' now-possibly-

@@ -77,7 +77,7 @@ fn jitter_facet_data() -> Cols {
 /// #154: a bar chart mixing positive and negative values at one x.
 /// `geom_col()` defaults to `PositionIdentity` (review #167 finding 3 —
 /// a pre-existing parity gap from ggplot2, which defaults `geom_col` to
-/// `position_stack`; see the follow-up issue), so exercising #154 needs
+/// `position_stack`; tracked in #169), so exercising #154 needs
 /// an explicit `.position(PositionStack)` / `.position(PositionFill)` —
 /// without one, this data renders byte-identical to 0.22.2 and the case
 /// doesn't touch #154's code at all.

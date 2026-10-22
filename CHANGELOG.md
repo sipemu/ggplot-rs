@@ -3,7 +3,7 @@
 All notable changes to this project are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
-## [0.23.0] — Unreleased
+## [0.23.0] — 2026-10-22
 
 Minor bump: per-panel dodge/jitter, negative stacking, legend wrap for
 grids/multiple guides, vertical legend fit. Default output stays byte-
@@ -12,12 +12,17 @@ by a test.
 
 ### Added
 
-- `DrawBackend::draw_text_with_title` (default no-op; implemented by the
-  native SVG backend) and `render::text::truncate_to_width` (a new `pub
+- `DrawBackend::draw_text_with_title` (the default draws the text and
+  drops the title; the native SVG backend writes the `<title>`) and `render::text::truncate_to_width` (a new `pub
   fn` in the public `render::text` module): draws (or measures) a text
   run with an attached full-text `<title>` tooltip, used by #159's label
   truncation below to keep a truncated label's full text available via
-  hover even though the drawn text itself is shortened.
+  hover even though the drawn text itself is shortened. The truncated
+  label is a plain text run, not a `gg-mark`: an SVG consumer that treats
+  "has a `<title>`" as "is a data mark" should select on `gg-mark` instead.
+- `Position::group_order` (default `None`) and
+  `PositionParams::group_order`: the layer-wide group order a faceted
+  dodge/dodge2 ranks its groups by (#153, see Changed).
 - `tests/default_output_023.rs`, on the same pattern as
   `tests/default_output_022.rs`: a battery of fixed plots exercising
   #153/#154/#155/#159's deliberate changes plus their byte-identical
@@ -29,6 +34,14 @@ by a test.
   (#153 finding 2), and `tests/legend_wrap.rs` gained a `PlotGrid`
   collected-legend case with two simultaneous discrete guides (#155
   finding 1).
+
+### Breaking
+
+- `PositionParams` has a new public field, `group_order:
+  Option<Vec<String>>` (#153). Code that builds `PositionParams` with a
+  struct literal must add `group_order: None` (or use
+  `..Default::default()`). `cargo semver-checks` flags this as
+  `constructible_struct_adds_field`; it's the only API break.
 
 ### Deprecated
 
@@ -51,7 +64,9 @@ by a test.
   shifts the groups that panel does have). Group *rank* — which group
   dodges left vs right — still comes from the whole layer's first-
   appearance order (review #167 finding 2), not from each panel's own
-  row order: ggplot2 4.0.3 ranks by the global `group` id, so a panel
+  row order, so every panel agrees, as in ggplot2 4.0.3. (ggplot2 ranks by
+  the sorted `group` id, so the two still differ when the data's first
+  appearance order isn't sorted; 0.22.2 behaved the same.) A panel
   whose rows happen to list two groups in a different order than
   another panel still draws a given group on the same side in both. A
   faceted `position_jitter`'s default width/height (`resolution(x) *
@@ -114,7 +129,7 @@ by a test.
   same way every other text run is — `DrawBackend::draw_text_with_title`, new,
   default no-op, SVG-only); only if it still doesn't fit after both does
   it warn, as before. A grid that already fits renders byte-identical to
-  0.22.1 — no reduction, no truncation, no warning
+  0.22.2 — no reduction, no truncation, no warning
   (`tests/legend_wrap.rs`'s `a_vertical_grid_that_already_fits_is_byte_identical`,
   plus the reduce/truncate/still-warns cases replacing
   `vertical_legend_ncol_grid_too_wide_for_the_canvas_warns`, which
