@@ -1341,6 +1341,17 @@ impl PlotBuilder {
             return;
         }
 
+        // Review #167 finding 2: a per-panel position's group *rank*
+        // (e.g. `PositionDodge`) must come from the whole layer, computed
+        // here against the still-pooled `data` — before it's split into
+        // the panels below — so every panel ranks a given group the same
+        // way regardless of which group its own rows happen to list
+        // first (sipemu/ggplot-rs#153; matches 0.22.2 and ggplot2 4.0.3's
+        // global `group` id). Positions that don't override `group_order`
+        // (stack/fill/jitter) get `None` back, unchanged from before.
+        let mut panel_params = params.clone();
+        panel_params.group_order = position.group_order(data);
+
         let col_names: Vec<String> = data.column_names().iter().map(|s| s.to_string()).collect();
         let mut panels: Vec<(Vec<usize>, DataFrame)> = Vec::with_capacity(order.len());
         for key in &order {
@@ -1352,7 +1363,7 @@ impl PlotBuilder {
                     indices.iter().map(|&i| col[i].clone()).collect();
                 sub.add_column(name.clone(), values);
             }
-            position.compute(&mut sub, params);
+            position.compute(&mut sub, &panel_params);
             panels.push((indices.clone(), sub));
         }
 

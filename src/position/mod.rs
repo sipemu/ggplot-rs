@@ -14,6 +14,18 @@ use crate::data::DataFrame;
 pub struct PositionParams {
     pub width: f64,
     pub height: f64,
+    /// The whole layer's group rank order (review #167 finding 2), set by
+    /// `build::compute_position_per_panel` from [`Position::group_order`]
+    /// *before* splitting the layer's rows into panels. A per-panel
+    /// position (`PositionDodge`/`PositionDodge2`) ranks groups from this
+    /// — the whole layer's first-appearance order — rather than
+    /// recomputing it from whatever order each panel's own rows happen to
+    /// list groups in, so every panel draws a given group on the same
+    /// side (matching 0.22.2 and ggplot2 4.0.3's global `group` id).
+    /// `None` outside the per-panel path (or for positions that don't
+    /// override `group_order`), in which case each position falls back
+    /// to its previous, locally-computed order.
+    pub group_order: Option<Vec<String>>,
 }
 
 impl Default for PositionParams {
@@ -21,6 +33,7 @@ impl Default for PositionParams {
         PositionParams {
             width: 0.9,
             height: 0.0,
+            group_order: None,
         }
     }
 }
@@ -45,6 +58,19 @@ pub trait Position: Send + Sync {
     /// with `layer_data()` on faceted plots; see `tests/position_panels_r.rs`).
     fn per_panel(&self) -> bool {
         false
+    }
+
+    /// The whole layer's group rank order (first-appearance, pre-panel-
+    /// split), for a `per_panel` position whose group *ranking* must come
+    /// from the whole layer even though its per-x *counting* stays
+    /// per-panel (review #167 finding 2; sipemu/ggplot-rs#153).
+    /// `build::compute_position_per_panel` calls this on the pooled data
+    /// before splitting and threads the result through
+    /// [`PositionParams::group_order`] to every panel's `compute` call.
+    /// Default `None` — positions that don't need this (stack/fill/
+    /// jitter) are unaffected.
+    fn group_order(&self, _data: &DataFrame) -> Option<Vec<String>> {
+        None
     }
 
     /// Validate this position's own parameters once per layer (D2);

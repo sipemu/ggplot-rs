@@ -203,6 +203,68 @@ fn facet_dodge_matches_r_per_panel() {
     );
 }
 
+/// Review #167 finding 2: a dodge's group *rank* must come from the whole
+/// layer, not from whatever order each panel's own rows happen to list
+/// groups in. Panel P lists `g1` then `g2`; panel Q lists the same two
+/// groups in the opposite row order (`g2` then `g1`). ggplot2 4.0.3
+/// (`layer_data()`) and 0.22.2 both rank by the global `group` id, so
+/// `g1` dodges left (x=0.75) and `g2` right (x=1.25) in *both* panels.
+/// Before this fix, Q's `compute` re-derived "first appearance" from its
+/// own rows and drew `g2` left / `g1` right there instead.
+#[test]
+fn facet_dodge_order_is_global_not_per_panel_first_appearance() {
+    let data = vec![
+        (
+            "panel".to_string(),
+            vec![
+                Value::Str("P".into()),
+                Value::Str("P".into()),
+                Value::Str("Q".into()),
+                Value::Str("Q".into()),
+            ],
+        ),
+        ("x".to_string(), vec![Value::Float(1.0); 4]),
+        (
+            "grp".to_string(),
+            vec![
+                // P: g1 then g2 (first-appearance order == global order).
+                Value::Str("g1".into()),
+                Value::Str("g2".into()),
+                // Q: g2 then g1 — the opposite row order.
+                Value::Str("g2".into()),
+                Value::Str("g1".into()),
+            ],
+        ),
+        ("y".to_string(), vec![Value::Float(1.0); 4]),
+    ];
+    let svg = GGPlot::new(data)
+        .aes(Aes::new().x("x").y("y").color("grp"))
+        .geom_point()
+        .position(ggplot_rs::position::dodge::position_dodge(1.0))
+        .tooltip("{grp}@{x}")
+        .facet_wrap("panel", None)
+        .render_svg_native_with_size(600, 300)
+        .unwrap();
+
+    for expect in ["<title>g1@0.75</title>", "<title>g2@1.25</title>"] {
+        let n = svg.matches(expect).count();
+        assert_eq!(
+            n, 2,
+            "expected {expect} once per panel (P and Q) — found {n} in {svg}"
+        );
+    }
+    // The regression: Q's own row order would otherwise have drawn g2
+    // left (0.75) and g1 right (1.25).
+    assert!(
+        !svg.contains("<title>g2@0.75</title>"),
+        "g2 must not dodge left of g1 in any panel: {svg}"
+    );
+    assert!(
+        !svg.contains("<title>g1@1.25</title>"),
+        "g1 must not dodge right of g2 in any panel: {svg}"
+    );
+}
+
 /// `position_dodge2` shares `dodge_rows` with `position_dodge`, so the
 /// same per-panel rule applies to it (#153).
 #[test]

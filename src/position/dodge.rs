@@ -55,7 +55,13 @@ pub fn position_dodge(width: f64) -> PositionDodge {
 
 impl Position for PositionDodge {
     fn compute(&self, data: &mut DataFrame, params: &PositionParams) {
-        dodge_rows(data, self.width.unwrap_or(params.width), None, self.reverse);
+        dodge_rows(
+            data,
+            self.width.unwrap_or(params.width),
+            None,
+            self.reverse,
+            params.group_order.as_deref(),
+        );
     }
 
     fn name(&self) -> &str {
@@ -69,11 +75,29 @@ impl Position for PositionDodge {
     fn per_panel(&self) -> bool {
         true
     }
+
+    /// Review #167 finding 2: the group *rank* still comes from the whole
+    /// layer (first-appearance order across every panel), even though the
+    /// per-x group *count* stays per-panel. Without this, a panel whose
+    /// rows happen to list groups in a different order than another panel
+    /// drew that group on the opposite side — a regression vs 0.22.2 and
+    /// ggplot2 4.0.3, which both rank by the global `group` id.
+    fn group_order(&self, data: &DataFrame) -> Option<Vec<String>> {
+        group_keys(data).map(|keys| dedup_order(&keys))
+    }
+}
+
+/// First-appearance-order, de-duplicated group keys — the "legend order"
+/// `group_order` (and, absent an external order, `dodge_rows` itself)
+/// ranks groups by.
+pub(crate) fn dedup_order(keys: &[String]) -> Vec<String> {
+    let set: indexmap::IndexSet<&str> = keys.iter().map(|k| k.as_str()).collect();
+    set.into_iter().map(str::to_string).collect()
 }
 
 /// The dodge key of each row: its group / fill / colour levels combined
 /// (`None` when the frame has none of these columns).
-fn group_keys(data: &DataFrame) -> Option<Vec<String>> {
+pub(crate) fn group_keys(data: &DataFrame) -> Option<Vec<String>> {
     let cols: Vec<&[Value]> = ["group", "fill", "color"]
         .iter()
         .filter_map(|c| data.column(c))
@@ -95,7 +119,21 @@ fn group_keys(data: &DataFrame) -> Option<Vec<String>> {
 
 /// Shared dodge / dodge2 implementation. `padding` (dodge2) also rewrites
 /// `xmin`/`xmax` on a continuous axis to the shrunken element extent.
-pub(crate) fn dodge_rows(data: &mut DataFrame, width: f64, padding: Option<f64>, reverse: bool) {
+///
+/// `external_order` (review #167 finding 2) is the whole layer's group
+/// rank order, computed by `build::compute_position_per_panel` from
+/// [`Position::group_order`] before the layer's rows were split into
+/// panels. When given, it — not this call's own (possibly per-panel)
+/// `data` — decides group rank; `None` (the non-per-panel call path, and
+/// every pre-#153 caller) falls back to the previous, locally-computed
+/// order.
+pub(crate) fn dodge_rows(
+    data: &mut DataFrame,
+    width: f64,
+    padding: Option<f64>,
+    reverse: bool,
+    external_order: Option<&[String]>,
+) {
     let Some(x_col) = data.column("x").map(|c| c.to_vec()) else {
         return;
     };
@@ -107,8 +145,15 @@ pub(crate) fn dodge_rows(data: &mut DataFrame, width: f64, padding: Option<f64>,
     } else {
         0.9
     };
-    // Global group order (legend order), optionally reversed.
-    let mut order: indexmap::IndexSet<&str> = keys.iter().map(|k| k.as_str()).collect();
+    // Group order (legend order), optionally reversed: the whole layer's
+    // order when given (#167 finding 2), else this call's own data —
+    // identical to the whole layer's order whenever there's no per-panel
+    // split (the non-per-panel path, and direct `compute()` calls in unit
+    // tests below).
+    let mut order: indexmap::IndexSet<&str> = match external_order {
+        Some(ext) => ext.iter().map(|s| s.as_str()).collect(),
+        None => keys.iter().map(|k| k.as_str()).collect(),
+    };
     if order.len() <= 1 {
         return;
     }
