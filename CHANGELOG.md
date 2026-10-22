@@ -21,7 +21,11 @@ annotation ink, boxplot identity mapping.
   adds no field to any public struct. A `.tooltip(...)` on a decorative
   layer has no visible effect and warns, like the existing has-no-effect
   warning. A decorative layer also defaults to hidden in the legend,
-  unless `show_legend(true)` is called to opt back in.
+  unless `show_legend(true)` is called to opt back in. Its marks are tagged
+  `data-part="decorative"` and `aria-hidden="true"` (keeping `data-geom`),
+  and their class is `gg-mark gg-decorative` instead of the geom's own
+  (`gg-point`, `gg-line`, …), so a stylesheet selecting on the geom class
+  doesn't restyle them as data marks.
 - `with_value_formatter` (same signature as
   `ScaleContinuous::with_value_formatter`) on every continuous colour/fill
   scale that implements `format_value`: `ScaleColorContinuous`,
@@ -37,6 +41,9 @@ annotation ink, boxplot identity mapping.
   `"y = …"` label the same way every other `consumes_tooltips` geom does;
   previously the template was silently dropped with a has-no-effect
   warning (#165). The default label (no template set) is unchanged.
+  A mapped reference line's `data_attr` attributes no longer carry over
+  onto the marks drawn after it (annotations, gridlines drawn on top,
+  legend keys).
 - `annotate_text`/`annotate_segment` now follow theme `element_geom` ink
   when their colour is still at its hard-coded default, the same as every
   other geom's default colour (#157, follow-up to #142) — previously they

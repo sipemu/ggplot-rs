@@ -1109,7 +1109,7 @@ impl PlotBuilder {
             // `geom_ribbon`.
             if !geom.consumes_tooltips() {
                 warnings.push(format!(
-                    "{geom_label}: tooltip(\"{template}\") has no effect — this geom doesn't read tooltips"
+                    "{geom_label}: tooltip(\"{template}\") has no effect — this geom doesn't read tooltips, or the layer is decorative()"
                 ));
             }
             let rendered: Vec<crate::data::Value> = (0..working_data.nrows())

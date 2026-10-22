@@ -201,6 +201,7 @@ impl Geom for GeomHline {
             backend.draw_line(&pts, &style)?;
         }
         super::clear_mark(backend);
+        super::clear_row_extras(backend);
         Ok(())
     }
 
@@ -298,6 +299,7 @@ impl Geom for GeomVline {
             backend.draw_line(&pts, &style)?;
         }
         super::clear_mark(backend);
+        super::clear_row_extras(backend);
         Ok(())
     }
 
@@ -489,6 +491,7 @@ impl Geom for GeomAbline {
             }
         }
         super::clear_mark(backend);
+        super::clear_row_extras(backend);
         Ok(())
     }
 

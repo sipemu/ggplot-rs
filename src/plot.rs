@@ -1138,6 +1138,8 @@ impl GGPlot {
     /// `data-part="decorative"` and `aria-hidden="true"` (`data-geom`
     /// still names the real geom), so a consumer can select decorative
     /// marks positively rather than only infer them from what they lack.
+    /// Their class is `gg-mark gg-decorative`, not the geom's own
+    /// (`gg-point`, `gg-line`, …).
     ///
     /// A `.tooltip(...)` template on a decorative layer has no visible
     /// effect — the geom's marks carry no tooltip regardless — and warns,
