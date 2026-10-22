@@ -69,21 +69,26 @@ impl Position for PositionFill {
         // `PositionStack` already does. "top"/"bottom" below are in that
         // accumulation order, not value order, so the final `ymin`/
         // `ymax`/`y` take the min/max of the pair.
+        //
+        // A missing row (`super::stack_row` — shared with `PositionStack`,
+        // review #167 finding 3 on #171) joins the positive bucket but
+        // contributes 0 to its total/denominator, and its own top/bottom
+        // are left NaN below, matching ggplot2's `position_fill`.
         for positive in [true, false] {
             let sign_total = if positive { 1.0 } else { -1.0 };
             let mut totals: HashMap<Cow<'_, str>, f64> = HashMap::new();
             for (x, y) in x_col.iter().zip(y_col.iter()) {
-                let y_val = y.as_f64().unwrap_or(0.0);
-                if (y_val >= 0.0) != positive {
+                let row = super::stack_row(y);
+                if row.is_positive_bucket() != positive {
                     continue;
                 }
-                *totals.entry(x.key_str()).or_insert(0.0) += y_val;
+                *totals.entry(x.key_str()).or_insert(0.0) += row.contribution();
             }
 
             let mut consumed: HashMap<Cow<'_, str>, f64> = HashMap::new();
             for (i, (x, y)) in x_col.iter().zip(y_col.iter()).enumerate() {
-                let y_val = y.as_f64().unwrap_or(0.0);
-                if (y_val >= 0.0) != positive {
+                let row = super::stack_row(y);
+                if row.is_positive_bucket() != positive {
                     continue;
                 }
                 let x_key = x.key_str();
@@ -94,6 +99,12 @@ impl Position for PositionFill {
                     total.abs()
                 };
                 let run = consumed.get(&x_key).copied().unwrap_or(0.0);
+
+                let Some(y_val) = row.value() else {
+                    tops[i] = f64::NAN;
+                    bottoms[i] = f64::NAN;
+                    continue;
+                };
 
                 let norm_y = y_val / denom;
                 tops[i] = sign_total - run;
@@ -224,5 +235,33 @@ mod tests {
         let y = col(&df, "y");
         assert!((y[0] - 1.0).abs() < 1e-9);
         assert!((y[1] - 0.625).abs() < 1e-9);
+    }
+
+    /// Review #167 finding 3 on sipemu/ggplot-rs#171: `position_fill`
+    /// shares `PositionStack`'s missing-value helper (finding 2), so a
+    /// missing `y` contributes 0 to its bucket's normalisation
+    /// denominator instead of poisoning it with NaN. ggplot2 4.0.3
+    /// (`layer_data()`): a=3, b=NaN, c=-2 gives a 0..1, c -1..0, b's own
+    /// y/ymin left `NA`.
+    #[test]
+    fn missing_y_contributes_zero_and_does_not_poison_its_bucket() {
+        let mut df = frame(&[1.0, 1.0, 1.0], &["a", "b", "c"], &[3.0, f64::NAN, -2.0]);
+        PositionFill.compute(&mut df, &PositionParams::default());
+        let y = col(&df, "y");
+        let ymin = col(&df, "ymin");
+        assert_eq!(
+            (y[0], ymin[0]),
+            (1.0, 0.0),
+            "a must normalize as if b's row weren't there at all: y={y:?} ymin={ymin:?}"
+        );
+        assert!(
+            y[1].is_nan() && ymin[1].is_nan(),
+            "b's own y/ymin must stay NaN (not drawn): y={y:?} ymin={ymin:?}"
+        );
+        assert_eq!(
+            (y[2], ymin[2]),
+            (0.0, -1.0),
+            "c (negative bucket) must be unaffected: y={y:?} ymin={ymin:?}"
+        );
     }
 }

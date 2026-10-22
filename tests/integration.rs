@@ -977,16 +977,19 @@ fn test_layer_position_override_build() {
             vec![Value::Str("g1".into()), Value::Str("g2".into())],
         ),
     ];
-    // Default: geom_col uses PositionIdentity → y values unchanged
+    // Default: geom_point uses PositionIdentity → y values unchanged.
+    // (#169, 0.24: geom_col's own default changed to PositionStack —
+    // ggplot2 parity with geom_bar — so geom_point is used here instead
+    // to keep testing an actual override of an identity default.)
     let built_default = GGPlot::new(data.clone())
         .aes(Aes::new().x("x").y("y").fill("fill"))
-        .geom_col()
+        .geom_point()
         .build();
 
     // Override: PositionStack → y should be cumulative
     let built_stacked = GGPlot::new(data)
         .aes(Aes::new().x("x").y("y").fill("fill"))
-        .geom_col()
+        .geom_point()
         .position(PositionStack)
         .build();
 

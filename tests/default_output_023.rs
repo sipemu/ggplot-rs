@@ -9,6 +9,10 @@
 //! listed under CHANGELOG's `[0.23.0]` "Changed". Anything else that
 //! flips a hash here is a regression — fix the code, not the test.
 //!
+//! `all_positive_stack`'s hash changed under #169 (0.24): see that case's
+//! own data-fn comment below and CHANGELOG's `[0.24.0]` entry — a
+//! documented follow-up, not a regression.
+//!
 //! Runs in every feature configuration (no polars/plotters/sf-only API), so
 //! it is part of every `cargo test` job, including `--no-default-features`
 //! and `--no-default-features --features sf`.
@@ -74,13 +78,17 @@ fn jitter_facet_data() -> Cols {
     ]
 }
 
-/// #154: a bar chart mixing positive and negative values at one x.
-/// `geom_col()` defaults to `PositionIdentity` (review #167 finding 3 —
-/// a pre-existing parity gap from ggplot2, which defaults `geom_col` to
-/// `position_stack`; tracked in #169), so exercising #154 needs
-/// an explicit `.position(PositionStack)` / `.position(PositionFill)` —
-/// without one, this data renders byte-identical to 0.22.2 and the case
-/// doesn't touch #154's code at all.
+/// #154: a bar chart mixing positive and negative values at one x. Up
+/// through 0.23, `geom_col()` defaulted to `PositionIdentity` (review
+/// #167 finding 3 — a pre-existing parity gap from ggplot2, which
+/// defaults `geom_col` to `position_stack`; tracked in #169), so
+/// exercising #154 needed an explicit `.position(PositionStack)` /
+/// `.position(PositionFill)` below. #169 (0.24) fixed that gap, so this
+/// data is no longer load-bearing for reaching #154's code through the
+/// default path — the explicit `.position(...)` calls below are kept
+/// anyway: they're what document *which* position variant (`Stack` vs
+/// `Fill`) each case exercises, and this fixture is unaffected by #169
+/// either way (every row explicitly overrides the default).
 fn mixed_sign_data() -> Cols {
     vec![
         ("x".into(), f(&[1.0, 1.0, 1.0, 1.0])),
@@ -89,8 +97,14 @@ fn mixed_sign_data() -> Cols {
     ]
 }
 
-/// A bar chart with only positive values at each x: unaffected by #154
-/// (the negative bucket is simply empty).
+/// A bar chart with only positive values at each x, rendered with
+/// `geom_col()`'s *default* position (no explicit `.position(...)`) —
+/// unaffected by #154 (the negative bucket is simply empty either way),
+/// but, as of #169 (0.24), no longer byte-identical to 0.22.2/0.23: two
+/// groups at a shared x now stack instead of drawing on top of each
+/// other from `y = 0` (ggplot2 parity — `geom_col()`'s default position
+/// is `position_stack()`, matching `geom_bar()`'s, see
+/// `tests/issue169_geom_col_default_stack.rs`).
 fn all_positive_stack_data() -> Cols {
     vec![
         ("x".into(), f(&[1.0, 1.0])),
@@ -177,7 +191,12 @@ fn expected() -> Vec<(&'static str, u64)> {
         ("jitter_facet", 0x2041b5e10e321c52),
         ("stack_mixed_sign", 0xd89d244ba7f70ae2),
         ("fill_mixed_sign", 0xf1c8fa0e2df7203a),
-        ("all_positive_stack", 0x92ba5f6f174412ae),
+        // #169 (0.24): geom_col()'s default position changed from
+        // PositionIdentity to PositionStack (ggplot2 parity) — two
+        // groups at a shared x now stack instead of overlapping from
+        // y=0. See this case's data-fn comment above and CHANGELOG
+        // [0.24.0].
+        ("all_positive_stack", 0x236f799c5fa67957),
         ("two_discrete_guides", 0x1c9247192286f120),
         ("one_discrete_guide", 0x98da47e69ace53db),
         ("ncol_fits", 0x4bbbea598fcaaceb),

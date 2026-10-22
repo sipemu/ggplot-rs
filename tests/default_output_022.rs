@@ -7,6 +7,17 @@
 //! it, and documented with a CHANGELOG "Changed" line. Anything else that
 //! flips a hash here is a regression — fix the code, not the test.
 //!
+//! `area`'s hash changed under a later, documented follow-up: 0.24.0's
+//! `geom_area()` default-position change (ggplot2 parity, review #167
+//! finding 5 on sipemu/ggplot-rs#171) — see the `"area"` case below and
+//! CHANGELOG's `[0.24.0]` entry. `band_data()`'s own `ymin` column
+//! (unrelated to this test — it's there for `geom_ribbon`'s own case)
+//! used to pass through to `geom_area()`'s band untouched under the old
+//! `PositionIdentity` default; `PositionStack` now overwrites it with
+//! the (single-series, so all-zero) stack baseline it computes, same as
+//! it always has for any other geom whose data happens to arrive with a
+//! pre-existing `ymin` column.
+//!
 //! Runs in every feature configuration (no polars/plotters/sf-only API), so
 //! it is part of every `cargo test` job, including `--no-default-features`
 //! and `--no-default-features --features sf`.
@@ -286,7 +297,10 @@ fn expected() -> Vec<(&'static str, u64)> {
         ("col", 0xc5738d84e879e5f8),
         ("histogram", 0x509a73b585ca7049),
         ("boxplot", 0x1e4e90592a30f608),
-        ("area", 0xacba2a5cebd1c91b),
+        // 0.24.0 (sipemu/ggplot-rs#171 review finding 5): geom_area()'s
+        // default position changed from PositionIdentity to
+        // PositionStack. See the docstring above and CHANGELOG [0.24.0].
+        ("area", 0x460dd3463a534157),
         ("ribbon", 0xd64eb7a91d469399),
         ("step", 0x4cceadf6cd3d5452),
         ("density", 0x055db381e3b7d8e5),

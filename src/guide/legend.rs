@@ -816,6 +816,27 @@ fn discrete_guide_count(scales: &ScaleSet, legend_scales: &[Aesthetic]) -> usize
         .max(1)
 }
 
+/// How many of a plot's legend scales are continuous (a colourbar, or a
+/// sampled continuous size/alpha legend) — each reserves its own fixed
+/// width share of a horizontal row (#170 / review #167 finding 7: a
+/// bottom legend mixing a colourbar with a discrete guide ignored the
+/// colourbar's share, so the discrete guide's auto-wrap/grid was planned
+/// against the *whole* row and could still run off the right edge).
+fn continuous_guide_count(scales: &ScaleSet, legend_scales: &[Aesthetic]) -> usize {
+    legend_scales
+        .iter()
+        .filter(|aes| !scales.get(aes).map(|s| s.is_discrete()).unwrap_or(false))
+        .count()
+}
+
+/// The fixed horizontal width one continuous guide reserves in a
+/// horizontal row — the same per-guide step `draw_legend_planned` already
+/// advances `offset_x` by once it has drawn one (see its two
+/// `is_horizontal` arms for a continuous scale).
+fn continuous_guide_width(theme: &Theme) -> f64 {
+    theme.legend_key_width + theme.legend_text.size * 6.0 + theme.legend_spacing * 2.0
+}
+
 /// Plan every discrete legend scale's B3-2 layout (explicit `nrow`/`ncol`
 /// grid, or auto-wrap) independently (sipemu/ggplot-rs#155): previously
 /// this only ran for the plot's single discrete guide, leaving a second
@@ -843,7 +864,14 @@ pub(crate) fn plan_all_legends(
     let legend_scales = legend_scales_for(scales, suppressed);
     let n_discrete = discrete_guide_count(scales, &legend_scales);
     let per_guide_width = if is_horizontal {
-        (avail_width / n_discrete as f64).max(0.0)
+        // #170: leave the discrete guides only the width left over after
+        // every continuous guide's own fixed share (a colourbar sitting
+        // in the same row) — previously `avail_width` was split among
+        // the discrete guides alone, so a colourbar plus a discrete
+        // guide could together still overflow the row.
+        let n_continuous = continuous_guide_count(scales, &legend_scales);
+        let continuous_width = n_continuous as f64 * continuous_guide_width(theme);
+        ((avail_width - continuous_width) / n_discrete as f64).max(0.0)
     } else {
         avail_width
     };
@@ -920,7 +948,13 @@ pub(crate) fn draw_legend_planned(
         is_horizontal = matches!(dir, crate::theme::LegendDirection::Horizontal);
     }
     let n_discrete = discrete_guide_count(scales, &legend_scales);
-    let per_guide_width = legend_avail_width / n_discrete as f64;
+    // #170: match `plan_all_legends`'s share — a continuous guide (e.g. a
+    // colourbar) sharing this row has already claimed its own fixed
+    // width, so step the discrete guides by what's left, not the whole
+    // `legend_avail_width`.
+    let n_continuous = continuous_guide_count(scales, &legend_scales);
+    let continuous_width = n_continuous as f64 * continuous_guide_width(theme);
+    let per_guide_width = ((legend_avail_width - continuous_width) / n_discrete as f64).max(0.0);
 
     let mut offset_y = legend_y;
     let mut offset_x = legend_x;

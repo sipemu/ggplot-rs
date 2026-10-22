@@ -2855,26 +2855,43 @@ impl GGPlot {
                         let swatch_and_gap =
                             built.theme.legend_key_width + built.theme.legend_spacing;
                         let text_size = built.theme.legend_text.size;
-                        let right_edge_of =
-                            |plan: &crate::guide::legend::LegendPlan, breaks: &[(f64, String)]| {
-                                plan.entries
-                                    .iter()
-                                    .filter_map(|e| breaks.get(e.break_idx).map(|(_, l)| (e, l)))
-                                    .map(|(e, label)| {
-                                        let text =
-                                            e.label_override.as_deref().unwrap_or(label.as_str());
-                                        legend_x_final
-                                            + e.x_offset
-                                            + swatch_and_gap
-                                            + crate::render::text::text_width(text, text_size)
-                                    })
-                                    .fold(0.0_f64, f64::max)
-                            };
+                        // A plain fn, not a closure: #168's retightening
+                        // pass below re-runs this same check at a second
+                        // `legend_x` (the narrower reservation's), so
+                        // `legend_x` has to be a parameter rather than
+                        // captured.
+                        fn right_edge_of(
+                            legend_x: f64,
+                            swatch_and_gap: f64,
+                            text_size: f64,
+                            plan: &crate::guide::legend::LegendPlan,
+                            breaks: &[(f64, String)],
+                        ) -> f64 {
+                            plan.entries
+                                .iter()
+                                .filter_map(|e| breaks.get(e.break_idx).map(|(_, l)| (e, l)))
+                                .map(|(e, label)| {
+                                    let text =
+                                        e.label_override.as_deref().unwrap_or(label.as_str());
+                                    legend_x
+                                        + e.x_offset
+                                        + swatch_and_gap
+                                        + crate::render::text::text_width(text, text_size)
+                                })
+                                .fold(0.0_f64, f64::max)
+                        }
 
                         let mut updates: Vec<(
                             crate::aes::Aesthetic,
                             crate::guide::legend::LegendPlan,
                         )> = Vec::new();
+                        // #168: guides narrowed below by *column
+                        // reduction* (not label truncation) are
+                        // candidates for the retightening pass after this
+                        // loop — a truncated guide already picked the
+                        // narrowest column count, so there's no reserved
+                        // width left to give back.
+                        let mut reduced_aes: Vec<crate::aes::Aesthetic> = Vec::new();
                         for (aes, plan) in &plans {
                             if plan.cols <= 1 {
                                 continue;
@@ -2883,7 +2900,14 @@ impl GGPlot {
                                 continue;
                             };
                             let breaks = scale.breaks();
-                            if right_edge_of(plan, &breaks) <= w as f64 {
+                            if right_edge_of(
+                                legend_x_final,
+                                swatch_and_gap,
+                                text_size,
+                                plan,
+                                &breaks,
+                            ) <= w as f64
+                            {
                                 continue; // already fits — untouched.
                             }
 
@@ -2909,13 +2933,14 @@ impl GGPlot {
                                     reduced.push(cand);
                                 }
                             }
-                            if let Some(fits) = reduced
-                                .iter()
-                                .find(|c| right_edge_of(c, &breaks) <= w as f64)
-                            {
+                            if let Some(fits) = reduced.iter().find(|c| {
+                                right_edge_of(legend_x_final, swatch_and_gap, text_size, c, &breaks)
+                                    <= w as f64
+                            }) {
                                 extras.legend_extra_rows =
                                     extras.legend_extra_rows.max(fits.rows.saturating_sub(1));
                                 updates.push((aes.clone(), fits.clone()));
+                                reduced_aes.push(aes.clone());
                                 continue;
                             }
 
@@ -2944,54 +2969,105 @@ impl GGPlot {
                             // Step 3: only warn if it still doesn't fit
                             // after both the reduction and the
                             // truncation above.
-                            if right_edge_of(&truncated, &breaks) > w as f64 {
+                            let truncated_edge = right_edge_of(
+                                legend_x_final,
+                                swatch_and_gap,
+                                text_size,
+                                &truncated,
+                                &breaks,
+                            );
+                            if truncated_edge > w as f64 {
                                 built.warnings.push(format!(
                                     "legend: the {}-column grid still doesn't fit the {w}px chart (needs about {} px)",
                                     truncated.cols,
-                                    right_edge_of(&truncated, &breaks).ceil() as i64
+                                    truncated_edge.ceil() as i64
                                 ));
                             }
                             updates.push((aes.clone(), truncated));
                         }
-                        for (aes, new_plan) in updates {
-                            plans.insert(aes, new_plan);
+                        for (aes, new_plan) in &updates {
+                            plans.insert(aes.clone(), new_plan.clone());
                         }
-                        // Review #167 finding 5 (LOW, #168; left as-is — see
-                        // below): `extras.legend_extra_width` (set above,
-                        // before this reduction loop ran) is deliberately
-                        // *not* recomputed from `plans`' now-possibly-
-                        // reduced column count. It still reserves the
-                        // original (pre-reduction) column count's width.
+
+                        // #168: `extras.legend_extra_width` above still
+                        // reserves the *original*, pre-reduction column
+                        // count's width — that stale, wider reservation
+                        // is an accident of ordering (reserve → layout →
+                        // fit? → reduce), not a requirement, so the panel
+                        // stays narrower than it needs to be once a guide
+                        // above got fewer columns.
                         //
-                        // That stale, wider reservation is why the
-                        // reduced grid fits at all: it narrows
-                        // `final_layout.plot_area` above, which pushes
-                        // `legend_x_final` left and gives the reduced
-                        // grid more room before the canvas edge — tried
-                        // recomputing it here (narrower reservation once
-                        // the column count drops), and the hash in
-                        // `tests/default_output_023.rs`'s `ncol_reduces`
-                        // case changed: the panel widens, the hash
-                        // changes, and the hard-coded `right_edge_of(...)
-                        // <= w` fit check two closures up re-runs against
-                        // a still-stale `legend_x_final` either way — the
-                        // reserved width, the fit decision and the final
-                        // layout are mutually circular (reserve → layout
-                        // → fits? → reduce columns → reserve again →
-                        // …), so fixing this one spot in isolation isn't
-                        // contained; it needs the whole #159 loop above
-                        // to re-layout and re-check fit after each
-                        // reservation change, which is out of scope for
-                        // this review's LOW, non-blocking finding. Left
-                        // as a known limitation: an explicit `ncol(1)`
-                        // with the same labels can still run off the
-                        // canvas (unlike the auto-reduced case, which
-                        // benefits from the wider reservation here by
-                        // accident) without a warning, since #159's
-                        // "warn if it still doesn't fit" check is also
-                        // measured against the same stale `w`-relative
-                        // geometry. See the PR #167 review for the
-                        // original repro (ncol(1), 139px panel at 300px).
+                        // Tighten it to the reduced guides' new column
+                        // counts and re-check fit once more at the
+                        // narrower reservation (a bounded retry, not an
+                        // unbounded fixed point: a tighter reservation
+                        // moves `legend_x_final` right — less headroom
+                        // before the canvas edge — which could in
+                        // principle call for yet another round of
+                        // reduction; rather than chase reserve → layout →
+                        // fit → reduce → reserve → … indefinitely, this
+                        // keeps the tighter reservation only if every
+                        // guide still fits under it, and falls back to
+                        // the wider, already-proven-safe reservation
+                        // otherwise — so retightening can only ever
+                        // help, never regress a plot that fit before
+                        // this pass existed).
+                        //
+                        // Review #167 finding 1 on #171 (HIGH, fixed):
+                        // the retry must re-check *every* plan in
+                        // `plans`, not just `reduced_aes`. `legend_x`
+                        // moves for every guide sharing the row, not
+                        // only the one(s) that got reduced — a second
+                        // guide that already fit at the old, wider
+                        // `legend_x_final` (its own width is a fixed
+                        // `6·text_size` estimate, unrelated to the
+                        // reduced guide's labels) or whose labels were
+                        // truncated against that old `legend_x_final`
+                        // shifts right by the same amount and was never
+                        // re-checked, so it could run off the canvas
+                        // with no warning (the warnings were computed
+                        // against the old x too). `reduced_aes` is kept
+                        // only to gate *entering* this block at all —
+                        // nothing to reclaim if nothing was reduced.
+                        if !reduced_aes.is_empty() {
+                            let original_reserve = extras.legend_extra_width;
+                            let tighter_reserve = plans
+                                .values()
+                                .map(|p| p.cols.saturating_sub(1) as f64 * p.col_pitch)
+                                .fold(0.0_f64, f64::max);
+                            if tighter_reserve < original_reserve {
+                                let mut retry_extras = extras;
+                                retry_extras.legend_extra_width = tighter_reserve;
+                                let retry_layout = PlotLayout::compute_with_extras(
+                                    w as f64,
+                                    h as f64,
+                                    &built.theme,
+                                    has_title,
+                                    has_subtitle,
+                                    has_caption,
+                                    has_legend,
+                                    x_axis_top,
+                                    y_label_width,
+                                    x_label_height,
+                                    retry_extras,
+                                );
+                                let (retry_x, _, _) = crate::guide::legend::legend_position(
+                                    &built.theme,
+                                    &retry_layout.plot_area,
+                                );
+                                let all_still_fit = plans.iter().all(|(aes, plan)| {
+                                    let Some(scale) = built.scales.get(aes) else {
+                                        return true;
+                                    };
+                                    let breaks = scale.breaks();
+                                    right_edge_of(retry_x, swatch_and_gap, text_size, plan, &breaks)
+                                        <= w as f64
+                                });
+                                if all_still_fit {
+                                    extras.legend_extra_width = tighter_reserve;
+                                }
+                            }
+                        }
                     }
                     for (aes, plan) in &plans {
                         if let Some(ov) = &plan.overflow {

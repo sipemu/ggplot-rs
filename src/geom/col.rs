@@ -1,7 +1,7 @@
 use crate::aes::Aesthetic;
 use crate::coord::Coord;
 use crate::data::DataFrame;
-use crate::position::identity::PositionIdentity;
+use crate::position::stack::PositionStack;
 use crate::position::Position;
 use crate::render::backend::{DrawBackend, RectStyle};
 use crate::render::RenderError;
@@ -219,7 +219,12 @@ impl Geom for GeomCol {
     }
 
     fn default_position(&self) -> Box<dyn Position> {
-        Box::new(PositionIdentity)
+        // ggplot2 parity (sipemu/ggplot-rs#169): `geom_col()` defaults to
+        // `position_stack()`, same as `geom_bar()` (GeomBar::default_position,
+        // just above). 0.23 left this as `PositionIdentity`, a gap from
+        // `default_output_023.rs`'s `mixed_sign_data` comment, which needed
+        // an explicit `.position(PositionStack)` to exercise #154 at all.
+        Box::new(PositionStack)
     }
 
     fn default_params(&self) -> GeomParams {

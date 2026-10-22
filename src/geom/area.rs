@@ -1,7 +1,7 @@
 use crate::aes::Aesthetic;
 use crate::coord::Coord;
 use crate::data::{DataFrame, Value};
-use crate::position::identity::PositionIdentity;
+use crate::position::stack::PositionStack;
 use crate::position::Position;
 use crate::render::backend::{DrawBackend, LineStyle, Linetype, RectStyle};
 use crate::render::RenderError;
@@ -150,7 +150,13 @@ impl Geom for GeomArea {
         Box::new(StatIdentity)
     }
     fn default_position(&self) -> Box<dyn Position> {
-        Box::new(PositionIdentity)
+        // ggplot2 parity (sipemu/ggplot-rs#171 review finding 5): `geom_area()`
+        // defaults to `position_stack()`, same as `geom_col()`/`geom_bar()`
+        // (#169, just above those geoms' own `default_position`). 0.23/0.24
+        // left this as `PositionIdentity`, the same gap #169 fixed for
+        // `geom_col()` — landing it in the same minor as #169 so every
+        // default-position parity break is in one release.
+        Box::new(PositionStack)
     }
     fn default_params(&self) -> GeomParams {
         GeomParams::default()

@@ -419,9 +419,11 @@ impl PlotGrid {
             legends: Vec::new(),
             page_w: w as f64,
             page_h: h as f64,
+            legend_warnings: Vec::new(),
         };
         let prepared = prepare_grid(self, &mut ctx)?;
         let legends = ctx.legends;
+        let legend_warnings = ctx.legend_warnings;
 
         // Phase 2: page layout.
         let full = Rect {
@@ -487,7 +489,7 @@ impl PlotGrid {
         }
 
         // Phase 3: render cells into their rects.
-        let mut warnings = Vec::new();
+        let mut warnings = legend_warnings;
         render_prepared(prepared, &body, &mut page, &mut warnings)?;
 
         let mut reserved = vec![data_grid_attr];
@@ -543,6 +545,12 @@ struct PrepCtx {
     /// wraps to fit within the page itself.
     page_w: f64,
     page_h: f64,
+    /// Warnings `capture_legend`'s `plan_all_legends` call produces for a
+    /// collected legend (#170 / review #167 finding 6) — previously
+    /// discarded; merged into `render_page`'s own `warnings` so they
+    /// reach `render_svg_native_with_warnings` / `data-warnings` like
+    /// every other warning.
+    legend_warnings: Vec<String>,
 }
 
 /// A built sub-plot awaiting its cell size.
@@ -660,8 +668,14 @@ fn prepare_plot(mut plot: GGPlot, ctx: &mut PrepCtx) -> Result<PreparedPlot, GGE
     let (built, mut meta) = plot.build_for_render()?;
     if let Some(pos) = collect {
         meta.has_legend = false;
-        if let Some(l) =
-            capture_legend(&built, pos, ctx.page_w, ctx.page_h).map_err(GGError::Render)?
+        if let Some(l) = capture_legend(
+            &built,
+            pos,
+            ctx.page_w,
+            ctx.page_h,
+            &mut ctx.legend_warnings,
+        )
+        .map_err(GGError::Render)?
         {
             if !ctx.legends.iter().any(|o| o.body == l.body) {
                 ctx.legends.push(l);
@@ -688,6 +702,14 @@ fn capture_legend(
     pos: GridLegendPosition,
     page_w: f64,
     page_h: f64,
+    // Review #167 finding 6 (#170): the plan's own `guide_legend:
+    // nrow(0)/ncol(0) is invalid`-style warnings used to go into a
+    // `legend_warnings` local that nothing ever read — this path dropped
+    // them silently. The caller threads its own warnings vec through so
+    // they land in the grid's `render_svg_native_with_warnings` /
+    // `data-warnings`, the same place a single plot's own legend
+    // warnings go (`GGPlot::layout_built` → `built.warnings`).
+    warnings: &mut Vec<String>,
 ) -> Result<Option<Legend>, RenderError> {
     let mut theme = built.theme.clone();
     let m = theme.legend_margin.clone();
@@ -719,7 +741,6 @@ fn capture_legend(
     let mut meas = Measure::new(&mut svg, pa.clone());
     let avail_width = (page_w + m.left).max(0.0);
     let avail_height = (page_h + m.top).max(0.0);
-    let mut legend_warnings = Vec::new();
     let legend_plans = legend::plan_all_legends(
         &built.scales,
         &built.guide_legend,
@@ -728,7 +749,7 @@ fn capture_legend(
         avail_width,
         avail_height,
         is_horizontal,
-        &mut legend_warnings,
+        warnings,
     );
     legend::draw_legend_planned(
         &built.scales,
@@ -1009,6 +1030,22 @@ impl DrawBackend for Measure<'_> {
         pos: (f64, f64),
         style: &TextStyle,
     ) -> Result<(), RenderError> {
+        self.draw_text_with_title(text, pos, style, None)
+    }
+    fn draw_text_with_title(
+        &mut self,
+        text: &str,
+        pos: (f64, f64),
+        style: &TextStyle,
+        title: Option<&str>,
+    ) -> Result<(), RenderError> {
+        // Review #167 finding 4 (#170): this wrapper must forward to
+        // `inner.draw_text_with_title`, not `inner.draw_text` — the
+        // latter is what `DrawBackend::draw_text_with_title`'s own
+        // default impl calls, and relying on that default here would
+        // silently drop a truncated legend label's `<title>` tooltip
+        // (#159) whenever the label is measured through `Measure`
+        // (`compose::capture_legend`'s collected-legend path).
         let w = text.chars().count() as f64 * style.size * 0.6;
         let (x0, x1) = match style.anchor {
             TextAnchor::Start => (pos.0, pos.0 + w),
@@ -1016,7 +1053,7 @@ impl DrawBackend for Measure<'_> {
             TextAnchor::End => (pos.0 - w, pos.0),
         };
         self.grow(x0, pos.1 - style.size / 2.0, x1, pos.1 + style.size / 2.0);
-        self.inner.draw_text(text, pos, style)
+        self.inner.draw_text_with_title(text, pos, style, title)
     }
     fn draw_polygon(&mut self, pts: &[(f64, f64)], style: &RectStyle) -> Result<(), RenderError> {
         for p in pts {
@@ -1203,5 +1240,43 @@ mod tests {
         assert!(svg.contains("gg-arrow"));
         assert!(svg.contains("data-fvalue=\"1,234.5\""));
         assert!(svg.contains("data-fx=\"2026-10-12\""));
+    }
+
+    /// #170 / review #167 finding 4: `Measure::draw_text_with_title` must
+    /// forward the `<title>` to its inner `SvgBackend`, not fall through
+    /// to `DrawBackend::draw_text_with_title`'s default impl (which calls
+    /// `self.draw_text`, and `Measure::draw_text` only ever calls
+    /// `inner.draw_text` — dropping the title). This only matters once a
+    /// `<title>` is actually passed through a `Measure`-wrapped backend
+    /// (today that's `compose::capture_legend`'s collected-legend path, a
+    /// `PlotGrid`'s B3-2 label truncation doesn't run yet, so the bug is
+    /// latent rather than reachable from `PlotGrid`'s own public API —
+    /// hence this unit test against `Measure` directly).
+    #[test]
+    fn measure_forwards_the_title_to_its_inner_backend() {
+        let pa = Rect {
+            x: 0.0,
+            y: 0.0,
+            width: 100.0,
+            height: 100.0,
+        };
+        let mut backend = SvgBackend::new(100, 100, pa.clone());
+        let mut meas = Measure::new(&mut backend, pa);
+        meas.draw_text_with_title(
+            "Grp…",
+            (10.0, 20.0),
+            &TextStyle {
+                size: 12.0,
+                anchor: TextAnchor::Start,
+                ..Default::default()
+            },
+            Some("Group 01"),
+        )
+        .unwrap();
+        let svg = backend.finish();
+        assert!(
+            svg.contains("<title>Group 01</title>"),
+            "the full label should reach the inner backend's <title>: {svg}"
+        );
     }
 }
