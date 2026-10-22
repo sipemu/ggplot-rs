@@ -10,6 +10,14 @@ grids/multiple guides, vertical legend fit. Default output stays byte-
 identical except for the deliberate changes under "Changed", each guarded
 by a test.
 
+### Added
+
+- `tests/default_output_023.rs`, on the same pattern as
+  `tests/default_output_022.rs`: a battery of fixed plots exercising
+  #153/#154/#155/#159's deliberate changes plus their byte-identical
+  unaffected counterparts, hashed with FNV-1a. Wired into CI's `sf`,
+  no-default-features test job alongside `default_output_022`.
+
 ### Changed
 
 - A faceted `position_dodge`/`position_dodge2` now computes each panel's
