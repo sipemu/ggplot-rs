@@ -7,7 +7,10 @@
 //! [`super::set_row_extras`] gets full mark metadata unconditionally, so a
 //! decorative mark looks like an independent, selectable data point to any
 //! SVG consumer that keys off "has a non-empty `<title>`" (hover lists, a
-//! per-x crosshair, click-to-select).
+//! per-x crosshair, click-to-select). Each mark also carries
+//! `data-part="decorative"` and `aria-hidden="true"` (`data-geom` still
+//! names the real geom), so a consumer can positively select decorative
+//! marks too, rather than only infer them from what they lack.
 //!
 //! [`GGPlot::decorative`](crate::plot::GGPlot::decorative) swaps the last
 //! layer's `geom` for a private [`Decorative`] wrapper that delegates every
@@ -39,6 +42,19 @@ use super::{Aesthetic, Geom, GeomParams};
 /// attributes — into a no-op, so a decorative layer's marks keep their
 /// visual style (`draw_circle`/`draw_line`/...) but get none of that
 /// metadata.
+///
+/// It still forwards [`set_mark_geom`](DrawBackend::set_mark_geom) and
+/// [`set_mark_part`](DrawBackend::set_mark_part) to the inner backend
+/// (further below), so a decorative mark keeps its `data-geom` (e.g.
+/// `data-geom="point"`) but every one of its marks additionally carries
+/// `data-part="decorative"` and `aria-hidden="true"` (review finding, PR
+/// #166: without this, a decorative mark still looked exactly like an
+/// ordinary data mark — `class="gg-mark gg-point" data-geom="point"` —
+/// to any consumer that selects on those alone, even once its `<title>`/
+/// `data-x`/.../`data_attr` were muted). `DECORATIVE_PART` is the same
+/// mechanism `geom::arrow`'s own arrowhead sub-parts use for `"arrow"`.
+const DECORATIVE_PART: &str = "decorative";
+
 struct MuteMarks<'a> {
     inner: &'a mut dyn DrawBackend,
 }
@@ -91,6 +107,34 @@ impl DrawBackend for MuteMarks<'_> {
         self.inner.total_area()
     }
 
+    // `DrawBackend::draw_shape`/`draw_quadratic` have *default* trait
+    // bodies that unconditionally fall back to `self.draw_circle`/
+    // `self.draw_line` (for a backend that doesn't implement real shapes/
+    // curves) — without an explicit override here, `self` resolves to
+    // `MuteMarks` itself, so a shape-mapped point would flatten to a
+    // circle and a `geom_curve` to a straight polyline even when the
+    // *inner* backend (e.g. the SVG backend) implements both properly.
+    // Forward both explicitly, the same way `PanelBackendAdapter`/the
+    // bounding-box adapter in `compose.rs` already do.
+    fn draw_shape(
+        &mut self,
+        center: (f64, f64),
+        radius: f64,
+        style: &PointStyle,
+    ) -> Result<(), RenderError> {
+        self.inner.draw_shape(center, radius, style)
+    }
+
+    fn draw_quadratic(
+        &mut self,
+        p0: (f64, f64),
+        ctrl: (f64, f64),
+        p1: (f64, f64),
+        style: &LineStyle,
+    ) -> Result<(), RenderError> {
+        self.inner.draw_quadratic(p0, ctrl, p1, style)
+    }
+
     // Per-mark metadata: muted. `Aes::tooltip`/`Aes::data_attr` must have
     // no visible effect on a decorative mark, however the wrapped geom's
     // own `draw` calls `set_mark`/`set_row_extras`.
@@ -107,8 +151,18 @@ impl DrawBackend for MuteMarks<'_> {
         self.inner.set_mark_geom(geom);
     }
 
+    // A genuine sub-part name (e.g. `"arrow"`, from `geom::arrow`'s own
+    // bracketed `set_mark_part(Some("arrow"))`/`set_mark_part(None)` around
+    // an arrowhead) forwards as-is; a clear-back-to-`None` is turned into
+    // `DECORATIVE_PART` instead of a true clear (review finding, PR #166:
+    // without this, a mid-draw arrow bracket's own `set_mark_part(None)`
+    // would otherwise drop the decorative tag for every mark drawn after
+    // it in the same layer). `Decorative::draw` primes the real `"None"` →
+    // `DECORATIVE_PART` state before delegating and restores a true `None`
+    // afterwards, so nothing leaks into the next layer.
     fn set_mark_part(&mut self, part: Option<&str>) {
-        self.inner.set_mark_part(part);
+        self.inner
+            .set_mark_part(Some(part.unwrap_or(DECORATIVE_PART)));
     }
 
     fn warn(&mut self, message: String) {
@@ -133,8 +187,17 @@ impl Geom for Decorative {
         theme: &Theme,
         backend: &mut dyn DrawBackend,
     ) -> Result<(), RenderError> {
-        let mut muted = MuteMarks { inner: backend };
-        self.0.draw(data, coord, scales, theme, &mut muted)
+        // Prime the real backend's own mark-part state to `DECORATIVE_PART`
+        // before delegating (nothing else would — most geoms never call
+        // `set_mark_part` at all), and restore a true `None` afterwards so
+        // nothing leaks into whatever draws next.
+        backend.set_mark_part(Some(DECORATIVE_PART));
+        let result = {
+            let mut muted = MuteMarks { inner: backend };
+            self.0.draw(data, coord, scales, theme, &mut muted)
+        };
+        backend.set_mark_part(None);
+        result
     }
 
     fn required_aes(&self) -> Vec<Aesthetic> {
@@ -363,6 +426,7 @@ mod tests {
         polygons: usize,
         mark_geom_calls: usize,
         mark_part_calls: usize,
+        last_mark_part: Option<String>,
         warn_calls: usize,
         tooltip_calls: usize,
         mark_axis_calls: usize,
@@ -451,8 +515,9 @@ mod tests {
         fn warn(&mut self, _message: String) {
             self.warn_calls += 1;
         }
-        fn set_mark_part(&mut self, _part: Option<&str>) {
+        fn set_mark_part(&mut self, part: Option<&str>) {
             self.mark_part_calls += 1;
+            self.last_mark_part = part.map(str::to_string);
         }
         fn set_mark_attrs(&mut self, _attrs: Vec<(String, String)>) {
             self.mark_attrs_calls += 1;
@@ -526,6 +591,27 @@ mod tests {
         assert_eq!(inner.mark_attrs_calls, 0);
         assert_eq!(inner.mark_fvalue_calls, 0);
         assert_eq!(inner.mark_fx_calls, 0);
+    }
+
+    #[test]
+    fn mute_marks_turns_a_part_clear_into_decorative_but_preserves_a_real_sub_part() {
+        let mut inner = MockBackend::default();
+        // A `None` clear (what every well-behaved geom calls once it's
+        // done with its own sub-part, or what a geom that never touches
+        // `set_mark_part` at all never calls in the first place) must not
+        // reach the inner backend as a true clear — it must come through
+        // as `DECORATIVE_PART`, so a later mark in the same draw doesn't
+        // lose the decorative tag.
+        MuteMarks { inner: &mut inner }.set_mark_part(None);
+        assert_eq!(inner.last_mark_part.as_deref(), Some(DECORATIVE_PART));
+        // A genuine sub-part (e.g. an arrowhead) still forwards as itself,
+        // unchanged.
+        MuteMarks { inner: &mut inner }.set_mark_part(Some("arrow"));
+        assert_eq!(inner.last_mark_part.as_deref(), Some("arrow"));
+        // And clearing *that* reverts to decorative, not a true clear.
+        MuteMarks { inner: &mut inner }.set_mark_part(None);
+        assert_eq!(inner.last_mark_part.as_deref(), Some(DECORATIVE_PART));
+        assert_eq!(inner.mark_part_calls, 3);
     }
 
     #[test]

@@ -1134,7 +1134,10 @@ impl GGPlot {
     /// for a layer that annotates another layer's mark rather than drawing
     /// data in its own right (e.g. a boxplot's own mean dot, drawn by a
     /// separate `geom_point` layer purely to mark the spot the box's own
-    /// tooltip already names).
+    /// tooltip already names). Each mark also carries
+    /// `data-part="decorative"` and `aria-hidden="true"` (`data-geom`
+    /// still names the real geom), so a consumer can select decorative
+    /// marks positively rather than only infer them from what they lack.
     ///
     /// A `.tooltip(...)` template on a decorative layer has no visible
     /// effect — the geom's marks carry no tooltip regardless — and warns,

@@ -31,6 +31,42 @@ fn decorative_point_has_no_title_or_data_attrs() {
     assert!(!svg.contains("data-value="), "{svg}");
 }
 
+/// A decorative mark is also distinguishable from an ordinary data mark
+/// by `data-part="decorative"`/`aria-hidden="true"` — not just by what it
+/// lacks (review finding, PR #166: without this, a decorative mark still
+/// carried the same `class="gg-mark gg-point" data-geom="point"` as a
+/// real data point, so a consumer selecting on those alone couldn't tell
+/// them apart). `data-geom` still names the real geom.
+#[test]
+fn decorative_point_carries_a_decorative_part_marker() {
+    let data = frame(vec![("x", floats(&[1.0])), ("y", floats(&[2.0]))]);
+    let svg = GGPlot::new(data)
+        .aes(Aes::new().x("x").y("y"))
+        .geom_point()
+        .decorative()
+        .render_svg_native_with_size(300, 200)
+        .unwrap();
+    assert!(svg.contains("data-part=\"decorative\""), "{svg}");
+    assert!(svg.contains("aria-hidden=\"true\""), "{svg}");
+    assert!(svg.contains("data-geom=\"point\""), "{svg}");
+    assert!(svg.contains("gg-decorative"), "{svg}");
+}
+
+/// The decorative marker must not leak into a later, non-decorative
+/// layer in the same plot.
+#[test]
+fn decorative_part_marker_does_not_leak_into_the_next_layer() {
+    let data = frame(vec![("x", floats(&[1.0])), ("y", floats(&[2.0]))]);
+    let svg = GGPlot::new(data)
+        .aes(Aes::new().x("x").y("y"))
+        .geom_point()
+        .decorative()
+        .geom_point()
+        .render_svg_native_with_size(300, 200)
+        .unwrap();
+    assert_eq!(svg.matches("data-part=\"decorative\"").count(), 1, "{svg}");
+}
+
 #[test]
 fn decorative_point_still_draws_its_own_visual_style() {
     // The wrapper mutes metadata, not drawing: the mark itself must still
@@ -156,6 +192,69 @@ fn decorative_defaults_out_of_the_legend() {
         has_legend(&plot(true, Some(true))),
         "show_legend(true) after decorative() must still show the legend"
     );
+}
+
+/// A shape-mapped decorative point must still draw its real shape
+/// (`<polygon>` for Triangle) through `MuteMarks`'s `draw_shape`, not
+/// fall back to a circle the way the trait's default `draw_shape` body
+/// would if `MuteMarks` left it unoverridden (review finding, PR #166).
+#[test]
+fn decorative_shape_mapped_point_keeps_its_real_shape() {
+    let data = frame(vec![
+        ("x", floats(&[1.0, 2.0])),
+        ("y", floats(&[1.0, 2.0])),
+        // Two distinct levels: "a" maps to the first shape (Circle),
+        // "b" to the second (Triangle) — `ScaleShapeDiscrete`'s order.
+        ("g", strs(&["a", "b"])),
+    ]);
+    let plain = GGPlot::new(data.clone())
+        .aes(Aes::new().x("x").y("y").shape("g"))
+        .geom_point()
+        .render_svg_native_with_size(300, 200)
+        .unwrap();
+    let decorative = GGPlot::new(data)
+        .aes(Aes::new().x("x").y("y").shape("g"))
+        .geom_point()
+        .decorative()
+        .render_svg_native_with_size(300, 200)
+        .unwrap();
+    assert!(plain.contains("<polygon"), "{plain}");
+    assert!(
+        decorative.contains("<polygon"),
+        "a decorative shape-mapped point must still render its real shape, not fall back to a circle: {decorative}"
+    );
+    assert!(!decorative.contains("<title>"), "{decorative}");
+}
+
+/// A decorative `geom_curve` must still draw a real quadratic Bézier
+/// (`<path ... Q...>`) through `MuteMarks`'s `draw_quadratic`, not fall
+/// back to a flattened 32-segment polyline the way the trait's default
+/// `draw_quadratic` body would if `MuteMarks` left it unoverridden.
+#[test]
+fn decorative_curve_keeps_its_real_quadratic_path() {
+    let data = frame(vec![
+        ("x", floats(&[1.0])),
+        ("y", floats(&[1.0])),
+        ("xend", floats(&[2.0])),
+        ("yend", floats(&[2.0])),
+    ]);
+    let plain = GGPlot::new(data.clone())
+        .aes(Aes::new().x("x").y("y").xend("xend").yend("yend"))
+        .geom_curve()
+        .render_svg_native_with_size(300, 200)
+        .unwrap();
+    let decorative = GGPlot::new(data)
+        .aes(Aes::new().x("x").y("y").xend("xend").yend("yend"))
+        .geom_curve()
+        .decorative()
+        .render_svg_native_with_size(300, 200)
+        .unwrap();
+    assert!(plain.contains(" Q"), "{plain}");
+    assert!(
+        decorative.contains(" Q"),
+        "a decorative geom_curve must still render a real quadratic path, not a flattened polyline: {decorative}"
+    );
+    assert!(!decorative.contains("<title>"), "{decorative}");
 }
 
 #[test]
