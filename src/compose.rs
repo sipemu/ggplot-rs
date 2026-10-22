@@ -417,6 +417,8 @@ impl PlotGrid {
             next_index: 0,
             collect: collect.then_some(legend_pos),
             legends: Vec::new(),
+            page_w: w as f64,
+            page_h: h as f64,
         };
         let prepared = prepare_grid(self, &mut ctx)?;
         let legends = ctx.legends;
@@ -534,6 +536,13 @@ struct PrepCtx {
     next_index: usize,
     collect: Option<GridLegendPosition>,
     legends: Vec<Legend>,
+    /// The grid's overall page size (sipemu/ggplot-rs#155): a collected
+    /// legend's available width/height for its own B3-2 wrap/grid plan,
+    /// since a `PlotGrid`'s legend strip has no other natural bound —
+    /// it's sized by whatever the legend needs, so the legend instead
+    /// wraps to fit within the page itself.
+    page_w: f64,
+    page_h: f64,
 }
 
 /// A built sub-plot awaiting its cell size.
@@ -651,7 +660,9 @@ fn prepare_plot(mut plot: GGPlot, ctx: &mut PrepCtx) -> Result<PreparedPlot, GGE
     let (built, mut meta) = plot.build_for_render()?;
     if let Some(pos) = collect {
         meta.has_legend = false;
-        if let Some(l) = capture_legend(&built, pos).map_err(GGError::Render)? {
+        if let Some(l) =
+            capture_legend(&built, pos, ctx.page_w, ctx.page_h).map_err(GGError::Render)?
+        {
             if !ctx.legends.iter().any(|o| o.body == l.body) {
                 ctx.legends.push(l);
             }
@@ -666,14 +677,22 @@ fn prepare_plot(mut plot: GGPlot, ctx: &mut PrepCtx) -> Result<PreparedPlot, GGE
 }
 
 /// Draw a built plot's legend in isolation, measuring its extent.
+///
+/// `page_w`/`page_h` are the grid's overall page size (sipemu/
+/// ggplot-rs#155): a collected legend has no natural width/height bound
+/// of its own — the strip that holds it is sized by whatever the legend
+/// needs — so a discrete guide wraps/grids here against the page itself,
+/// the same way a single plot's legend wraps against its own canvas.
 fn capture_legend(
     built: &crate::build::BuiltPlot,
     pos: GridLegendPosition,
+    page_w: f64,
+    page_h: f64,
 ) -> Result<Option<Legend>, RenderError> {
     let mut theme = built.theme.clone();
     let m = theme.legend_margin.clone();
     // Fake a zero-size panel so the legend's origin lands at (0, 0).
-    let (pa, lp) = match pos {
+    let (pa, lp, is_horizontal) = match pos {
         GridLegendPosition::Right => (
             Rect {
                 x: -m.left,
@@ -682,6 +701,7 @@ fn capture_legend(
                 height: 0.0,
             },
             LegendPosition::Right,
+            false,
         ),
         GridLegendPosition::Bottom => (
             Rect {
@@ -691,18 +711,33 @@ fn capture_legend(
                 height: 0.0,
             },
             LegendPosition::Bottom,
+            true,
         ),
     };
     theme.legend_position = lp;
     let mut svg = SvgBackend::new(1, 1, pa.clone());
     let mut meas = Measure::new(&mut svg, pa.clone());
-    legend::draw_legend(
+    let avail_width = (page_w + m.left).max(0.0);
+    let avail_height = (page_h + m.top).max(0.0);
+    let mut legend_warnings = Vec::new();
+    let legend_plans = legend::plan_all_legends(
+        &built.scales,
+        &built.guide_legend,
+        &theme,
+        &built.suppressed_aes,
+        avail_width,
+        avail_height,
+        is_horizontal,
+        &mut legend_warnings,
+    );
+    legend::draw_legend_planned(
         &built.scales,
         &theme,
         &pa,
         &mut meas,
         &built.guide_legend,
         &built.suppressed_aes,
+        &legend_plans,
     )?;
     let ext = meas.extent();
     if svg.body().is_empty() {

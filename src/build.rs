@@ -37,16 +37,19 @@ pub struct BuiltPlot {
     /// "geom_point: removed 2 rows containing non-finite values". See
     /// [`BuiltPlot::warnings`].
     pub warnings: Vec<String>,
-    /// The single discrete legend's B3-2 layout plan (explicit `nrow`/
-    /// `ncol` grid, or auto-wrap), computed exactly once in `layout_built`
-    /// and reused as-is by `draw_legend_planned` — never recomputed at
-    /// draw time, so the warning (based on this same plan) always matches
-    /// what's drawn (review #158 finding 2: computing it twice, once
-    /// against the pre-reservation panel height and once against the
-    /// post-reservation one, could warn "+7 more" while drawing "+15
-    /// more"). `None` when there's no such plan (nothing changes from the
-    /// 0.21 single-row/single-column path).
-    pub(crate) legend_plan: Option<crate::guide::legend::LegendPlan>,
+    /// Every discrete legend's B3-2 layout plan (explicit `nrow`/`ncol`
+    /// grid, or auto-wrap), keyed by aesthetic, computed exactly once in
+    /// `layout_built` and reused as-is by `draw_legend_planned` — never
+    /// recomputed at draw time, so the warning (based on these same
+    /// plans) always matches what's drawn (review #158 finding 2:
+    /// computing it twice, once against the pre-reservation panel height
+    /// and once against the post-reservation one, could warn "+7 more"
+    /// while drawing "+15 more"). A guide missing from this map draws via
+    /// the 0.21 single-row/single-column path unchanged. Several
+    /// simultaneous discrete guides each get their own independent entry
+    /// (sipemu/ggplot-rs#155) — previously this only ever held at most
+    /// one plan, for a single discrete guide.
+    pub(crate) legend_plans: std::collections::HashMap<Aesthetic, crate::guide::legend::LegendPlan>,
 }
 
 impl BuiltPlot {
@@ -394,7 +397,7 @@ impl PlotBuilder {
             suppressed_aes,
             panel_scales,
             warnings,
-            legend_plan: None,
+            legend_plans: std::collections::HashMap::new(),
         })
     }
 

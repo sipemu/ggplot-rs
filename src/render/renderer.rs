@@ -225,7 +225,7 @@ impl PlotRenderer {
             backend,
             &built.guide_legend,
             &built.suppressed_aes,
-            built.legend_plan.as_ref(),
+            &built.legend_plans,
         )?;
 
         // 10. Draw caption
@@ -685,7 +685,7 @@ impl PlotRenderer {
             backend,
             &built.guide_legend,
             &built.suppressed_aes,
-            built.legend_plan.as_ref(),
+            &built.legend_plans,
         )?;
 
         // Draw corner tag (labs(tag = ...))

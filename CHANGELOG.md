@@ -30,14 +30,27 @@ by a test.
   the positive sum as the total (or `position_fill`'s normalisation
   denominator), negatives stack downward from 0 using only the
   (absolute) negative sum, each with its own `vjust` anchoring, verified
-  against
-  ggplot2 4.0.3 with `layer_data()` (a 4-group bar at one x with y = 3,
+  against ggplot2 4.0.3 with `layer_data()` (a 4-group bar at one x with y = 3,
   -2, 4, -1: `position_stack(vjust = 0.5)` gives y/ymin/ymax (5.5, 4, 7),
   (-2, -3, -1), (2, 0, 4), (-0.5, -1, 0); `position_fill(vjust = 0)` gives
   (4/7, 4/7, 1), (-1, -1, -1/3), (0, 0, 4/7), (-1/3, -1/3, 0)). All-
   positive (or all-negative) data at an x is byte-identical — the other
   sign's bucket is simply empty (`src/position/stack.rs`,
   `src/position/fill.rs` unit tests).
+- A plot's auto-wrap/grid legend layout (0.22) now applies to every
+  simultaneous discrete guide independently, not only when the plot has
+  exactly one (#155): two discrete guides (e.g. `colour` and `shape` both
+  mapped to discrete variables) laid out side by side each wrap against
+  an equal share of the available width, and a vertical explicit
+  `nrow`/`ncol` grid on either reserves its own extra width. A
+  `PlotGrid`'s `collect_legends(true)` strip also now wraps its collected
+  legend against the grid's own page size, instead of always drawing the
+  plain, unwrapped path — previously the only legend eligible for
+  wrap/grid was a single plot's single discrete guide, rendered directly
+  (not collected into a grid strip). A plot with one discrete guide that
+  already fit is unaffected (`tests/legend_wrap.rs`'s
+  `two_discrete_guides_each_auto_wrap` and
+  `plotgrid_collected_legend_auto_wraps` cover the new cases).
 
 ## [0.22.2] — 2026-10-22
 

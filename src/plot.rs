@@ -2742,11 +2742,12 @@ impl GGPlot {
             }
         }
 
-        // B3-2 (D7): a single discrete legend's `nrow`/`ncol` grid, or an
+        // B3-2 (D7): a discrete legend's `nrow`/`ncol` grid, or an
         // overflowing horizontal legend's auto-wrap, reserves extra legend
-        // rows. Scoped to exactly one discrete guide, matching
-        // `draw_legend_planned`'s own gate — several simultaneous guides
-        // are a follow-up (sipemu/ggplot-rs#155).
+        // rows/width. Several simultaneous discrete guides (e.g. `colour`
+        // and `shape` both mapped to discrete variables) each get their
+        // own independent plan (sipemu/ggplot-rs#155) — previously this
+        // only ran for exactly one discrete guide.
         if has_legend
             && !matches!(
                 built.theme.legend_position,
@@ -2755,11 +2756,83 @@ impl GGPlot {
         {
             let legend_aes =
                 crate::guide::legend::legend_scales_for(&built.scales, &built.suppressed_aes);
-            if legend_aes.len() == 1 {
-                if let Some(scale) = built.scales.get(&legend_aes[0]) {
-                    if scale.is_discrete() {
-                        let breaks = scale.breaks();
-                        let layout0 = PlotLayout::compute_with_extras(
+            let has_discrete_guide = legend_aes.iter().any(|a| {
+                built
+                    .scales
+                    .get(a)
+                    .map(|s| s.is_discrete())
+                    .unwrap_or(false)
+            });
+            if has_discrete_guide {
+                let layout0 = PlotLayout::compute_with_extras(
+                    w as f64,
+                    h as f64,
+                    &built.theme,
+                    has_title,
+                    has_subtitle,
+                    has_caption,
+                    has_legend,
+                    x_axis_top,
+                    y_label_width,
+                    x_label_height,
+                    extras,
+                );
+                let (legend_x0, _, mut is_horizontal) =
+                    crate::guide::legend::legend_position(&built.theme, &layout0.plot_area);
+                if let Some(dir) = built.theme.legend_direction {
+                    is_horizontal = matches!(dir, crate::theme::LegendDirection::Horizontal);
+                }
+                let avail_width =
+                    (layout0.plot_area.x + layout0.plot_area.width - legend_x0).max(0.0);
+                let mut legend_warnings = Vec::new();
+                let plans = crate::guide::legend::plan_all_legends(
+                    &built.scales,
+                    &built.guide_legend,
+                    &built.theme,
+                    &built.suppressed_aes,
+                    avail_width,
+                    layout0.plot_area.height,
+                    is_horizontal,
+                    &mut legend_warnings,
+                );
+                built.warnings.extend(legend_warnings);
+
+                if !plans.is_empty() {
+                    // Guides laid out side by side (a horizontal legend
+                    // position) share one row band — its height is set
+                    // by whichever guide wrapped to the most rows.
+                    // Guides stacked vertically each add their own full
+                    // height, so their extra rows sum.
+                    extras.legend_extra_rows = if is_horizontal {
+                        plans
+                            .values()
+                            .map(|p| p.rows.saturating_sub(1))
+                            .max()
+                            .unwrap_or(0)
+                    } else {
+                        plans.values().map(|p| p.rows.saturating_sub(1)).sum()
+                    };
+                    // Review #158 finding 3: a vertical explicit grid
+                    // with ncol > 1 needs extra legend band width for
+                    // its later columns, or they run off the canvas
+                    // (cols is always 1, col_pitch 0, for the horizontal
+                    // auto-wrap path, so this is a no-op there). Several
+                    // guides take the widest requirement among them.
+                    extras.legend_extra_width = plans
+                        .values()
+                        .map(|p| p.cols.saturating_sub(1) as f64 * p.col_pitch)
+                        .fold(0.0_f64, f64::max);
+
+                    // Review #158's second re-review, LOW: warn when a
+                    // vertical multi-column grid still runs off the
+                    // canvas even after reserving the extra width above.
+                    // Measures each entry's own actual rendered right
+                    // edge rather than `cols * col_pitch` (the worst-
+                    // case upper bound, which over-warns whenever the
+                    // columns' real labels are shorter than the single
+                    // widest one `col_pitch` is sized from).
+                    if !is_horizontal {
+                        let final_layout = PlotLayout::compute_with_extras(
                             w as f64,
                             h as f64,
                             &built.theme,
@@ -2772,107 +2845,62 @@ impl GGPlot {
                             x_label_height,
                             extras,
                         );
-                        let (legend_x0, _, mut is_horizontal) =
-                            crate::guide::legend::legend_position(&built.theme, &layout0.plot_area);
-                        if let Some(dir) = built.theme.legend_direction {
-                            is_horizontal =
-                                matches!(dir, crate::theme::LegendDirection::Horizontal);
-                        }
-                        let avail_width =
-                            (layout0.plot_area.x + layout0.plot_area.width - legend_x0).max(0.0);
-                        let mut legend_warnings = Vec::new();
-                        let validated_guide = built
-                            .guide_legend
-                            .validated(breaks.len(), &mut legend_warnings);
-                        let plan = crate::guide::legend::plan_legend(
-                            &breaks,
-                            &validated_guide,
+                        let (legend_x_final, _, _) = crate::guide::legend::legend_position(
                             &built.theme,
-                            avail_width,
-                            layout0.plot_area.height,
-                            is_horizontal,
+                            &final_layout.plot_area,
                         );
-                        built.warnings.extend(legend_warnings);
-                        if let Some(plan) = &plan {
-                            extras.legend_extra_rows = plan.rows.saturating_sub(1);
-                            // Review #158 finding 3: a vertical explicit
-                            // grid with ncol > 1 needs extra legend band
-                            // width for its later columns, or they run off
-                            // the canvas (cols is always 1, col_pitch 0,
-                            // for the horizontal auto-wrap path, so this is
-                            // a no-op there).
-                            extras.legend_extra_width =
-                                plan.cols.saturating_sub(1) as f64 * plan.col_pitch;
-                            // Review #158's second re-review, LOW: warn
-                            // when a vertical multi-column grid still runs
-                            // off the canvas even after reserving the
-                            // extra width above — e.g. the grid is simply
-                            // too wide for this chart (many columns, long
-                            // labels, a narrow canvas). Measures each
-                            // entry's own actual rendered right edge
-                            // (swatch + spacing + that label's text width)
-                            // rather than `cols * col_pitch` (the worst-
-                            // case upper bound every column *could* need,
-                            // which over-warns whenever the columns' real
-                            // labels are shorter than the single widest
-                            // one `col_pitch` is sized from).
-                            if !is_horizontal && plan.cols > 1 {
-                                let final_layout = PlotLayout::compute_with_extras(
-                                    w as f64,
-                                    h as f64,
-                                    &built.theme,
-                                    has_title,
-                                    has_subtitle,
-                                    has_caption,
-                                    has_legend,
-                                    x_axis_top,
-                                    y_label_width,
-                                    x_label_height,
-                                    extras,
-                                );
-                                let (legend_x_final, _, _) = crate::guide::legend::legend_position(
-                                    &built.theme,
-                                    &final_layout.plot_area,
-                                );
-                                let swatch_and_gap =
-                                    built.theme.legend_key_width + built.theme.legend_spacing;
-                                let text_size = built.theme.legend_text.size;
-                                let legend_right_edge = plan
-                                    .entries
-                                    .iter()
-                                    .map(|e| {
-                                        let label = &breaks[e.break_idx].1;
-                                        legend_x_final
-                                            + e.x_offset
-                                            + swatch_and_gap
-                                            + crate::render::text::text_width(label, text_size)
-                                    })
-                                    .fold(0.0_f64, f64::max);
-                                if legend_right_edge > w as f64 {
-                                    built.warnings.push(format!(
-                                        "legend: the {}-column grid still doesn't fit the {w}px chart (needs about {} px)",
-                                        plan.cols,
-                                        legend_right_edge.ceil() as i64
-                                    ));
-                                }
+                        let swatch_and_gap =
+                            built.theme.legend_key_width + built.theme.legend_spacing;
+                        let text_size = built.theme.legend_text.size;
+                        for (aes, plan) in &plans {
+                            if plan.cols <= 1 {
+                                continue;
                             }
-                            if let Some(ov) = &plan.overflow {
-                                let n = breaks.len();
-                                let shown = n - ov.dropped;
+                            let Some(scale) = built.scales.get(aes) else {
+                                continue;
+                            };
+                            let breaks = scale.breaks();
+                            let legend_right_edge = plan
+                                .entries
+                                .iter()
+                                .filter_map(|e| breaks.get(e.break_idx).map(|(_, l)| (e, l)))
+                                .map(|(e, label)| {
+                                    legend_x_final
+                                        + e.x_offset
+                                        + swatch_and_gap
+                                        + crate::render::text::text_width(label, text_size)
+                                })
+                                .fold(0.0_f64, f64::max);
+                            if legend_right_edge > w as f64 {
                                 built.warnings.push(format!(
-                                    "legend: {} of {n} entries don't fit the chart; the legend shows {shown} and \"+{} more\"",
-                                    ov.dropped, ov.dropped
+                                    "legend: the {}-column grid still doesn't fit the {w}px chart (needs about {} px)",
+                                    plan.cols,
+                                    legend_right_edge.ceil() as i64
                                 ));
                             }
                         }
-                        // Review #158 finding 2: store this exact plan so
-                        // `draw_legend_planned` draws it verbatim instead of
-                        // recomputing against the (shorter) post-reservation
-                        // panel height, which could warn "+7 more" while
-                        // drawing "+15 more".
-                        built.legend_plan = plan;
+                    }
+                    for (aes, plan) in &plans {
+                        if let Some(ov) = &plan.overflow {
+                            let n = built
+                                .scales
+                                .get(aes)
+                                .map(|s| s.breaks().len())
+                                .unwrap_or(ov.dropped);
+                            let shown = n.saturating_sub(ov.dropped);
+                            built.warnings.push(format!(
+                                "legend: {} of {n} entries don't fit the chart; the legend shows {shown} and \"+{} more\"",
+                                ov.dropped, ov.dropped
+                            ));
+                        }
                     }
                 }
+                // Review #158 finding 2: store these exact plans so
+                // `draw_legend_planned` draws them verbatim instead of
+                // recomputing against the (shorter) post-reservation
+                // panel height, which could warn "+7 more" while
+                // drawing "+15 more".
+                built.legend_plans = plans;
             }
         }
 

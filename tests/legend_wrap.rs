@@ -431,3 +431,75 @@ fn reserved_band_height_matches_the_drawn_row_count() {
         );
     }
 }
+
+/// #155: a plot with two simultaneous discrete guides (`colour` and
+/// `shape`) laid out side by side on a bottom legend — each with enough
+/// entries to overflow a one-line layout on its own — now wraps
+/// independently instead of only the plot's single discrete guide ever
+/// being eligible. Neither guide's wrapped text may run past the canvas.
+#[test]
+fn two_discrete_guides_each_auto_wrap() {
+    let n = 10;
+    let x: Vec<Value> = (0..n).map(|i| Value::Float(i as f64)).collect();
+    let y: Vec<Value> = (0..n).map(|i| Value::Float((i % 3) as f64)).collect();
+    let g: Vec<Value> = (0..n)
+        .map(|i| Value::Str(format!("Colour {:02}", i + 1)))
+        .collect();
+    let s: Vec<Value> = (0..n)
+        .map(|i| Value::Str(format!("Shape {:02}", i + 1)))
+        .collect();
+    let plot = GGPlot::new(vec![
+        ("x".into(), x),
+        ("y".into(), y),
+        ("g".into(), g),
+        ("s".into(), s),
+    ])
+    .aes(Aes::new().x("x").y("y").color("g").shape("s"))
+    .geom_point()
+    .legend_position(LegendPosition::Bottom);
+    let svg = render(plot, 640, 500);
+
+    assert!(svg.contains(">Colour 01<"), "{svg}");
+    assert!(svg.contains(">Colour 10<"), "{svg}");
+    assert!(svg.contains(">Shape 01<"), "{svg}");
+    assert!(svg.contains(">Shape 10<"), "{svg}");
+    assert!(
+        max_text_right_edge(&svg) <= 640.0,
+        "a guide's wrapped text overflows the 640px canvas: right edge {}",
+        max_text_right_edge(&svg)
+    );
+}
+
+/// #155: a `PlotGrid` with `collect_legends(true)` wraps its collected
+/// legend the same way a single plot's legend does — previously
+/// `compose::capture_legend` always drew the plain, unwrapped path, so a
+/// crowded collected legend could run off the grid's own canvas.
+#[test]
+fn plotgrid_collected_legend_auto_wraps() {
+    use ggplot_rs::compose::{GridLegendPosition, PlotGrid};
+
+    let n = 14;
+    let x: Vec<Value> = (0..n).map(|i| Value::Float(i as f64)).collect();
+    let y: Vec<Value> = (0..n).map(|i| Value::Float((i % 3) as f64)).collect();
+    let g: Vec<Value> = (0..n)
+        .map(|i| Value::Str(format!("Group {:02}", i + 1)))
+        .collect();
+    let plot = GGPlot::new(vec![("x".into(), x), ("y".into(), y), ("g".into(), g)])
+        .aes(Aes::new().x("x").y("y").color("g"))
+        .geom_point();
+
+    let svg = PlotGrid::new()
+        .add(plot)
+        .collect_legends(true)
+        .legend_position(GridLegendPosition::Bottom)
+        .render_svg_native_with_size(500, 400)
+        .expect("render");
+
+    assert!(svg.contains(">Group 01<"), "{svg}");
+    assert!(svg.contains(">Group 14<"), "{svg}");
+    assert!(
+        max_text_right_edge(&svg) <= 500.0,
+        "the collected legend's text overflows the 500px canvas: right edge {}",
+        max_text_right_edge(&svg)
+    );
+}
