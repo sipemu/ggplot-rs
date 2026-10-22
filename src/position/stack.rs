@@ -48,18 +48,6 @@ pub fn position_stack() -> PositionStack {
     PositionStack::default()
 }
 
-/// Which of #154's two independent buckets a `y` value stacks into.
-///
-/// `y_val >= 0.0` is `false` for NaN (every IEEE-754 comparison with NaN
-/// is), so a plain `y_val >= 0.0` check routed a NaN `y` into the
-/// *negative* bucket (review #167 finding 8 / #170) — ggplot2 treats a
-/// missing/NaN value as positive (it still contributes to, and is
-/// placed within, the positive stack). `is_nan` is checked first so NaN
-/// takes the positive branch regardless of the `>= 0.0` result.
-fn is_positive_bucket(y_val: f64) -> bool {
-    y_val.is_nan() || y_val >= 0.0
-}
-
 impl Position for PositionStack {
     fn compute(&self, data: &mut DataFrame, _params: &PositionParams) {
         // Group by x, accumulate y values
@@ -95,25 +83,41 @@ impl Position for PositionStack {
         // rather than assume `tops[i] >= bottoms[i]`.
         // Per-x accumulators keyed by the borrowed x key: O(1) per row
         // instead of a linear scan over the distinct x values.
+        //
+        // A missing row (`super::stack_row`, review #167 finding 2 on
+        // #171) joins the positive bucket but contributes 0 to its
+        // total, and its own top/bottom are left NaN below — so it
+        // doesn't poison any other row's stack, matching ggplot2's
+        // `pos_stack` (`y <- ifelse(is.na(df$y), 0, df$y)`).
         for positive in [true, false] {
             let mut totals: HashMap<Cow<'_, str>, f64> = HashMap::new();
             for (x, y) in x_col.iter().zip(y_col.iter()) {
-                let y_val = y.as_f64().unwrap_or(0.0);
-                if is_positive_bucket(y_val) != positive {
+                let row = super::stack_row(y);
+                if row.is_positive_bucket() != positive {
                     continue;
                 }
-                *totals.entry(x.key_str()).or_insert(0.0) += y_val;
+                *totals.entry(x.key_str()).or_insert(0.0) += row.contribution();
             }
 
             let mut consumed: HashMap<Cow<'_, str>, f64> = HashMap::new();
             for (i, (x, y)) in x_col.iter().zip(y_col.iter()).enumerate() {
-                let y_val = y.as_f64().unwrap_or(0.0);
-                if is_positive_bucket(y_val) != positive {
+                let row = super::stack_row(y);
+                if row.is_positive_bucket() != positive {
                     continue;
                 }
                 let x_key = x.key_str();
                 let total = totals.get(&x_key).copied().unwrap_or(0.0);
                 let run = consumed.get(&x_key).copied().unwrap_or(0.0);
+
+                let Some(y_val) = row.value() else {
+                    // Missing: draw nothing for this row (NA in
+                    // ggplot2), but don't advance `consumed` — it
+                    // contributed 0, so the next row in this bucket
+                    // still starts from the same `run`.
+                    tops[i] = f64::NAN;
+                    bottoms[i] = f64::NAN;
+                    continue;
+                };
 
                 // This group occupies [total - run - y, total - run]
                 // within its own (same-sign) bucket.
@@ -247,32 +251,74 @@ mod tests {
         assert_eq!(col(&df, "ymin"), vec![5.0, 0.0]);
     }
 
-    /// #170 / review #167 finding 8: a NaN `y` must stack into the
-    /// *positive* bucket, like ggplot2 — `y_val >= 0.0` is `false` for
-    /// NaN (every IEEE-754 comparison with NaN is), so the naive
-    /// `(y_val >= 0.0) != positive` check routed it into the negative
-    /// one instead.
-    ///
-    /// Summing a NaN into a bucket's running total necessarily poisons
-    /// that *whole* bucket's arithmetic (`a`'s and `b`'s `y`/`ymin` below
-    /// are both NaN — that's inherent to a sum-based stack, not this
-    /// bug), so the only observable, bucket-correct behaviour to check is
-    /// that it's the *other* bucket that stays clean: `c`, the only
-    /// finite negative value, must stack to exactly what a lone negative
-    /// value does (its own total, from 0) whether or not `b`'s NaN ever
-    /// ran through the positive side. Before the fix `b` joined `c`'s
-    /// negative bucket instead, poisoning `c`'s total/`ymin` with NaN too.
+    /// Review #167 finding 2 on sipemu/ggplot-rs#171 (originally #170's
+    /// NaN bucket fix, which got the *bucket* right but the *arithmetic*
+    /// wrong): a missing `y` joins the positive bucket, like ggplot2,
+    /// but contributes **0** to its running total — not the raw NaN —
+    /// so the *other* row sharing that bucket (`a`) stacks exactly as if
+    /// `b` weren't there at all, instead of turning into NaN too.
+    /// ggplot2 4.0.3 (`layer_data()`, `pos_stack`'s `y <-
+    /// ifelse(is.na(df$y), 0, df$y)`): a=3, b=NaN, c=-2 gives a 0..3,
+    /// c -2..0, b's own y/ymin left `NA`. `c` (the negative bucket) was
+    /// already unaffected either way — it shares no bucket with `b`.
     #[test]
-    fn nan_y_stacks_into_the_positive_bucket_like_ggplot2() {
+    fn missing_y_contributes_zero_and_does_not_poison_its_bucket() {
         let mut df = frame(&[1.0, 1.0, 1.0], &["a", "b", "c"], &[3.0, f64::NAN, -2.0]);
         PositionStack.compute(&mut df, &PositionParams::default());
         let y = col(&df, "y");
         let ymin = col(&df, "ymin");
         assert_eq!(
+            (y[0], ymin[0]),
+            (3.0, 0.0),
+            "a must stack as if b's row weren't there at all: y={y:?} ymin={ymin:?}"
+        );
+        assert!(
+            y[1].is_nan() && ymin[1].is_nan(),
+            "b's own y/ymin must stay NaN (not drawn): y={y:?} ymin={ymin:?}"
+        );
+        assert_eq!(
             (y[2], ymin[2]),
             (0.0, -2.0),
-            "c (the only finite negative value) must be unaffected by b's NaN — \
-             a lone negative value's bucket runs from 0 down to its own total: \
+            "c (negative bucket) must be unaffected: y={y:?} ymin={ymin:?}"
+        );
+    }
+
+    /// The pre-existing bug finding 2 also fixes: a `Value::Na` `y` (not
+    /// just a `Float(NaN)`) used to fall back to `0.0` via
+    /// `as_f64().unwrap_or(0.0)` and get stacked as a *real* point at
+    /// the top of its bucket, drawing a line straight through a
+    /// supposedly-removed row. It must now be treated exactly like a
+    /// `Float(NaN)` — contributing 0, with its own output left NaN.
+    #[test]
+    fn value_na_is_treated_like_float_nan_not_zero() {
+        let mut df = DataFrame::new();
+        df.add_column(
+            "x".into(),
+            vec![Value::Float(1.0), Value::Float(1.0), Value::Float(1.0)],
+        );
+        df.add_column(
+            "fill".into(),
+            vec![
+                Value::Str("a".into()),
+                Value::Str("b".into()),
+                Value::Str("c".into()),
+            ],
+        );
+        df.add_column(
+            "y".into(),
+            vec![Value::Float(3.0), Value::Na, Value::Float(-2.0)],
+        );
+        PositionStack.compute(&mut df, &PositionParams::default());
+        let y = col(&df, "y");
+        let ymin = col(&df, "ymin");
+        assert_eq!(
+            (y[0], ymin[0]),
+            (3.0, 0.0),
+            "a must be unaffected by b's Value::Na: y={y:?} ymin={ymin:?}"
+        );
+        assert!(
+            y[1].is_nan() && ymin[1].is_nan(),
+            "a Value::Na row must not become a real point at the stack top: \
              y={y:?} ymin={ymin:?}"
         );
     }

@@ -5,9 +5,12 @@ All notable changes to this project are documented here. The format follows
 
 ## [0.24.0] — Unreleased
 
-Minor bump: a deliberate `geom_col()` default-position change (ggplot2
-parity) plus four LOW/non-blocking fixes from the #167 review, all
-guarded by a test.
+Minor bump: two deliberate default-position changes (ggplot2 parity)
+plus five LOW/MEDIUM fixes from the #167 review on PR #171, all guarded
+by a test. Two findings from that same review (the #168 retry and the
+`position_stack`/`position_fill` NaN handling) were themselves corrected
+by a follow-up round of review before landing here — see each bullet
+below for what changed and why.
 
 ### Changed
 
@@ -20,7 +23,9 @@ guarded by a test.
   (bars drawn on top of each other from `y = 0`, not stacked) must now
   add an explicit `.position(PositionIdentity)` to keep that output; a
   plot that already set `.position(...)` explicitly, or that never has
-  more than one group at a shared x, is unaffected. `tests/default_output_023.rs`'s
+  more than one group at a shared x, is unaffected. The `ggplot` CLI's
+  `--geom col` changes the same way (`src/bin/ggplot.rs`, same
+  `GGPlot::geom_col()` call). `tests/default_output_023.rs`'s
   `all_positive_stack` case (`geom_col()`'s default, two groups at one
   x) exercises this — see its updated expected hash and data-fn comment;
   `tests/issue169_geom_col_default_stack.rs` checks the default matches
@@ -28,27 +33,56 @@ guarded by a test.
   `tests/integration.rs`'s `test_layer_position_override_build` switched
   from `geom_col()` to `geom_point()` to keep testing an override of an
   *identity* default.
+- **`geom_area()`'s default position is now `position_stack()` too**,
+  matching ggplot2 (review #167 finding 5 on #171) — the same parity gap
+  as #169, landed in this same minor so every default-position break
+  ships in one release instead of trickling in across several.
+  **Migration**: a plot that calls `geom_area()` with more than one
+  series (a mapped `fill`/`colour`/`group`) at the same x and relies on
+  the old identity behaviour (bands drawn on top of each other from
+  `y = 0`, not stacked) must now add an explicit
+  `.position(PositionIdentity)`; a plot with only one series, or that
+  already set `.position(...)` explicitly, is unaffected. The `ggplot`
+  CLI's `--geom area` changes the same way. `tests/default_output_022.rs`'s
+  `area` case changes too, for an unrelated reason worth calling out: its
+  fixture (`band_data()`) happens to carry its own pre-existing `ymin`
+  column (there for `geom_ribbon`'s case, not this one), which
+  `PositionIdentity` always left untouched but `PositionStack` now
+  overwrites with the (single-series, all-zero) baseline it computes —
+  see that file's updated expected hash and docstring note.
+  `tests/geom_area_default_stack.rs` checks the default matches an
+  explicit `PositionStack` and no longer matches `PositionIdentity`.
 
 ### Fixed
 
 - A vertical legend's explicit `ncol` grid that auto-reduces its column
   count to fit (#159) now reclaims the panel width that reduction no
   longer needs, instead of keeping the wider, pre-reduction column
-  count's reservation forever (#168, review #167 finding 5). Reclaiming
-  it is a single bounded retry, not an unconditional recompute: the
-  tighter reservation is re-checked against the same fit test the
-  reduction loop uses, and is kept only if every guide the loop reduced
-  still fits under it — a grid that would overflow at the tighter
-  reservation (the pre-existing #159 limitation where an explicit
-  `ncol(1)` grid has no fit check of its own) keeps the wider, already-
-  safe reservation instead, so this can only shrink the reservation
-  when doing so is provably safe, never regress a plot that already
-  rendered correctly. `tests/legend_wrap.rs`'s
-  `legend_panel_width_is_reclaimed_after_column_reduction` (the panel
-  widens back to what an equivalent direct `ncol` grid gets) and
-  `legend_panel_width_reservation_is_not_loosened_when_unsafe` (the
-  all-the-way-to-one-column case keeps the wider reservation) cover
-  both sides.
+  count's reservation forever (#168, review #167 finding 5 on #171).
+  Reclaiming it is a single bounded retry, not an unconditional
+  recompute: the tighter reservation is re-checked against the same fit
+  test the reduction loop uses, against *every* currently-planned guide
+  — not only the guide(s) the reduction loop itself reduced — and is
+  kept only if every one of them still fits under it. A follow-up review
+  round caught that first cut checking only the reduced guides: `legend_x`
+  moves for *every* guide sharing the row once the reservation tightens,
+  not just the one(s) reduction touched, so a second guide that already
+  fit at the old, wider `legend_x` (its base width estimate is a fixed
+  `6·text_size`, unrelated to the reduced guide's own labels), or whose
+  labels were truncated against that old `legend_x`, shifted right by
+  the same amount with nothing re-checking it — up to 40px off-canvas
+  with no warning in a 7,992-plot sweep, 7.3% of cases with two
+  simultaneous guides. Checking every plan removed all of those. A grid
+  that would overflow at the tighter reservation even after that (the
+  pre-existing #159 limitation where an explicit `ncol(1)` grid has no
+  fit check of its own) keeps the wider, already-safe reservation
+  instead, so this can only shrink the reservation when doing so is
+  provably safe, never regress a plot that already rendered correctly.
+  `tests/legend_wrap.rs`'s `legend_panel_width_is_reclaimed_after_column_reduction`
+  and `legend_panel_width_reservation_is_not_loosened_when_unsafe` cover
+  the single-guide case (both sides); `two_guides_ncol_retighten_repro_a_stays_on_canvas`
+  and `..._repro_b_stays_on_canvas` cover the two-guide regression
+  (untouched guide and truncated guide respectively).
 - A bottom/top legend mixing a colourbar (a continuous `colour`/`fill`
   scale) with a discrete guide now leaves the discrete guide only the
   row width left over after the colourbar's own fixed share, instead of
@@ -70,15 +104,30 @@ guarded by a test.
   `<title>` treatment yet), but would otherwise have resurfaced as soon
   as they did. `src/compose.rs`'s
   `measure_forwards_the_title_to_its_inner_backend` unit test.
-- A `NaN` `y` in `position_stack` now stacks into the *positive* bucket,
-  matching ggplot2, instead of the negative one (review #167 finding 8)
-  — `y_val >= 0.0` is `false` for NaN under IEEE-754, so the naive sign
-  check routed it into the negative bucket by accident.
-  `src/position/stack.rs`'s
-  `nan_y_stacks_into_the_positive_bucket_like_ggplot2`. (`position_fill`
-  has the identical `(y_val >= 0.0) != positive` pattern and likely the
-  same bug — out of scope for #170, which named `position_stack`
-  specifically; flagged for a follow-up issue.)
+- A missing (`NaN`/SQL `NULL`) `y` is now skipped in `position_stack`
+  and `position_fill` (it contributes **0** to its bucket's running
+  total/denominator) and its own `y`/`ymin`/`ymax` are left `NaN` — not
+  drawn — matching ggplot2's `pos_stack`/`position_fill` exactly (review
+  #167 finding 2/3 on #171). A first cut (review #167 finding 8 on the
+  original #170) put the missing value in the right *bucket* (positive,
+  like ggplot2) but summed its raw `NaN` into that bucket's total,
+  turning every *other*, perfectly finite row sharing that bucket at the
+  same x into `NaN` too — worse than before, where the (wrongly-bucketed)
+  `NaN` at least sat alone. This only matters for `geom_line`/`geom_step`/
+  `geom_path`, which keep a missing row as a line break instead of
+  dropping it (`Geom::keeps_na_as_break`); every other geom already drops
+  non-finite rows before `Stat`/`Position` ever see them. Also fixes a
+  pre-existing, unrelated bug the same code touches: a `Value::Na` `y`
+  (SQL `NULL`, as opposed to a float `NaN`) used to fall back to `0.0`
+  via `as_f64().unwrap_or(0.0)` and get stacked as a *real* point at the
+  top of its bucket — a line drawn straight through a row the "removed 1
+  row" warning said was gone. `src/position/stack.rs`'s
+  `missing_y_contributes_zero_and_does_not_poison_its_bucket` and
+  `value_na_is_treated_like_float_nan_not_zero`, `src/position/fill.rs`'s
+  sibling test, and `tests/position_stack_r.rs`'s
+  `stacked_line_with_a_missing_y_leaves_other_series_intact_at_that_x`
+  (an end-to-end `geom_line` regression, since `keeps_na_as_break` is
+  what makes this reachable at all).
 
 ## [0.23.0] — 2026-10-22
 

@@ -3007,11 +3007,28 @@ impl GGPlot {
                         // reduction; rather than chase reserve → layout →
                         // fit → reduce → reserve → … indefinitely, this
                         // keeps the tighter reservation only if every
-                        // guide reduced above still fits under it, and
-                        // falls back to the wider, already-proven-safe
-                        // reservation otherwise — so retightening can
-                        // only ever help, never regress a plot that fit
-                        // before this pass existed).
+                        // guide still fits under it, and falls back to
+                        // the wider, already-proven-safe reservation
+                        // otherwise — so retightening can only ever
+                        // help, never regress a plot that fit before
+                        // this pass existed).
+                        //
+                        // Review #167 finding 1 on #171 (HIGH, fixed):
+                        // the retry must re-check *every* plan in
+                        // `plans`, not just `reduced_aes`. `legend_x`
+                        // moves for every guide sharing the row, not
+                        // only the one(s) that got reduced — a second
+                        // guide that already fit at the old, wider
+                        // `legend_x_final` (its own width is a fixed
+                        // `6·text_size` estimate, unrelated to the
+                        // reduced guide's labels) or whose labels were
+                        // truncated against that old `legend_x_final`
+                        // shifts right by the same amount and was never
+                        // re-checked, so it could run off the canvas
+                        // with no warning (the warnings were computed
+                        // against the old x too). `reduced_aes` is kept
+                        // only to gate *entering* this block at all —
+                        // nothing to reclaim if nothing was reduced.
                         if !reduced_aes.is_empty() {
                             let original_reserve = extras.legend_extra_width;
                             let tighter_reserve = plans
@@ -3038,10 +3055,8 @@ impl GGPlot {
                                     &built.theme,
                                     &retry_layout.plot_area,
                                 );
-                                let all_still_fit = reduced_aes.iter().all(|aes| {
-                                    let (Some(plan), Some(scale)) =
-                                        (plans.get(aes), built.scales.get(aes))
-                                    else {
+                                let all_still_fit = plans.iter().all(|(aes, plan)| {
+                                    let Some(scale) = built.scales.get(aes) else {
                                         return true;
                                     };
                                     let breaks = scale.breaks();

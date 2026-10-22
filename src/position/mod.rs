@@ -91,6 +91,56 @@ pub(crate) fn preserve_raw_y(data: &mut DataFrame, y: &[crate::data::Value]) {
     }
 }
 
+/// A row's `y`, classified for `PositionStack`/`PositionFill`'s #154
+/// positive/negative bucket split — shared so the two positions handle a
+/// missing value identically (sipemu/ggplot-rs#171 review, finding 3).
+///
+/// `value` is `None` for a *missing* row: `Value::Na`, or a `Value::Float`
+/// that isn't finite (NaN or an infinity). ggplot2's `pos_stack`/
+/// `position_fill` (verified against ggplot2 4.0.3's R source —
+/// `PositionStack$compute_panel` sends `negative[is.na(negative)] <-
+/// FALSE`, then `pos_stack`/`position_fill` use `y <- ifelse(is.na(df$y),
+/// 0, df$y)`) treat a missing row as joining the *positive* bucket but
+/// contributing **0** to its running total, and leave the row's own
+/// `y`/`ymin`/`ymax` as `NA` — so it draws nothing, but every *other* row
+/// at that x is unaffected. [`StackRow::is_positive_bucket`] and
+/// [`StackRow::contribution`] give exactly that: summing `contribution()`
+/// into a bucket's total never introduces a NaN (review #167 finding 2 on
+/// #171 — the pre-#171 code instead summed the raw, possibly-NaN `y`,
+/// poisoning every other row sharing that row's bucket at that x).
+#[derive(Clone, Copy)]
+pub(crate) struct StackRow {
+    value: Option<f64>,
+}
+
+/// Classify a row's `y` for stacking — see [`StackRow`].
+pub(crate) fn stack_row(y: &crate::data::Value) -> StackRow {
+    StackRow {
+        value: y.as_f64().filter(|v| v.is_finite()),
+    }
+}
+
+impl StackRow {
+    /// Which of the two independent buckets this row stacks into — a
+    /// missing row always joins the positive one, matching ggplot2.
+    pub(crate) fn is_positive_bucket(&self) -> bool {
+        self.value.is_none_or(|v| v >= 0.0)
+    }
+
+    /// What this row contributes to its bucket's running total: `0` for
+    /// a missing row, so summing it can never poison the total with NaN.
+    pub(crate) fn contribution(&self) -> f64 {
+        self.value.unwrap_or(0.0)
+    }
+
+    /// This row's own finite value, or `None` if it's missing — the
+    /// caller writes `f64::NAN` for `y`/`ymin`/`ymax` in the `None` case
+    /// (so the row draws nothing, matching ggplot2's `NA`).
+    pub(crate) fn value(&self) -> Option<f64> {
+        self.value
+    }
+}
+
 /// Column in which dodging positions store each row's offset (in category
 /// units) when x is *discrete*: the category itself can't move, so geoms add
 /// `offset / n_levels` to the mapped x (see `geom::support::XMapper`).
