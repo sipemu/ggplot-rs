@@ -694,6 +694,20 @@ impl PlotRenderer {
         Ok(())
     }
 
+    /// `annotate_text`/`annotate_segment` under theme ink/paper (#157,
+    /// follow-up to #142): `Annotation`'s fields are all `pub` with no
+    /// `#[non_exhaustive]`, so it can't gain an "explicitly styled" flag
+    /// without a semver break — the same `value == hard-coded default`
+    /// gate `apply_element_geom`'s other callers already use (e.g.
+    /// `geom/refline.rs`'s `(50, 50, 50)` → `ink`) is applied here instead.
+    /// Default theme (`geom.ink` unset) is byte-identical.
+    ///
+    /// `annotate_rect`'s grey fill is deliberately excluded: checked
+    /// against ggplot2 4.0.3 (`theme(geom = element_geom(ink = "white",
+    /// paper = "black"))`), `annotate("text")`/`annotate("segment")`
+    /// recolour to `ink` but `annotate("rect")`'s fill stays the same
+    /// hard-coded grey (`#A6A6A6`) regardless — ggplot2 itself doesn't
+    /// route a rect annotation's fill through ink/paper.
     fn draw_annotations(
         annotations: &[Annotation],
         scales: &crate::scale::ScaleSet,
@@ -723,7 +737,7 @@ impl PlotRenderer {
                         label,
                         pos,
                         &TextStyle {
-                            color: *color,
+                            color: annotation_ink(*color, theme),
                             size: *size,
                             anchor: TextAnchor::Middle,
                             angle: 0.0,
@@ -775,7 +789,7 @@ impl PlotRenderer {
                     backend.draw_line(
                         &[p0, p1],
                         &LineStyle {
-                            color: *color,
+                            color: annotation_ink(*color, theme),
                             alpha: 1.0,
                             width: *width,
                             linetype: Linetype::Solid,
@@ -786,6 +800,18 @@ impl PlotRenderer {
             }
         }
         Ok(())
+    }
+}
+
+/// `color`, recoloured from `theme.geom.ink` when it's still at
+/// `annotate_text`/`annotate_segment`'s hard-coded default (`(50, 50,
+/// 50)`) and the theme actually sets `ink` — see the doc comment on
+/// [`PlotRenderer::draw_annotations`]. `None`/an explicitly-styled colour
+/// (anything else) passes through unchanged.
+fn annotation_ink(color: (u8, u8, u8), theme: &crate::theme::Theme) -> (u8, u8, u8) {
+    match (color == (50, 50, 50), theme.geom.ink) {
+        (true, Some(ink)) => ink,
+        _ => color,
     }
 }
 

@@ -294,3 +294,81 @@ fn geom_with_variants_for_line_path_text_label_and_boxplot_keep_their_explicit_c
     assert!(box_svg.contains("stroke=\"#000000\""), "{box_svg}");
     assert!(box_svg.contains("fill=\"#FFFFFF\""), "{box_svg}");
 }
+
+/// #157, follow-up to #142: `annotate_text`/`annotate_segment`'s hard-coded
+/// `(50, 50, 50)` default follows theme ink, the same as every other
+/// geom's default colour under `element_geom` — otherwise they stay
+/// near-black and nearly invisible under a white-on-black theme.
+#[test]
+fn annotate_text_and_segment_follow_ink() {
+    let data = frame(vec![("x", floats(&[1.0, 2.0])), ("y", floats(&[1.0, 2.0]))]);
+    let svg = GGPlot::new(data)
+        .aes(Aes::new().x("x").y("y"))
+        .geom_point()
+        .annotate_text("hi", 1.0, 1.5)
+        .annotate_segment(1.0, 1.0, 2.0, 2.0)
+        .theme(Theme::default().with_ink_paper(WHITE, BLACK))
+        .render_svg_native_with_size(300, 200)
+        .unwrap();
+    let texts = tags(&svg, "text");
+    assert!(
+        texts.iter().any(|t| t.contains("fill=\"#FFFFFF\"")),
+        "{svg}"
+    );
+    assert!(svg.contains("stroke=\"#FFFFFF\""), "{svg}");
+    // The annotations' own near-black default must be gone.
+    assert!(!svg.contains("#323232"), "{svg}");
+}
+
+/// `annotate_rect`'s grey fill is deliberately excluded (verified against
+/// ggplot2 4.0.3: `annotate("rect", ...)` under `theme(geom =
+/// element_geom(ink = "white", paper = "black"))` keeps its hard-coded
+/// grey fill, unlike `annotate("text")`/`annotate("segment")`).
+#[test]
+fn annotate_rect_fill_is_unaffected_by_ink_paper() {
+    let data = frame(vec![("x", floats(&[1.0, 2.0])), ("y", floats(&[1.0, 2.0]))]);
+    let plain = GGPlot::new(data.clone())
+        .aes(Aes::new().x("x").y("y"))
+        .geom_point()
+        .annotate_rect(0.5, 1.5, 0.5, 1.5)
+        .render_svg_native_with_size(300, 200)
+        .unwrap();
+    let themed = GGPlot::new(data)
+        .aes(Aes::new().x("x").y("y"))
+        .geom_point()
+        .annotate_rect(0.5, 1.5, 0.5, 1.5)
+        .theme(Theme::default().with_ink_paper(WHITE, BLACK))
+        .render_svg_native_with_size(300, 200)
+        .unwrap();
+    let rect_fill = |svg: &str| {
+        tags(svg, "rect")
+            .into_iter()
+            .find_map(|r| r.contains("fill=\"#C8C8C8\"").then_some(true))
+    };
+    assert_eq!(rect_fill(&plain), Some(true), "{plain}");
+    assert_eq!(rect_fill(&themed), Some(true), "{themed}");
+}
+
+/// Default theme (nothing set) stays byte-identical for annotations too.
+#[test]
+fn annotations_default_theme_is_byte_identical() {
+    let data = frame(vec![("x", floats(&[1.0, 2.0])), ("y", floats(&[1.0, 2.0]))]);
+    let plain = GGPlot::new(data.clone())
+        .aes(Aes::new().x("x").y("y"))
+        .geom_point()
+        .annotate_text("hi", 1.0, 1.5)
+        .annotate_segment(1.0, 1.0, 2.0, 2.0)
+        .annotate_rect(0.5, 1.5, 0.5, 1.5)
+        .render_svg_native_with_size(300, 200)
+        .unwrap();
+    let with_default_theme = GGPlot::new(data)
+        .aes(Aes::new().x("x").y("y"))
+        .geom_point()
+        .annotate_text("hi", 1.0, 1.5)
+        .annotate_segment(1.0, 1.0, 2.0, 2.0)
+        .annotate_rect(0.5, 1.5, 0.5, 1.5)
+        .theme(Theme::default())
+        .render_svg_native_with_size(300, 200)
+        .unwrap();
+    assert_eq!(plain, with_default_theme);
+}

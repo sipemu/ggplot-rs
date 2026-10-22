@@ -25,6 +25,14 @@ annotation ink, boxplot identity mapping.
   `"y = …"` label the same way every other `consumes_tooltips` geom does;
   previously the template was silently dropped with a has-no-effect
   warning (#165). The default label (no template set) is unchanged.
+- `annotate_text`/`annotate_segment` now follow theme `element_geom` ink
+  when their colour is still at its hard-coded default, the same as every
+  other geom's default colour (#157, follow-up to #142) — previously they
+  stayed near-black and nearly invisible under a white-on-black theme.
+  `annotate_rect`'s fill is deliberately excluded, matching ggplot2
+  4.0.3's own behaviour (checked directly: its fill stays the hard-coded
+  grey under `element_geom(ink=, paper=)` too). Default theme (no ink set)
+  is byte-identical.
 
 ## [0.22.1] — 2026-10-21
 
