@@ -3,14 +3,12 @@
 All notable changes to this project are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
-## [0.24.0] — Unreleased
+## [0.24.0] — 2026-10-23
 
-Minor bump: two deliberate default-position changes (ggplot2 parity)
-plus five LOW/MEDIUM fixes from the #167 review on PR #171, all guarded
-by a test. Two findings from that same review (the #168 retry and the
-`position_stack`/`position_fill` NaN handling) were themselves corrected
-by a follow-up round of review before landing here — see each bullet
-below for what changed and why.
+Minor bump: `geom_col()` and `geom_area()` now stack by default, like
+ggplot2 (an output change; see **Migration** below), plus legend-layout
+and missing-value stacking fixes from the #167 review, each guarded by a
+test.
 
 ### Changed
 
@@ -50,6 +48,10 @@ below for what changed and why.
   `PositionIdentity` always left untouched but `PositionStack` now
   overwrites with the (single-series, all-zero) baseline it computes —
   see that file's updated expected hash and docstring note.
+  **Known limitation**: ggplot2 pairs `geom_area` with `stat_align`
+  (each series interpolated onto the union of x before stacking);
+  ggplot-rs stacks by exact x, so a series missing an x makes the series
+  above it dip at that x (#172).
   `tests/geom_area_default_stack.rs` checks the default matches an
   explicit `PositionStack` and no longer matches `PositionIdentity`.
 
@@ -108,12 +110,8 @@ below for what changed and why.
   and `position_fill` (it contributes **0** to its bucket's running
   total/denominator) and its own `y`/`ymin`/`ymax` are left `NaN` — not
   drawn — matching ggplot2's `pos_stack`/`position_fill` exactly (review
-  #167 finding 2/3 on #171). A first cut (review #167 finding 8 on the
-  original #170) put the missing value in the right *bucket* (positive,
-  like ggplot2) but summed its raw `NaN` into that bucket's total,
-  turning every *other*, perfectly finite row sharing that bucket at the
-  same x into `NaN` too — worse than before, where the (wrongly-bucketed)
-  `NaN` at least sat alone. This only matters for `geom_line`/`geom_step`/
+  #167 finding 2/3 on #171). `±Inf` is treated as missing the same way.
+  This only matters for `geom_line`/`geom_step`/
   `geom_path`, which keep a missing row as a line break instead of
   dropping it (`Geom::keeps_na_as_break`); every other geom already drops
   non-finite rows before `Stat`/`Position` ever see them. Also fixes a
