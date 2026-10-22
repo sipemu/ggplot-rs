@@ -275,8 +275,10 @@ pub struct ScaleColorContinuous {
     /// Formatter for [`format_value`](super::Scale::format_value) (#164,
     /// same shape as `ScaleContinuous::with_value_formatter`), distinct
     /// from the axis-break label formatting this scale has none of. Falls
-    /// back to the plain locale-formatted number when unset.
-    value_formatter: Option<super::format::LabelFormatter>,
+    /// back to the plain locale-formatted number when unset. Wrapped in
+    /// [`UnwindSafeFormatter`](super::format::UnwindSafeFormatter) so this
+    /// field doesn't drop `UnwindSafe`/`RefUnwindSafe` from the struct.
+    value_formatter: Option<super::format::UnwindSafeFormatter>,
 }
 
 // Manual `Debug`, since `value_formatter` (an `Arc<dyn Fn>`) isn't
@@ -324,7 +326,7 @@ impl ScaleColorContinuous {
     where
         F: Fn(f64) -> String + Send + Sync + 'static,
     {
-        self.value_formatter = Some(std::sync::Arc::new(f));
+        self.value_formatter = Some(super::format::UnwindSafeFormatter(std::sync::Arc::new(f)));
         self
     }
 
@@ -381,7 +383,7 @@ impl Scale for ScaleColorContinuous {
             return None;
         }
         Some(match &self.value_formatter {
-            Some(fmt) => fmt(f),
+            Some(fmt) => fmt.call(f),
             None => super::util::format_number_opt(f, self.locale.as_ref()),
         })
     }
@@ -549,5 +551,18 @@ mod tests {
             ScaleColorContinuous::new(Aesthetic::Fill).with_value_formatter(|v| v.to_string())
         );
         assert!(with.contains("value_formatter: true"));
+    }
+
+    /// #164 review: `value_formatter`'s `Arc<dyn Fn>` must not drop
+    /// `UnwindSafe`/`RefUnwindSafe` (or `Send`/`Sync`/`Clone`) from
+    /// `ScaleColorContinuous` — `cargo-semver-checks` flags losing an
+    /// auto trait as a major-version break, which a patch must not cause.
+    #[test]
+    fn scale_color_continuous_keeps_every_auto_trait() {
+        fn assert_traits<
+            T: Send + Sync + std::panic::UnwindSafe + std::panic::RefUnwindSafe + Clone,
+        >() {
+        }
+        assert_traits::<ScaleColorContinuous>();
     }
 }

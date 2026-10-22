@@ -2,7 +2,7 @@ use crate::aes::Aesthetic;
 use crate::data::Value;
 
 use super::color::RGBAColor;
-use super::format::LabelFormatter;
+use super::format::UnwindSafeFormatter;
 use super::util::nice_step;
 use super::Scale;
 
@@ -30,8 +30,9 @@ pub struct ScaleColorGradientN {
     /// `"grey50"`, `(127, 127, 127)`.
     na_value: (u8, u8, u8),
     /// Formatter for [`format_value`](super::Scale::format_value) (#164).
-    /// Falls back to the plain locale-formatted number when unset.
-    value_formatter: Option<LabelFormatter>,
+    /// Falls back to the plain locale-formatted number when unset. See
+    /// [`UnwindSafeFormatter`] for why this isn't a plain `LabelFormatter`.
+    value_formatter: Option<UnwindSafeFormatter>,
 }
 
 // Manual `Debug`: `value_formatter` (an `Arc<dyn Fn>`) isn't `Debug`.
@@ -80,7 +81,7 @@ impl ScaleColorGradientN {
     where
         F: Fn(f64) -> String + Send + Sync + 'static,
     {
-        self.value_formatter = Some(std::sync::Arc::new(f));
+        self.value_formatter = Some(UnwindSafeFormatter(std::sync::Arc::new(f)));
         self
     }
 
@@ -178,7 +179,7 @@ impl Scale for ScaleColorGradientN {
             return None;
         }
         Some(match &self.value_formatter {
-            Some(fmt) => fmt(f),
+            Some(fmt) => fmt.call(f),
             None => super::util::format_number_opt(f, self.locale.as_ref()),
         })
     }
@@ -450,6 +451,16 @@ mod tests {
                 .with_value_formatter(|v| v.to_string())
         );
         assert!(with.contains("value_formatter: true"));
+    }
+
+    /// #164 review: see the matching test in `scale/color.rs`.
+    #[test]
+    fn scale_color_gradient_n_keeps_every_auto_trait() {
+        fn assert_traits<
+            T: Send + Sync + std::panic::UnwindSafe + std::panic::RefUnwindSafe + Clone,
+        >() {
+        }
+        assert_traits::<ScaleColorGradientN>();
     }
 
     #[test]
