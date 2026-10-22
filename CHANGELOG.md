@@ -17,6 +17,15 @@ annotation ink, boxplot identity mapping.
   the plain locale-formatted number when unset (byte-identical default
   output).
 
+### Fixed
+
+- `geom_hline`/`geom_vline`/`geom_abline` now implement `Geom::
+  consumes_tooltips` and read a layer's `tooltip()` template (e.g.
+  `.tooltip("{xintercept}")`), replacing their own default `"x = …"`/
+  `"y = …"` label the same way every other `consumes_tooltips` geom does;
+  previously the template was silently dropped with a has-no-effect
+  warning (#165). The default label (no template set) is unchanged.
+
 ## [0.22.1] — 2026-10-21
 
 Patch: discrete-axis auto-rotate (#162).

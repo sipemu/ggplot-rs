@@ -65,7 +65,10 @@ fn row_style(
 
 /// Hover metadata for one reference line: `data-series` (the row's colour /
 /// group level) and `data-value` (the intercept), with a `"<series>: y = v"`
-/// tooltip.
+/// tooltip — replaced by the layer's `tooltip_template` (#165), e.g.
+/// `.tooltip("{xintercept}")`, when one is set (`set_row_extras` only
+/// overrides the tooltip when the internal tooltip column actually
+/// exists, so a layer with no template keeps this default).
 ///
 /// B2-4: with `svg_formatted_values` on, the value is formatted through the
 /// matching position scale (`what == "x"` → the x scale, else y) instead of
@@ -108,6 +111,13 @@ fn mark_line(
         &Aesthetic::Y,
         (what == "y").then_some(value),
     );
+    // Call set_mark (above) first so a `tooltip()` template — rendered
+    // into the same internal column `set_row_extras` reads — wins over
+    // this geom's own default tooltip, same as every other
+    // `consumes_tooltips` geom (point, segment, path, ...).
+    if let Some(i) = i {
+        super::set_row_extras(backend, data, i);
+    }
 }
 
 /// The rows to draw: one per row of `col` (finite values only), or the
@@ -217,6 +227,9 @@ impl Geom for GeomHline {
             self.color = ink;
         }
     }
+    fn consumes_tooltips(&self) -> bool {
+        true
+    }
 }
 
 /// Vertical reference line spanning the panel height.
@@ -310,6 +323,9 @@ impl Geom for GeomVline {
         if let (true, Some(ink)) = (self.color == (0, 0, 0), el.ink) {
             self.color = ink;
         }
+    }
+    fn consumes_tooltips(&self) -> bool {
+        true
     }
 }
 
@@ -455,6 +471,11 @@ impl Geom for GeomAbline {
             );
             // Slope/intercept aren't on either position scale — reset only.
             super::set_mark_formatted(backend, scales, None, &Aesthetic::Y, None);
+            // #165: a `tooltip()` template wins over the default
+            // "y = a + b·x" label above, same as the other refline geoms.
+            if let Some(i) = row {
+                super::set_row_extras(backend, data, i);
+            }
             for run in abline_runs(scales, slope, intercept) {
                 let mut pts = Vec::new();
                 for w in run.windows(2) {
@@ -493,6 +514,9 @@ impl Geom for GeomAbline {
         if let (true, Some(ink)) = (self.color == (0, 0, 0), el.ink) {
             self.color = ink;
         }
+    }
+    fn consumes_tooltips(&self) -> bool {
+        true
     }
 }
 
