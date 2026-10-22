@@ -216,6 +216,20 @@ fn vertical_legend_with_explicit_ncol_two() {
 /// this: the original finding-3 test did exactly that) is meaningless for
 /// a `start`-anchored label, since its glyphs extend *rightward* from
 /// `x` — a passing "x <= canvas width" assertion there proves nothing.
+/// The x-coordinate of the `<text>` element whose body is exactly `label`
+/// (the first match, in document order).
+fn text_x(svg: &str, label: &str) -> Option<f64> {
+    svg.match_indices("<text ").find_map(|(start, _)| {
+        let tag_end = svg[start..].find('>').map(|e| start + e)?;
+        let close = svg[tag_end..].find("</text>").map(|e| tag_end + e)?;
+        if &svg[tag_end + 1..close] != label {
+            return None;
+        }
+        let tag = &svg[start..tag_end];
+        tag.split("x=\"").nth(1)?.split('"').next()?.parse().ok()
+    })
+}
+
 fn max_text_right_edge(svg: &str) -> f64 {
     svg.match_indices("<text ")
         .filter_map(|(start, _)| {
@@ -271,19 +285,87 @@ fn vertical_legend_ncol_two_with_long_labels_stays_on_canvas() {
     );
 }
 
-/// Regression for review #158's second re-review (LOW): when a vertical
-/// multi-column grid is simply too wide for the canvas — many columns,
-/// long labels, a narrow chart — even after reserving `(cols - 1) *
-/// col_pitch`, it still runs off the canvas; the build must warn about
-/// it rather than silently clip.
+/// #159: a vertical multi-column grid that still runs off the canvas
+/// after reserving `(cols - 1) * col_pitch` first tries reducing its
+/// column count toward 1 — here that alone is enough: `ncol(4)` on a
+/// 300px chart has no room for 4 columns of long labels, but 1 column
+/// does fit, so the build no longer needs to warn or truncate (0.22
+/// warned unconditionally in this exact case; review #158's second
+/// re-review introduced that warning).
 #[test]
-fn vertical_legend_ncol_grid_too_wide_for_the_canvas_warns() {
+fn vertical_legend_ncol_grid_too_wide_reduces_columns_instead_of_warning() {
     let data = groups_with_labels(12, |i| format!("A Very Long Group Label Number {}", i + 1));
     let (svg, warnings) = GGPlot::new(data)
         .aes(Aes::new().x("x").y("y").color("g"))
         .geom_point()
         .guides(GuideLegend::new().with_ncol(4))
         .render_svg_native_with_warnings(300, 400)
+        .unwrap();
+    assert!(!svg.contains("NaN"), "{svg}");
+    assert!(
+        warnings
+            .iter()
+            .all(|w| !(w.contains("legend") && w.contains("doesn't fit"))),
+        "column reduction should have avoided the warning: {warnings:?}"
+    );
+}
+
+/// #159: when reducing columns isn't enough (labels so long even a
+/// single column overflows), labels are truncated with an ellipsis
+/// instead — the full label stays available via a `<title>` tooltip on
+/// the key, and no warning is needed since the truncated legend does fit.
+#[test]
+fn vertical_legend_with_very_long_labels_truncates_with_a_title_tooltip() {
+    let data = groups_with_labels(12, |i| {
+        format!(
+            "An Extremely Very Super Duper Long Group Label Number {} \
+             With Lots More Text Appended Here To Make It Even Longer",
+            i + 1
+        )
+    });
+    let (svg, warnings) = GGPlot::new(data)
+        .aes(Aes::new().x("x").y("y").color("g"))
+        .geom_point()
+        .guides(GuideLegend::new().with_ncol(6))
+        .render_svg_native_with_warnings(200, 400)
+        .unwrap();
+    assert!(!svg.contains("NaN"), "{svg}");
+    assert!(
+        svg.contains('…'),
+        "a label should have been truncated: {svg}"
+    );
+    // The full, untruncated label is still present verbatim inside a
+    // <title> tooltip for the key it belongs to.
+    assert!(
+        svg.contains("<title>An Extremely Very Super Duper Long Group Label Number 1 "),
+        "the full label should still be available via <title>: {svg}"
+    );
+    assert!(
+        warnings
+            .iter()
+            .all(|w| !(w.contains("legend") && w.contains("doesn't fit"))),
+        "truncation should have avoided the warning: {warnings:?}"
+    );
+}
+
+/// #159: when the chart is so narrow that even a truncated-to-an-
+/// ellipsis single column still can't fit, the build falls back to
+/// warning — the "only warn if it still overflows after both" tail of
+/// the fix.
+#[test]
+fn vertical_legend_warns_only_when_truncation_still_cant_fit() {
+    let data = groups_with_labels(12, |i| {
+        format!(
+            "An Extremely Very Super Duper Long Group Label Number {} \
+             With Lots More Text Appended Here To Make It Even Longer",
+            i + 1
+        )
+    });
+    let (svg, warnings) = GGPlot::new(data)
+        .aes(Aes::new().x("x").y("y").color("g"))
+        .geom_point()
+        .guides(GuideLegend::new().with_ncol(8))
+        .render_svg_native_with_warnings(60, 400)
         .unwrap();
     assert!(!svg.contains("NaN"), "{svg}");
     assert!(
@@ -346,6 +428,32 @@ fn byte_identical_cases_are_unaffected() {
         let svg = render(base(3).legend_position(pos), 800, 400);
         assert!(!svg.contains(" more<"), "a 3-key legend never overflows");
     }
+}
+
+/// #159: a vertical `ncol` grid that already fits renders byte-identically
+/// to the pre-#159 "warn only" version of this check — no column
+/// reduction, no truncated labels, no extra `<title>` tooltip, no
+/// warning. Two independent renders (identical input) must also match
+/// exactly, since the fix path is otherwise deterministic.
+#[test]
+fn a_vertical_grid_that_already_fits_is_byte_identical() {
+    let (svg1, warnings1) = base(4)
+        .guides(GuideLegend::new().with_ncol(2))
+        .render_svg_native_with_warnings(500, 400)
+        .unwrap();
+    let (svg2, warnings2) = base(4)
+        .guides(GuideLegend::new().with_ncol(2))
+        .render_svg_native_with_warnings(500, 400)
+        .unwrap();
+    assert_eq!(svg1, svg2, "identical input must render identically");
+    assert!(
+        !svg1.contains('…'),
+        "a fitting grid must not truncate: {svg1}"
+    );
+    assert!(
+        warnings1.is_empty() && warnings2.is_empty(),
+        "a fitting grid must not warn: {warnings1:?}"
+    );
 }
 
 /// The drawn "+N more" text, if any.
@@ -430,4 +538,127 @@ fn reserved_band_height_matches_the_drawn_row_count() {
             "a legend key at y={y} falls below the {canvas_h}px canvas — reserved band too short"
         );
     }
+}
+
+/// #155: a plot with two simultaneous discrete guides (`colour` and
+/// `shape`) laid out side by side on a bottom legend — each with enough
+/// entries to overflow a one-line layout on its own — now wraps
+/// independently instead of only the plot's single discrete guide ever
+/// being eligible. Neither guide's wrapped text may run past the canvas.
+#[test]
+fn two_discrete_guides_each_auto_wrap() {
+    let n = 10;
+    let x: Vec<Value> = (0..n).map(|i| Value::Float(i as f64)).collect();
+    let y: Vec<Value> = (0..n).map(|i| Value::Float((i % 3) as f64)).collect();
+    let g: Vec<Value> = (0..n)
+        .map(|i| Value::Str(format!("Colour {:02}", i + 1)))
+        .collect();
+    let s: Vec<Value> = (0..n)
+        .map(|i| Value::Str(format!("Shape {:02}", i + 1)))
+        .collect();
+    let plot = GGPlot::new(vec![
+        ("x".into(), x),
+        ("y".into(), y),
+        ("g".into(), g),
+        ("s".into(), s),
+    ])
+    .aes(Aes::new().x("x").y("y").color("g").shape("s"))
+    .geom_point()
+    .legend_position(LegendPosition::Bottom);
+    let svg = render(plot, 640, 500);
+
+    assert!(svg.contains(">Colour 01<"), "{svg}");
+    assert!(svg.contains(">Colour 10<"), "{svg}");
+    assert!(svg.contains(">Shape 01<"), "{svg}");
+    assert!(svg.contains(">Shape 10<"), "{svg}");
+    assert!(
+        max_text_right_edge(&svg) <= 640.0,
+        "a guide's wrapped text overflows the 640px canvas: right edge {}",
+        max_text_right_edge(&svg)
+    );
+}
+
+/// #155: a `PlotGrid` with `collect_legends(true)` wraps its collected
+/// legend the same way a single plot's legend does — previously
+/// `compose::capture_legend` always drew the plain, unwrapped path, so a
+/// crowded collected legend could run off the grid's own canvas.
+#[test]
+fn plotgrid_collected_legend_auto_wraps() {
+    use ggplot_rs::compose::{GridLegendPosition, PlotGrid};
+
+    let n = 14;
+    let x: Vec<Value> = (0..n).map(|i| Value::Float(i as f64)).collect();
+    let y: Vec<Value> = (0..n).map(|i| Value::Float((i % 3) as f64)).collect();
+    let g: Vec<Value> = (0..n)
+        .map(|i| Value::Str(format!("Group {:02}", i + 1)))
+        .collect();
+    let plot = GGPlot::new(vec![("x".into(), x), ("y".into(), y), ("g".into(), g)])
+        .aes(Aes::new().x("x").y("y").color("g"))
+        .geom_point();
+
+    let svg = PlotGrid::new()
+        .add(plot)
+        .collect_legends(true)
+        .legend_position(GridLegendPosition::Bottom)
+        .render_svg_native_with_size(500, 400)
+        .expect("render");
+
+    assert!(svg.contains(">Group 01<"), "{svg}");
+    assert!(svg.contains(">Group 14<"), "{svg}");
+    assert!(
+        max_text_right_edge(&svg) <= 500.0,
+        "the collected legend's text overflows the 500px canvas: right edge {}",
+        max_text_right_edge(&svg)
+    );
+}
+
+/// Review #167 finding 1: a `PlotGrid`'s collected bottom legend with two
+/// simultaneous discrete guides (`colour` and `shape`) must lay them out
+/// side by side, exactly like a single plot's legend does (see
+/// `two_discrete_guides_each_auto_wrap` above) — not drawn on top of each
+/// other. `compose::capture_legend` measures the collected legend against
+/// a fake zero-width panel so its origin lands at (0, 0); stepping to the
+/// next guide by `plot_area.width / n` there always advanced by zero
+/// (0.0 / n), so "Shape 01" landed at the exact same (x, y) as "Colour
+/// 01" and the two guides' labels were drawn on top of each other.
+#[test]
+fn plotgrid_collected_legend_two_guides_sit_side_by_side() {
+    use ggplot_rs::compose::{GridLegendPosition, PlotGrid};
+
+    let n = 8;
+    let x: Vec<Value> = (0..n).map(|i| Value::Float(i as f64)).collect();
+    let y: Vec<Value> = (0..n).map(|i| Value::Float((i % 3) as f64)).collect();
+    let g: Vec<Value> = (0..n)
+        .map(|i| Value::Str(format!("Colour {:02}", i + 1)))
+        .collect();
+    let s: Vec<Value> = (0..n)
+        .map(|i| Value::Str(format!("Shape {:02}", i + 1)))
+        .collect();
+    let plot = GGPlot::new(vec![
+        ("x".into(), x),
+        ("y".into(), y),
+        ("g".into(), g),
+        ("s".into(), s),
+    ])
+    .aes(Aes::new().x("x").y("y").color("g").shape("s"))
+    .geom_point();
+
+    let svg = PlotGrid::new()
+        .add(plot)
+        .collect_legends(true)
+        .legend_position(GridLegendPosition::Bottom)
+        .render_svg_native_with_size(500, 400)
+        .expect("render");
+
+    let colour_x = text_x(&svg, "Colour 01").expect("colour guide label \"Colour 01\" missing");
+    let shape_x = text_x(&svg, "Shape 01").expect("shape guide label \"Shape 01\" missing");
+    assert!(
+        shape_x > colour_x,
+        "the shape guide (x={shape_x}) must sit to the right of the colour guide \
+         (x={colour_x}), not on top of it"
+    );
+
+    // Every entry of both guides must still be present.
+    assert!(svg.contains(">Colour 08<"), "{svg}");
+    assert!(svg.contains(">Shape 08<"), "{svg}");
 }

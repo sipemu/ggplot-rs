@@ -135,6 +135,19 @@ impl Position for PositionJitter {
     fn name(&self) -> &str {
         "jitter"
     }
+
+    /// ggplot2 4.0.3 measures `position_jitter`'s default width/height
+    /// (`resolution(x) * 0.4`) from each facet panel's own x/y, not the
+    /// rows pooled across panels (#153) — verified with `layer_data()`:
+    /// two panels with very different x spacing (e.g. integers vs.
+    /// hundredths) get differently-scaled jitter even under fixed facet
+    /// scales. The RNG draw is also per panel (it resets from `seed` at
+    /// the top of `compute`, as it already did), matching ggplot2's own
+    /// per-panel restart — verified by the identical normalized jitter
+    /// fractions ggplot2 produces across panels for the same seed.
+    fn per_panel(&self) -> bool {
+        true
+    }
 }
 
 #[cfg(test)]

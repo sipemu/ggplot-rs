@@ -46,6 +46,22 @@ pub(crate) fn legend_scales_for(
 }
 
 /// Draw all legends for the plot.
+///
+/// No longer called internally: `compose::capture_legend` (the only
+/// caller) was rerouted to `draw_legend_planned` in 0.23 so a `PlotGrid`'s
+/// collected legend gets the same B3-2 wrap/grid treatment a single
+/// plot's legend does (sipemu/ggplot-rs#155). `draw_legend_planned` is
+/// crate-internal (`pub(crate)`), so there is no direct public
+/// replacement — legend drawing is otherwise handled automatically by
+/// `GGPlot`'s own render methods, which is the supported way to draw a
+/// legend; this function was never meant to be called by consumers for
+/// that purpose and will be removed in a later minor release.
+#[deprecated(
+    since = "0.23.0",
+    note = "unused internally since 0.23 (superseded by the crate-internal draw_legend_planned, \
+             sipemu/ggplot-rs#155); no direct public replacement — legends are drawn automatically \
+             by GGPlot's render methods. Will be removed in a later minor release."
+)]
 pub fn draw_legend(
     scales: &ScaleSet,
     theme: &Theme,
@@ -600,6 +616,13 @@ pub(crate) struct LegendEntry {
     pub break_idx: usize,
     pub row: usize,
     pub x_offset: f64,
+    /// A truncated-with-ellipsis display label (#159), set only when a
+    /// vertical multi-column grid still doesn't fit the canvas after
+    /// reducing its column count as far as it can go: the full label is
+    /// still available (e.g. for a `<title>` tooltip) via the scale's own
+    /// `breaks()[break_idx]`. `None` draws the break's label unchanged —
+    /// the common, byte-identical case.
+    pub label_override: Option<String>,
 }
 
 /// A trailing "+{k} more" marker when the legend doesn't have room for
@@ -691,6 +714,7 @@ pub(crate) fn plan_legend(
                     break_idx: i,
                     row,
                     x_offset: col as f64 * col_pitch,
+                    label_override: None,
                 }
             })
             .collect();
@@ -735,6 +759,7 @@ pub(crate) fn plan_legend(
             break_idx: i,
             row,
             x_offset: cur_x,
+            label_override: None,
         });
         cur_x += p;
     }
@@ -780,27 +805,106 @@ pub(crate) fn plan_legend(
     }
 }
 
-/// Draw all legends for the plot, honouring a B3-2 `plan_legend` layout
-/// when one changes anything (explicit `nrow`/`ncol`, or an overflowing
-/// horizontal legend). Falls back to the unchanged [`draw_legend`] path —
-/// same calls, same order — whenever `plan_legend` would return `None`,
-/// which keeps this byte-identical to 0.21 for every plot this plan
-/// doesn't touch. Used by `renderer.rs` (single and faceted); `draw_legend`
-/// itself stays the one `compose::capture_legend` calls.
+/// How many of a plot's legend scales are discrete (the ones B3-2's
+/// wrap/grid applies to) — used to split the available horizontal room
+/// among them when several sit side by side (sipemu/ggplot-rs#155).
+fn discrete_guide_count(scales: &ScaleSet, legend_scales: &[Aesthetic]) -> usize {
+    legend_scales
+        .iter()
+        .filter(|aes| scales.get(aes).map(|s| s.is_discrete()).unwrap_or(false))
+        .count()
+        .max(1)
+}
+
+/// Plan every discrete legend scale's B3-2 layout (explicit `nrow`/`ncol`
+/// grid, or auto-wrap) independently (sipemu/ggplot-rs#155): previously
+/// this only ran for the plot's single discrete guide, leaving a second
+/// simultaneous discrete guide (e.g. both `colour` and `shape` mapped to
+/// discrete variables) always on the unwrapped 0.21 path. When several
+/// discrete guides sit side by side (`is_horizontal`), the available
+/// width is split evenly among them first, so each one wraps against its
+/// own share rather than the whole row (which would let it claim more
+/// room than its neighbours leave). Guides that stack vertically instead
+/// each get the full `avail_width`, since they don't compete for it.
+/// Returns one entry per discrete guide that needs anything beyond the
+/// single-row/single-column path — a guide absent from the map is
+/// byte-identical to 0.21/0.22.
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn plan_all_legends(
+    scales: &ScaleSet,
+    guide: &GuideLegend,
+    theme: &Theme,
+    suppressed: &std::collections::HashSet<Aesthetic>,
+    avail_width: f64,
+    avail_height: f64,
+    is_horizontal: bool,
+    warnings: &mut Vec<String>,
+) -> std::collections::HashMap<Aesthetic, LegendPlan> {
+    let legend_scales = legend_scales_for(scales, suppressed);
+    let n_discrete = discrete_guide_count(scales, &legend_scales);
+    let per_guide_width = if is_horizontal {
+        (avail_width / n_discrete as f64).max(0.0)
+    } else {
+        avail_width
+    };
+
+    let mut plans = std::collections::HashMap::new();
+    for aes in &legend_scales {
+        let Some(scale) = scales.get(aes) else {
+            continue;
+        };
+        if !scale.is_discrete() {
+            continue;
+        }
+        let breaks = scale.breaks();
+        let validated_guide = guide.validated(breaks.len(), warnings);
+        if let Some(plan) = plan_legend(
+            &breaks,
+            &validated_guide,
+            theme,
+            per_guide_width,
+            avail_height,
+            is_horizontal,
+        ) {
+            plans.insert(aes.clone(), plan);
+        }
+    }
+    plans
+}
+
+/// Draw all legends for the plot, honouring each discrete guide's B3-2
+/// `plan_legend` layout (explicit `nrow`/`ncol`, or an overflowing
+/// horizontal legend's auto-wrap) when it has one — several simultaneous
+/// discrete guides each get their own independent plan
+/// (sipemu/ggplot-rs#155). A guide missing from `legend_plans` falls back
+/// to the unchanged [`draw_legend`] path — same calls, same order — which
+/// keeps this byte-identical to 0.21/0.22 for every plot nothing in
+/// `legend_plans` touches. Used by `renderer.rs` (single and faceted) and
+/// `compose::capture_legend` (PlotGrid-collected legends).
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn draw_legend_planned(
     scales: &ScaleSet,
     theme: &Theme,
     plot_area: &Rect,
+    // Review #167 finding 1: the width share each discrete guide was
+    // *planned* against (the same `avail_width` passed to
+    // `plan_all_legends`), not `plot_area.width`. For a single plot these
+    // are the same value in practice, but a PlotGrid's collected legend
+    // (`compose::capture_legend`) measures itself against a fake
+    // zero-width panel so its origin lands at (0, 0) — stepping by
+    // `plot_area.width / n` there always advanced by zero, so the second
+    // discrete guide (e.g. `shape` after `colour`) was drawn directly on
+    // top of the first instead of beside it.
+    legend_avail_width: f64,
     backend: &mut dyn DrawBackend,
     guide: &GuideLegend,
     suppressed: &std::collections::HashSet<Aesthetic>,
-    // Review #158 finding 2: the single discrete guide's plan, computed
-    // exactly once in `layout_built` (`BuiltPlot::legend_plan`) — drawn
-    // verbatim here rather than recomputed against this (possibly
-    // shorter, post-row-reservation) `plot_area`, so the drawn "+N more"
-    // always matches the warning that plan already produced.
-    legend_plan: Option<&LegendPlan>,
+    // Review #158 finding 2: each discrete guide's plan, computed exactly
+    // once in `layout_built` (`BuiltPlot::legend_plans`) — drawn verbatim
+    // here rather than recomputed against this (possibly shorter, post-
+    // row-reservation) `plot_area`, so the drawn "+N more" always matches
+    // the warning that plan already produced.
+    legend_plans: &std::collections::HashMap<Aesthetic, LegendPlan>,
 ) -> Result<(), RenderError> {
     if matches!(theme.legend_position, LegendPosition::None) {
         return Ok(());
@@ -815,6 +919,8 @@ pub(crate) fn draw_legend_planned(
     if let Some(dir) = theme.legend_direction {
         is_horizontal = matches!(dir, crate::theme::LegendDirection::Horizontal);
     }
+    let n_discrete = discrete_guide_count(scales, &legend_scales);
+    let per_guide_width = legend_avail_width / n_discrete as f64;
 
     let mut offset_y = legend_y;
     let mut offset_x = legend_x;
@@ -857,25 +963,7 @@ pub(crate) fn draw_legend_planned(
             continue;
         }
 
-        // Explicit nrow/ncol and auto-wrap are both scoped to a single
-        // discrete guide (D7's "one discrete guide"; several simultaneous
-        // guides are a follow-up, sipemu/ggplot-rs#155).
-        if legend_scales.len() != 1 {
-            if is_horizontal {
-                let width = draw_discrete_legend_at(
-                    scales, aes, scale, theme, offset_x, offset_y, backend, guide, true,
-                )?;
-                offset_x += width + theme.legend_spacing * 2.0;
-            } else {
-                let height = draw_discrete_legend_at(
-                    scales, aes, scale, theme, offset_x, offset_y, backend, guide, false,
-                )?;
-                offset_y += height + theme.legend_spacing * 2.0;
-            }
-            continue;
-        }
-
-        match legend_plan {
+        match legend_plans.get(aes) {
             None => {
                 if is_horizontal {
                     let width = draw_discrete_legend_at(
@@ -894,7 +982,10 @@ pub(crate) fn draw_legend_planned(
                     scales, aes, scale, theme, offset_x, offset_y, backend, guide, plan,
                 )?;
                 if is_horizontal {
-                    offset_x += plot_area.width; // single-guide-per-row scope (D7)
+                    // Each discrete guide gets an equal share of the row
+                    // (sipemu/ggplot-rs#155) rather than the whole row,
+                    // which only held for exactly one discrete guide.
+                    offset_x += per_guide_width;
                 } else {
                     offset_y += height + theme.legend_spacing * 2.0;
                 }
@@ -999,8 +1090,12 @@ fn draw_discrete_legend_grid(
         } else {
             Some(theme.legend_text.family.clone())
         };
-        backend.draw_text(
-            label,
+        // #159: a label truncated to fit a vertical multi-column grid
+        // still shows its full text via a `<title>` tooltip (backends
+        // without tooltip support just render the truncated text).
+        let display = entry.label_override.as_deref().unwrap_or(label.as_str());
+        backend.draw_text_with_title(
+            display,
             (x + swatch_size + theme.legend_spacing, center_y),
             &TextStyle {
                 color: theme.legend_text.color,
@@ -1010,6 +1105,7 @@ fn draw_discrete_legend_grid(
                 family: label_family,
                 face: theme.legend_text.face,
             },
+            entry.label_override.as_deref().map(|_| label.as_str()),
         )?;
     }
 

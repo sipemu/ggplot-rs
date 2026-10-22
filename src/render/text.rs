@@ -30,6 +30,28 @@ pub fn text_width(text: &str, size: f64) -> f64 {
     em * size
 }
 
+/// Shorten `label` with a trailing ellipsis ("…") until it (plus the
+/// ellipsis) fits within `max_width` px at font `size` (#159: a vertical
+/// multi-column legend grid that still overflows after exhausting column
+/// reduction falls back to truncating its labels). `None` means `label`
+/// already fits — no truncation needed, so the caller keeps the
+/// byte-identical untruncated path. A `max_width` too narrow for even a
+/// bare "…" still returns `Some("…")` — the best any truncation can do —
+/// rather than an empty string.
+pub fn truncate_to_width(label: &str, max_width: f64, size: f64) -> Option<String> {
+    if text_width(label, size) <= max_width {
+        return None;
+    }
+    let chars: Vec<char> = label.chars().collect();
+    for keep in (0..chars.len()).rev() {
+        let candidate: String = chars[..keep].iter().collect::<String>() + "…";
+        if text_width(&candidate, size) <= max_width {
+            return Some(candidate);
+        }
+    }
+    Some("…".to_string())
+}
+
 /// Estimated bounding box `[x0, y0, x1, y1]` of a label anchored at
 /// `(x, y)`, set at font `size`, rotated `angle` degrees (SVG convention,
 /// clockwise), with `anchor` in `0.0` (text starts at `x`) `..=1.0` (text
@@ -178,6 +200,31 @@ mod tests {
         assert_eq!(axis_label_priority(0), Vec::<usize>::new());
         assert_eq!(axis_label_priority(1), vec![1]);
         assert_eq!(axis_label_priority(2), vec![1, 2]);
+    }
+
+    #[test]
+    fn truncate_to_width_keeps_short_labels_untouched() {
+        assert_eq!(truncate_to_width("ab", 1000.0, 10.0), None);
+    }
+
+    #[test]
+    fn truncate_to_width_shortens_with_an_ellipsis() {
+        let full = "a very long legend label indeed";
+        let w = text_width(full, 10.0);
+        let truncated = truncate_to_width(full, w / 2.0, 10.0).expect("should truncate");
+        assert!(truncated.ends_with('…'));
+        assert!(text_width(&truncated, 10.0) <= w / 2.0);
+        assert!(truncated.chars().count() < full.chars().count());
+    }
+
+    #[test]
+    fn truncate_to_width_falls_back_to_a_bare_ellipsis() {
+        // Even "…" alone doesn't fit a near-zero width — still the best
+        // truncation can do, not an empty string.
+        assert_eq!(
+            truncate_to_width("hello", 0.01, 10.0),
+            Some("…".to_string())
+        );
     }
 
     #[test]

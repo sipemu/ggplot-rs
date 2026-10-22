@@ -1,6 +1,6 @@
 use crate::data::DataFrame;
 
-use super::dodge::dodge_rows;
+use super::dodge::{dedup_order, dodge_rows, group_keys};
 use super::{Position, PositionParams};
 
 /// Like position_dodge but preserves total width and adds padding between
@@ -55,10 +55,23 @@ impl Position for PositionDodge2 {
             self.width.unwrap_or(params.width),
             Some(self.padding),
             self.reverse,
+            params.group_order.as_deref(),
         );
     }
 
     fn name(&self) -> &str {
         "dodge2"
+    }
+
+    /// Same per-panel rule as `PositionDodge` (#153): `dodge_rows` is
+    /// shared between the two.
+    fn per_panel(&self) -> bool {
+        true
+    }
+
+    /// Same whole-layer group ranking as `PositionDodge` (review #167
+    /// finding 2): `dodge_rows` is shared between the two.
+    fn group_order(&self, data: &DataFrame) -> Option<Vec<String>> {
+        group_keys(data).map(|keys| dedup_order(&keys))
     }
 }

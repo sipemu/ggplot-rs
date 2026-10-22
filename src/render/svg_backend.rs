@@ -808,8 +808,21 @@ impl DrawBackend for SvgBackend {
     fn draw_text(
         &mut self,
         text: &str,
+        pos: (f64, f64),
+        style: &TextStyle,
+    ) -> Result<(), RenderError> {
+        self.draw_text_with_title(text, pos, style, None)
+    }
+
+    /// #159: with `title`, wraps the `<text>` in a `<title>` child
+    /// carrying the full (escaped) label — e.g. a legend key truncated
+    /// with an ellipsis to fit a vertical multi-column grid.
+    fn draw_text_with_title(
+        &mut self,
+        text: &str,
         (x, y): (f64, f64),
         style: &TextStyle,
+        title: Option<&str>,
     ) -> Result<(), RenderError> {
         if !(x.is_finite() && y.is_finite()) {
             return Ok(());
@@ -837,9 +850,13 @@ impl DrawBackend for SvgBackend {
             String::new()
         };
         let class = self.mark_class("text");
+        let title_tag = match title {
+            Some(t) => format!("<title>{}</title>", escape(t)),
+            None => String::new(),
+        };
         self.body.push_str(&format!(
             "<text x=\"{x:.2}\" y=\"{y:.2}\" font-size=\"{:.2}\" text-anchor=\"{anchor}\" \
-             dominant-baseline=\"middle\" font-family=\"{family}\"{weight}{fstyle} fill=\"{}\"{transform}{class}>{}</text>",
+             dominant-baseline=\"middle\" font-family=\"{family}\"{weight}{fstyle} fill=\"{}\"{transform}{class}>{title_tag}{}</text>",
             finite_or(style.size, 12.0),
             rgb(style.color),
             escape(text)

@@ -14,6 +14,18 @@ use crate::data::DataFrame;
 pub struct PositionParams {
     pub width: f64,
     pub height: f64,
+    /// The whole layer's group rank order (review #167 finding 2), set by
+    /// `build::compute_position_per_panel` from [`Position::group_order`]
+    /// *before* splitting the layer's rows into panels. A per-panel
+    /// position (`PositionDodge`/`PositionDodge2`) ranks groups from this
+    /// — the whole layer's first-appearance order — rather than
+    /// recomputing it from whatever order each panel's own rows happen to
+    /// list groups in, so every panel draws a given group on the same
+    /// side (matching 0.22.2 and ggplot2 4.0.3's global `group` id).
+    /// `None` outside the per-panel path (or for positions that don't
+    /// override `group_order`), in which case each position falls back
+    /// to its previous, locally-computed order.
+    pub group_order: Option<Vec<String>>,
 }
 
 impl Default for PositionParams {
@@ -21,6 +33,7 @@ impl Default for PositionParams {
         PositionParams {
             width: 0.9,
             height: 0.0,
+            group_order: None,
         }
     }
 }
@@ -36,10 +49,28 @@ pub trait Position: Send + Sync {
     /// than once on the pooled rows before facets are split (B3-3, D8).
     /// Default `false`. `PositionStack`/`PositionFill` override this to
     /// `true` — a shared x category's stack height must not mix rows from
-    /// different panels. Dodge and jitter stay pooled across panels for
-    /// now (a follow-up, sipemu/ggplot-rs#154).
+    /// different panels. `PositionDodge`/`PositionDodge2`/`PositionJitter`
+    /// also override this to `true` (sipemu/ggplot-rs#153): ggplot2
+    /// computes a dodge's group count/offset via `compute_panel` (per
+    /// panel), and `position_jitter`'s default width/height — 40% of
+    /// `resolution()` — is likewise measured from each panel's own x/y,
+    /// not the rows pooled across panels (verified against ggplot2 4.0.3
+    /// with `layer_data()` on faceted plots; see `tests/position_panels_r.rs`).
     fn per_panel(&self) -> bool {
         false
+    }
+
+    /// The whole layer's group rank order (first-appearance, pre-panel-
+    /// split), for a `per_panel` position whose group *ranking* must come
+    /// from the whole layer even though its per-x *counting* stays
+    /// per-panel (review #167 finding 2; sipemu/ggplot-rs#153).
+    /// `build::compute_position_per_panel` calls this on the pooled data
+    /// before splitting and threads the result through
+    /// [`PositionParams::group_order`] to every panel's `compute` call.
+    /// Default `None` — positions that don't need this (stack/fill/
+    /// jitter) are unaffected.
+    fn group_order(&self, _data: &DataFrame) -> Option<Vec<String>> {
+        None
     }
 
     /// Validate this position's own parameters once per layer (D2);
