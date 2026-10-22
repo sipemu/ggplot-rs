@@ -12,11 +12,23 @@ by a test.
 
 ### Added
 
+- `DrawBackend::draw_text_with_title` (default no-op; implemented by the
+  native SVG backend) and `render::text::truncate_to_width` (a new `pub
+  fn` in the public `render::text` module): draws (or measures) a text
+  run with an attached full-text `<title>` tooltip, used by #159's label
+  truncation below to keep a truncated label's full text available via
+  hover even though the drawn text itself is shortened.
 - `tests/default_output_023.rs`, on the same pattern as
   `tests/default_output_022.rs`: a battery of fixed plots exercising
   #153/#154/#155/#159's deliberate changes plus their byte-identical
   unaffected counterparts, hashed with FNV-1a. Wired into CI's `sf`,
-  no-default-features test job alongside `default_output_022`.
+  no-default-features test job alongside `default_output_022`. Extended
+  (review #167) with a `PositionFill` mixed-sign case alongside
+  `PositionStack`'s, and `tests/position_panels_r.rs` gained a dodge-
+  order case with two panels listing their groups in opposite row order
+  (#153 finding 2), and `tests/legend_wrap.rs` gained a `PlotGrid`
+  collected-legend case with two simultaneous discrete guides (#155
+  finding 1).
 
 ### Deprecated
 
@@ -33,16 +45,23 @@ by a test.
 ### Changed
 
 - A faceted `position_dodge`/`position_dodge2` now computes each panel's
-  group count/offset from that panel's own rows instead of the rows
+  group *count*/offset from that panel's own rows instead of the rows
   pooled across panels (#153), matching ggplot2 4.0.3 (verified with
   `layer_data()`: a group missing from one panel's x level no longer
-  shifts the groups that panel does have). A faceted `position_jitter`'s
-  default width/height (`resolution(x) * 0.4`) is now likewise measured
-  per panel — also verified with `layer_data()`: two panels with very
-  different x spacing get differently-scaled jitter even under shared,
-  fixed facet scales. A plot with 2+ distinct facet panels and a dodge or
-  jitter layer may render differently; an unfaceted plot, or one with a
-  single panel, is unaffected (`tests/position_panels_r.rs`).
+  shifts the groups that panel does have). Group *rank* — which group
+  dodges left vs right — still comes from the whole layer's first-
+  appearance order (review #167 finding 2), not from each panel's own
+  row order: ggplot2 4.0.3 ranks by the global `group` id, so a panel
+  whose rows happen to list two groups in a different order than
+  another panel still draws a given group on the same side in both. A
+  faceted `position_jitter`'s default width/height (`resolution(x) *
+  0.4`) is now likewise measured per panel — also verified with
+  `layer_data()`: two panels with very different x spacing get
+  differently-scaled jitter even under shared, fixed facet scales. A
+  plot with 2+ distinct facet panels and a dodge or jitter layer may
+  render differently; an unfaceted plot, or one with a single panel, is
+  unaffected (`tests/position_panels_r.rs`, including
+  `facet_dodge_order_is_global_not_per_panel_first_appearance`).
 - `position_stack`/`position_fill` now split a group's positive and
   negative values at each x into two independent stacks instead of one
   pooled running total (#154), matching ggplot2's internal `pos`/`neg`
@@ -62,22 +81,37 @@ by a test.
   exactly one (#155): two discrete guides (e.g. `colour` and `shape` both
   mapped to discrete variables) laid out side by side each wrap against
   an equal share of the available width, and a vertical explicit
-  `nrow`/`ncol` grid on either reserves its own extra width. A
-  `PlotGrid`'s `collect_legends(true)` strip also now wraps its collected
-  legend against the grid's own page size, instead of always drawing the
-  plain, unwrapped path — previously the only legend eligible for
-  wrap/grid was a single plot's single discrete guide, rendered directly
-  (not collected into a grid strip). A plot with one discrete guide that
-  already fit is unaffected (`tests/legend_wrap.rs`'s
-  `two_discrete_guides_each_auto_wrap` and
-  `plotgrid_collected_legend_auto_wraps` cover the new cases).
+  `nrow`/`ncol` grid on either reserves its own extra width. Because
+  `GuideLegend` (the `.guides(...)` argument) is a single, global
+  setting, an explicit `nrow`/`ncol` on it now applies to *every*
+  discrete guide, including one sitting next to a continuous guide
+  (e.g. a colourbar plus a discrete `shape`) — a discrete guide next to
+  a continuous one now participates in auto-wrap/grid too. In 0.22 an
+  explicit `nrow`/`ncol` was silently ignored as soon as the plot had
+  two or more legend scales of any kind, discrete+discrete or
+  discrete+continuous. A `PlotGrid`'s `collect_legends(true)` strip also
+  now wraps its collected legend against the grid's own page size,
+  instead of always drawing the plain, unwrapped path — previously the
+  only legend eligible for wrap/grid was a single plot's single discrete
+  guide, rendered directly (not collected into a grid strip); two
+  simultaneous discrete guides collected this way are laid out side by
+  side, each against its own equal share of the page width, the same as
+  a single plot's legend (review #167 finding 1 — `capture_legend`
+  measures the collected legend against a fake zero-width panel, so the
+  step to the next guide must use the share `plan_all_legends` actually
+  planned against, not that panel's own width). A plot with one discrete
+  guide that already fit is unaffected (`tests/legend_wrap.rs`'s
+  `two_discrete_guides_each_auto_wrap`,
+  `plotgrid_collected_legend_auto_wraps` and
+  `plotgrid_collected_legend_two_guides_sit_side_by_side` cover the new
+  cases).
 - A vertical legend's explicit `ncol` grid that still runs off the canvas
   after reserving `(cols - 1) * col_pitch` (0.22's "warn only" check) now
   tries harder before giving up (#159): it first reduces the column
   count toward 1, keeping the first count that fits; if even one column
   overflows, it truncates labels with an ellipsis instead (the full label
-  stays available via a `<title>` tooltip on the key, escaped the same
-  way every other text run is — `DrawBackend::draw_text_with_title`, new,
+  stays available via a `<title>` tooltip on the label text, escaped the
+  same way every other text run is — `DrawBackend::draw_text_with_title`, new,
   default no-op, SVG-only); only if it still doesn't fit after both does
   it warn, as before. A grid that already fits renders byte-identical to
   0.22.1 — no reduction, no truncation, no warning
