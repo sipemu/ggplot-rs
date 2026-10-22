@@ -284,7 +284,19 @@ impl Geom for GeomBoxplot {
     }
 
     fn mapped_only_columns(&self) -> &'static [&'static str] {
-        &["lower", "middle", "upper", "outliers"]
+        // #160, follow-up to #158/review #158's final check: `ymin`/`ymax`
+        // get the same "only when actually mapped" treatment as `lower`/
+        // `middle`/`upper`/`outliers` — otherwise a raw, unmapped `ymin`/
+        // `ymax` column (e.g. a SQL alias) satisfied `validate_layer`'s
+        // stat="identity" requirement below the same way a raw `y`
+        // satisfies `required_aes` everywhere else, silently accepting an
+        // incomplete five-number summary ggplot2 itself rejects. This is
+        // scoped to `GeomBoxplot` alone (`build.rs`'s drop loop runs per
+        // layer), so a raw `ymin`/`ymax` on any *other* geom — e.g. a
+        // forecast's confidence band on an unmapped `geom_line` — is
+        // untouched; the universal raw-y rule stays exactly as it is
+        // everywhere else.
+        &["lower", "middle", "upper", "outliers", "ymin", "ymax"]
     }
 
     fn validate_layer(&self, pre_stat_columns: &[String], stat_name: &str) -> Result<(), String> {

@@ -33,6 +33,12 @@ annotation ink, boxplot identity mapping.
   4.0.3's own behaviour (checked directly: its fill stays the hard-coded
   grey under `element_geom(ink=, paper=)` too). Default theme (no ink set)
   is byte-identical.
+- `geom_boxplot(stat = "identity")`: a raw, unmapped `ymin`/`ymax` column
+  no longer satisfies the five-number-summary requirement, matching
+  ggplot2 4.0.3 (checked directly) and the same "only when actually
+  mapped" treatment `lower`/`middle`/`upper`/`outliers` already got (#160,
+  follow-up to #158). Scoped to `GeomBoxplot` alone; the universal raw-y
+  convention for other geoms is unchanged.
 
 ## [0.22.1] — 2026-10-21
 
