@@ -886,6 +886,16 @@ pub(crate) fn draw_legend_planned(
     scales: &ScaleSet,
     theme: &Theme,
     plot_area: &Rect,
+    // Review #167 finding 1: the width share each discrete guide was
+    // *planned* against (the same `avail_width` passed to
+    // `plan_all_legends`), not `plot_area.width`. For a single plot these
+    // are the same value in practice, but a PlotGrid's collected legend
+    // (`compose::capture_legend`) measures itself against a fake
+    // zero-width panel so its origin lands at (0, 0) — stepping by
+    // `plot_area.width / n` there always advanced by zero, so the second
+    // discrete guide (e.g. `shape` after `colour`) was drawn directly on
+    // top of the first instead of beside it.
+    legend_avail_width: f64,
     backend: &mut dyn DrawBackend,
     guide: &GuideLegend,
     suppressed: &std::collections::HashSet<Aesthetic>,
@@ -910,7 +920,7 @@ pub(crate) fn draw_legend_planned(
         is_horizontal = matches!(dir, crate::theme::LegendDirection::Horizontal);
     }
     let n_discrete = discrete_guide_count(scales, &legend_scales);
-    let per_guide_width = plot_area.width / n_discrete as f64;
+    let per_guide_width = legend_avail_width / n_discrete as f64;
 
     let mut offset_y = legend_y;
     let mut offset_x = legend_x;

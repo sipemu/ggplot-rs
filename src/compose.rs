@@ -734,6 +734,13 @@ fn capture_legend(
         &built.scales,
         &theme,
         &pa,
+        // Review #167 finding 1: step by the same `avail_width` share
+        // `plan_all_legends` just planned against, not `pa.width` (always
+        // 0.0 — `pa` is a fake zero-size panel so the legend's origin
+        // lands at (0, 0)). Using `pa.width` made every discrete guide
+        // after the first advance by zero, so two collected guides (e.g.
+        // `colour` and `shape`) were drawn on top of each other.
+        avail_width,
         &mut meas,
         &built.guide_legend,
         &built.suppressed_aes,

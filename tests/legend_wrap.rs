@@ -216,6 +216,20 @@ fn vertical_legend_with_explicit_ncol_two() {
 /// this: the original finding-3 test did exactly that) is meaningless for
 /// a `start`-anchored label, since its glyphs extend *rightward* from
 /// `x` — a passing "x <= canvas width" assertion there proves nothing.
+/// The x-coordinate of the `<text>` element whose body is exactly `label`
+/// (the first match, in document order).
+fn text_x(svg: &str, label: &str) -> Option<f64> {
+    svg.match_indices("<text ").find_map(|(start, _)| {
+        let tag_end = svg[start..].find('>').map(|e| start + e)?;
+        let close = svg[tag_end..].find("</text>").map(|e| tag_end + e)?;
+        if &svg[tag_end + 1..close] != label {
+            return None;
+        }
+        let tag = &svg[start..tag_end];
+        tag.split("x=\"").nth(1)?.split('"').next()?.parse().ok()
+    })
+}
+
 fn max_text_right_edge(svg: &str) -> f64 {
     svg.match_indices("<text ")
         .filter_map(|(start, _)| {
@@ -596,4 +610,55 @@ fn plotgrid_collected_legend_auto_wraps() {
         "the collected legend's text overflows the 500px canvas: right edge {}",
         max_text_right_edge(&svg)
     );
+}
+
+/// Review #167 finding 1: a `PlotGrid`'s collected bottom legend with two
+/// simultaneous discrete guides (`colour` and `shape`) must lay them out
+/// side by side, exactly like a single plot's legend does (see
+/// `two_discrete_guides_each_auto_wrap` above) — not drawn on top of each
+/// other. `compose::capture_legend` measures the collected legend against
+/// a fake zero-width panel so its origin lands at (0, 0); stepping to the
+/// next guide by `plot_area.width / n` there always advanced by zero
+/// (0.0 / n), so "Shape 01" landed at the exact same (x, y) as "Colour
+/// 01" and the two guides' labels were drawn on top of each other.
+#[test]
+fn plotgrid_collected_legend_two_guides_sit_side_by_side() {
+    use ggplot_rs::compose::{GridLegendPosition, PlotGrid};
+
+    let n = 8;
+    let x: Vec<Value> = (0..n).map(|i| Value::Float(i as f64)).collect();
+    let y: Vec<Value> = (0..n).map(|i| Value::Float((i % 3) as f64)).collect();
+    let g: Vec<Value> = (0..n)
+        .map(|i| Value::Str(format!("Colour {:02}", i + 1)))
+        .collect();
+    let s: Vec<Value> = (0..n)
+        .map(|i| Value::Str(format!("Shape {:02}", i + 1)))
+        .collect();
+    let plot = GGPlot::new(vec![
+        ("x".into(), x),
+        ("y".into(), y),
+        ("g".into(), g),
+        ("s".into(), s),
+    ])
+    .aes(Aes::new().x("x").y("y").color("g").shape("s"))
+    .geom_point();
+
+    let svg = PlotGrid::new()
+        .add(plot)
+        .collect_legends(true)
+        .legend_position(GridLegendPosition::Bottom)
+        .render_svg_native_with_size(500, 400)
+        .expect("render");
+
+    let colour_x = text_x(&svg, "Colour 01").expect("colour guide label \"Colour 01\" missing");
+    let shape_x = text_x(&svg, "Shape 01").expect("shape guide label \"Shape 01\" missing");
+    assert!(
+        shape_x > colour_x,
+        "the shape guide (x={shape_x}) must sit to the right of the colour guide \
+         (x={colour_x}), not on top of it"
+    );
+
+    // Every entry of both guides must still be present.
+    assert!(svg.contains(">Colour 08<"), "{svg}");
+    assert!(svg.contains(">Shape 08<"), "{svg}");
 }
