@@ -3,7 +3,7 @@
 All notable changes to this project are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
-## [0.22.2] — Unreleased
+## [0.22.2] — 2026-10-22
 
 Patch: decorative layers, fill value formatter, refline tooltips,
 annotation ink, boxplot identity mapping.
