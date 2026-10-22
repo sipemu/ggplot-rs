@@ -10,6 +10,18 @@ annotation ink, boxplot identity mapping.
 
 ### Added
 
+- `GGPlot::decorative()` marks the most recently added layer as purely
+  decorative (#161): its drawn marks keep their own visual style but carry
+  no per-mark metadata — no `<title>`, no `data-x`/`data-series`/
+  `data-value`/`data-fvalue`, and no `data_attr` attributes — so an SVG
+  consumer that treats "has a non-empty `<title>`" as "is a selectable
+  data point" doesn't pick it up (e.g. a boxplot's own mean dot, drawn by
+  a separate `geom_point` layer purely to mark the spot). Implemented as a
+  private delegating `Geom` wrapper rather than a new `Layer` field, so it
+  adds no field to any public struct. A `.tooltip(...)` on a decorative
+  layer has no visible effect and warns, like the existing has-no-effect
+  warning. A decorative layer also defaults to hidden in the legend,
+  unless `show_legend(true)` is called to opt back in.
 - `with_value_formatter` (same signature as
   `ScaleContinuous::with_value_formatter`) on every continuous colour/fill
   scale that implements `format_value`: `ScaleColorContinuous`,
