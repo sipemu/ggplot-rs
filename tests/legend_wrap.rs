@@ -310,6 +310,84 @@ fn vertical_legend_ncol_grid_too_wide_reduces_columns_instead_of_warning() {
     );
 }
 
+/// #168 (review #167 finding 5): once column reduction above has settled
+/// on a narrower column count, the panel should get back the width that
+/// count no longer needs — not keep reserving the *original*, pre-
+/// reduction column count's width. `ncol(3)` here reduces to `ncol(2)`
+/// (9 short-enough labels that 2 columns fits, unlike the all-the-way-
+/// to-1 case below); the panel width after reduction must match an
+/// explicit `ncol(2)` grid built from the start, not a narrower one still
+/// carrying the 3-column reservation.
+#[test]
+fn legend_panel_width_is_reclaimed_after_column_reduction() {
+    let data = groups_with_labels(9, |i| format!("Group {}", i + 1));
+    let (reduced_svg, reduced_warnings) = GGPlot::new(data.clone())
+        .aes(Aes::new().x("x").y("y").color("g"))
+        .geom_point()
+        .guides(GuideLegend::new().with_ncol(3))
+        .render_svg_native_with_warnings(300, 400)
+        .unwrap();
+    let (direct_svg, direct_warnings) = GGPlot::new(data)
+        .aes(Aes::new().x("x").y("y").color("g"))
+        .geom_point()
+        .guides(GuideLegend::new().with_ncol(2))
+        .render_svg_native_with_warnings(300, 400)
+        .unwrap();
+
+    assert!(
+        reduced_warnings.is_empty() && direct_warnings.is_empty(),
+        "neither grid should need to warn: reduced={reduced_warnings:?} direct={direct_warnings:?}"
+    );
+    assert!(!reduced_svg.contains('…'), "{reduced_svg}");
+
+    let reduced_width = data_plot_rect(&reduced_svg)[2];
+    let direct_width = data_plot_rect(&direct_svg)[2];
+    assert!(
+        (reduced_width - direct_width).abs() < 0.01,
+        "#168: a ncol(3) grid auto-reduced to 2 columns must reserve the same \
+         width as an explicit ncol(2) grid (panel width {reduced_width}), not \
+         the wider, stale ncol(3) reservation (direct ncol(2) panel width \
+         {direct_width})"
+    );
+}
+
+/// #168's retightening is a bounded, *safe* retry, not an unconditional
+/// recompute: when the grid reduces all the way to a single column (the
+/// pre-existing #159 limitation — an explicit `ncol(1)` grid has no fit
+/// check of its own, see `vertical_legend_warns_only_when_truncation_still_cant_fit`'s
+/// sibling cases), tightening the reservation to match would push the
+/// legend's text off the canvas with no warning to show for it, so the
+/// wider, already-proven-safe reservation must be kept instead — the
+/// panel here stays exactly as narrow as the unreduced #159 behaviour,
+/// not byte-identical to an explicit `ncol(1)` grid (which doesn't get
+/// one at all).
+#[test]
+fn legend_panel_width_reservation_is_not_loosened_when_unsafe() {
+    let data = groups_with_labels(12, |i| format!("A Very Long Group Label Number {}", i + 1));
+    let (reduced_svg, _) = GGPlot::new(data.clone())
+        .aes(Aes::new().x("x").y("y").color("g"))
+        .geom_point()
+        .guides(GuideLegend::new().with_ncol(4))
+        .render_svg_native_with_warnings(300, 400)
+        .unwrap();
+    let (direct_one_col_svg, _) = GGPlot::new(data)
+        .aes(Aes::new().x("x").y("y").color("g"))
+        .geom_point()
+        .guides(GuideLegend::new().with_ncol(1))
+        .render_svg_native_with_warnings(300, 400)
+        .unwrap();
+
+    let reduced_width = data_plot_rect(&reduced_svg)[2];
+    let direct_width = data_plot_rect(&direct_one_col_svg)[2];
+    assert!(
+        reduced_width < direct_width,
+        "retightening to the fully-reduced 1-column reservation would run this \
+         label off the canvas (an explicit ncol(1) grid has no fit check to \
+         catch it) — the wider reservation must be kept: reduced={reduced_width} \
+         direct_ncol1={direct_width}"
+    );
+}
+
 /// #159: when reducing columns isn't enough (labels so long even a
 /// single column overflows), labels are truncated with an ellipsis
 /// instead — the full label stays available via a `<title>` tooltip on
@@ -661,4 +739,76 @@ fn plotgrid_collected_legend_two_guides_sit_side_by_side() {
     // Every entry of both guides must still be present.
     assert!(svg.contains(">Colour 08<"), "{svg}");
     assert!(svg.contains(">Shape 08<"), "{svg}");
+}
+
+/// #170 / review #167 finding 7: a bottom legend mixing a colourbar
+/// (`colour` mapped to a continuous variable) with a discrete guide
+/// (`shape`) must leave the discrete guide only the row width left over
+/// after the colourbar's own fixed share — `plan_all_legends` previously
+/// split the *whole* row width among the discrete guides alone, so the
+/// wrapped grid could still run past the canvas once the colourbar's
+/// share was added back on top (worse than 0.22.2, which never auto-
+/// wrapped a discrete guide sharing a row with a continuous one at all;
+/// not a regression there, see #155's own CHANGELOG note).
+#[test]
+fn bottom_legend_colourbar_leaves_room_for_the_discrete_guide() {
+    let n = 18;
+    let x: Vec<Value> = (0..n).map(|i| Value::Float(i as f64)).collect();
+    let y: Vec<Value> = (0..n).map(|i| Value::Float((i % 3) as f64)).collect();
+    let c: Vec<Value> = (0..n).map(|i| Value::Float(i as f64)).collect();
+    let s: Vec<Value> = (0..n)
+        .map(|i| Value::Str(format!("Shape Group Number {:02}", i + 1)))
+        .collect();
+    let plot = GGPlot::new(vec![
+        ("x".into(), x),
+        ("y".into(), y),
+        ("c".into(), c),
+        ("s".into(), s),
+    ])
+    .aes(Aes::new().x("x").y("y").color("c").shape("s"))
+    .geom_point()
+    .legend_position(LegendPosition::Bottom);
+    let svg = render(plot, 450, 500);
+
+    // 18 entries also run into the available legend-band *height* at
+    // this canvas size (an unrelated, pre-existing #159 "+N more" drop)
+    // — this test is only about the *width* share, so just check that
+    // at least the auto-wrapped grid that does get drawn stays on-canvas.
+    assert!(svg.contains(">Shape Group Number 01<"), "{svg}");
+    let max_x = max_text_right_edge(&svg);
+    assert!(
+        max_x <= 450.0,
+        "the discrete guide's wrapped text overflows the 450px canvas once the \
+         colourbar's own share is accounted for: right edge {max_x}"
+    );
+}
+
+/// #170 / review #167 finding 6: a `PlotGrid`'s collected-legend path
+/// (`compose::capture_legend`) must propagate the warnings its own
+/// `plan_all_legends` call produces — previously they went into a local
+/// `Vec` nothing ever read, so an invalid `nrow`/`ncol` setting on a
+/// collected legend silently fell back instead of warning, unlike the
+/// same setting on a single plot's own legend (see
+/// `invalid_grid_settings_warn_and_fall_back` above).
+#[test]
+fn plotgrid_collected_legend_propagates_its_own_warnings() {
+    use ggplot_rs::compose::{GridLegendPosition, PlotGrid};
+
+    let plot = GGPlot::new(groups(6))
+        .aes(Aes::new().x("x").y("y").color("g"))
+        .geom_point()
+        .guides(GuideLegend::new().with_nrow(0));
+
+    let (_, warnings) = PlotGrid::new()
+        .add(plot)
+        .collect_legends(true)
+        .legend_position(GridLegendPosition::Bottom)
+        .render_svg_native_with_warnings(500, 400)
+        .expect("render");
+
+    assert!(
+        warnings.iter().any(|w| w.contains("nrow(0)")),
+        "the collected legend's own guide_legend warning should have reached \
+         the grid's warnings: {warnings:?}"
+    );
 }

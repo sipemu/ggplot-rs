@@ -3,6 +3,83 @@
 All notable changes to this project are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.24.0] — Unreleased
+
+Minor bump: a deliberate `geom_col()` default-position change (ggplot2
+parity) plus four LOW/non-blocking fixes from the #167 review, all
+guarded by a test.
+
+### Changed
+
+- **`geom_col()`'s default position is now `position_stack()`**, matching
+  `geom_bar()`'s (#169) — ggplot2 defaults `geom_col` to `position_stack`
+  too, and 0.22/0.23 left it at `PositionIdentity`, a parity gap called
+  out in review #167 finding 3 and tracked as #169. **Migration**: a plot
+  that calls `geom_col()` with more than one group (e.g. a mapped
+  `fill`/`colour`) at the same x and relies on the old identity behaviour
+  (bars drawn on top of each other from `y = 0`, not stacked) must now
+  add an explicit `.position(PositionIdentity)` to keep that output; a
+  plot that already set `.position(...)` explicitly, or that never has
+  more than one group at a shared x, is unaffected. `tests/default_output_023.rs`'s
+  `all_positive_stack` case (`geom_col()`'s default, two groups at one
+  x) exercises this — see its updated expected hash and data-fn comment;
+  `tests/issue169_geom_col_default_stack.rs` checks the default matches
+  an explicit `PositionStack` and no longer matches `PositionIdentity`.
+  `tests/integration.rs`'s `test_layer_position_override_build` switched
+  from `geom_col()` to `geom_point()` to keep testing an override of an
+  *identity* default.
+
+### Fixed
+
+- A vertical legend's explicit `ncol` grid that auto-reduces its column
+  count to fit (#159) now reclaims the panel width that reduction no
+  longer needs, instead of keeping the wider, pre-reduction column
+  count's reservation forever (#168, review #167 finding 5). Reclaiming
+  it is a single bounded retry, not an unconditional recompute: the
+  tighter reservation is re-checked against the same fit test the
+  reduction loop uses, and is kept only if every guide the loop reduced
+  still fits under it — a grid that would overflow at the tighter
+  reservation (the pre-existing #159 limitation where an explicit
+  `ncol(1)` grid has no fit check of its own) keeps the wider, already-
+  safe reservation instead, so this can only shrink the reservation
+  when doing so is provably safe, never regress a plot that already
+  rendered correctly. `tests/legend_wrap.rs`'s
+  `legend_panel_width_is_reclaimed_after_column_reduction` (the panel
+  widens back to what an equivalent direct `ncol` grid gets) and
+  `legend_panel_width_reservation_is_not_loosened_when_unsafe` (the
+  all-the-way-to-one-column case keeps the wider reservation) cover
+  both sides.
+- A bottom/top legend mixing a colourbar (a continuous `colour`/`fill`
+  scale) with a discrete guide now leaves the discrete guide only the
+  row width left over after the colourbar's own fixed share, instead of
+  splitting the *whole* row width among the discrete guides alone — the
+  wrapped discrete grid could still run past the canvas once the
+  colourbar's share was added back on top (review #167 finding 7).
+  `tests/legend_wrap.rs`'s `bottom_legend_colourbar_leaves_room_for_the_discrete_guide`.
+- A `PlotGrid`'s collected-legend path (`collect_legends(true)`) now
+  propagates the warnings its own legend planning produces (e.g. an
+  invalid `nrow(0)`/`ncol(0)` on the collected legend), instead of
+  silently discarding them — unlike the same setting on a single plot's
+  own legend, which already warned (review #167 finding 6).
+  `tests/legend_wrap.rs`'s `plotgrid_collected_legend_propagates_its_own_warnings`.
+- The legend bbox pre-pass used to measure a `PlotGrid`'s collected
+  legend (`compose::capture_legend`'s internal `Measure` backend) now
+  forwards a drawn label's `<title>` tooltip to its inner backend
+  instead of silently dropping it (review #167 finding 4) — latent
+  today (a collected legend's labels never get 0.23's truncate-with-
+  `<title>` treatment yet), but would otherwise have resurfaced as soon
+  as they did. `src/compose.rs`'s
+  `measure_forwards_the_title_to_its_inner_backend` unit test.
+- A `NaN` `y` in `position_stack` now stacks into the *positive* bucket,
+  matching ggplot2, instead of the negative one (review #167 finding 8)
+  — `y_val >= 0.0` is `false` for NaN under IEEE-754, so the naive sign
+  check routed it into the negative bucket by accident.
+  `src/position/stack.rs`'s
+  `nan_y_stacks_into_the_positive_bucket_like_ggplot2`. (`position_fill`
+  has the identical `(y_val >= 0.0) != positive` pattern and likely the
+  same bug — out of scope for #170, which named `position_stack`
+  specifically; flagged for a follow-up issue.)
+
 ## [0.23.0] — 2026-10-22
 
 Minor bump: per-panel dodge/jitter, negative stacking, legend wrap for

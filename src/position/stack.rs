@@ -48,6 +48,18 @@ pub fn position_stack() -> PositionStack {
     PositionStack::default()
 }
 
+/// Which of #154's two independent buckets a `y` value stacks into.
+///
+/// `y_val >= 0.0` is `false` for NaN (every IEEE-754 comparison with NaN
+/// is), so a plain `y_val >= 0.0` check routed a NaN `y` into the
+/// *negative* bucket (review #167 finding 8 / #170) — ggplot2 treats a
+/// missing/NaN value as positive (it still contributes to, and is
+/// placed within, the positive stack). `is_nan` is checked first so NaN
+/// takes the positive branch regardless of the `>= 0.0` result.
+fn is_positive_bucket(y_val: f64) -> bool {
+    y_val.is_nan() || y_val >= 0.0
+}
+
 impl Position for PositionStack {
     fn compute(&self, data: &mut DataFrame, _params: &PositionParams) {
         // Group by x, accumulate y values
@@ -87,7 +99,7 @@ impl Position for PositionStack {
             let mut totals: HashMap<Cow<'_, str>, f64> = HashMap::new();
             for (x, y) in x_col.iter().zip(y_col.iter()) {
                 let y_val = y.as_f64().unwrap_or(0.0);
-                if (y_val >= 0.0) != positive {
+                if is_positive_bucket(y_val) != positive {
                     continue;
                 }
                 *totals.entry(x.key_str()).or_insert(0.0) += y_val;
@@ -96,7 +108,7 @@ impl Position for PositionStack {
             let mut consumed: HashMap<Cow<'_, str>, f64> = HashMap::new();
             for (i, (x, y)) in x_col.iter().zip(y_col.iter()).enumerate() {
                 let y_val = y.as_f64().unwrap_or(0.0);
-                if (y_val >= 0.0) != positive {
+                if is_positive_bucket(y_val) != positive {
                     continue;
                 }
                 let x_key = x.key_str();
@@ -233,5 +245,35 @@ mod tests {
         PositionStack.compute(&mut df, &PositionParams::default());
         assert_eq!(col(&df, "y"), vec![8.0, 5.0]);
         assert_eq!(col(&df, "ymin"), vec![5.0, 0.0]);
+    }
+
+    /// #170 / review #167 finding 8: a NaN `y` must stack into the
+    /// *positive* bucket, like ggplot2 — `y_val >= 0.0` is `false` for
+    /// NaN (every IEEE-754 comparison with NaN is), so the naive
+    /// `(y_val >= 0.0) != positive` check routed it into the negative
+    /// one instead.
+    ///
+    /// Summing a NaN into a bucket's running total necessarily poisons
+    /// that *whole* bucket's arithmetic (`a`'s and `b`'s `y`/`ymin` below
+    /// are both NaN — that's inherent to a sum-based stack, not this
+    /// bug), so the only observable, bucket-correct behaviour to check is
+    /// that it's the *other* bucket that stays clean: `c`, the only
+    /// finite negative value, must stack to exactly what a lone negative
+    /// value does (its own total, from 0) whether or not `b`'s NaN ever
+    /// ran through the positive side. Before the fix `b` joined `c`'s
+    /// negative bucket instead, poisoning `c`'s total/`ymin` with NaN too.
+    #[test]
+    fn nan_y_stacks_into_the_positive_bucket_like_ggplot2() {
+        let mut df = frame(&[1.0, 1.0, 1.0], &["a", "b", "c"], &[3.0, f64::NAN, -2.0]);
+        PositionStack.compute(&mut df, &PositionParams::default());
+        let y = col(&df, "y");
+        let ymin = col(&df, "ymin");
+        assert_eq!(
+            (y[2], ymin[2]),
+            (0.0, -2.0),
+            "c (the only finite negative value) must be unaffected by b's NaN — \
+             a lone negative value's bucket runs from 0 down to its own total: \
+             y={y:?} ymin={ymin:?}"
+        );
     }
 }
