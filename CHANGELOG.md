@@ -3,6 +3,20 @@
 All notable changes to this project are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.22.2] — Unreleased
+
+Patch: decorative layers, fill value formatter, refline tooltips,
+annotation ink, boxplot identity mapping.
+
+### Added
+
+- `with_value_formatter` (same signature as
+  `ScaleContinuous::with_value_formatter`) on every continuous colour/fill
+  scale that implements `format_value`: `ScaleColorContinuous`,
+  `ScaleColorGradientN` and `ScaleColorGradient2` (#164). Falls back to
+  the plain locale-formatted number when unset (byte-identical default
+  output).
+
 ## [0.22.1] — 2026-10-21
 
 Patch: discrete-axis auto-rotate (#162).

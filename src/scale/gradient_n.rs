@@ -2,12 +2,13 @@ use crate::aes::Aesthetic;
 use crate::data::Value;
 
 use super::color::RGBAColor;
+use super::format::LabelFormatter;
 use super::util::nice_step;
 use super::Scale;
 
 /// N-stop continuous color gradient scale.
 /// Interpolates linearly between user-defined color stops.
-#[derive(Clone, Debug)]
+#[derive(Clone)]
 pub struct ScaleColorGradientN {
     aesthetic: Aesthetic,
     name: String,
@@ -28,6 +29,27 @@ pub struct ScaleColorGradientN {
     /// ([`with_na_value`](Self::with_na_value)). Default ggplot2's
     /// `"grey50"`, `(127, 127, 127)`.
     na_value: (u8, u8, u8),
+    /// Formatter for [`format_value`](super::Scale::format_value) (#164).
+    /// Falls back to the plain locale-formatted number when unset.
+    value_formatter: Option<LabelFormatter>,
+}
+
+// Manual `Debug`: `value_formatter` (an `Arc<dyn Fn>`) isn't `Debug`.
+impl std::fmt::Debug for ScaleColorGradientN {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("ScaleColorGradientN")
+            .field("aesthetic", &self.aesthetic)
+            .field("name", &self.name)
+            .field("stops", &self.stops)
+            .field("min", &self.min)
+            .field("max", &self.max)
+            .field("locale", &self.locale)
+            .field("limits", &self.limits)
+            .field("oob", &self.oob)
+            .field("na_value", &self.na_value)
+            .field("value_formatter", &self.value_formatter.is_some())
+            .finish()
+    }
 }
 
 impl ScaleColorGradientN {
@@ -46,7 +68,20 @@ impl ScaleColorGradientN {
             limits: None,
             oob: super::Oob::Censor,
             na_value: super::DEFAULT_NA_VALUE,
+            value_formatter: None,
         }
+    }
+
+    /// Set a formatter for [`format_value`](super::Scale::format_value) —
+    /// a per-mark `data-fvalue`/tooltip-template value for this fill/colour
+    /// scale (#164). Falls back to the plain locale-formatted number when
+    /// unset (byte-identical default output).
+    pub fn with_value_formatter<F>(mut self, f: F) -> Self
+    where
+        F: Fn(f64) -> String + Send + Sync + 'static,
+    {
+        self.value_formatter = Some(std::sync::Arc::new(f));
+        self
     }
 
     /// Fix the colour domain to `[lo, hi]` instead of whatever the data
@@ -142,7 +177,10 @@ impl Scale for ScaleColorGradientN {
         if !f.is_finite() {
             return None;
         }
-        Some(super::util::format_number_opt(f, self.locale.as_ref()))
+        Some(match &self.value_formatter {
+            Some(fmt) => fmt(f),
+            None => super::util::format_number_opt(f, self.locale.as_ref()),
+        })
     }
 
     fn aesthetic(&self) -> Aesthetic {
@@ -386,6 +424,14 @@ mod tests {
     fn format_value_formats_a_finite_number_and_rejects_non_finite() {
         let g = ScaleColorGradientN::new(Aesthetic::Color, vec![(0.0, RGBAColor::new(0, 0, 0))]);
         assert_eq!(g.format_value(&Value::Float(42.0)), Some("42".to_string()));
+        assert_eq!(g.format_value(&Value::Float(f64::INFINITY)), None);
+    }
+
+    #[test]
+    fn with_value_formatter_overrides_format_value() {
+        let g = ScaleColorGradientN::new(Aesthetic::Color, vec![(0.0, RGBAColor::new(0, 0, 0))])
+            .with_value_formatter(|v| format!("#{v:.0}"));
+        assert_eq!(g.format_value(&Value::Float(42.0)), Some("#42".to_string()));
         assert_eq!(g.format_value(&Value::Float(f64::INFINITY)), None);
     }
 
