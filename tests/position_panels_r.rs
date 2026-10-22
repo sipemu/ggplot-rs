@@ -151,10 +151,62 @@ fn unfaceted_stack_is_unaffected() {
     assert!(svg.contains("<title>5/0</title>"));
 }
 
-/// Dodge and jitter stay pooled across panels (D8 scopes per-panel to
-/// Stack/Fill only) — unaffected by this change.
+/// #153: `position_dodge` now also runs per facet panel. R parity
+/// (ggplot2 4.0.3, `layer_data()`): panel P has 3 groups at x = 1 (g1, g2,
+/// g3; dodge(width = 0.9) centres them at 0.7, 1.0, 1.3), panel Q has only
+/// g1 at the same x — pooled across panels (the pre-#153 bug) g1 would
+/// still see {g1,g2,g3} present and land at 0.7; computed per panel, g1 is
+/// the only group there and stays centred at 1.0 (unshifted).
 #[test]
-fn dodge_and_jitter_are_unaffected_by_this_change() {
+fn facet_dodge_matches_r_per_panel() {
+    let data = vec![
+        (
+            "panel".to_string(),
+            vec![
+                Value::Str("P".into()),
+                Value::Str("P".into()),
+                Value::Str("P".into()),
+                Value::Str("Q".into()),
+            ],
+        ),
+        ("x".to_string(), vec![Value::Float(1.0); 4]),
+        (
+            "grp".to_string(),
+            vec![
+                Value::Str("g1".into()),
+                Value::Str("g2".into()),
+                Value::Str("g3".into()),
+                Value::Str("g1".into()),
+            ],
+        ),
+        ("y".to_string(), vec![Value::Float(1.0); 4]),
+    ];
+    let svg = GGPlot::new(data)
+        .aes(Aes::new().x("x").y("y").color("grp"))
+        .geom_point()
+        .position(ggplot_rs::position::dodge::position_dodge(0.9))
+        .tooltip("{x}")
+        .facet_wrap("panel", None)
+        .render_svg_native_with_size(600, 300)
+        .unwrap();
+
+    for expect in [
+        "<title>0.7</title>",
+        "<title>1</title>",
+        "<title>1.3</title>",
+    ] {
+        assert!(svg.contains(expect), "missing {expect} in {svg}");
+    }
+    assert!(
+        !svg.contains("<title>0.7</title><title>0.7</title>"),
+        "panel Q's lone group must not duplicate panel P's offset"
+    );
+}
+
+/// `position_dodge2` shares `dodge_rows` with `position_dodge`, so the
+/// same per-panel rule applies to it (#153).
+#[test]
+fn facet_dodge2_runs_per_panel() {
     let data = vec![
         (
             "panel".to_string(),
@@ -162,43 +214,107 @@ fn dodge_and_jitter_are_unaffected_by_this_change() {
                 Value::Str("P".into()),
                 Value::Str("P".into()),
                 Value::Str("Q".into()),
-                Value::Str("Q".into()),
             ],
         ),
-        ("x".to_string(), vec![Value::Str("a".into()); 4]),
+        ("x".to_string(), vec![Value::Float(1.0); 3]),
         (
             "grp".to_string(),
             vec![
                 Value::Str("g1".into()),
                 Value::Str("g2".into()),
                 Value::Str("g1".into()),
-                Value::Str("g2".into()),
+            ],
+        ),
+        ("y".to_string(), vec![Value::Float(1.0); 3]),
+    ];
+    let svg = GGPlot::new(data)
+        .aes(Aes::new().x("x").y("y").color("grp"))
+        .geom_point()
+        .position(ggplot_rs::position::dodge2::PositionDodge2::new(0.0).with_width(0.9))
+        .tooltip("{x}")
+        .facet_wrap("panel", None)
+        .render_svg_native_with_size(600, 300)
+        .unwrap();
+
+    // Panel Q's lone g1 is unshifted (centred at 1), not offset the way
+    // it would be if panel P's second group leaked into panel Q's count.
+    assert!(svg.contains("<title>1</title>"), "{svg}");
+}
+
+/// #153: `position_jitter`'s default width (`resolution(x) * 0.4`) is also
+/// measured per panel. R parity (ggplot2 4.0.3): panel P's x is spaced 1
+/// apart (resolution 1, jitter up to ±0.4); panel Q's x is spaced 0.01
+/// apart (resolution 0.01, jitter up to ±0.004) — even though both panels
+/// share the same fixed facet scale. Pooled across panels (the pre-#153
+/// bug), the whole layer's minimum gap (0.01) would clamp panel P's
+/// jitter down to ±0.004 too.
+#[test]
+fn facet_jitter_resolution_is_measured_per_panel() {
+    let data = vec![
+        (
+            "panel".to_string(),
+            vec![
+                Value::Str("P".into()),
+                Value::Str("P".into()),
+                Value::Str("P".into()),
+                Value::Str("Q".into()),
+                Value::Str("Q".into()),
+                Value::Str("Q".into()),
+            ],
+        ),
+        (
+            "x".to_string(),
+            vec![
+                Value::Float(1.0),
+                Value::Float(2.0),
+                Value::Float(3.0),
+                Value::Float(10.00),
+                Value::Float(10.01),
+                Value::Float(10.02),
             ],
         ),
         (
             "y".to_string(),
             vec![
-                Value::Float(3.0),
-                Value::Float(5.0),
-                Value::Float(4.0),
                 Value::Float(1.0),
+                Value::Float(2.0),
+                Value::Float(3.0),
+                Value::Float(10.00),
+                Value::Float(10.01),
+                Value::Float(10.02),
             ],
         ),
     ];
-    let svg_dodge = GGPlot::new(data.clone())
-        .aes(Aes::new().x("x").y("y").fill("grp"))
-        .geom_col()
-        .position(ggplot_rs::position::dodge::position_dodge(0.9))
-        .facet_wrap("panel", None)
-        .render_svg_native_with_size(600, 300)
-        .unwrap();
-    assert!(svg_dodge.starts_with("<svg"));
-
-    let svg_jitter = GGPlot::new(data)
-        .aes(Aes::new().x("x").y("y").color("grp"))
+    let svg = GGPlot::new(data)
+        .aes(Aes::new().x("x").y("y"))
         .geom_jitter()
         .facet_wrap("panel", None)
         .render_svg_native_with_size(600, 300)
         .unwrap();
-    assert!(svg_jitter.starts_with("<svg"));
+
+    let cx: Vec<f64> = svg
+        .match_indices("<circle cx=\"")
+        .map(|(start, _)| {
+            let rest = &svg[start + "<circle cx=\"".len()..];
+            rest[..rest.find('"').unwrap()].parse().unwrap()
+        })
+        .collect();
+    assert_eq!(cx.len(), 6, "expected 3 points in each of 2 panels: {svg}");
+    let spread = |vs: &[f64]| {
+        vs.iter().cloned().fold(f64::MIN, f64::max)
+            - vs[..].iter().cloned().fold(f64::MAX, f64::min)
+    };
+    let panel_p_spread = spread(&cx[0..3]).abs();
+    let panel_q_spread = spread(&cx[3..6]).abs();
+    // Panel P's x is spaced 1 apart (resolution 1): its 3 jittered points
+    // spread over a sizeable pixel range. Panel Q's x is spaced 0.01
+    // apart (resolution 0.01): its jitter is ~100x smaller in data units,
+    // and both panels share the same pixel width per data unit here, so
+    // panel Q's spread must be much smaller than panel P's — only
+    // possible if each panel's resolution (and jitter amount) was
+    // measured from its own rows, not pooled across panels.
+    assert!(
+        panel_p_spread > panel_q_spread * 5.0,
+        "panel P spread {panel_p_spread} should be much larger than panel Q spread {panel_q_spread}: {svg}"
+    );
 }

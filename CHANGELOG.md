@@ -3,6 +3,27 @@
 All notable changes to this project are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.23.0] — Unreleased
+
+Minor bump: per-panel dodge/jitter, negative stacking, legend wrap for
+grids/multiple guides, vertical legend fit. Default output stays byte-
+identical except for the deliberate changes under "Changed", each guarded
+by a test.
+
+### Changed
+
+- A faceted `position_dodge`/`position_dodge2` now computes each panel's
+  group count/offset from that panel's own rows instead of the rows
+  pooled across panels (#153), matching ggplot2 4.0.3 (verified with
+  `layer_data()`: a group missing from one panel's x level no longer
+  shifts the groups that panel does have). A faceted `position_jitter`'s
+  default width/height (`resolution(x) * 0.4`) is now likewise measured
+  per panel — also verified with `layer_data()`: two panels with very
+  different x spacing get differently-scaled jitter even under shared,
+  fixed facet scales. A plot with 2+ distinct facet panels and a dodge or
+  jitter layer may render differently; an unfaceted plot, or one with a
+  single panel, is unaffected (`tests/position_panels_r.rs`).
+
 ## [0.22.2] — 2026-10-22
 
 Patch: decorative layers, fill value formatter, refline tooltips,

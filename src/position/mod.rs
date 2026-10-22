@@ -36,8 +36,13 @@ pub trait Position: Send + Sync {
     /// than once on the pooled rows before facets are split (B3-3, D8).
     /// Default `false`. `PositionStack`/`PositionFill` override this to
     /// `true` — a shared x category's stack height must not mix rows from
-    /// different panels. Dodge and jitter stay pooled across panels for
-    /// now (a follow-up, sipemu/ggplot-rs#154).
+    /// different panels. `PositionDodge`/`PositionDodge2`/`PositionJitter`
+    /// also override this to `true` (sipemu/ggplot-rs#153): ggplot2
+    /// computes a dodge's group count/offset via `compute_panel` (per
+    /// panel), and `position_jitter`'s default width/height — 40% of
+    /// `resolution()` — is likewise measured from each panel's own x/y,
+    /// not the rows pooled across panels (verified against ggplot2 4.0.3
+    /// with `layer_data()` on faceted plots; see `tests/position_panels_r.rs`).
     fn per_panel(&self) -> bool {
         false
     }

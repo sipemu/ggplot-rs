@@ -61,4 +61,10 @@ impl Position for PositionDodge2 {
     fn name(&self) -> &str {
         "dodge2"
     }
+
+    /// Same per-panel rule as `PositionDodge` (#153): `dodge_rows` is
+    /// shared between the two.
+    fn per_panel(&self) -> bool {
+        true
+    }
 }

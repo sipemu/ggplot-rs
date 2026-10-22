@@ -61,6 +61,14 @@ impl Position for PositionDodge {
     fn name(&self) -> &str {
         "dodge"
     }
+
+    /// ggplot2 computes `position_dodge`'s group count/offset per facet
+    /// panel (`compute_panel`), not pooled across panels (#153) — verified
+    /// against ggplot2 4.0.3: a group missing from one panel's x level
+    /// doesn't shift the groups that panel does have.
+    fn per_panel(&self) -> bool {
+        true
+    }
 }
 
 /// The dodge key of each row: its group / fill / colour levels combined
