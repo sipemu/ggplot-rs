@@ -2956,6 +2956,42 @@ impl GGPlot {
                         for (aes, new_plan) in updates {
                             plans.insert(aes, new_plan);
                         }
+                        // Review #167 finding 4 (LOW, left as-is — see
+                        // below): `extras.legend_extra_width` (set above,
+                        // before this reduction loop ran) is deliberately
+                        // *not* recomputed from `plans`' now-possibly-
+                        // reduced column count. It still reserves the
+                        // original (pre-reduction) column count's width.
+                        //
+                        // That stale, wider reservation is why the
+                        // reduced grid fits at all: it narrows
+                        // `final_layout.plot_area` above, which pushes
+                        // `legend_x_final` left and gives the reduced
+                        // grid more room before the canvas edge — tried
+                        // recomputing it here (narrower reservation once
+                        // the column count drops), and the hash in
+                        // `tests/default_output_023.rs`'s `ncol_reduces`
+                        // case changed: the panel widens, the hash
+                        // changes, and the hard-coded `right_edge_of(...)
+                        // <= w` fit check two closures up re-runs against
+                        // a still-stale `legend_x_final` either way — the
+                        // reserved width, the fit decision and the final
+                        // layout are mutually circular (reserve → layout
+                        // → fits? → reduce columns → reserve again →
+                        // …), so fixing this one spot in isolation isn't
+                        // contained; it needs the whole #159 loop above
+                        // to re-layout and re-check fit after each
+                        // reservation change, which is out of scope for
+                        // this review's LOW, non-blocking finding. Left
+                        // as a known limitation: an explicit `ncol(1)`
+                        // with the same labels can still run off the
+                        // canvas (unlike the auto-reduced case, which
+                        // benefits from the wider reservation here by
+                        // accident) without a warning, since #159's
+                        // "warn if it still doesn't fit" check is also
+                        // measured against the same stale `w`-relative
+                        // geometry. See the PR #167 review for the
+                        // original repro (ncol(1), 139px panel at 300px).
                     }
                     for (aes, plan) in &plans {
                         if let Some(ov) = &plan.overflow {
