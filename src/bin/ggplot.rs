@@ -168,6 +168,35 @@ fn run() -> Result<(), String> {
     Ok(())
 }
 
+/// Parse `--projection`: `mercator`, `platecarree`/`plate` (default),
+/// `equal-earth`, `albers-usa`, `albers-europe`, or `utm:<zone>`/`utm:<zone>s`
+/// (south) for an explicit UTM zone (1–60).
+fn parse_projection(s: Option<&str>) -> Result<ggplot_rs::spatial::SfProjection, String> {
+    use ggplot_rs::spatial::SfProjection;
+    Ok(match s {
+        None | Some("platecarree") | Some("plate") => SfProjection::PlateCarree,
+        Some("mercator") => SfProjection::Mercator,
+        Some("equal-earth") | Some("equalearth") => SfProjection::equal_earth(0.0),
+        Some("albers-usa") => SfProjection::albers_usa(),
+        Some("albers-europe") => SfProjection::albers_europe(),
+        Some(utm) if utm.starts_with("utm:") => {
+            let rest = &utm[4..];
+            let (zone_str, south) = match rest.strip_suffix(['s', 'S']) {
+                Some(z) => (z, true),
+                None => (rest, false),
+            };
+            let zone: u8 = zone_str
+                .parse()
+                .map_err(|_| format!("bad UTM zone in --projection '{utm}'"))?;
+            if !(1..=60).contains(&zone) {
+                return Err(format!("UTM zone must be 1-60, got {zone}"));
+            }
+            SfProjection::utm(zone, south)
+        }
+        Some(other) => return Err(format!("unknown --projection '{other}'")),
+    })
+}
+
 fn build_plot(args: &Args, columns: Vec<(String, Vec<Value>)>) -> Result<GGPlot, String> {
     // Validate every referenced column up front with a helpful message.
     let names: Vec<&str> = columns.iter().map(|(n, _)| n.as_str()).collect();
@@ -229,13 +258,7 @@ fn build_plot(args: &Args, columns: Vec<(String, Vec<Value>)>) -> Result<GGPlot,
         "jitter" => plot.geom_jitter(),
         "freqpoly" => plot.geom_freqpoly(),
         "sf" => {
-            let projection = match args.projection.as_deref() {
-                Some("mercator") => ggplot_rs::spatial::SfProjection::Mercator,
-                None | Some("platecarree") | Some("plate") => {
-                    ggplot_rs::spatial::SfProjection::PlateCarree
-                }
-                Some(other) => return Err(format!("unknown --projection '{other}'")),
-            };
+            let projection = parse_projection(args.projection.as_deref())?;
             plot.geom_sf_with(ggplot_rs::geom::sf::GeomSf::default().project(projection))
         }
         other => return Err(format!("unknown --geom '{other}'")),

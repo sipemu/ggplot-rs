@@ -26,6 +26,25 @@ All notable changes to this project are documented here. The format follows
   now runs against whichever backend is active. Ported from
   anofox-visualization's own `src/smooth.rs` (DataZooDE/anofox-visualization#318).
 
+### Spatial
+
+- `SfProjection` gains `EqualEarth { lon0 }` (Šavrič et al. 2018),
+  `Albers { lat1, lat2, lat0, lon0 }` (spherical equal-area conic, with
+  `SfProjection::albers_usa()`/`albers_europe()` presets) and
+  `Utm { zone, south }` (ellipsoidal, Krüger series), alongside the existing
+  `PlateCarree`/`Mercator`. `SfProjection::utm_for(lon, lat)` picks the zone
+  and hemisphere for a point; `SfProjection::utm_zone(lon)` the zone alone.
+  All three are tested against PROJ (`ST_Transform` in DuckDB spatial) to
+  0.01 m absolute (≤1e-6 relative) over their usual range. Ported from
+  anofox-visualization's `map/project.rs` (DataZooDE/anofox-visualization#318,
+  #177). The `ggplot` CLI's `--projection` and the wasm `render_geo` JSON
+  spec's `projection` field accept the new names (`equal-earth`,
+  `albers-usa`, `albers-europe`, `utm:<zone>`/`utm:<zone>s`).
+- **Breaking**: `SfProjection` no longer derives `Eq` (the new variants carry
+  `f64` fields); `PartialEq`/`Debug`/`Clone`/`Copy` are unaffected, so this
+  only matters to code that put `SfProjection` in an `Eq`-bound generic
+  (none in this crate).
+
 ## [0.26.0] — 2026-10-24
 
 Minor bump: log and sqrt axis ticks now land on round numbers (an output
