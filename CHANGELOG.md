@@ -50,15 +50,23 @@ rounded corners, arrows between box edges) can now be drawn with geoms
 only — no hand-rolled SVG. Tracked from
 [DataZooDE/anofox-visualization#318](https://github.com/DataZooDE/anofox-visualization/issues/318),
 which hand-rolled all three of these in its own `diagram.rs` for lack of
-upstream support. Purely additive — no existing output changes.
+upstream support. No rendered output changes unless the new options are
+used, but the new pub fields are an API break for exhaustive struct
+literals (see **Migration**); cargo-semver-checks rates it major, i.e. the
+next release needs a 0.x minor bump (0.27.0), not a patch.
+
+**Migration:** code that builds `RectStyle`, `GeomRect`, `GeomTile`,
+`GeomText` or `GeomLabel` with every field named (no
+`..Default::default()`) must add the new fields — `corner_radius: 0.0` /
+`radius: 0.0` / `wrap_width: None` / `line_height: 1.2` — or switch to
+`..Default::default()`. Code using `::default()`, `..Default::default()`
+or the `with_*` builders is unaffected.
 
 ### Added
 
 - **Rounded rectangles** (ggplot2 `geom_label(label.r)`, ggchicklet
   `radius`): `RectStyle` gains a `corner_radius: f64` field (default `0.0`,
-  a plain rectangle — existing code constructing `RectStyle` with every
-  field named needs a new `corner_radius: 0.0,` line, the only breaking
-  edge of this otherwise-additive change). `GeomRect`/`GeomTile` gain a
+  a plain rectangle). `GeomRect`/`GeomTile` gain a
   `radius` field and `.with_radius(px)` builder method; `GeomLabel` gains
   the same for its background box. `svg_backend` emits a native `rx`/`ry`;
   `pixel_backend` (feature `canvas`) and `plotters_backend` (feature
