@@ -39,6 +39,8 @@ pub mod rug;
 pub mod segment;
 #[cfg(feature = "sf")]
 pub mod sf;
+#[cfg(feature = "sf")]
+pub mod sf_text;
 pub mod smooth;
 pub mod spoke;
 pub mod step;
