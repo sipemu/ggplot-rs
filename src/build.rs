@@ -1394,20 +1394,27 @@ impl PlotBuilder {
     /// Detect which columns to group by for statistics.
     /// Checks group/color/fill plus discrete x (like R's auto-grouping by discrete x).
     fn detect_group_columns(data: &DataFrame) -> Vec<String> {
-        let candidates = ["group", "color", "fill", "x"];
-        let mut group_cols = Vec::new();
-        for &col in &candidates {
-            if data.has_column(col) {
-                if let Some(values) = data.column(col) {
-                    let is_discrete = values
-                        .iter()
-                        .any(|v| matches!(v, crate::data::Value::Str(_)));
-                    if is_discrete {
-                        group_cols.push(col.to_string());
-                    }
+        detect_group_columns(data)
+    }
+}
+
+/// The columns whose discrete values split a layer's rows into aesthetic
+/// groups (`group`, `color`, `fill`, a discrete `x`). Also used by panelwise
+/// stats that regroup inside a panel ([`crate::stat::align::StatAlign`]).
+pub(crate) fn detect_group_columns(data: &DataFrame) -> Vec<String> {
+    let candidates = ["group", "color", "fill", "x"];
+    let mut group_cols = Vec::new();
+    for &col in &candidates {
+        if data.has_column(col) {
+            if let Some(values) = data.column(col) {
+                let is_discrete = values
+                    .iter()
+                    .any(|v| matches!(v, crate::data::Value::Str(_)));
+                if is_discrete {
+                    group_cols.push(col.to_string());
                 }
             }
         }
-        group_cols
     }
+    group_cols
 }

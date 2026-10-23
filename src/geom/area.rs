@@ -6,7 +6,7 @@ use crate::position::Position;
 use crate::render::backend::{DrawBackend, LineStyle, Linetype, RectStyle};
 use crate::render::RenderError;
 use crate::scale::ScaleSet;
-use crate::stat::identity::StatIdentity;
+use crate::stat::align::StatAlign;
 use crate::stat::Stat;
 use crate::theme::Theme;
 
@@ -147,7 +147,10 @@ impl Geom for GeomArea {
     }
 
     fn default_stat(&self) -> Box<dyn Stat> {
-        Box::new(StatIdentity)
+        // ggplot2 parity (#172): `geom_area()`'s default stat is
+        // `stat_align()`, so series sampled at different x stack without
+        // dipping where one has no row.
+        Box::new(StatAlign)
     }
     fn default_position(&self) -> Box<dyn Position> {
         // ggplot2 parity (sipemu/ggplot-rs#171 review finding 5): `geom_area()`

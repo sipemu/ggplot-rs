@@ -90,6 +90,7 @@ pub use crate::scale::size::ScaleSizeContinuous;
 pub use crate::scale::steps::ScaleColorSteps;
 pub use crate::scale::transform::ScaleTransform;
 pub use crate::scale::Oob;
+pub use crate::stat::align::StatAlign;
 pub use crate::stat::bin::StatBin;
 pub use crate::stat::calendar::StatCalendar;
 #[cfg(feature = "ggpubr")]
