@@ -620,6 +620,28 @@ mod tests {
     }
 
     #[test]
+    fn utm_zone_out_of_range_clamps_instead_of_panicking() {
+        assert_eq!(SfProjection::utm(0, false), SfProjection::utm(1, false));
+        assert_eq!(SfProjection::utm(200, false), SfProjection::utm(60, false));
+    }
+
+    #[test]
+    fn albers_usa_matches_proj() {
+        // +proj=aea +lat_1=29.5 +lat_2=45.5 +lat_0=23 +lon_0=-96 +R=6371008.8
+        let p = SfProjection::albers_usa();
+        close(
+            p.project([-98.5, 39.5]),
+            [-212_471.293_229_921_78, 1_838_982.778_857_062_8],
+            0.01,
+        );
+        close(
+            p.project([-122.4, 37.8]),
+            [-2_267_548.949_559_569_4, 1_962_287.268_585_857_5],
+            0.01,
+        );
+    }
+
+    #[test]
     fn albers_zero_n_falls_back_to_equal_earth() {
         // Standard parallels straddling the equator collapse the cone (n≈0);
         // `project` stays total rather than dividing by ~0.

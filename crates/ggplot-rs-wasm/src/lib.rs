@@ -763,3 +763,50 @@ fn render_scatter_xy_impl(
         ydom: vec![ye0, ye1],
     })
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn spec(projection: &str) -> String {
+        format!(
+            r#"{{"geometry": ["POLYGON ((0 0, 10 0, 10 10, 0 10, 0 0))"], "projection": "{projection}"}}"#
+        )
+    }
+
+    /// #177: `render_geo`'s `projection` field accepts the new named
+    /// projections/UTM zones ggplot-rs's `SfProjection` gained, each
+    /// producing a render distinct from the `platecarree` default (proving
+    /// the string was actually parsed into that projection, not silently
+    /// falling back).
+    #[test]
+    fn projection_names_are_recognised() {
+        let plate = render_geo_impl(&spec("platecarree")).expect("platecarree");
+        for name in [
+            "equal-earth",
+            "albers-usa",
+            "albers-europe",
+            "utm:33",
+            "utm:33s",
+        ] {
+            let svg = render_geo_impl(&spec(name)).unwrap_or_else(|e| panic!("{name}: {e}"));
+            assert_ne!(svg, plate, "{name} should reproject, not pass through");
+        }
+    }
+
+    #[test]
+    fn utm_zone_out_of_range_falls_back_to_platecarree() {
+        let plate = render_geo_impl(&spec("platecarree")).expect("platecarree");
+        let bad_zone = render_geo_impl(&spec("utm:0")).expect("bad zone still renders");
+        let non_numeric = render_geo_impl(&spec("utm:abc")).expect("non-numeric still renders");
+        assert_eq!(bad_zone, plate);
+        assert_eq!(non_numeric, plate);
+    }
+
+    #[test]
+    fn unknown_projection_name_falls_back_to_platecarree() {
+        let plate = render_geo_impl(&spec("platecarree")).expect("platecarree");
+        let unknown = render_geo_impl(&spec("robinson")).expect("unknown still renders");
+        assert_eq!(unknown, plate);
+    }
+}
