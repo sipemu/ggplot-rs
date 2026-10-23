@@ -685,8 +685,12 @@ mod gam_backend_parity_tests {
             .zip(&builtin_y)
             .map(|(a, b)| (a - b).abs())
             .fold(0.0, f64::max);
+        // Measured max_y_diff on this fixture is ~0.093; the bound below is
+        // about 2x that — tight enough to catch a real backend divergence,
+        // loose enough for GCV's lambda grid to land on a neighbouring step
+        // between the two independent implementations.
         assert!(
-            max_y_diff < 0.2,
+            max_y_diff < 0.19,
             "fitted curves disagree by up to {max_y_diff}"
         );
     }
