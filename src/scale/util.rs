@@ -142,6 +142,140 @@ pub fn extended_breaks(dmin: f64, dmax: f64, m: usize) -> Vec<f64> {
     (0..=n).map(|i| lmin + i as f64 * step).collect()
 }
 
+/// Round ticks for a log-transformed axis, matching R's `scales::log_breaks()`:
+/// prefers `base^n`; when the range spans too few decades for `m` ticks, mixes
+/// in evenly-spaced sub-multiples of `base` (e.g. `{1,2,5} * 10^n` for base 10);
+/// falls back to [`extended_breaks`] over the *data* range `[dmin, dmax]` when
+/// neither gives enough ticks. `dmin`/`dmax` are in data (pre-transform) space
+/// and must be finite and positive.
+pub fn log_breaks(dmin: f64, dmax: f64, m: usize, base: f64) -> Vec<f64> {
+    let m = m.max(2);
+    if !(dmin.is_finite() && dmax.is_finite())
+        || dmin <= 0.0
+        || dmax <= 0.0
+        || dmax < dmin
+        || base <= 1.0
+    {
+        return extended_breaks(dmin, dmax, m);
+    }
+    if is_degenerate_range(dmin, dmax) {
+        return vec![];
+    }
+
+    let log_min = dmin.log(base);
+    let log_max = dmax.log(base);
+    let min_e = log_min.floor();
+    let max_e = log_max.ceil();
+    if (max_e - min_e).abs() < 1e-9 {
+        return vec![base.powf(min_e)];
+    }
+
+    let want = (m as i64 - 2).max(0) as f64;
+    let exp_seq = |by: f64| -> Vec<f64> {
+        let mut out = Vec::new();
+        let mut e = min_e;
+        while e <= max_e + 1e-9 {
+            out.push(base.powf(e));
+            e += by;
+        }
+        out
+    };
+    let count_relevant = |breaks: &[f64]| -> usize {
+        let lo = base.powf(log_min) * (1.0 - 1e-9);
+        let hi = base.powf(log_max) * (1.0 + 1e-9);
+        breaks.iter().filter(|&&b| b >= lo && b <= hi).count()
+    };
+
+    let mut by = ((max_e - min_e) / m as f64).floor() + 1.0;
+    loop {
+        let breaks = exp_seq(by);
+        if count_relevant(&breaks) as f64 >= want {
+            return breaks;
+        }
+        if by <= 1.0 {
+            break;
+        }
+        by -= 1.0;
+    }
+
+    log_sub_breaks(dmin, dmax, min_e, max_e, m, base)
+}
+
+/// Sub-decade ticks for [`log_breaks`] once whole-decade (or whole-`by`)
+/// steps don't give enough of them — mirrors `scales:::log_sub_breaks()`.
+fn log_sub_breaks(dmin: f64, dmax: f64, min_e: f64, max_e: f64, m: usize, base: f64) -> Vec<f64> {
+    let want = (m as i64 - 2).max(0) as f64;
+    let lo = dmin * (1.0 - 1e-9);
+    let hi = dmax * (1.0 + 1e-9);
+
+    if base <= 2.0 {
+        let mut out = Vec::new();
+        let mut e = min_e;
+        while e <= max_e + 1e-9 {
+            out.push(base.powf(e));
+            e += 1.0;
+        }
+        return out;
+    }
+
+    let exps: Vec<i64> = ((min_e as i64)..=(max_e as i64)).collect();
+    let mut steps: Vec<f64> = vec![1.0];
+    // Integer sub-multiples strictly between 1 and `base` (R's
+    // `seq_len(base)` filtered to `1 < candidate < base`).
+    let mut candidates: Vec<f64> = (2..=(base.floor() as i64))
+        .filter(|&x| (x as f64) < base)
+        .map(|x| x as f64)
+        .collect();
+
+    // Greedily add whichever remaining candidate leaves the largest gap
+    // (in log space) between consecutive steps, same as the R reference.
+    let delta = |x: f64, steps: &[f64]| -> f64 {
+        let mut vals: Vec<f64> = steps.to_vec();
+        vals.push(x);
+        vals.push(base);
+        vals.sort_by(|a, b| a.partial_cmp(b).unwrap());
+        vals.windows(2)
+            .map(|w| w[1].log(base) - w[0].log(base))
+            .fold(f64::INFINITY, f64::min)
+    };
+
+    let mut breaks: Vec<f64> = Vec::new();
+    let mut relevant = 0usize;
+    while !candidates.is_empty() {
+        let (best_i, _) = candidates
+            .iter()
+            .enumerate()
+            .map(|(i, &c)| (i, delta(c, &steps)))
+            .max_by(|a, b| a.1.partial_cmp(&b.1).unwrap())
+            .unwrap();
+        steps.push(candidates.remove(best_i));
+        breaks = exps
+            .iter()
+            .flat_map(|&e| steps.iter().map(move |&s| base.powf(e as f64) * s))
+            .collect();
+        relevant = breaks.iter().filter(|&&b| b >= lo && b <= hi).count();
+        if relevant as f64 >= want {
+            break;
+        }
+    }
+
+    if relevant as f64 >= want && !breaks.is_empty() {
+        breaks.sort_by(|a, b| a.partial_cmp(b).unwrap());
+        let first_in = breaks.iter().position(|&b| b >= lo);
+        let last_in = breaks.iter().rposition(|&b| b <= hi);
+        match (first_in, last_in) {
+            (Some(fi), Some(li)) => {
+                let start = fi.saturating_sub(1);
+                let end = (li + 1).min(breaks.len() - 1);
+                breaks[start..=end].to_vec()
+            }
+            _ => breaks,
+        }
+    } else {
+        extended_breaks(dmin, dmax, m)
+    }
+}
+
 /// Round step size to a "nice" value (1, 2, 5, 10, 20, 50, ...).
 pub fn nice_step(raw: f64) -> f64 {
     let magnitude = 10f64.powf(raw.abs().log10().floor());
@@ -242,6 +376,50 @@ pub(crate) fn format_number_opt(v: f64, locale: Option<&crate::locale::Locale>) 
     match locale {
         Some(l) => format_number_locale(v, l),
         None => format_number(v),
+    }
+}
+
+#[cfg(test)]
+mod log_breaks_tests {
+    use super::*;
+
+    #[test]
+    fn wide_range_ticks_whole_decades() {
+        // A span of several decades: whole powers of 10 are plenty for 5 ticks.
+        assert_eq!(
+            log_breaks(1.0, 1000.0, 5, 10.0),
+            vec![1.0, 10.0, 100.0, 1000.0]
+        );
+    }
+
+    #[test]
+    fn narrow_range_falls_back_to_sub_decade_steps() {
+        // Issue #413: 1..170 spans barely two decades — too few for 5 ticks at
+        // whole powers of 10 alone (ggplot2 fills in with 1-2-5-style steps).
+        let breaks = log_breaks(1.0, 170.0, 5, 10.0);
+        // Every tick must be a "round" number, never a half-decade like 316.23.
+        for &b in &breaks {
+            let digits = format!("{b}");
+            assert!(!digits.contains('.'), "non-round log break: {b}");
+        }
+        assert!(breaks.contains(&1.0));
+        assert!(breaks.iter().any(|&b| b >= 100.0));
+    }
+
+    #[test]
+    fn base2_ticks_whole_powers_only() {
+        assert_eq!(log_breaks(1.0, 8.0, 5, 2.0), vec![1.0, 2.0, 4.0, 8.0]);
+    }
+
+    #[test]
+    fn degenerate_or_invalid_range_falls_back() {
+        assert!(log_breaks(5.0, 5.0, 5, 10.0).is_empty());
+        // Non-positive domain can't be logged — fall back to linear extended
+        // breaks rather than NaN/garbage.
+        assert_eq!(
+            log_breaks(-1.0, 10.0, 5, 10.0),
+            extended_breaks(-1.0, 10.0, 5)
+        );
     }
 }
 
