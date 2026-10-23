@@ -134,3 +134,93 @@ fn halo_draws_extra_text_runs_behind_the_label() {
         count(&without_halo)
     );
 }
+
+/// `.halo(color, 0.0)` (and any non-positive radius) disables the halo —
+/// same output as not calling `.halo` at all.
+#[test]
+fn a_non_positive_halo_radius_disables_it() {
+    let mut df = DataFrame::new();
+    df.add_column(
+        "geometry".into(),
+        strs(&["POLYGON ((0 0, 10 0, 10 10, 0 10, 0 0))"]),
+    );
+    df.add_column("name".into(), strs(&["Plain"]));
+    let zero_radius = GGPlot::new(df.clone())
+        .aes(Aes::new().label("name"))
+        .geom_sf_text_with(GeomSfText::default().halo((255, 255, 255), 0.0))
+        .render_svg_native()
+        .expect("sf_text render");
+    let no_halo = GGPlot::new(df)
+        .aes(Aes::new().label("name"))
+        .geom_sf_text()
+        .render_svg_native()
+        .expect("sf_text render");
+    assert_eq!(
+        zero_radius.matches("Plain").count(),
+        no_halo.matches("Plain").count()
+    );
+}
+
+#[test]
+fn missing_geometry_column_is_a_clear_error() {
+    let mut df = DataFrame::new();
+    df.add_column("name".into(), strs(&["X"]));
+    let err = GGPlot::new(df)
+        .aes(Aes::new().label("name"))
+        .geom_sf_text()
+        .render_svg_native()
+        .unwrap_err();
+    assert!(format!("{err:?}").contains("geometry"), "{err:?}");
+}
+
+#[test]
+fn missing_label_column_is_a_clear_error() {
+    let mut df = DataFrame::new();
+    df.add_column(
+        "geometry".into(),
+        strs(&["POLYGON ((0 0, 1 0, 1 1, 0 1, 0 0))"]),
+    );
+    let err = GGPlot::new(df)
+        .aes(Aes::new())
+        .geom_sf_text()
+        .render_svg_native()
+        .unwrap_err();
+    assert!(format!("{err:?}").contains("label"), "{err:?}");
+}
+
+/// `apply_element_geom` (the ink/paper theme hook) recolours `GeomSfLabel`'s
+/// default ink border and white fill, like `GeomLabel`'s own.
+#[test]
+fn geom_sf_label_ink_paper_theme_hook() {
+    let mut df = DataFrame::new();
+    df.add_column(
+        "geometry".into(),
+        strs(&["POLYGON ((0 0, 10 0, 10 10, 0 10, 0 0))"]),
+    );
+    df.add_column("name".into(), strs(&["Themed"]));
+    let svg = GGPlot::new(df)
+        .aes(Aes::new().label("name"))
+        .geom_sf_label()
+        .theme(Theme::default().with_ink_paper((255, 255, 255), (0, 0, 0)))
+        .render_svg_native()
+        .expect("sf_label render");
+    assert!(svg.contains("#FFFFFF"), "{svg}");
+}
+
+/// `GeomSfLabel`'s own builders (`fun_geometry`/`check_overlap`/`project`)
+/// take effect the same way `GeomSfText`'s do.
+#[test]
+fn geom_sf_label_builders_change_behaviour() {
+    let df = two_regions();
+    let svg = GGPlot::new(df)
+        .aes(Aes::new().label("name"))
+        .geom_sf_label_with(
+            GeomSfLabel::default()
+                .fun_geometry(SfLabelAnchor::Centroid)
+                .check_overlap(true)
+                .project(ggplot_rs::spatial::SfProjection::Mercator),
+        )
+        .render_svg_native()
+        .expect("sf_label render");
+    assert!(svg.contains("West") && svg.contains("East"));
+}
