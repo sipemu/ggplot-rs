@@ -214,10 +214,15 @@ or the `with_*` builders is unaffected.
   `Align`'s plot-area alignment but warns and skips the domain union.
   Every aligned cell also switches to
   `axis_text_x_fit(AxisLabelFit::Shift)`, so an overflowing outer tick
-  label can never perturb the alignment. Default `AxisCollect::Keep`:
-  byte-identical output when not called. Tracked from
-  DataZooDE/anofox-visualization#318 (visualization logic belongs in
-  ggplot-rs, not the consumer); `track.rs` keeps its own
+  label can never perturb the alignment. A cell set thinner than the
+  plotting engine's 50px panel-height floor via `PlotGrid::heights`
+  (anofox-visualization's `::TRACK` strips, typically 16-30px) gets a
+  centred `aspect_ratio` instead, so its panel comes out exactly as tall
+  as the cell rather than overflowing it — `track.rs`'s own
+  `Fit::correct` `aspect` trick, computed from the same layout pass.
+  Default `AxisCollect::Keep`: byte-identical output when not called.
+  Tracked from DataZooDE/anofox-visualization#318 (visualization logic
+  belongs in ggplot-rs, not the consumer); `track.rs` keeps its own
   render-measure-render approach for now.
 
 ## [0.26.0] — 2026-10-24

@@ -130,6 +130,12 @@ pub enum AxisCollect {
     /// rather than a render-measure-render loop. Every cell in the column
     /// also switches to [`AxisLabelFit::Shift`](crate::theme::AxisLabelFit::Shift)
     /// so an overflowing outer tick label can never perturb the alignment.
+    /// A cell set thinner than the plotting engine's 50px panel-height
+    /// floor via [`PlotGrid::heights`](Self::heights) (an
+    /// anofox-visualization `::TRACK` strip, typically 16-30px) gets a
+    /// centred `aspect_ratio` instead, so its panel comes out exactly as
+    /// tall as the cell rather than overflowing it — `track.rs`'s own
+    /// `Fit::correct` `aspect` trick, computed from the same layout pass.
     /// Domains and axis text are otherwise untouched.
     Align,
     /// [`Align`](Self::Align), plus one x domain shared across the column
@@ -1062,11 +1068,15 @@ fn align_axes(
             }
         }
 
-        // Each cell's own plot-area x-range at this column's width — pure
+        // Each cell's own plot-area rect at this column's width — pure
         // layout arithmetic (`GGPlot::layout_built`, the same computation
         // the real render pass makes), not a drawn-and-measured SVG, so
         // this whole pass costs one extra layout per cell, not a redraw.
-        let mut natural: Vec<(f64, f64)> = Vec::with_capacity(plot_cells.len());
+        // `y`/`height` are kept too, for the thin-cell correction below —
+        // changing a cell's left/right margin never moves them (only
+        // top/bottom margins and the vertical bands do), so one layout
+        // call per cell covers both passes.
+        let mut natural: Vec<(f64, f64, f64, f64, f64)> = Vec::with_capacity(plot_cells.len());
         for &(r, k) in &plot_cells {
             let ch = rows.get(r).map_or(0.0, |t| t.1);
             match &mut cells[k] {
@@ -1080,6 +1090,9 @@ fn align_axes(
                     natural.push((
                         layout.plot_area.x,
                         layout.plot_area.x + layout.plot_area.width,
+                        layout.plot_area.y,
+                        layout.plot_area.height,
+                        ch,
                     ));
                 }
                 _ => unreachable!("plot_cells only holds Prepared::Plot indices"),
@@ -1090,13 +1103,39 @@ fn align_axes(
         // widest left requirement in the column, and likewise for the
         // right (anofox-visualization's `track.rs` `left = max(...)`
         // fallback, generalised to both edges and computed once).
-        let target_left = natural.iter().fold(f64::MIN, |m, &(l, _)| m.max(l));
-        let target_right_inset = natural.iter().fold(f64::MIN, |m, &(_, r)| m.max(cw - r));
+        let target_left = natural.iter().fold(f64::MIN, |m, &(l, ..)| m.max(l));
+        let target_right_inset = natural
+            .iter()
+            .fold(f64::MIN, |m, &(_, r, ..)| m.max(cw - r));
+        let width = cw - target_right_inset - target_left;
         if target_left.is_finite() && target_right_inset.is_finite() {
-            for (&(_, k), &(nl, nr)) in plot_cells.iter().zip(&natural) {
+            for (&(_, k), &(nl, nr, ..)) in plot_cells.iter().zip(&natural) {
                 if let Prepared::Plot(p) = &mut cells[k] {
                     p.built.theme.plot_margin.left += (target_left - nl).max(0.0);
                     p.built.theme.plot_margin.right += (target_right_inset - (cw - nr)).max(0.0);
+                }
+            }
+        }
+
+        // A cell thinner than the plotting engine's 50px panel-height
+        // floor (anofox-visualization's `::TRACK` strips, ~16-30px) would
+        // otherwise overflow its own canvas: `layout_built` never shrinks
+        // a panel below 50px on its own. Mirror `track.rs`'s `Fit::correct`
+        // `aspect` trick — a centred `aspect_ratio` set so the panel comes
+        // out exactly as tall as what's actually left after the margins —
+        // but computed once from this same `layout_built` measurement
+        // instead of track.rs's render-measure-render loop. A cell that
+        // already fits (the common case — a normal chart cell) is
+        // untouched.
+        if width.is_finite() && width > 0.0 {
+            for (&(_, k), &(_, _, y, h, ch)) in plot_cells.iter().zip(&natural) {
+                if let Prepared::Plot(p) = &mut cells[k] {
+                    let bottom_budget = ch - p.built.theme.plot_margin.bottom;
+                    if y + h > bottom_budget + 0.5 {
+                        let fits = (ch - y - p.built.theme.plot_margin.bottom).max(8.0);
+                        p.built.theme.aspect_ratio = Some(fits / width);
+                        p.built.theme.plot_margin.top -= (h - fits) / 2.0;
+                    }
                 }
             }
         }

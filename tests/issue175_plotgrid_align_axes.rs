@@ -201,6 +201,104 @@ fn align_alone_equalises_plot_areas_but_keeps_each_panels_own_x_domain() {
     );
 }
 
+/// Each nested `<svg>`'s own `width="…" height="…"` — the cell's actual
+/// rendered canvas size, as opposed to `plot_rects`' `data-plot` (the
+/// *panel*, which sits inside that canvas with margins around it).
+fn fragment_sizes(svg: &str) -> Vec<(f64, f64)> {
+    panel_fragments(svg)
+        .into_iter()
+        .map(|frag| {
+            let tag = &frag[..frag.find('>').unwrap_or(frag.len())];
+            let attr = |n: &str| -> f64 {
+                tag.split(&format!(" {n}=\""))
+                    .nth(1)
+                    .and_then(|r| r.split('"').next())
+                    .and_then(|v| v.parse().ok())
+                    .unwrap_or_else(|| panic!("no {n} attr in {tag}"))
+            };
+            (attr("width"), attr("height"))
+        })
+        .collect()
+}
+
+/// A 300px chart cell plus two 24px `::TRACK`-style strip cells (event
+/// ticks / a one-row heatmap, anofox-visualization's motivating case —
+/// `chart_theme(o, 11.0)`'s own `plot_margin` is `half_line = 5.5` px a
+/// side, same as the default theme used here). Each strip is well under
+/// the plotting engine's 50px panel-height floor: `layout_built` would
+/// otherwise give its panel `h = 50` regardless of the 24px canvas, badly
+/// overflowing it (`y + h` far past the cell's own height) and getting
+/// clipped. `CollectX` must still align every plot area exactly and give
+/// each strip's *canvas* (the nested `<svg>`'s own size) its requested
+/// 24px — `heights()`' weights sum to the render height here, so that
+/// maps to an exact pixel count — while keeping its *panel* inside that
+/// canvas, not overflowing it.
+#[test]
+fn collect_x_keeps_thin_strip_cells_at_their_requested_height_and_still_aligns_them() {
+    let chart = plot_with_y_magnitude(1_000.0, 0.0, 100.0);
+    let strip_a = plot_with_y_magnitude(1.0, 0.0, 100.0);
+    let strip_b = plot_with_y_magnitude(1_234_567.0, 0.0, 100.0);
+
+    let svg = PlotGrid::new()
+        .add(chart)
+        .add(strip_a)
+        .add(strip_b)
+        .ncol(1)
+        .heights(&[300.0, 24.0, 24.0])
+        .axis_collect(AxisCollect::CollectX)
+        // Weights sum to 348 = the render height, so `tracks()` divides
+        // the body into exactly 300/24/24 px with no rounding slack.
+        .render_svg_native_with_size(500, 348)
+        .expect("render");
+
+    let rects = plot_rects(&svg);
+    assert_eq!(rects.len(), 3, "expected 3 panels: {svg}");
+
+    let (x0, w0) = (rects[0][0], rects[0][2]);
+    for (i, r) in rects.iter().enumerate() {
+        assert!(
+            (r[0] - x0).abs() < 1e-6 && (r[2] - w0).abs() < 1e-6,
+            "panel {i} plot-area x/width {r:?} does not match panel 0's ({x0}, {w0})"
+        );
+    }
+
+    let domains = xdomains(&svg);
+    assert_eq!(domains.len(), 3);
+    let d0 = domains[0];
+    for (i, d) in domains.iter().enumerate() {
+        assert!(
+            (d.0 - d0.0).abs() < 1e-6 && (d.1 - d0.1).abs() < 1e-6,
+            "panel {i} x domain {d:?} does not match panel 0's {d0:?}"
+        );
+    }
+
+    // Each strip cell's own rendered canvas is exactly its requested 24px
+    // — the grid never grows a cell to fit an overflowing panel.
+    let sizes = fragment_sizes(&svg);
+    assert_eq!(sizes.len(), 3);
+    for (i, (_, h)) in sizes.iter().enumerate().skip(1) {
+        assert!(
+            (h - 24.0).abs() <= 1.0,
+            "strip panel {i} canvas height {h} should be within 1px of the requested 24px"
+        );
+    }
+
+    // And the strips' *panels* stay inside that canvas — without the
+    // `aspect_ratio` correction, `layout_built`'s 50px panel-height floor
+    // would make `y + h` massively overflow a 24px canvas.
+    for (i, (r, (_, canvas_h))) in rects.iter().zip(&sizes).enumerate().skip(1) {
+        let (y, h) = (r[1], r[3]);
+        assert!(
+            y + h <= canvas_h + 0.5,
+            "strip panel {i}'s plot area (y={y}, h={h}) overflows its {canvas_h}px canvas"
+        );
+        assert!(
+            h < 49.0,
+            "strip panel {i} panel height {h} looks like the unfixed 50px floor, not the aspect-ratio correction"
+        );
+    }
+}
+
 /// A column with a discrete x scale can't have a well-defined shared
 /// domain: `CollectX` still aligns the plot areas, warns instead of
 /// panicking or silently producing nonsense, and leaves each scale as-is.
