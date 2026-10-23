@@ -63,6 +63,25 @@ All notable changes to this project are documented here. The format follows
   additionally draws a background box, like `geom_label`.
   anofox-visualization's own label placement (`map/labels.rs`) can
   retire onto this (DataZooDE/anofox-visualization#318, #179).
+- `geom_sf`'s `Polygon` now draws every ring (exterior + holes) as one
+  shape under the even-odd fill rule, via a new
+  `DrawBackend::draw_polygon_rings` (default impl: the old
+  exterior-filled/holes-stroked-only approximation, for third-party
+  backends; the SVG, pixel/`canvas` and plotters backends all override it
+  with a real fill-rule/even-odd-scanline cut-out). A `MultiPolygon`'s
+  parts already drew independently and keep doing so, each now correctly
+  honouring its own holes. `GeomSf::simplify_px` (default `0.5`, builder
+  `.simplify(px)`) simplifies every ring/line to the render resolution in
+  screen space (Ramer-Douglas-Peucker) before drawing — a country
+  boundary made of 10^5 points draws a fraction of that at a few hundred
+  pixels across. Ported from anofox-visualization's `map/mod.rs`/
+  `map/write.rs` (DataZooDE/anofox-visualization#318, #178).
+  **Migration**: a polygon's holes were previously drawn as separately
+  stroked (not filled-through) rings on top of the exterior fill — any
+  snapshot test asserting on that exact (incorrect) look will need
+  re-blessing; a hole now actually shows the panel background through
+  it. `GeomSf { .. }` struct-literal callers gain the new `simplify_px`
+  field (`..Default::default()` already covers it).
 
 Diagram primitives (#176): a node-link diagram (boxes with wrapped labels,
 rounded corners, arrows between box edges) can now be drawn with geoms

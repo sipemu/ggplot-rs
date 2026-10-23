@@ -537,6 +537,81 @@ impl<'a, DB: DrawingBackend> DrawBackend for PlottersAdapter<'a, DB> {
         Ok(())
     }
 
+    /// Even-odd fill across every ring at once (`geom_sf`'s polygon holes,
+    /// #178) — plotters' own `Polygon` element has no hole support, so the
+    /// fill is a per-pixel scanline (as the `canvas` backend's own
+    /// `fill_polygon_rings` does), then each ring is stroked the same way
+    /// (plotters' [`PathElement`], one closed path per ring).
+    fn draw_polygon_rings(
+        &mut self,
+        rings: &[Vec<(f64, f64)>],
+        style: &RectStyle,
+    ) -> Result<(), RenderError> {
+        if let Some(fill) = style.fill {
+            let color = to_rgba(fill, style.alpha);
+            let (mut y0, mut y1) = (f64::INFINITY, f64::NEG_INFINITY);
+            for ring in rings {
+                if ring.len() < 3 {
+                    continue;
+                }
+                for p in ring {
+                    y0 = y0.min(p.1);
+                    y1 = y1.max(p.1);
+                }
+            }
+            if y0.is_finite() && y1.is_finite() {
+                let (y0, y1) = (y0.floor() as i32, y1.ceil() as i32);
+                for y in y0..=y1 {
+                    let yc = y as f64 + 0.5;
+                    let mut xs: Vec<f64> = Vec::new();
+                    for ring in rings {
+                        let n = ring.len();
+                        if n < 3 {
+                            continue;
+                        }
+                        for i in 0..n {
+                            let (ax, ay) = ring[i];
+                            let (bx, by) = ring[(i + 1) % n];
+                            if (ay <= yc && by > yc) || (by <= yc && ay > yc) {
+                                xs.push(ax + (yc - ay) / (by - ay) * (bx - ax));
+                            }
+                        }
+                    }
+                    xs.sort_by(|p, q| p.total_cmp(q));
+                    for span in xs.chunks(2) {
+                        if let [xa, xb] = span {
+                            for x in xa.round() as i32..=xb.round() as i32 {
+                                self.area.draw_pixel((x, y), &color).map_err(map_err)?;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        if let Some(stroke) = style.stroke {
+            let stroke_color = to_rgba(stroke, style.alpha);
+            let width = if style.stroke_width > 0.0 {
+                (style.stroke_width as u32).max(1)
+            } else {
+                0
+            };
+            if width > 0 {
+                for ring in rings {
+                    if ring.len() < 3 {
+                        continue;
+                    }
+                    let mut pts: Vec<(i32, i32)> =
+                        ring.iter().map(|(x, y)| (*x as i32, *y as i32)).collect();
+                    pts.push(pts[0]);
+                    self.area
+                        .draw(&PathElement::new(pts, stroke_color.stroke_width(width)))
+                        .map_err(map_err)?;
+                }
+            }
+        }
+        Ok(())
+    }
+
     fn draw_shape(
         &mut self,
         center: (f64, f64),

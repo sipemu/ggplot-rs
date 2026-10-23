@@ -133,30 +133,52 @@ fn segment(
     }
 }
 
-/// Even-odd scanline polygon fill.
+/// Even-odd scanline polygon fill, one ring.
 fn fill_polygon(buf: &mut [u8], w: usize, h: usize, pts: &[(f64, f64)], c: (u8, u8, u8), a: f64) {
-    if pts.len() < 3 {
+    fill_polygon_rings(buf, w, h, &[pts], c, a);
+}
+
+/// Even-odd scanline fill across every ring at once (`geom_sf`'s polygon
+/// holes, #178): every ring's edges are collected before sorting each
+/// scanline's crossings, so a hole ring's pair of crossings on a given row
+/// cancels the exterior's fill between them — the standard even-odd
+/// definition generalises directly from one ring to several.
+fn fill_polygon_rings(
+    buf: &mut [u8],
+    w: usize,
+    h: usize,
+    rings: &[&[(f64, f64)]],
+    c: (u8, u8, u8),
+    a: f64,
+) {
+    let (mut y0, mut y1) = (f64::INFINITY, f64::NEG_INFINITY);
+    for ring in rings {
+        if ring.len() < 3 {
+            continue;
+        }
+        for p in ring.iter() {
+            y0 = y0.min(p.1);
+            y1 = y1.max(p.1);
+        }
+    }
+    if !(y0.is_finite() && y1.is_finite()) {
         return;
     }
-    let y0 = pts
-        .iter()
-        .map(|p| p.1)
-        .fold(f64::INFINITY, f64::min)
-        .floor() as i32;
-    let y1 = pts
-        .iter()
-        .map(|p| p.1)
-        .fold(f64::NEG_INFINITY, f64::max)
-        .ceil() as i32;
-    let n = pts.len();
+    let (y0, y1) = (y0.floor() as i32, y1.ceil() as i32);
     for y in y0..=y1 {
         let yc = y as f64 + 0.5;
         let mut xs: Vec<f64> = Vec::new();
-        for i in 0..n {
-            let (ax, ay) = pts[i];
-            let (bx, by) = pts[(i + 1) % n];
-            if (ay <= yc && by > yc) || (by <= yc && ay > yc) {
-                xs.push(ax + (yc - ay) / (by - ay) * (bx - ax));
+        for ring in rings {
+            let n = ring.len();
+            if n < 3 {
+                continue;
+            }
+            for i in 0..n {
+                let (ax, ay) = ring[i];
+                let (bx, by) = ring[(i + 1) % n];
+                if (ay <= yc && by > yc) || (by <= yc && ay > yc) {
+                    xs.push(ax + (yc - ay) / (by - ay) * (bx - ax));
+                }
             }
         }
         xs.sort_by(|p, q| p.total_cmp(q));
@@ -303,6 +325,60 @@ impl DrawBackend for PixelBackend {
         Ok(())
     }
 
+    fn draw_polygon_rings(
+        &mut self,
+        rings: &[Vec<(f64, f64)>],
+        style: &RectStyle,
+    ) -> Result<(), RenderError> {
+        if let Some(fill) = style.fill {
+            let ring_refs: Vec<&[(f64, f64)]> = rings.iter().map(Vec::as_slice).collect();
+            fill_polygon_rings(
+                &mut self.buf,
+                self.width,
+                self.height,
+                &ring_refs,
+                fill,
+                style.alpha,
+            );
+        }
+        if let Some(stroke) = style.stroke {
+            for ring in rings {
+                if ring.len() < 2 {
+                    continue;
+                }
+                for w in ring.windows(2) {
+                    segment(
+                        &mut self.buf,
+                        self.width,
+                        self.height,
+                        w[0].0,
+                        w[0].1,
+                        w[1].0,
+                        w[1].1,
+                        stroke,
+                        style.stroke_width,
+                        style.alpha,
+                    );
+                }
+                if let (Some(first), Some(last)) = (ring.first(), ring.last()) {
+                    segment(
+                        &mut self.buf,
+                        self.width,
+                        self.height,
+                        last.0,
+                        last.1,
+                        first.0,
+                        first.1,
+                        stroke,
+                        style.stroke_width,
+                        style.alpha,
+                    );
+                }
+            }
+        }
+        Ok(())
+    }
+
     fn draw_text(
         &mut self,
         text: &str,
@@ -351,5 +427,57 @@ impl DrawBackend for PixelBackend {
             pen += scaled.h_advance(gid);
         }
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn pixel(buf: &[u8], w: usize, x: i32, y: i32) -> (u8, u8, u8) {
+        let i = (y as usize * w + x as usize) * 4;
+        (buf[i], buf[i + 1], buf[i + 2])
+    }
+
+    /// A ring after the other is a hole cut out of the fill under the
+    /// even-odd rule (`geom_sf`'s `Polygon`, #178) — a 20×20 square with a
+    /// 6×6 hole in the middle leaves the hole's centre at the white ground,
+    /// while a point between the hole and the exterior edge is filled.
+    #[test]
+    fn fill_polygon_rings_cuts_out_a_hole() {
+        let (w, h) = (20usize, 20usize);
+        let mut buf = vec![255u8; w * h * 4];
+        let exterior: Vec<(f64, f64)> = vec![(1.0, 1.0), (19.0, 1.0), (19.0, 19.0), (1.0, 19.0)];
+        let hole: Vec<(f64, f64)> = vec![(7.0, 7.0), (13.0, 7.0), (13.0, 13.0), (7.0, 13.0)];
+        fill_polygon_rings(&mut buf, w, h, &[&exterior, &hole], (200, 50, 50), 1.0);
+        assert_eq!(pixel(&buf, w, 10, 10), (255, 255, 255), "hole stays blank");
+        assert_eq!(
+            pixel(&buf, w, 3, 3),
+            (200, 50, 50),
+            "ring between is filled"
+        );
+        // Without the hole ring, the same point would be filled — proving
+        // it's the second ring that cuts it, not some other effect.
+        let mut filled = vec![255u8; w * h * 4];
+        fill_polygon_rings(&mut filled, w, h, &[&exterior], (200, 50, 50), 1.0);
+        assert_eq!(pixel(&filled, w, 10, 10), (200, 50, 50));
+    }
+
+    /// Two disjoint rings (a multipolygon's two parts, drawn in one call)
+    /// each fill independently.
+    #[test]
+    fn fill_polygon_rings_handles_disjoint_rings() {
+        let (w, h) = (20usize, 20usize);
+        let mut buf = vec![255u8; w * h * 4];
+        let a: Vec<(f64, f64)> = vec![(1.0, 1.0), (5.0, 1.0), (5.0, 5.0), (1.0, 5.0)];
+        let b: Vec<(f64, f64)> = vec![(14.0, 14.0), (18.0, 14.0), (18.0, 18.0), (14.0, 18.0)];
+        fill_polygon_rings(&mut buf, w, h, &[&a, &b], (10, 20, 30), 1.0);
+        assert_eq!(pixel(&buf, w, 3, 3), (10, 20, 30));
+        assert_eq!(pixel(&buf, w, 16, 16), (10, 20, 30));
+        assert_eq!(
+            pixel(&buf, w, 10, 10),
+            (255, 255, 255),
+            "gap between stays blank"
+        );
     }
 }

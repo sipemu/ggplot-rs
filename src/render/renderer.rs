@@ -877,6 +877,13 @@ impl<'a> DrawBackend for PanelBackendAdapter<'a> {
     ) -> Result<(), RenderError> {
         self.inner.draw_polygon(points, style)
     }
+    fn draw_polygon_rings(
+        &mut self,
+        rings: &[Vec<(f64, f64)>],
+        style: &RectStyle,
+    ) -> Result<(), RenderError> {
+        self.inner.draw_polygon_rings(rings, style)
+    }
     fn draw_shape(
         &mut self,
         center: (f64, f64),

@@ -335,6 +335,37 @@ pub trait DrawBackend {
     fn draw_polygon(&mut self, points: &[(f64, f64)], style: &RectStyle)
         -> Result<(), RenderError>;
 
+    /// Draw a polygon with holes: `rings[0]` is the exterior, every other
+    /// ring a hole cut out of it under the even-odd fill rule (`geom_sf`'s
+    /// `Polygon`, OGC/`sf` convention — see
+    /// [`spatial::Geometry::Polygon`](crate::spatial::Geometry::Polygon)).
+    /// One `stroke`/`stroke_width` draws every ring's outline, exterior and
+    /// holes alike (as `ggplot2`'s `geom_sf` does).
+    ///
+    /// Default: no real hole cut-out (for backends that pre-date this
+    /// method) — the exterior ring filled and stroked, every other ring
+    /// stroked only. Backends with a resolution-independent fill (SVG) or a
+    /// scanline rasteriser (pixel/plotters) should override this to use
+    /// their fill rule across every ring at once.
+    fn draw_polygon_rings(
+        &mut self,
+        rings: &[Vec<(f64, f64)>],
+        style: &RectStyle,
+    ) -> Result<(), RenderError> {
+        for (i, ring) in rings.iter().enumerate() {
+            let ring_style = if i == 0 {
+                style.clone()
+            } else {
+                RectStyle {
+                    fill: None,
+                    ..style.clone()
+                }
+            };
+            self.draw_polygon(ring, &ring_style)?;
+        }
+        Ok(())
+    }
+
     /// Like [`draw_text`](Self::draw_text), but with an optional `<title>`
     /// tooltip carrying the *full* text when `text` itself has been
     /// shortened (e.g. a truncated-with-ellipsis legend label, #159).
