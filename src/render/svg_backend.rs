@@ -778,8 +778,16 @@ impl DrawBackend for SvgBackend {
         let (w, h) = ((x1 - x0).abs(), (y1 - y0).abs());
         let fill = style.fill.map(rgb).unwrap_or_else(|| "none".into());
         let stroke = style.stroke.map(rgb).unwrap_or_else(|| "none".into());
+        // SVG `<rect>` takes rx/ry natively — clamp to half the shorter side
+        // so an oversized radius draws a "stadium" instead of a malformed box.
+        let r = style.corner_radius.max(0.0).min(w / 2.0).min(h / 2.0);
+        let radius = if r > 0.0 {
+            format!(" rx=\"{r:.2}\" ry=\"{r:.2}\"")
+        } else {
+            String::new()
+        };
         let attrs = format!(
-            "x=\"{x:.2}\" y=\"{y:.2}\" width=\"{w:.2}\" height=\"{h:.2}\" fill=\"{fill}\"{} \
+            "x=\"{x:.2}\" y=\"{y:.2}\" width=\"{w:.2}\" height=\"{h:.2}\"{radius} fill=\"{fill}\"{} \
              stroke=\"{stroke}\" stroke-width=\"{:.2}\"",
             opacity_attr("fill", style.alpha),
             finite_or(style.stroke_width, 0.0)

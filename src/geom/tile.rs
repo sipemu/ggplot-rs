@@ -29,6 +29,10 @@ pub struct GeomTile {
     /// Tile height as a multiple of the y resolution (default 1 = abutting).
     pub height: f64,
     pub line_width: f64,
+    /// Corner radius in px (ggplot2 `geom_label(label.r)`, ggchicklet
+    /// `radius`, #176). `0.0` (the default) is a plain rectangle, unchanged
+    /// from pre-#176 behaviour.
+    pub radius: f64,
 }
 
 /// ggplot2's `resolution(x, zero = FALSE)`: the smallest gap between distinct
@@ -91,7 +95,16 @@ impl Default for GeomTile {
             width: 1.0,
             height: 1.0,
             line_width: 0.5,
+            radius: 0.0,
         }
+    }
+}
+
+impl GeomTile {
+    /// Corner radius in px (#176). See the [`radius`](Self::radius) field doc.
+    pub fn with_radius(mut self, radius_px: f64) -> Self {
+        self.radius = radius_px;
+        self
     }
 }
 
@@ -222,6 +235,7 @@ impl Geom for GeomTile {
                     stroke_width: self.line_width,
                     alpha: self.alpha,
                     clip: true,
+                    corner_radius: self.radius,
                 },
             )?;
         }

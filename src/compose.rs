@@ -451,6 +451,7 @@ impl PlotGrid {
                     stroke_width: 0.0,
                     alpha: 1.0,
                     clip: false,
+                    corner_radius: 0.0,
                 },
             )
             .map_err(GGError::Render)?;

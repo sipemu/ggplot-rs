@@ -121,6 +121,10 @@ pub struct RectStyle {
     /// Whether to clip this rect to the plot area. Default `true` for data elements.
     /// Set to `false` for non-data elements (backgrounds, strips, legends).
     pub clip: bool,
+    /// Corner radius in px, for a rounded rectangle (ggplot2 `geom_label(label.r)`,
+    /// ggchicklet `radius`). `0.0` (the default) draws a plain rectangle; backends
+    /// that cannot draw rounded corners natively fall back to a plain rectangle.
+    pub corner_radius: f64,
 }
 
 impl Default for RectStyle {
@@ -131,6 +135,114 @@ impl Default for RectStyle {
             stroke_width: 1.0,
             alpha: 1.0,
             clip: true,
+            corner_radius: 0.0,
+        }
+    }
+}
+
+/// Number of line segments approximating each 90° corner of a rounded rect in
+/// backends with no native rounded-rect primitive (pixel, plotters). Higher
+/// is smoother; 8 is visually indistinguishable from a true arc at the sizes
+/// these rects are drawn at (node/label boxes, a few tens to ~200px).
+///
+/// Only [`pixel_backend`](super::pixel_backend) (feature `canvas`) and
+/// [`plotters_backend`](super::plotters_backend) (feature `plotters`) call
+/// [`rounded_rect_points`] — `svg_backend` emits a native `rx`/`ry` instead —
+/// so both it and the function are cfg-gated the same way those backends
+/// are, rather than left for `--no-default-features` to flag as dead code.
+#[cfg(any(
+    feature = "canvas",
+    all(feature = "plotters", not(target_arch = "wasm32"))
+))]
+const ROUNDED_RECT_CORNER_SEGMENTS: usize = 8;
+
+/// A closed polygon approximating a rectangle with rounded corners, for
+/// backends that must rasterize/triangulate rather than emit a native rounded
+/// rect (see [`DrawBackend::draw_rect`]'s `corner_radius`, via [`RectStyle`]).
+///
+/// `radius` is clamped to half the shorter side, so an oversized radius draws
+/// a "stadium" (fully rounded) shape rather than overshooting. A
+/// non-positive radius returns the plain 4-corner rectangle.
+///
+/// Corners go clockwise in screen coordinates (y down), starting at the
+/// top-right, so the first and last points sit either side of the top-right
+/// corner — callers that stroke the result as a closed loop (last point back
+/// to the first) get a seamless boundary.
+#[cfg(any(
+    feature = "canvas",
+    all(feature = "plotters", not(target_arch = "wasm32"))
+))]
+pub(crate) fn rounded_rect_points(
+    x0: f64,
+    y0: f64,
+    x1: f64,
+    y1: f64,
+    radius: f64,
+) -> Vec<(f64, f64)> {
+    let (x0, x1) = (x0.min(x1), x0.max(x1));
+    let (y0, y1) = (y0.min(y1), y0.max(y1));
+    let r = radius.max(0.0).min((x1 - x0) / 2.0).min((y1 - y0) / 2.0);
+    if r <= 0.0 {
+        return vec![(x0, y0), (x1, y0), (x1, y1), (x0, y1)];
+    }
+    use std::f64::consts::{FRAC_PI_2, PI};
+    let n = ROUNDED_RECT_CORNER_SEGMENTS;
+    // (corner centre, start angle, end angle), clockwise, starting top-right.
+    let corners = [
+        (x1 - r, y0 + r, -FRAC_PI_2, 0.0),     // top-right
+        (x1 - r, y1 - r, 0.0, FRAC_PI_2),      // bottom-right
+        (x0 + r, y1 - r, FRAC_PI_2, PI),       // bottom-left
+        (x0 + r, y0 + r, PI, 3.0 * FRAC_PI_2), // top-left
+    ];
+    let mut pts = Vec::with_capacity(4 * (n + 1));
+    for (cx, cy, a0, a1) in corners {
+        for i in 0..=n {
+            let t = a0 + (a1 - a0) * (i as f64 / n as f64);
+            pts.push((cx + r * t.cos(), cy + r * t.sin()));
+        }
+    }
+    pts
+}
+
+#[cfg(all(
+    test,
+    any(
+        feature = "canvas",
+        all(feature = "plotters", not(target_arch = "wasm32"))
+    )
+))]
+mod rounded_rect_tests {
+    use super::rounded_rect_points;
+
+    #[test]
+    fn zero_radius_is_a_plain_rectangle() {
+        let pts = rounded_rect_points(0.0, 0.0, 10.0, 20.0, 0.0);
+        assert_eq!(
+            pts,
+            vec![(0.0, 0.0), (10.0, 0.0), (10.0, 20.0), (0.0, 20.0)]
+        );
+    }
+
+    #[test]
+    fn radius_is_clamped_to_half_the_shorter_side() {
+        // A radius bigger than the box collapses to a "stadium": every point
+        // must stay within the rect's bounds.
+        let pts = rounded_rect_points(0.0, 0.0, 10.0, 20.0, 1000.0);
+        for (x, y) in &pts {
+            assert!((0.0..=10.0).contains(x), "x={x} out of [0,10]");
+            assert!((0.0..=20.0).contains(y), "y={y} out of [0,20]");
+        }
+    }
+
+    #[test]
+    fn corners_are_inset_by_radius_from_the_rect_corners() {
+        let pts = rounded_rect_points(0.0, 0.0, 100.0, 50.0, 10.0);
+        // The arc midpoint of the top-right corner sits at 45° in from the
+        // corner, inset by r*(1 - cos(45°)) from the straight edges.
+        assert!(pts.len() > 4);
+        for (x, y) in &pts {
+            assert!(*x >= 0.0 && *x <= 100.0);
+            assert!(*y >= 0.0 && *y <= 50.0);
         }
     }
 }

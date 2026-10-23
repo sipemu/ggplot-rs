@@ -104,6 +104,7 @@ impl Geom for GeomBar {
                 stroke_width: 0.5,
                 alpha: self.alpha,
                 clip: !coord.is_polar(),
+                corner_radius: 0.0,
             };
 
             // Hover: "<series>: <count>" with data-x / data-series / data-value.

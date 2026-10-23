@@ -45,6 +45,53 @@ All notable changes to this project are documented here. The format follows
   only matters to code that put `SfProjection` in an `Eq`-bound generic
   (none in this crate).
 
+Diagram primitives (#176): a node-link diagram (boxes with wrapped labels,
+rounded corners, arrows between box edges) can now be drawn with geoms
+only — no hand-rolled SVG. Tracked from
+[DataZooDE/anofox-visualization#318](https://github.com/DataZooDE/anofox-visualization/issues/318),
+which hand-rolled all three of these in its own `diagram.rs` for lack of
+upstream support. Purely additive — no existing output changes.
+
+### Added
+
+- **Rounded rectangles** (ggplot2 `geom_label(label.r)`, ggchicklet
+  `radius`): `RectStyle` gains a `corner_radius: f64` field (default `0.0`,
+  a plain rectangle — existing code constructing `RectStyle` with every
+  field named needs a new `corner_radius: 0.0,` line, the only breaking
+  edge of this otherwise-additive change). `GeomRect`/`GeomTile` gain a
+  `radius` field and `.with_radius(px)` builder method; `GeomLabel` gains
+  the same for its background box. `svg_backend` emits a native `rx`/`ry`;
+  `pixel_backend` (feature `canvas`) and `plotters_backend` (feature
+  `plotters`), which have no rounded-rect primitive, approximate it as a
+  polygon via the new `render::backend::rounded_rect_points` helper.
+  `GeomRect` ignores `radius` under polar coords (drawn as an annulus
+  sector, not a rect).
+- **Text wrapping** (ggtext / `str_wrap` behaviour): `GeomText`/`GeomLabel`
+  gain `.with_wrap(width_px)` (word-wraps to a max width, measured with
+  `render::text::text_width`'s per-character metrics — the same table
+  `axis_label_fit`/`check.overlap` already use, not a cruder estimate) and
+  `.with_line_height(multiple_of_size)` (default `1.2`) for the gap between
+  wrapped lines. `GeomLabel`'s background box grows to fit however many
+  lines result, plus `padding`, and inherits the box's `radius`. The new
+  `render::text::wrap_text`/`wrapped_block_width` do the wrapping and
+  measure the widest resulting line. Unwrapped output (no `.with_wrap()`
+  call) is byte-identical to before.
+- **Arrow-to-box-edge** (arrows on segments/curves via `arrow()`, since
+  0.20): no change needed to the arrow API itself — a segment/curve already
+  draws to whatever endpoint its data gives it, tip included, so "attach to
+  a box edge" was always just a matter of computing that endpoint. Added
+  `geom::arrow::rect_edge_point(center, half_w, half_h, toward)`, a small
+  public helper (ported from the consumer's hand-rolled `exit()`) that
+  returns where a straight line from a box's centre toward a point leaves
+  the box — feed its result as a `geom_segment`/`geom_curve` row's
+  `(x, y)`/`(xend, yend)` instead of the box's raw centre. Documented with
+  a worked example in its doc comment.
+- `tests/diagram_primitives_176.rs`: an integration test building a 4-box
+  node-link diagram (rounded boxes, a wrapped label, arrows landing exactly
+  on computed box edges) through the public `GGPlot` builder API only,
+  checked against the SVG output's actual `rx`, `<text>` count, and
+  polyline endpoints — not just rendered and eyeballed.
+
 ## [0.26.0] — 2026-10-24
 
 Minor bump: log and sqrt axis ticks now land on round numbers (an output

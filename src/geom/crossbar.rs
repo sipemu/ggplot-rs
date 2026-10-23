@@ -85,6 +85,7 @@ impl Geom for GeomCrossbar {
                     stroke_width: self.line_width,
                     alpha: self.alpha,
                     clip: true,
+                    corner_radius: 0.0,
                 },
             )?;
 

@@ -52,6 +52,73 @@ pub fn truncate_to_width(label: &str, max_width: f64, size: f64) -> Option<Strin
     Some("…".to_string())
 }
 
+/// Word-wraps `text` to lines no wider than `max_width` px at font `size`,
+/// measured with [`text_width`] (ggtext / `str_wrap` behaviour: break at
+/// whitespace; a single word wider than `max_width` on its own is hard-split
+/// so it never overflows the box). Returns `vec![String::new()]` for empty
+/// input and otherwise always at least one line, so a caller can take
+/// `lines.len()` as the wrapped block's line count without a special case.
+///
+/// `max_width <= 0.0` (or non-finite) disables wrapping — each word still
+/// splits only when it alone would overflow a *positive* width, so a
+/// degenerate width never panics or infinite-loops; it returns `text`
+/// unsplit as a single line (matching "no wrap requested").
+pub fn wrap_text(text: &str, max_width: f64, size: f64) -> Vec<String> {
+    if text.is_empty() {
+        return vec![String::new()];
+    }
+    if !max_width.is_finite() || max_width <= 0.0 {
+        return vec![text.to_string()];
+    }
+    let mut lines: Vec<String> = Vec::new();
+    let mut cur = String::new();
+    for word in text.split_whitespace() {
+        let mut word = word.to_string();
+        // A single word that alone overflows max_width: hard-break it by
+        // character rather than let it overflow the box.
+        while text_width(&word, size) > max_width {
+            let chars: Vec<char> = word.chars().collect();
+            if chars.len() <= 1 {
+                break;
+            }
+            let mut cut = chars.len() - 1;
+            while cut > 1 && text_width(&chars[..cut].iter().collect::<String>(), size) > max_width
+            {
+                cut -= 1;
+            }
+            if !cur.is_empty() {
+                lines.push(std::mem::take(&mut cur));
+            }
+            lines.push(chars[..cut].iter().collect());
+            word = chars[cut..].iter().collect();
+        }
+        if cur.is_empty() {
+            cur = word;
+        } else {
+            let candidate = format!("{cur} {word}");
+            if text_width(&candidate, size) <= max_width {
+                cur = candidate;
+            } else {
+                lines.push(std::mem::replace(&mut cur, word));
+            }
+        }
+    }
+    if !cur.is_empty() || lines.is_empty() {
+        lines.push(cur);
+    }
+    lines
+}
+
+/// The widest wrapped line's width (px) at font `size` — the natural width
+/// of a wrapped text block, e.g. for a [`GeomLabel`](crate::geom::text::GeomLabel)
+/// background box sized to fit its wrapped text.
+pub fn wrapped_block_width(lines: &[String], size: f64) -> f64 {
+    lines
+        .iter()
+        .map(|l| text_width(l, size))
+        .fold(0.0, f64::max)
+}
+
 /// Estimated bounding box `[x0, y0, x1, y1]` of a label anchored at
 /// `(x, y)`, set at font `size`, rotated `angle` degrees (SVG convention,
 /// clockwise), with `anchor` in `0.0` (text starts at `x`) `..=1.0` (text
@@ -232,6 +299,60 @@ mod tests {
         assert_eq!(text_width("", 10.0), 0.0);
         assert!((text_width("i", 10.0) - 2.7).abs() < 1e-9);
         assert!((text_width("M", 10.0) - 8.6).abs() < 1e-9);
+    }
+
+    #[test]
+    fn wrap_text_breaks_at_whitespace_within_width() {
+        let lines = wrap_text("alpha beta gamma delta", 1000.0, 10.0);
+        assert_eq!(lines, vec!["alpha beta gamma delta".to_string()]);
+    }
+
+    #[test]
+    fn wrap_text_wraps_to_multiple_lines_when_narrow() {
+        let w = text_width("alpha beta", 10.0);
+        let lines = wrap_text("alpha beta gamma delta", w + 1.0, 10.0);
+        assert!(lines.len() >= 2, "expected wrapping, got {lines:?}");
+        for l in &lines {
+            assert!(
+                text_width(l, 10.0) <= w + 1.0 + 1e-6,
+                "line {l:?} overflows width"
+            );
+        }
+        assert_eq!(lines.join(" "), "alpha beta gamma delta");
+    }
+
+    #[test]
+    fn wrap_text_hard_breaks_a_single_overlong_word() {
+        let lines = wrap_text("supercalifragilisticexpialidocious", 40.0, 10.0);
+        assert!(lines.len() > 1);
+        assert_eq!(lines.concat(), "supercalifragilisticexpialidocious");
+        for l in &lines {
+            assert!(text_width(l, 10.0) <= 40.0 + 1e-6);
+        }
+    }
+
+    #[test]
+    fn wrap_text_empty_input_is_one_empty_line() {
+        assert_eq!(wrap_text("", 100.0, 10.0), vec![String::new()]);
+    }
+
+    #[test]
+    fn wrap_text_non_positive_width_disables_wrapping() {
+        assert_eq!(
+            wrap_text("alpha beta gamma", 0.0, 10.0),
+            vec!["alpha beta gamma".to_string()]
+        );
+        assert_eq!(
+            wrap_text("alpha beta gamma", -5.0, 10.0),
+            vec!["alpha beta gamma".to_string()]
+        );
+    }
+
+    #[test]
+    fn wrapped_block_width_is_the_widest_line() {
+        let lines = vec!["short".to_string(), "a longer line here".to_string()];
+        let w = wrapped_block_width(&lines, 10.0);
+        assert_eq!(w, text_width("a longer line here", 10.0));
     }
 
     #[test]

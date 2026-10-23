@@ -4,6 +4,7 @@ use crate::data::DataFrame;
 use crate::position::identity::PositionIdentity;
 use crate::position::Position;
 use crate::render::backend::{DrawBackend, RectStyle, TextAnchor, TextStyle};
+use crate::render::text::{wrap_text, wrapped_block_width};
 use crate::render::RenderError;
 use crate::scale::ScaleSet;
 use crate::stat::identity::StatIdentity;
@@ -25,6 +26,14 @@ pub struct GeomText {
     pub fontfamily: String,
     /// When true, skip drawing labels that overlap previously drawn labels.
     pub check_overlap: bool,
+    /// Word-wrap width in px (ggtext / `str_wrap` behaviour), measured with
+    /// the theme's text metrics ([`crate::render::text::text_width`]).
+    /// `None` (the default) never wraps — unchanged from pre-#176 behaviour.
+    pub wrap_width: Option<f64>,
+    /// Line height as a multiple of `size`, applied between wrapped lines
+    /// (CSS-style; ggplot2's `lineheight` is the same idea). Only matters
+    /// when `wrap_width` is set and the label wraps to more than one line.
+    pub line_height: f64,
 }
 
 impl GeomText {
@@ -47,6 +56,18 @@ impl GeomText {
         self.check_overlap = check;
         self
     }
+
+    /// Word-wrap the label to lines no wider than `width_px` (#176).
+    pub fn with_wrap(mut self, width_px: f64) -> Self {
+        self.wrap_width = Some(width_px);
+        self
+    }
+
+    /// Line height as a multiple of `size` for wrapped text (default `1.2`).
+    pub fn with_line_height(mut self, line_height: f64) -> Self {
+        self.line_height = line_height;
+        self
+    }
 }
 
 impl Default for GeomText {
@@ -59,6 +80,8 @@ impl Default for GeomText {
             vjust: 0.5,
             fontfamily: String::new(),
             check_overlap: false,
+            wrap_width: None,
+            line_height: 1.2,
         }
     }
 }
@@ -92,17 +115,32 @@ impl Geom for GeomText {
             let nx = xm.map(&x_col[i], i);
             let ny = y_scale.map(|s| s.map(&y_col[i])).unwrap_or(0.0);
             let (px, py) = coord.transform((nx, ny), &plot_area);
-            // The backend centres text vertically (dominant-baseline=middle), so
-            // apply vjust as a baseline shift: 0 = bottom-anchored (text above the
-            // point), 0.5 = centred, 1 = top-anchored (text below). y grows down.
-            let py = py + (self.vjust - 0.5) * self.size;
 
             let text = label_col[i].to_group_key();
+            let lines = match self.wrap_width {
+                Some(w) => wrap_text(&text, w, self.size),
+                None => vec![text],
+            };
+            let lh = self.size * self.line_height;
+            let n = lines.len() as f64;
+            // The backend centres text vertically (dominant-baseline=middle), so
+            // apply vjust as a baseline shift over the whole wrapped block: 0 =
+            // bottom-anchored (block above the point), 0.5 = centred, 1 =
+            // top-anchored (block below). y grows down. An unwrapped single line
+            // (the pre-#176 case, `lines.len() == 1`) keeps the exact pre-#176
+            // `(vjust - 0.5) * size` shift — `line_height` only matters once a
+            // label actually wraps, so an un-wrapped plot's output is unchanged.
+            let block_h = if n <= 1.0 { self.size } else { lh * n };
+            let py_block = py + (self.vjust - 0.5) * block_h;
 
             if self.check_overlap {
-                let w = text.len() as f64 * self.size * 0.6;
-                let h = self.size;
-                let bbox = (px - w / 2.0, py - h / 2.0, px + w / 2.0, py + h / 2.0);
+                let w = wrapped_block_width(&lines, self.size);
+                let bbox = (
+                    px - w / 2.0,
+                    py_block - block_h / 2.0,
+                    px + w / 2.0,
+                    py_block + block_h / 2.0,
+                );
                 if bboxes_overlap(&bbox, &drawn_bboxes) {
                     continue;
                 }
@@ -110,18 +148,30 @@ impl Geom for GeomText {
             }
 
             let anchor = hjust_to_anchor(self.hjust);
-            backend.draw_text(
-                &text,
-                (px, py),
-                &TextStyle {
-                    color: self.color,
-                    size: self.size,
-                    anchor,
-                    angle: 0.0,
-                    family: super::resolve_font_family(&self.fontfamily, theme),
-                    face: crate::render::backend::FontFace::Plain,
-                },
-            )?;
+            let family = super::resolve_font_family(&self.fontfamily, theme);
+            let top = py_block - block_h / 2.0;
+            for (li, line) in lines.iter().enumerate() {
+                // n == 1 draws at py_block directly (byte-identical to pre-#176
+                // single-line output); n > 1 lays lines out by `lh` within the
+                // block computed above.
+                let line_y = if n <= 1.0 {
+                    py_block
+                } else {
+                    top + lh * (li as f64 + 0.5)
+                };
+                backend.draw_text(
+                    line,
+                    (px, line_y),
+                    &TextStyle {
+                        color: self.color,
+                        size: self.size,
+                        anchor: anchor.clone(),
+                        angle: 0.0,
+                        family: family.clone(),
+                        face: crate::render::backend::FontFace::Plain,
+                    },
+                )?;
+            }
         }
 
         Ok(())
@@ -165,6 +215,20 @@ pub struct GeomLabel {
     pub fontfamily: String,
     /// When true, skip drawing labels that overlap previously drawn labels.
     pub check_overlap: bool,
+    /// Word-wrap width in px (ggtext / `str_wrap` behaviour), measured with
+    /// the theme's text metrics ([`crate::render::text::text_width`]). The
+    /// background box grows to fit however many lines result, plus
+    /// `padding`. `None` (the default) never wraps — unchanged from
+    /// pre-#176 behaviour.
+    pub wrap_width: Option<f64>,
+    /// Line height as a multiple of `size`, applied between wrapped lines.
+    /// Only matters when `wrap_width` is set and the label wraps to more
+    /// than one line.
+    pub line_height: f64,
+    /// Corner radius in px for the background box (ggplot2
+    /// `geom_label(label.r)`, #176). `0.0` (the default) is a plain
+    /// rectangle, unchanged from pre-#176 behaviour.
+    pub radius: f64,
 }
 
 impl GeomLabel {
@@ -187,6 +251,25 @@ impl GeomLabel {
         self.check_overlap = check;
         self
     }
+
+    /// Word-wrap the label to lines no wider than `width_px`, growing the
+    /// background box to fit (#176).
+    pub fn with_wrap(mut self, width_px: f64) -> Self {
+        self.wrap_width = Some(width_px);
+        self
+    }
+
+    /// Line height as a multiple of `size` for wrapped text (default `1.2`).
+    pub fn with_line_height(mut self, line_height: f64) -> Self {
+        self.line_height = line_height;
+        self
+    }
+
+    /// Corner radius in px for the background box (ggplot2 `label.r`, #176).
+    pub fn with_radius(mut self, radius_px: f64) -> Self {
+        self.radius = radius_px;
+        self
+    }
 }
 
 impl Default for GeomLabel {
@@ -201,6 +284,9 @@ impl Default for GeomLabel {
             vjust: 0.5,
             fontfamily: String::new(),
             check_overlap: false,
+            wrap_width: None,
+            line_height: 1.2,
+            radius: 0.0,
         }
     }
 }
@@ -234,51 +320,84 @@ impl Geom for GeomLabel {
             let nx = xm.map(&x_col[i], i);
             let ny = y_scale.map(|s| s.map(&y_col[i])).unwrap_or(0.0);
             let (px, py) = coord.transform((nx, ny), &plot_area);
-            // The backend centres text vertically (dominant-baseline=middle), so
-            // apply vjust as a baseline shift: 0 = bottom-anchored (text above the
-            // point), 0.5 = centred, 1 = top-anchored (text below). y grows down.
-            let py = py + (self.vjust - 0.5) * self.size;
 
             let text = label_col[i].to_group_key();
-            let approx_width = text.len() as f64 * self.size * 0.6;
-            let half_w = approx_width / 2.0 + self.padding;
-            let half_h = self.size / 2.0 + self.padding;
+            // Unwrapped (pre-#176, the default) keeps the exact old box width:
+            // a crude char-count estimate, not the real `text_width` metric
+            // `with_wrap` uses — changing it would shift every existing
+            // geom_label()'s box width with no opt-in. Wrapping is new, so it
+            // has no old behaviour to preserve: it sizes the box to fit the
+            // wrapped lines using the real metric.
+            let (lines, half_w) = match self.wrap_width {
+                Some(w) => {
+                    let lines = wrap_text(&text, w, self.size);
+                    let half_w = wrapped_block_width(&lines, self.size) / 2.0 + self.padding;
+                    (lines, half_w)
+                }
+                None => {
+                    let half_w = text.len() as f64 * self.size * 0.6 / 2.0 + self.padding;
+                    (vec![text], half_w)
+                }
+            };
+            let lh = self.size * self.line_height;
+            let n = lines.len() as f64;
+            // See GeomText::draw for why n == 1 keeps the exact pre-#176
+            // `size`-based box height and `(vjust - 0.5) * size` shift.
+            let block_h = if n <= 1.0 { self.size } else { lh * n };
+            let py_block = py + (self.vjust - 0.5) * block_h;
+            let half_h = block_h / 2.0 + self.padding;
 
             if self.check_overlap {
-                let bbox = (px - half_w, py - half_h, px + half_w, py + half_h);
+                let bbox = (
+                    px - half_w,
+                    py_block - half_h,
+                    px + half_w,
+                    py_block + half_h,
+                );
                 if bboxes_overlap(&bbox, &drawn_bboxes) {
                     continue;
                 }
                 drawn_bboxes.push(bbox);
             }
 
-            // Background rect
+            // Background rect, sized to fit the wrapped lines + padding, with
+            // its corners rounded by `radius` (#176's `label.r`).
             backend.draw_rect(
-                (px - half_w, py - half_h),
-                (px + half_w, py + half_h),
+                (px - half_w, py_block - half_h),
+                (px + half_w, py_block + half_h),
                 &RectStyle {
                     fill: Some(self.fill),
                     stroke: Some(self.color),
                     stroke_width: 0.5,
                     alpha: self.alpha,
                     clip: true,
+                    corner_radius: self.radius,
                 },
             )?;
 
-            // Text
+            // Text, one draw_text call per wrapped line.
             let anchor = hjust_to_anchor(self.hjust);
-            backend.draw_text(
-                &text,
-                (px, py),
-                &TextStyle {
-                    color: self.color,
-                    size: self.size,
-                    anchor,
-                    angle: 0.0,
-                    family: super::resolve_font_family(&self.fontfamily, theme),
-                    face: crate::render::backend::FontFace::Plain,
-                },
-            )?;
+            let family = super::resolve_font_family(&self.fontfamily, theme);
+            let top = py_block - block_h / 2.0;
+            for (li, line) in lines.iter().enumerate() {
+                let line_y = if n <= 1.0 {
+                    py_block
+                } else {
+                    top + lh * (li as f64 + 0.5)
+                };
+                backend.draw_text(
+                    line,
+                    (px, line_y),
+                    &TextStyle {
+                        color: self.color,
+                        size: self.size,
+                        anchor: anchor.clone(),
+                        angle: 0.0,
+                        family: family.clone(),
+                        face: crate::render::backend::FontFace::Plain,
+                    },
+                )?;
+            }
         }
 
         Ok(())

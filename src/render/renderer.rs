@@ -38,6 +38,7 @@ impl PlotRenderer {
                         stroke_width: 0.0,
                         alpha: 1.0,
                         clip: false,
+                        corner_radius: 0.0,
                     },
                 )?;
             }
@@ -58,6 +59,7 @@ impl PlotRenderer {
                         stroke_width: theme.panel_background.width,
                         alpha: 1.0,
                         clip: false,
+                        corner_radius: 0.0,
                     },
                 )?;
             }
@@ -353,6 +355,7 @@ impl PlotRenderer {
                         stroke_width: 0.0,
                         alpha: 1.0,
                         clip: false,
+                        corner_radius: 0.0,
                     },
                 )?;
             }
@@ -468,6 +471,7 @@ impl PlotRenderer {
                         stroke_width: theme.strip_background.width,
                         alpha: 1.0,
                         clip: false,
+                        corner_radius: 0.0,
                     },
                 )?;
             }
@@ -509,6 +513,7 @@ impl PlotRenderer {
                             stroke_width: theme.panel_background.width,
                             alpha: 1.0,
                             clip: false,
+                            corner_radius: 0.0,
                         },
                     )?;
                 }
@@ -771,6 +776,7 @@ impl PlotRenderer {
                             stroke_width: 0.0,
                             alpha: *alpha,
                             clip: false,
+                            corner_radius: 0.0,
                         },
                     )?;
                 }

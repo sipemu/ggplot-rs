@@ -144,6 +144,7 @@ impl Geom for GeomCol {
                 stroke_width: 0.5,
                 alpha: self.alpha,
                 clip: !coord.is_polar(),
+                corner_radius: 0.0,
             };
 
             let label = label_col.and_then(|c| match &c[i] {

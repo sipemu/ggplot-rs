@@ -8,7 +8,7 @@ pub use crate::coord::sf::CoordSf;
 pub use crate::data::{GGData, Value};
 pub use crate::facet::{FacetLabeller, FacetScales, FacetSpace};
 pub use crate::geom::area::GeomArea;
-pub use crate::geom::arrow::{arrow, Arrow, ArrowEnds, ArrowType};
+pub use crate::geom::arrow::{arrow, rect_edge_point, Arrow, ArrowEnds, ArrowType};
 pub use crate::geom::bar::GeomBar;
 pub use crate::geom::bin2d::GeomBin2d;
 pub use crate::geom::blank::GeomBlank;

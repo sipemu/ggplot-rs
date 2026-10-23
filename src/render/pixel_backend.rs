@@ -221,7 +221,13 @@ impl DrawBackend for PixelBackend {
         (x1, y1): (f64, f64),
         style: &RectStyle,
     ) -> Result<(), RenderError> {
-        let r = [(x0, y0), (x1, y0), (x1, y1), (x0, y1)];
+        // No native rounded-rect primitive here: approximate as a polygon
+        // (a plain rectangle when corner_radius is 0, same as before).
+        let r = if style.corner_radius > 0.0 {
+            super::backend::rounded_rect_points(x0, y0, x1, y1, style.corner_radius)
+        } else {
+            vec![(x0, y0), (x1, y0), (x1, y1), (x0, y1)]
+        };
         if let Some(fill) = style.fill {
             fill_polygon(
                 &mut self.buf,
@@ -233,8 +239,9 @@ impl DrawBackend for PixelBackend {
             );
         }
         if let Some(stroke) = style.stroke {
-            for i in 0..4 {
-                let (a, b) = (r[i], r[(i + 1) % 4]);
+            let n = r.len();
+            for i in 0..n {
+                let (a, b) = (r[i], r[(i + 1) % n]);
                 segment(
                     &mut self.buf,
                     self.width,

@@ -659,6 +659,7 @@ fn rect_tile_polygon() {
                 color: (0, 0, 0),
                 alpha: 0.6,
                 line_width: 1.0,
+                radius: 0.0,
             }),
         "rect_with",
     );
@@ -684,6 +685,7 @@ fn rect_tile_polygon() {
                 width: 1.0,
                 height: 1.0,
                 line_width: 0.5,
+                radius: 0.0,
             }),
         "tile_with",
     );
@@ -869,6 +871,8 @@ fn text_and_label() {
                 vjust: 0.5,
                 fontfamily: String::new(),
                 check_overlap: true,
+                wrap_width: None,
+                line_height: 1.2,
             }),
         "text_with",
     );
@@ -891,6 +895,9 @@ fn text_and_label() {
                 vjust: 0.5,
                 fontfamily: String::new(),
                 check_overlap: false,
+                wrap_width: None,
+                line_height: 1.2,
+                radius: 0.0,
             }),
         "label_with",
     );
