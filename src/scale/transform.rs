@@ -137,6 +137,43 @@ impl ScaleTransform {
     pub fn is_identity(&self) -> bool {
         matches!(self, ScaleTransform::Identity)
     }
+
+    /// "Nice" tick positions in *data* (pre-transform) space — used for
+    /// log/sqrt axes, where ticks should read as round numbers in the
+    /// original units rather than evenly spaced in transformed space (which
+    /// gives half-decades like `316.23` under log10, or squares like `625`
+    /// under sqrt). Mirrors ggplot2/scales: `trans$breaks(trans$inverse(limits))`;
+    /// the caller forward-transforms the result back onto the scale
+    /// (`ScaleContinuous::breaks`).
+    ///
+    /// `data_min`/`data_max` must be finite with `data_max > data_min`.
+    pub(crate) fn breaks_in_data_space(&self, data_min: f64, data_max: f64, n: usize) -> Vec<f64> {
+        match self {
+            ScaleTransform::Log10 => super::util::log_breaks(data_min, data_max, n, 10.0),
+            ScaleTransform::Log2 => super::util::log_breaks(data_min, data_max, n, 2.0),
+            ScaleTransform::Ln => {
+                super::util::log_breaks(data_min, data_max, n, std::f64::consts::E)
+            }
+            // sqrt_trans breaks in `scales` are extended_breaks() over the
+            // untransformed data — not evenly spaced in sqrt space.
+            ScaleTransform::Sqrt => super::util::extended_breaks(data_min, data_max, n),
+            _ => super::util::extended_breaks(data_min, data_max, n),
+        }
+    }
+
+    /// Whether [`breaks_in_data_space`](Self::breaks_in_data_space) applies —
+    /// i.e. this transform's ticks should be chosen in data space rather than
+    /// transformed space. Only log/sqrt change behaviour; other transforms
+    /// keep their previous (transformed-space) break placement.
+    pub(crate) fn uses_data_space_breaks(&self) -> bool {
+        matches!(
+            self,
+            ScaleTransform::Log10
+                | ScaleTransform::Log2
+                | ScaleTransform::Ln
+                | ScaleTransform::Sqrt
+        )
+    }
 }
 
 /// Standard normal CDF, via the Abramowitz & Stegun 7.1.26 erf approximation.

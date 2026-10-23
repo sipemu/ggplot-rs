@@ -338,10 +338,31 @@ impl Scale for ScaleContinuous {
         // range. Labels show the original (inverse-transformed) value.
         let (emin, emax) = self.expanded_range();
         let tol = (emax - emin).abs() * 1e-9;
-        let breaks: Vec<f64> = extended_breaks(self.min, self.max, 5)
-            .into_iter()
-            .filter(|&v| v >= emin - tol && v <= emax + tol)
-            .collect();
+        let breaks: Vec<f64> = if self.scale_transform.uses_data_space_breaks() {
+            // Log/sqrt axes: pick round ticks in *data* space, then forward-
+            // transform them back onto the scale — not `extended_breaks`
+            // directly on the transformed range, which gives "nice" numbers
+            // in log/sqrt space that read as noise once inverse-transformed
+            // (half-decades like 316.23 under log10, squares like 625 under
+            // sqrt).
+            let data_min = self.scale_transform.inverse(self.min);
+            let data_max = self.scale_transform.inverse(self.max);
+            if data_min.is_finite() && data_max.is_finite() && data_max > data_min {
+                self.scale_transform
+                    .breaks_in_data_space(data_min, data_max, 5)
+                    .into_iter()
+                    .map(|d| self.scale_transform.apply(d))
+                    .filter(|&v| v.is_finite() && v >= emin - tol && v <= emax + tol)
+                    .collect()
+            } else {
+                vec![]
+            }
+        } else {
+            extended_breaks(self.min, self.max, 5)
+                .into_iter()
+                .filter(|&v| v >= emin - tol && v <= emax + tol)
+                .collect()
+        };
         let shown: Vec<f64> = breaks
             .iter()
             .map(|&v| self.scale_transform.inverse(v))

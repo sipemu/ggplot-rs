@@ -3,6 +3,43 @@
 All notable changes to this project are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.26.0] — 2026-10-24
+
+Minor bump: log and sqrt axis ticks now land on round numbers (an output
+change for `scale_x_log10`/`scale_y_log10`/`scale_x_sqrt`/`scale_y_sqrt` and
+their `log2`/`ln` siblings; see **Migration**).
+
+### Fixed
+- **Log and sqrt axes pick round ticks, not raw half-decades/squares**
+  (#413, upstream issue DataZooDE/anofox-visualization#413). A
+  `scale_y_log10()`/`scale_x_log10()` axis previously placed ticks at
+  `extended_breaks()` computed directly in log space, which inverse-
+  transform to half-decades like `316.23`/`3162.28` — unround numbers no
+  label formatter can fix. Likewise `scale_y_sqrt()`/`scale_x_sqrt()` ticked
+  at evenly-spaced sqrt-space values, which square back to `625`, `2500`,
+  `5625`, etc.
+  - Log axes (`Log10`/`Log2`/`Ln`) now use a `scales::log_breaks()`-style
+    algorithm (`ScaleTransform::breaks_in_data_space`,
+    `scale::util::log_breaks`): prefer whole powers of the base; when the
+    domain spans too few decades for the requested tick count, fill in with
+    evenly-spaced sub-multiples (`{1,2,5,...} * base^n`, as `log_sub_breaks`
+    does in R's `scales`); fall back to `extended_breaks()` over the data
+    range if neither gives enough ticks.
+  - Sqrt axes now place ticks via `extended_breaks()` over the
+    *untransformed* data range (matching `scales::sqrt_trans()`), not the
+    sqrt-transformed range.
+  - `ScaleContinuous::with_breaks(...)` (explicit breaks) is unaffected and
+    still overrides this placement entirely.
+  - This only changes `ScaleContinuous`/`scale_{x,y}_{log10,log2,ln,sqrt}`
+    axes; `coord_trans` (`CoordTrans`), whose ticks come from the
+    underlying linear scale and are warped at draw time, was already round
+    and is unchanged.
+  **Migration:** a plot using a log10/log2/ln/sqrt scale (directly or via
+  `YSCALE`/`XSCALE` in a downstream consumer) now renders different tick
+  positions and labels — round numbers instead of half-decades/squares.
+  Nothing else about the API changes; a plot pinning tick positions with
+  `.with_breaks(...)` is unaffected.
+
 ## [0.25.0] — 2026-10-23
 
 Minor bump: `geom_area()`'s default stat is now `stat_align()`, as in

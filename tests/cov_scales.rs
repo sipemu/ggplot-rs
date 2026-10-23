@@ -472,6 +472,69 @@ fn continuous_transform_labels_and_zero_range() {
     assert_eq!(z.breaks().len(), 1);
 }
 
+#[test]
+fn log10_breaks_land_on_round_decades_not_half_decades() {
+    // Issue #413: an index chart with one series growing ~170x and another
+    // ~7x previously ticked at half-decades (316.23, 3,162.28). Ticks must
+    // land on round data-space numbers.
+    let mut s = ScaleContinuous::new().with_transform(ScaleTransform::Log10);
+    let vals: Vec<Value> = [1.0_f64, 7.0, 170.0]
+        .iter()
+        .map(|&v| Value::Float(ScaleTransform::Log10.apply(v)))
+        .collect();
+    s.train(&vals);
+    let labels: Vec<String> = s.breaks().into_iter().map(|(_, l)| l).collect();
+    assert_eq!(labels, vec!["1", "10", "100"]);
+}
+
+#[test]
+fn sqrt_breaks_land_on_round_linear_values_not_squares() {
+    // Issue #413: sqrt ticked at squares (625, 2,500, 5,625, 15,625).
+    // Ticks must land on round values in the original (linear) units.
+    let mut s = ScaleContinuous::new().with_transform(ScaleTransform::Sqrt);
+    let vals: Vec<Value> = [0.0_f64, 7.0, 170.0]
+        .iter()
+        .map(|&v| Value::Float(ScaleTransform::Sqrt.apply(v)))
+        .collect();
+    s.train(&vals);
+    let labels: Vec<String> = s.breaks().into_iter().map(|(_, l)| l).collect();
+    for l in &labels {
+        assert!(
+            !l.contains('.'),
+            "expected round sqrt-axis labels, got {labels:?}"
+        );
+    }
+    assert_eq!(labels, vec!["0", "40", "80", "120", "160"]);
+
+    // A wider range (matching the issue's 15,625 example).
+    let mut s2 = ScaleContinuous::new().with_transform(ScaleTransform::Sqrt);
+    let vals2: Vec<Value> = [0.0_f64, 15625.0]
+        .iter()
+        .map(|&v| Value::Float(ScaleTransform::Sqrt.apply(v)))
+        .collect();
+    s2.train(&vals2);
+    let labels2: Vec<String> = s2.breaks().into_iter().map(|(_, l)| l).collect();
+    assert_eq!(labels2, vec!["0", "4000", "8000", "12000", "16000"]);
+}
+
+#[test]
+fn explicit_breaks_override_log_sqrt_round_tick_placement() {
+    // `with_breaks` must still win over the new log/sqrt break placement.
+    let mut s = ScaleContinuous::new()
+        .with_transform(ScaleTransform::Log10)
+        .with_breaks(vec![
+            ScaleTransform::Log10.apply(1.0),
+            ScaleTransform::Log10.apply(170.0),
+        ]);
+    let vals: Vec<Value> = [1.0_f64, 170.0]
+        .iter()
+        .map(|&v| Value::Float(ScaleTransform::Log10.apply(v)))
+        .collect();
+    s.train(&vals);
+    let labels: Vec<String> = s.breaks().into_iter().map(|(_, l)| l).collect();
+    assert_eq!(labels, vec!["1", "170"]);
+}
+
 // ─── (a) DIRECT: ScaleDiscrete ──────────────────────────────────────────────
 
 #[test]
