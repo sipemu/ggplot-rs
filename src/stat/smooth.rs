@@ -18,9 +18,11 @@ pub enum SmoothMethod {
     /// Robust linear regression (Huber M-estimator) via anofox-regression.
     #[cfg(feature = "regression")]
     Rlm,
-    /// Penalized B-spline (P-spline) GAM smoother via anofox-regression —
-    /// ggplot2's `method = "gam"`. λ is chosen by GCV.
-    #[cfg(feature = "regression")]
+    /// Penalized B-spline (P-spline) GAM smoother — ggplot2's
+    /// `method = "gam"`. λ is chosen by GCV. Backed by anofox-regression's
+    /// `PSplineRegressor` when the `regression` feature is enabled, or by a
+    /// small dependency-free (wasm-safe) P-spline fit otherwise — see
+    /// [`StatSmooth::compute_gam`].
     Gam,
 }
 
@@ -130,7 +132,6 @@ impl Stat for StatSmooth {
             SmoothMethod::Glm { family } => self.compute_glm(data, Some(*family)),
             #[cfg(feature = "regression")]
             SmoothMethod::Rlm => self.compute_glm(data, None),
-            #[cfg(feature = "regression")]
             SmoothMethod::Gam => self.compute_gam(data),
         }
     }
@@ -327,11 +328,23 @@ impl StatSmooth {
         result
     }
 
+    /// `method = "gam"` dispatcher: anofox-regression's P-spline when the
+    /// `regression` feature is enabled, the dependency-free (wasm-safe)
+    /// P-spline otherwise. Both always compile when `regression` is on
+    /// (see [`Self::compute_gam_builtin`]'s doc comment), which is what lets
+    /// `tests/gam_smooth.rs` and the parity test below compare them.
+    fn compute_gam(&self, data: &DataFrame) -> DataFrame {
+        #[cfg(feature = "regression")]
+        return self.compute_gam_regression(data);
+        #[cfg(not(feature = "regression"))]
+        return self.compute_gam_builtin(data);
+    }
+
     /// GAM smoothing via anofox-regression's penalized B-spline (P-spline) with
     /// GCV-selected smoothing — ggplot2's `method = "gam"`. Emits a t-based
     /// confidence ribbon (ymin/ymax) when `self.se` is set.
     #[cfg(feature = "regression")]
-    fn compute_gam(&self, data: &DataFrame) -> DataFrame {
+    fn compute_gam_regression(&self, data: &DataFrame) -> DataFrame {
         use anofox_regression::solvers::{FittedRegressor, PSplineRegressor, Regressor};
         use anofox_regression::IntervalType;
         use faer::{Col, Mat};
@@ -382,6 +395,81 @@ impl StatSmooth {
             if self.se {
                 ymin_vals.push(Value::Float(pred.lower[k]));
                 ymax_vals.push(Value::Float(pred.upper[k]));
+            }
+        }
+
+        let mut result = DataFrame::new();
+        result.add_column("x".to_string(), x_vals);
+        result.add_column("y".to_string(), y_vals);
+        if self.se {
+            result.add_column("ymin".to_string(), ymin_vals);
+            result.add_column("ymax".to_string(), ymax_vals);
+        }
+        for col_name in &["color", "fill", "group"] {
+            if let Some(col) = data.column(col_name) {
+                if let Some(first) = col.first() {
+                    result.add_column(col_name.to_string(), vec![first.clone(); steps]);
+                }
+            }
+        }
+        result
+    }
+
+    /// GAM smoothing via a small, dependency-free penalized B-spline
+    /// (P-spline) fit — ggplot2's `method = "gam"` without the `regression`
+    /// feature's anofox-regression/faer/nalgebra/statrs/rand dependency tree,
+    /// so this builds for `wasm32-unknown-unknown` too (#174). Same cubic
+    /// B-spline basis, GCV-selected λ and confidence-band construction as
+    /// [`gam::fit`](super::gam::fit) documents. Emits a t-based confidence
+    /// ribbon (ymin/ymax) when `self.se` is set.
+    ///
+    /// This function has no `#[cfg]` of its own — it always compiles — so
+    /// that with the `regression` feature on, both backends exist side by
+    /// side and can be compared directly (see the parity test below and
+    /// `tests/gam_smooth.rs`); only [`Self::compute_gam`]'s dispatch is
+    /// feature-gated. With `regression` on, its only non-test caller is
+    /// gone (the dispatcher picks `compute_gam_regression` instead), hence
+    /// the `allow` below for that configuration.
+    #[cfg_attr(feature = "regression", allow(dead_code))]
+    fn compute_gam_builtin(&self, data: &DataFrame) -> DataFrame {
+        let (x_col, y_col) = match (data.column("x"), data.column("y")) {
+            (Some(x), Some(y)) => (x, y),
+            _ => return DataFrame::new(),
+        };
+        let pairs: Vec<(f64, f64)> = x_col
+            .iter()
+            .zip(y_col.iter())
+            .filter_map(|(x, y)| Some((x.as_f64()?, y.as_f64()?)))
+            .collect();
+        // The P-spline needs enough distinct support to build a basis; fall
+        // back to a straight line for tiny groups or a singular/degenerate
+        // fit — matching the regression backend's fallback behaviour.
+        if pairs.len() < 6 {
+            return self.compute_lm(data);
+        }
+        let Some(fit) = super::gam::fit(&pairs) else {
+            return self.compute_lm(data);
+        };
+
+        let (x_min, x_max) = fit.domain();
+        let steps = self.n_points.max(2);
+        let t_val = self
+            .se
+            .then(|| crate::stat::dist::qt(0.975, (fit.n() - fit.edf()).max(1.0)));
+
+        let mut x_vals = Vec::with_capacity(steps);
+        let mut y_vals = Vec::with_capacity(steps);
+        let mut ymin_vals = Vec::with_capacity(steps);
+        let mut ymax_vals = Vec::with_capacity(steps);
+        for k in 0..steps {
+            let x = x_min + (x_max - x_min) * k as f64 / (steps - 1) as f64;
+            let y = fit.predict(x);
+            x_vals.push(Value::Float(x));
+            y_vals.push(Value::Float(y));
+            if let Some(t) = t_val {
+                let se = fit.se(x);
+                ymin_vals.push(Value::Float(y - t * se));
+                ymax_vals.push(Value::Float(y + t * se));
             }
         }
 
@@ -515,4 +603,115 @@ fn glm_link_prediction(
         upper,
         link_pred.se.clone(),
     ))
+}
+
+// With the `regression` feature on, both `compute_gam_regression` and
+// `compute_gam_builtin` compile side by side (only `compute_gam`'s dispatch
+// is feature-gated) — exercise that to check the two backends agree, which
+// is only possible in this configuration.
+#[cfg(all(test, feature = "regression"))]
+mod gam_backend_parity_tests {
+    use super::*;
+
+    /// A noisy sine wave — the same shape of fixture used across the other
+    /// GAM tests (`tests/gam_smooth.rs`, `src/stat/gam.rs`).
+    fn sine_frame() -> DataFrame {
+        let mut df = DataFrame::new();
+        let x: Vec<Value> = (0..80)
+            .map(|i| Value::Float(i as f64 / 79.0 * std::f64::consts::TAU))
+            .collect();
+        let y: Vec<Value> = (0..80)
+            .map(|i| {
+                let xv = i as f64 / 79.0 * std::f64::consts::TAU;
+                Value::Float(xv.sin() + 0.05 * ((i * 7 % 5) as f64 - 2.0))
+            })
+            .collect();
+        df.add_column("x".into(), x);
+        df.add_column("y".into(), y);
+        df
+    }
+
+    #[test]
+    fn builtin_matches_regression_backend() {
+        let data = sine_frame();
+        let stat = StatSmooth {
+            n_points: 50,
+            se: false,
+            method: SmoothMethod::Gam,
+        };
+        let reg = stat.compute_gam_regression(&data);
+        let builtin = stat.compute_gam_builtin(&data);
+        assert_eq!(reg.nrows(), builtin.nrows());
+
+        let reg_x: Vec<f64> = reg
+            .column("x")
+            .unwrap()
+            .iter()
+            .filter_map(Value::as_f64)
+            .collect();
+        let reg_y: Vec<f64> = reg
+            .column("y")
+            .unwrap()
+            .iter()
+            .filter_map(Value::as_f64)
+            .collect();
+        let builtin_x: Vec<f64> = builtin
+            .column("x")
+            .unwrap()
+            .iter()
+            .filter_map(Value::as_f64)
+            .collect();
+        let builtin_y: Vec<f64> = builtin
+            .column("y")
+            .unwrap()
+            .iter()
+            .filter_map(Value::as_f64)
+            .collect();
+
+        // Both backends grid the same [x_min, x_max] with the same formula,
+        // so the x values should match closely.
+        let max_x_diff = reg_x
+            .iter()
+            .zip(&builtin_x)
+            .map(|(a, b)| (a - b).abs())
+            .fold(0.0, f64::max);
+        assert!(max_x_diff < 1e-9, "x grids disagree: {max_x_diff}");
+
+        // The two P-spline fits (anofox-regression's PSplineRegressor vs. the
+        // dependency-free GCV fit here) should track the same curve closely —
+        // this is the issue #174 "Done when" criterion.
+        let max_y_diff = reg_y
+            .iter()
+            .zip(&builtin_y)
+            .map(|(a, b)| (a - b).abs())
+            .fold(0.0, f64::max);
+        // Measured max_y_diff on this fixture is ~0.093; the bound below is
+        // about 2x that — tight enough to catch a real backend divergence,
+        // loose enough for GCV's lambda grid to land on a neighbouring step
+        // between the two independent implementations.
+        assert!(
+            max_y_diff < 0.19,
+            "fitted curves disagree by up to {max_y_diff}"
+        );
+    }
+
+    #[test]
+    fn builtin_falls_back_to_lm_for_tiny_groups_like_regression() {
+        let mut df = DataFrame::new();
+        df.add_column("x".into(), (0..4).map(|i| Value::Float(i as f64)).collect());
+        df.add_column(
+            "y".into(),
+            (0..4).map(|i| Value::Float(2.0 * i as f64 + 1.0)).collect(),
+        );
+        let stat = StatSmooth {
+            n_points: 20,
+            se: false,
+            method: SmoothMethod::Gam,
+        };
+        let reg = stat.compute_gam_regression(&df);
+        let builtin = stat.compute_gam_builtin(&df);
+        let lm = stat.compute_lm(&df);
+        assert_eq!(reg.nrows(), lm.nrows());
+        assert_eq!(builtin.nrows(), lm.nrows());
+    }
 }
