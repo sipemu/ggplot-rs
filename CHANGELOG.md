@@ -138,6 +138,29 @@ or the `with_*` builders is unaffected.
   checked against the SVG output's actual `rx`, `<text>` count, and
   polyline endpoints — not just rendered and eyeballed.
 
+### Scales / legend
+
+- `ScaleFillBinned` (`scale_fill_binned(breaks, low, high)` /
+  `scale_fill_binned_with(breaks, colors)`): a binned fill scale with
+  *explicit* class breaks (`n + 1` increasing edges), one colour per bin —
+  R's `scale_fill_steps(breaks = ...)`, backing a `::CLASSES` choropleth.
+  The legend shows each class's trained count (`"10–50 (12)"`) and, when
+  any trained value is `Value::Na`, a "no data" key in a configurable
+  `na_color` (ggplot2's `na.value`, default grey50) — no changes needed to
+  the existing discrete-legend drawing code, since both ride the same
+  `Scale::breaks()`/`map_to_color()` round trip `ScaleColorSteps` already
+  uses. The break *maths* (quantile/Fisher-Jenks/equal-width/custom edges)
+  stays the caller's job — this only bins against the edges it's given.
+  anofox-visualization's own map legend (`map/legend.rs`) can retire its
+  stepped-class rendering onto this (DataZooDE/anofox-visualization#318,
+  #180).
+- **Fix**: `ScaleSizeContinuous::map_fraction_to_size` (used to size a
+  graduated-symbol legend's keys) ignored `scale_size_area`'s area-
+  proportional mapping entirely and always used the plain linear `range`
+  — so a `scale_size_area` legend's circles didn't match the radii the
+  data itself draws at. It now uses the same `max_size · √(|v|/denom)`
+  formula `map_to_size` does.
+
 ## [0.26.0] — 2026-10-24
 
 Minor bump: log and sqrt axis ticks now land on round numbers (an output

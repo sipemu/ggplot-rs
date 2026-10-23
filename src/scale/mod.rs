@@ -1,4 +1,5 @@
 pub mod alpha;
+pub mod binned;
 pub mod color;
 pub mod continuous;
 pub mod datetime;

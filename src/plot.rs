@@ -1405,6 +1405,47 @@ impl GGPlot {
         self.scale_fill(s)
     }
 
+    /// Binned fill scale with *explicit* class breaks (`n + 1` increasing
+    /// edges, `n` colours interpolated `low`→`high`) — R's
+    /// `scale_fill_steps(breaks = ...)`, backing a `::CLASSES` choropleth
+    /// (sipemu/ggplot-rs#180). The legend shows each class's trained count
+    /// (`"10–50 (12)"`) and, when any value is `Value::Na`, a "no data" key
+    /// in `na_color` (default grey50) — see
+    /// [`ScaleFillBinned`](crate::scale::binned::ScaleFillBinned) for the
+    /// `.na_color(..)`/`.na_label(..)` builders. The break maths itself
+    /// (quantile/Jenks/equal-width/custom edges) is the caller's job; this
+    /// only bins against the edges it's given.
+    pub fn scale_fill_binned(
+        self,
+        breaks: Vec<f64>,
+        low: crate::scale::color::RGBAColor,
+        high: crate::scale::color::RGBAColor,
+    ) -> Self {
+        let s = crate::scale::binned::ScaleFillBinned::two(
+            crate::aes::Aesthetic::Fill,
+            breaks,
+            (low.r, low.g, low.b),
+            (high.r, high.g, high.b),
+        );
+        self.scale_fill(s)
+    }
+
+    /// Like [`scale_fill_binned`](Self::scale_fill_binned), with an
+    /// explicit colour per bin (`colors.len()` should be
+    /// `breaks.len() - 1`) instead of a two-colour interpolation.
+    pub fn scale_fill_binned_with(
+        self,
+        breaks: Vec<f64>,
+        colors: Vec<crate::scale::color::RGBAColor>,
+    ) -> Self {
+        let s = crate::scale::binned::ScaleFillBinned::new(
+            crate::aes::Aesthetic::Fill,
+            breaks,
+            colors.iter().map(|c| (c.r, c.g, c.b)).collect(),
+        );
+        self.scale_fill(s)
+    }
+
     /// Binned ColorBrewer fill scale.
     pub fn scale_fill_fermenter(
         self,
