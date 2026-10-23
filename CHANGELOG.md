@@ -3,6 +3,29 @@
 All notable changes to this project are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.25.0] — 2026-10-23
+
+Minor bump: `geom_area()`'s default stat is now `stat_align()`, as in
+ggplot2 (an output change for areas with more than one series; see
+**Migration**).
+
+### Added
+- `StatAlign` (`stat_align`, #172). Before stacking, it interpolates every
+  group of a panel onto shared x positions: every x, each group's zero
+  crossings, and a tiny step either side of them. It pads each group with
+  `y = 0` just outside its range. A single group passes through unchanged;
+  a group with one distinct x is dropped; repeated x become a vertical step.
+  This follows ggplot2 4.0.3's `StatAlign`, checked against its
+  `layer_data()` (`tests/geom_area_stat_align.rs`).
+
+### Changed
+- **`geom_area()` uses `stat_align()` by default** (#172, ggplot2 parity).
+  Stacked areas whose series are sampled at different x no longer dip where
+  one series has no row. This was the known limitation of 0.24.0.
+  **Migration:** to keep the 0.24.0 output, a plot with several series per
+  panel sets `.stat(StatIdentity)` on the layer. A single-series area is
+  unchanged.
+
 ## [0.24.0] — 2026-10-23
 
 Minor bump: `geom_col()` and `geom_area()` now stack by default, like
