@@ -200,6 +200,26 @@ or the `with_*` builders is unaffected.
   data itself draws at. It now uses the same `max_size · √(|v|/denom)`
   formula `map_to_size` does.
 
+- `PlotGrid::axis_collect` and [`AxisCollect`] (#175): align a column of
+  stacked plots' plot areas and/or share one x domain across them —
+  patchwork's `plot_layout(axes = ...)` idea, applied to the x axis and
+  plot-area alignment specifically. `AxisCollect::Align` gives every cell
+  in a column the same left/right plot-area inset, computed from the
+  widest y-axis label requirement in that column (the same idea
+  anofox-visualization's `track.rs` uses via a render-measure-render loop,
+  done here as one layout pass instead). `AxisCollect::CollectX` adds a
+  shared x domain — the union of every cell's own trained domain — with
+  x-axis ticks/title/labels drawn only on the bottom cell of each column;
+  a column whose x scale is discrete or untrained on any cell keeps
+  `Align`'s plot-area alignment but warns and skips the domain union.
+  Every aligned cell also switches to
+  `axis_text_x_fit(AxisLabelFit::Shift)`, so an overflowing outer tick
+  label can never perturb the alignment. Default `AxisCollect::Keep`:
+  byte-identical output when not called. Tracked from
+  DataZooDE/anofox-visualization#318 (visualization logic belongs in
+  ggplot-rs, not the consumer); `track.rs` keeps its own
+  render-measure-render approach for now.
+
 ## [0.26.0] — 2026-10-24
 
 Minor bump: log and sqrt axis ticks now land on round numbers (an output
