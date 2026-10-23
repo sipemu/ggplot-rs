@@ -19,6 +19,7 @@ pub mod distribution;
 pub mod ecdf;
 pub mod ellipse;
 pub mod function;
+pub(crate) mod gam;
 pub mod identity;
 pub mod loess;
 pub mod marching_squares;

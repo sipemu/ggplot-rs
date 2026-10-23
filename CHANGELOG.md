@@ -3,6 +3,29 @@
 All notable changes to this project are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [Unreleased]
+
+### Added
+- `GeomSmooth::gam()` (`method = "gam"`) now works without the `regression`
+  feature, including for `wasm32-unknown-unknown` (#174). Previously the GAM
+  smoother only existed behind `regression`, which pulls anofox-regression,
+  faer, nalgebra, statrs and rand (~100 crates) and does not build for wasm.
+  `StatSmooth` now carries two GAM backends: `compute_gam_regression`
+  (unchanged, anofox-regression's `PSplineRegressor`, `regression` feature)
+  and a new dependency-free `compute_gam_builtin` — a cubic B-spline basis,
+  a second-order difference penalty (Eilers & Marx), λ chosen by
+  generalised cross-validation, and a handful of dense k×k solves by
+  Gaussian elimination, plus a t-based confidence ribbon built from the
+  same linear algebra (`src/stat/gam.rs`). A small dispatcher
+  (`StatSmooth::compute_gam`) picks the regression-backed path when the
+  feature is enabled and the builtin path otherwise; no other API changes.
+  This is not a breaking change — `gam()` simply works in more
+  configurations than before. The builtin fit is checked against the
+  regression-backed one on the same data (`src/stat/smooth.rs`'s
+  `gam_backend_parity_tests`, `regression`-gated) and `tests/gam_smooth.rs`
+  now runs against whichever backend is active. Ported from
+  anofox-visualization's own `src/smooth.rs` (DataZooDE/anofox-visualization#318).
+
 ## [0.26.0] — 2026-10-24
 
 Minor bump: log and sqrt axis ticks now land on round numbers (an output

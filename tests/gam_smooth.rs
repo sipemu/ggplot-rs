@@ -1,5 +1,9 @@
-//! GAM smoothing (`method = "gam"`) via anofox-regression's P-spline.
-#![cfg(all(feature = "regression", feature = "plotters"))]
+//! GAM smoothing (`method = "gam"`) — anofox-regression's P-spline with the
+//! `regression` feature, a dependency-free (wasm-safe) P-spline otherwise
+//! (#174). These tests run in both configurations; see
+//! `src/stat/smooth.rs`'s `gam_backend_parity_tests` for a direct comparison
+//! of the two backends' fitted curves.
+#![cfg(feature = "plotters")]
 
 use ggplot_rs::data::{DataFrame, Value};
 use ggplot_rs::prelude::*;

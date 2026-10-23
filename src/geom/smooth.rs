@@ -45,8 +45,10 @@ impl GeomSmooth {
     }
 
     /// Use penalized B-spline (P-spline) GAM smoothing — ggplot2's
-    /// `method = "gam"`, backed by anofox-regression with GCV-selected λ.
-    #[cfg(feature = "regression")]
+    /// `method = "gam"`, with λ chosen by GCV. Backed by anofox-regression's
+    /// `PSplineRegressor` when the `regression` feature is enabled; a small
+    /// dependency-free (wasm-safe) P-spline fit otherwise — both track the
+    /// same curve (#174).
     pub fn gam(mut self) -> Self {
         self.method = SmoothMethod::Gam;
         self
