@@ -162,6 +162,16 @@ impl PlotRenderer {
 
         // 7. Draw title
         let title_ref = Self::title_ref_rect(theme, &plot_area, &total_area);
+        // #233: a Top legend reserves its own band just above the panel,
+        // same idea as a top x-axis's x_axis_lift below — lift title and
+        // subtitle above it too, or they'd land inside the legend's band
+        // instead of their own (zero when there's no Top legend to draw).
+        let legend_lift = legend::top_legend_lift(
+            theme,
+            &built.scales,
+            &built.suppressed_aes,
+            &built.legend_plans,
+        );
         if let Some(ref title) = built.labels.title {
             let (tx, anchor) = Self::hjust_pos(&theme.title, &title_ref);
             // A top x-axis occupies the space just above the panel — lift the
@@ -176,7 +186,7 @@ impl PlotRenderer {
             } else {
                 0.0
             };
-            let title_y = plot_area.y - theme.title.size * 0.9 - x_axis_lift;
+            let title_y = plot_area.y - theme.title.size * 0.9 - x_axis_lift - legend_lift;
             let family = if theme.title.family.is_empty() {
                 None
             } else {
@@ -201,7 +211,7 @@ impl PlotRenderer {
         // 8. Draw subtitle
         if let Some(ref subtitle) = built.labels.subtitle {
             let (sx, anchor) = Self::hjust_pos(&theme.subtitle, &title_ref);
-            let subtitle_y = plot_area.y - 2.0;
+            let subtitle_y = plot_area.y - 2.0 - legend_lift;
             let family = if theme.subtitle.family.is_empty() {
                 None
             } else {
@@ -615,9 +625,17 @@ impl PlotRenderer {
 
         // Draw title
         let title_ref = Self::title_ref_rect(theme, &plot_area, &total_area);
+        // #233: see render_single's identical lift — a Top legend must not
+        // overlap the title/subtitle (zero when there's no Top legend).
+        let legend_lift = legend::top_legend_lift(
+            theme,
+            &built.scales,
+            &built.suppressed_aes,
+            &built.legend_plans,
+        );
         if let Some(ref title) = built.labels.title {
             let (tx, anchor) = Self::hjust_pos(&theme.title, &title_ref);
-            let title_y = plot_area.y - theme.title.size * 0.9;
+            let title_y = plot_area.y - theme.title.size * 0.9 - legend_lift;
             let family = if theme.title.family.is_empty() {
                 None
             } else {
@@ -642,7 +660,7 @@ impl PlotRenderer {
         // Draw subtitle
         if let Some(ref subtitle) = built.labels.subtitle {
             let (sx, anchor) = Self::hjust_pos(&theme.subtitle, &title_ref);
-            let subtitle_y = plot_area.y - 2.0;
+            let subtitle_y = plot_area.y - 2.0 - legend_lift;
             let family = if theme.subtitle.family.is_empty() {
                 None
             } else {

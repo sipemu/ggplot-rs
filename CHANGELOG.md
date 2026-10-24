@@ -6,6 +6,26 @@ All notable changes to this project are documented here. The format follows
 ## [Unreleased]
 
 ### Fixed
+- **`LegendPosition::Top` drew from an absolute canvas
+  `y = legend_margin.top`, ignoring the title/subtitle and the plot's own
+  outer margin** (#233, found while checking DataZooDE/anofox-
+  visualization#467: a map's Top legend flush to the edges with the first
+  key clipped — it didn't show there only because those maps have no
+  title and a zero outer margin). `PlotLayout::compute_with_extras`
+  correctly reserves a `legend_band` row between the title/subtitle area
+  and `plot_area.y`, but `legend_position`'s `Top` arm never asked it —
+  with a title, a subtitle or a non-zero `plot_margin`, the legend drew
+  over them instead of into its reserved band (`Bottom` was already
+  anchored correctly, off the panel's own edge). `legend_position` now
+  backs `Top` off from `plot_area.y` by the band's own content
+  (`legend_band_height`, including a wrapped multi-row legend's extra
+  rows) instead of working forward from an absolute `0`; `renderer.rs`'s
+  title/subtitle drawing lifts itself above that same band too (mirroring
+  its existing `x_axis_lift` for a top x-axis), so neither overlaps the
+  other. A plot without a `Top` legend, or with one that already fit (no
+  title, no subtitle, the default zero-ish margin, a single row), renders
+  byte-identically to before.
+
 - **SVG attribute values didn't entity-escape `\t`/`\n`/`\r`** (#226,
   upstream issue DataZooDE/anofox-visualization#420: a multi-line
   `data-label` came out with a literal newline). The shared escaper used
