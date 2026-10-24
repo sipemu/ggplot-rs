@@ -3255,10 +3255,24 @@ impl GGPlot {
         self.save_with_size(path, w, h)
     }
 
+    /// Does this plot have a legend to make room for? (#201) A plot-level
+    /// `.aes(...)` mapping always counts; so does a *layer's own*
+    /// `.layer_aes(...)` mapping — e.g. `geom_hex`'s usual pattern of
+    /// mapping `fill` to a raw column only on that one layer, via
+    /// `StatIdentity` after pre-binning, rather than on the plot as a
+    /// whole. Checking only `self.mapping` (as before) missed that case
+    /// entirely: the legend still drew (the render path always draws
+    /// whatever guides the trained scales produce, regardless of this
+    /// flag), just with no panel margin ever reserved for it, so it ran
+    /// straight off the canvas edge. A layer that opts out with
+    /// `show_legend(false)` doesn't count towards its own mapping, mirroring
+    /// `PlotBuilder::compute_suppressed_aes`'s later, more precise
+    /// (post-build, cross-layer) suppression check — this one only needs to
+    /// decide *whether to reserve space at all*, not exactly how much.
     fn has_legend_mapping(&self) -> bool {
-        self.mapping.mappings.iter().any(|m| {
+        fn is_legend_aes(a: &crate::aes::Aesthetic) -> bool {
             matches!(
-                m.aesthetic,
+                a,
                 crate::aes::Aesthetic::Color
                     | crate::aes::Aesthetic::Fill
                     | crate::aes::Aesthetic::Shape
@@ -3266,7 +3280,27 @@ impl GGPlot {
                     | crate::aes::Aesthetic::Size
                     | crate::aes::Aesthetic::Alpha
             )
-        })
+        }
+        let plot_level = self
+            .mapping
+            .mappings
+            .iter()
+            .any(|m| is_legend_aes(&m.aesthetic));
+        plot_level
+            || self.layers.iter().any(|layer| {
+                if layer.show_legend == Some(false) {
+                    return false;
+                }
+                let effective = if layer.geom.inherit_aes() {
+                    self.mapping.merge(&layer.mapping)
+                } else {
+                    layer.mapping.clone()
+                };
+                effective
+                    .mappings
+                    .iter()
+                    .any(|m| is_legend_aes(&m.aesthetic))
+            })
     }
 }
 
