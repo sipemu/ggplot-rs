@@ -7,7 +7,21 @@ All notable changes to this project are documented here. The format follows
 
 ## [0.30.3] — 2026-10-25
 
-`GeomAttribution` holds several stacked lines, each with its own runs (`.line(runs)`, #250), for multi-line data licences such as BKG's. No API breaks.
+`GeomAttribution` holds several stacked lines, each with its own runs
+(`.line(runs)`, #250), for multi-line data licences such as BKG's. No
+rendered output changes unless `.line(..)` is used, but the new `pub`
+field is an API break for exhaustive struct literals (see
+**Migration**); `cargo semver-checks` rates it major (tried both a
+private field and `#[non_exhaustive]` instead — each trips its own
+major-rated lint, since `GeomAttribution` had zero non-public fields
+before #250 and was fully literal-constructible, so there's no
+additive way to add this). Same category of change as #176's
+(`b9211c6`).
+
+**Migration:** code that builds `GeomAttribution` with every field
+named (no `..GeomAttribution::new(..)`/`..Default::default()`) must
+add a `lines: Vec::new()` line. Code using `GeomAttribution::new(..)`
+or the `.link(..)`/`.runs(..)`/`.line(..)` builders is unaffected.
 
 ### Added
 - **`GeomAttribution` (`annotation_attribution`) can hold several stacked
