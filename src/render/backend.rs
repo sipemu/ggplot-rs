@@ -516,10 +516,14 @@ mod tests {
 
     /// A minimal backend that does not override `draw_quadratic`, to exercise
     /// the trait's default flattening implementation.
+    /// One `draw_polygon` call's recorded points and fill colour.
+    type RecordedPolygon = (Vec<(f64, f64)>, Option<(u8, u8, u8)>);
+
     #[derive(Default)]
     struct RecordingBackend {
         lines: RefCell<Vec<Vec<(f64, f64)>>>,
         circles: RefCell<Vec<((f64, f64), f64)>>,
+        polygons: RefCell<Vec<RecordedPolygon>>,
     }
 
     impl DrawBackend for RecordingBackend {
@@ -558,9 +562,12 @@ mod tests {
         }
         fn draw_polygon(
             &mut self,
-            _points: &[(f64, f64)],
-            _style: &RectStyle,
+            points: &[(f64, f64)],
+            style: &RectStyle,
         ) -> Result<(), RenderError> {
+            self.polygons
+                .borrow_mut()
+                .push((points.to_vec(), style.fill));
             Ok(())
         }
         fn plot_area(&self) -> Rect {
@@ -629,6 +636,34 @@ mod tests {
             assert_eq!(*center, (1.0, 2.0));
             assert_eq!(*radius, 3.0);
         }
+    }
+
+    /// The default `draw_polygon_rings` (for a backend pre-dating #178, or
+    /// any third-party `DrawBackend` that never overrides it) falls back to
+    /// one `draw_polygon` call per ring: the exterior filled, every other
+    /// ring (a hole) with its fill cleared — the old approximation, not a
+    /// real cut-out, but it draws *something* rather than nothing.
+    #[test]
+    fn default_draw_polygon_rings_fills_only_the_exterior() {
+        let mut b = RecordingBackend::default();
+        let exterior = vec![(0.0, 0.0), (10.0, 0.0), (10.0, 10.0), (0.0, 10.0)];
+        let hole = vec![(3.0, 3.0), (7.0, 3.0), (7.0, 7.0), (3.0, 7.0)];
+        b.draw_polygon_rings(
+            &[exterior.clone(), hole.clone()],
+            &RectStyle {
+                fill: Some((200, 50, 50)),
+                stroke: Some((0, 0, 0)),
+                stroke_width: 1.0,
+                alpha: 1.0,
+                clip: true,
+            },
+        )
+        .unwrap();
+        let polys = b.polygons.borrow();
+        assert_eq!(polys.len(), 2, "one draw_polygon call per ring");
+        assert_eq!(polys[0], (exterior, Some((200, 50, 50))), "exterior filled");
+        assert_eq!(polys[1].0, hole);
+        assert_eq!(polys[1].1, None, "hole not filled (no real cut-out)");
     }
 
     #[test]

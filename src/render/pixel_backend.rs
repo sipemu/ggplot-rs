@@ -480,4 +480,79 @@ mod tests {
             "gap between stays blank"
         );
     }
+
+    /// The `DrawBackend::draw_polygon_rings` trait method itself (not just
+    /// the free `fill_polygon_rings` the unit tests above call directly):
+    /// fills with a real hole cut-out *and* strokes every ring, through
+    /// dynamic dispatch (`&mut dyn DrawBackend`), the way `geom_sf` calls
+    /// it.
+    #[test]
+    fn draw_polygon_rings_trait_method_fills_and_strokes_every_ring() {
+        let pa = Rect {
+            x: 0.0,
+            y: 0.0,
+            width: 20.0,
+            height: 20.0,
+        };
+        let mut backend = PixelBackend::new(20, 20, pa);
+        let dyn_backend: &mut dyn DrawBackend = &mut backend;
+        let exterior = vec![(1.0, 1.0), (19.0, 1.0), (19.0, 19.0), (1.0, 19.0)];
+        let hole = vec![(7.0, 7.0), (13.0, 7.0), (13.0, 13.0), (7.0, 13.0)];
+        dyn_backend
+            .draw_polygon_rings(
+                &[exterior, hole],
+                &RectStyle {
+                    fill: Some((200, 50, 50)),
+                    stroke: Some((0, 0, 0)),
+                    stroke_width: 1.0,
+                    alpha: 1.0,
+                    clip: true,
+                },
+            )
+            .unwrap();
+        let buf = backend.into_rgba();
+        assert_eq!(pixel(&buf, 20, 10, 10), (255, 255, 255), "hole stays blank");
+        assert_eq!(
+            pixel(&buf, 20, 3, 3),
+            (200, 50, 50),
+            "ring between is filled"
+        );
+        // The hole's own outline should be stroked (near-black somewhere
+        // along it), distinguishing this from a plain single-ring fill.
+        let near_hole_edge = pixel(&buf, 20, 7, 10);
+        assert_ne!(near_hole_edge, (255, 255, 255), "hole outline is stroked");
+    }
+
+    /// A ring with fewer than 2 points is skipped by the stroke loop
+    /// (rather than panicking on `windows(2)`/`first()`/`last()`), while a
+    /// valid sibling ring still strokes normally.
+    #[test]
+    fn draw_polygon_rings_skips_a_degenerate_ring_when_stroking() {
+        let pa = Rect {
+            x: 0.0,
+            y: 0.0,
+            width: 20.0,
+            height: 20.0,
+        };
+        let mut backend = PixelBackend::new(20, 20, pa);
+        let dyn_backend: &mut dyn DrawBackend = &mut backend;
+        let degenerate: Vec<(f64, f64)> = vec![(5.0, 5.0)];
+        let real = vec![(1.0, 1.0), (10.0, 1.0), (10.0, 10.0), (1.0, 10.0)];
+        dyn_backend
+            .draw_polygon_rings(
+                &[degenerate, real],
+                &RectStyle {
+                    fill: None,
+                    stroke: Some((0, 0, 0)),
+                    stroke_width: 1.0,
+                    alpha: 1.0,
+                    clip: true,
+                },
+            )
+            .unwrap();
+        // No panic is the main assertion; the real ring's top edge should
+        // still be stroked.
+        let buf = backend.into_rgba();
+        assert_ne!(pixel(&buf, 20, 5, 1), (255, 255, 255));
+    }
 }

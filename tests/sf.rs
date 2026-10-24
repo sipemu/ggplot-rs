@@ -257,3 +257,34 @@ fn render_resolution_simplification_reduces_near_collinear_points() {
         "simplified {simplified} should be far fewer than unsimplified {unsimplified}"
     );
 }
+
+/// #178: a faceted plot draws each panel through `PanelBackendAdapter`
+/// (`render::renderer`), not the top-level backend directly — its own
+/// `draw_polygon_rings` forwarding needs its own coverage, separate from
+/// every other (unfaceted) test in this file.
+#[test]
+fn a_hole_renders_correctly_inside_a_facet_panel() {
+    let mut df = DataFrame::new();
+    df.add_column(
+        "geometry".into(),
+        strs(&[
+            "POLYGON ((0 0, 10 0, 10 10, 0 10, 0 0), (3 3, 7 3, 7 7, 3 7, 3 3))",
+            "POLYGON ((0 0, 10 0, 10 10, 0 10, 0 0))",
+        ]),
+    );
+    df.add_column("region".into(), strs(&["A", "B"]));
+    let svg = GGPlot::new(df)
+        .aes(Aes::new())
+        .geom_sf()
+        .facet_wrap("region", Some(2))
+        .render_svg_native()
+        .expect("faceted sf render");
+    assert!(svg.contains("fill-rule=\"evenodd\""), "{svg}");
+    let subpath_counts: Vec<usize> = svg
+        .split("d=\"")
+        .skip(1)
+        .map(|s| s.split('"').next().unwrap_or("").matches('M').count())
+        .collect();
+    // Panel A's polygon has a hole (2 subpaths); panel B's doesn't (1).
+    assert!(subpath_counts.contains(&2), "{svg}");
+}
