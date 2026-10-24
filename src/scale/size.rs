@@ -182,9 +182,30 @@ impl Scale for ScaleSizeContinuous {
         }
     }
 
+    /// #180: under `scale_size_area` (`area_max` set) this must use the
+    /// same area-proportional formula as [`map_to_size`](Self::map_to_size)
+    /// — not the plain linear `range` — or a graduated-symbol legend's
+    /// circles don't match the radii the data itself draws at (a legend
+    /// key for "break at 50% of the domain" rendered at 50% of the
+    /// *radius* range, when the data point at that value is actually drawn
+    /// at `max_size · √0.5 ≈ 71%` of `max_size`, say).
     fn map_fraction_to_size(&self, fraction: f64) -> Option<f64> {
+        let t = fraction.clamp(0.0, 1.0);
+        if let Some(max_size) = self.area_max {
+            if !self.trained || self.max <= self.min {
+                return Some(0.0);
+            }
+            let max_size = Self::sanitized_area_max(max_size);
+            let v = self.min + t * (self.max - self.min);
+            let denom = self.min.abs().max(self.max.abs());
+            return Some(if denom < f64::EPSILON {
+                0.0
+            } else {
+                max_size * (v.abs() / denom).sqrt()
+            });
+        }
         let (lo, hi) = self.range;
-        Some(lo + fraction.clamp(0.0, 1.0) * (hi - lo))
+        Some(lo + t * (hi - lo))
     }
 
     fn clone_box(&self) -> Box<dyn Scale> {
@@ -229,6 +250,36 @@ mod tests {
         for (g, e) in got.iter().zip([0.0, 1.5, 3.0, 6.0]) {
             assert!((g - e).abs() < 1e-9, "got {got:?}");
         }
+    }
+
+    /// #180: a graduated-symbol legend (`draw_legend_swatch` calls
+    /// `map_fraction_to_size(pos)` where `pos = map(value)`) must draw the
+    /// same radius `map_to_size(value)` does for that value — not the
+    /// unrelated default linear `range`.
+    #[test]
+    fn scale_size_area_legend_fraction_matches_map_to_size() {
+        let mut s = ScaleSizeContinuous::new().area(6.0);
+        s.train(&[Value::Float(0.0), Value::Float(16.0)]);
+        for v in [0.0, 1.0, 4.0, 9.0, 16.0] {
+            let direct = s.map_to_size(&Value::Float(v)).unwrap();
+            let pos = s.map(&Value::Float(v));
+            let via_fraction = s.map_fraction_to_size(pos).unwrap();
+            assert!(
+                (direct - via_fraction).abs() < 1e-9,
+                "value {v}: map_to_size={direct}, map_fraction_to_size={via_fraction}"
+            );
+        }
+    }
+
+    /// Without `.area(..)` (the plain linear size scale), `range` still
+    /// drives both the data mapping and the legend fraction mapping.
+    #[test]
+    fn linear_size_legend_fraction_still_uses_range() {
+        let mut s = ScaleSizeContinuous::new().with_range(2.0, 10.0);
+        s.train(&[Value::Float(0.0), Value::Float(100.0)]);
+        assert_eq!(s.map_fraction_to_size(0.0), Some(2.0));
+        assert_eq!(s.map_fraction_to_size(1.0), Some(10.0));
+        assert_eq!(s.map_fraction_to_size(0.5), Some(6.0));
     }
 
     #[test]
