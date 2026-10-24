@@ -851,6 +851,37 @@ impl GGPlot {
         self.add_geom_with(geom)
     }
 
+    /// A metric scale bar in a panel corner (feature `sf`) — ggspatial's
+    /// `annotation_scale()`. Assumes the X/Y domain is in metres (any
+    /// `geom_sf` projection other than `SfProjection::PlateCarree`).
+    #[cfg(feature = "sf")]
+    pub fn annotation_scale(self) -> Self {
+        self.add_geom(crate::geom::annotation_scale::GeomAnnotationScale::default())
+    }
+
+    #[cfg(feature = "sf")]
+    pub fn annotation_scale_with(
+        self,
+        geom: crate::geom::annotation_scale::GeomAnnotationScale,
+    ) -> Self {
+        self.add_geom_with(geom)
+    }
+
+    /// A small, muted attribution text in a panel corner (feature `sf`) —
+    /// e.g. `"© Natural Earth"`.
+    #[cfg(feature = "sf")]
+    pub fn annotation_attribution(self, text: impl Into<String>) -> Self {
+        self.add_geom(crate::geom::annotation_scale::GeomAttribution::new(text))
+    }
+
+    #[cfg(feature = "sf")]
+    pub fn annotation_attribution_with(
+        self,
+        geom: crate::geom::annotation_scale::GeomAttribution,
+    ) -> Self {
+        self.add_geom_with(geom)
+    }
+
     pub fn geom_curve(self) -> Self {
         self.add_geom(GeomCurve::default())
     }

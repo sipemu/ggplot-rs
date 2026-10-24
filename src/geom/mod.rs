@@ -1,3 +1,5 @@
+#[cfg(feature = "sf")]
+pub mod annotation_scale;
 pub mod area;
 pub mod arrow;
 pub mod bar;
