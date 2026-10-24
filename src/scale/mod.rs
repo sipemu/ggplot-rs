@@ -118,6 +118,27 @@ pub trait Scale: Send + Sync {
         None
     }
 
+    /// A pattern fill for a value this scale draws with its flat `na`
+    /// colour (`Value::Na`, or whatever else a scale treats that way) —
+    /// `ScaleFillBinned::na_pattern` (#206) is the only implementor so
+    /// far. Default `None`: the flat colour from
+    /// [`map_to_color`](Self::map_to_color) wins, unchanged. A geom that
+    /// draws filled areas (`geom_sf`/`geom_polygon`/`geom_rect`/
+    /// `geom_tile`) checks this *before* falling back to `map_to_color`'s
+    /// na-colour branch, and the legend's "no data" key checks it too.
+    fn na_fill_pattern(&self) -> Option<crate::render::backend::FillPattern> {
+        None
+    }
+
+    /// Whether `label` (a [`breaks`](Self::breaks) label) is this scale's
+    /// "no data" legend key, so the legend draws that one key with
+    /// [`na_fill_pattern`](Self::na_fill_pattern) instead of its ordinary
+    /// flat swatch colour. Default `false` (no scale without an na key
+    /// needs this). `ScaleFillBinned` overrides it.
+    fn is_na_break(&self, _label: &str) -> bool {
+        false
+    }
+
     /// Map a data value to a point shape. Default returns None.
     fn map_to_shape(&self, _value: &Value) -> Option<PointShape> {
         None

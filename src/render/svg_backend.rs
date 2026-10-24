@@ -5,8 +5,8 @@
 //! (text is `<text>` with font attributes the viewer renders).
 
 use super::backend::{
-    DrawBackend, FontFace, LineEnd, LineStyle, PointShape, PointStyle, RectStyle, TextAnchor,
-    TextStyle,
+    DrawBackend, FillPattern, FontFace, LineEnd, LineStyle, PointShape, PointStyle, RectStyle,
+    TextAnchor, TextStyle,
 };
 use super::{Rect, RenderError};
 
@@ -42,7 +42,21 @@ pub struct SvgBackend {
     /// `data-fx` for the next drawn mark(s) — see
     /// [`DrawBackend::set_mark_fx`].
     mark_fx: Option<String>,
+    /// Patterns registered so far via [`Self::pattern_url`] (#206),
+    /// deduped by equality: `(pattern, "<id_prefix>-pat-<n>")`. Drained
+    /// into a `<defs>` block by [`Self::pattern_defs`] on `finish`/
+    /// `finish_fragment`.
+    patterns: Vec<(FillPattern, String)>,
+    /// This backend instance's id prefix for `<defs>` — process-unique
+    /// (a monotonic counter), so inlining several rendered SVGs into one
+    /// HTML page never lets one's `url(#…)` resolve into another's
+    /// `<pattern>` (SVG ids share one DOM-wide namespace once inlined).
+    id_prefix: String,
 }
+
+/// Source for [`SvgBackend::id_prefix`] — process-wide, so every backend
+/// instance gets a distinct prefix regardless of thread.
+static NEXT_ID_PREFIX: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
 
 impl SvgBackend {
     pub fn new(width: u32, height: u32, plot_area: Rect) -> Self {
@@ -68,7 +82,142 @@ impl SvgBackend {
             formatted_values: false,
             mark_fvalue: None,
             mark_fx: None,
+            patterns: Vec::new(),
+            id_prefix: format!(
+                "gg{:x}",
+                NEXT_ID_PREFIX.fetch_add(1, std::sync::atomic::Ordering::Relaxed)
+            ),
         }
+    }
+
+    /// The `url(#…)` fill value for `pattern`, registering its `<defs>
+    /// <pattern>` the first time this exact pattern is seen on this
+    /// backend (later calls with an equal pattern reuse the same id).
+    fn pattern_url(&mut self, pattern: &FillPattern) -> String {
+        if let Some((_, id)) = self.patterns.iter().find(|(p, _)| p == pattern) {
+            return format!("url(#{id})");
+        }
+        let id = format!("{}-pat-{}", self.id_prefix, self.patterns.len());
+        self.patterns.push((*pattern, id.clone()));
+        format!("url(#{id})")
+    }
+
+    /// Shared by [`DrawBackend::draw_rect`]/[`DrawBackend::draw_rect_pattern`]
+    /// — `fill` is already resolved (a hex colour or a pattern's `url(#…)`).
+    fn rect_markup(
+        &mut self,
+        (x0, y0): (f64, f64),
+        (x1, y1): (f64, f64),
+        fill: &str,
+        style: &RectStyle,
+    ) -> Result<(), RenderError> {
+        if !(x0.is_finite() && y0.is_finite() && x1.is_finite() && y1.is_finite()) {
+            return Ok(());
+        }
+        let (x, y) = (x0.min(x1), y0.min(y1));
+        let (w, h) = ((x1 - x0).abs(), (y1 - y0).abs());
+        let stroke = style.stroke.map(rgb).unwrap_or_else(|| "none".into());
+        // SVG `<rect>` takes rx/ry natively — clamp to half the shorter side
+        // so an oversized radius draws a "stadium" instead of a malformed box.
+        let r = style.corner_radius.max(0.0).min(w / 2.0).min(h / 2.0);
+        let radius = if r > 0.0 {
+            format!(" rx=\"{r:.2}\" ry=\"{r:.2}\"")
+        } else {
+            String::new()
+        };
+        let attrs = format!(
+            "x=\"{x:.2}\" y=\"{y:.2}\" width=\"{w:.2}\" height=\"{h:.2}\"{radius} fill=\"{fill}\"{} \
+             stroke=\"{stroke}\" stroke-width=\"{:.2}\"",
+            opacity_attr("fill", style.alpha),
+            finite_or(style.stroke_width, 0.0)
+        );
+        self.push_mark("rect", "bar", &attrs);
+        Ok(())
+    }
+
+    /// Shared by [`DrawBackend::draw_polygon`]/[`DrawBackend::draw_polygon_pattern`].
+    fn polygon_markup(
+        &mut self,
+        pts: &[(f64, f64)],
+        fill: &str,
+        style: &RectStyle,
+    ) -> Result<(), RenderError> {
+        let pts = finite_pts(pts);
+        if pts.len() < 3 {
+            return Ok(());
+        }
+        let stroke = style.stroke.map(rgb).unwrap_or_else(|| "none".into());
+        let attrs = format!(
+            "points=\"{}\" fill=\"{fill}\"{} stroke=\"{stroke}\" stroke-width=\"{:.2}\"",
+            points(&pts),
+            opacity_attr("fill", style.alpha),
+            finite_or(style.stroke_width, 0.0)
+        );
+        self.push_mark("polygon", "band", &attrs);
+        Ok(())
+    }
+
+    /// Shared by [`DrawBackend::draw_polygon_rings`]/
+    /// [`DrawBackend::draw_polygon_rings_pattern`].
+    fn polygon_rings_markup(
+        &mut self,
+        rings: &[Vec<(f64, f64)>],
+        fill: &str,
+        style: &RectStyle,
+    ) -> Result<(), RenderError> {
+        let mut d = String::new();
+        for ring in rings {
+            let pts = finite_pts(ring);
+            if pts.len() < 3 {
+                continue;
+            }
+            d.push('M');
+            d.push_str(&format!("{},{}", num(pts[0].0), num(pts[0].1)));
+            for p in &pts[1..] {
+                d.push('L');
+                d.push_str(&format!("{},{}", num(p.0), num(p.1)));
+            }
+            d.push('Z');
+        }
+        if d.is_empty() {
+            return Ok(());
+        }
+        let stroke = style.stroke.map(rgb).unwrap_or_else(|| "none".into());
+        let attrs = format!(
+            "d=\"{d}\" fill-rule=\"evenodd\" fill=\"{fill}\"{} stroke=\"{stroke}\" stroke-width=\"{:.2}\"",
+            opacity_attr("fill", style.alpha),
+            finite_or(style.stroke_width, 0.0)
+        );
+        self.push_mark("path", "band", &attrs);
+        Ok(())
+    }
+
+    /// The `<defs>` block for every pattern [`Self::pattern_url`]
+    /// registered (empty when none were) — a `<pattern>` tile per the
+    /// stripe's own cycle, rotated by `patternTransform`, a `bg`-filled
+    /// tile with a narrower `fg` stripe at its edge (#206).
+    fn pattern_defs(&self) -> String {
+        if self.patterns.is_empty() {
+            return String::new();
+        }
+        let mut defs = String::from("<defs>");
+        for (p, id) in &self.patterns {
+            let FillPattern::Stripe {
+                fg,
+                bg,
+                size_px,
+                angle_deg,
+            } = p;
+            let size = if *size_px > 0.0 { *size_px } else { 1.0 };
+            defs.push_str(&format!(
+                "<pattern id=\"{id}\" width=\"{size}\" height=\"{size}\" patternUnits=\"userSpaceOnUse\" patternTransform=\"rotate({angle_deg})\"><rect width=\"{size}\" height=\"{size}\" fill=\"{}\"/><rect width=\"{:.3}\" height=\"{size}\" fill=\"{}\"/></pattern>",
+                rgb(*bg),
+                size * 0.3,
+                rgb(*fg),
+            ));
+        }
+        defs.push_str("</defs>");
+        defs
     }
 
     /// Turn `data-fvalue`/`data-fx` on for the whole render
@@ -233,7 +382,8 @@ impl SvgBackend {
     /// host can map screen coordinates back to data (e.g. for zoom/crosshair).
     pub fn finish(self) -> String {
         let open = self.root_open("xmlns=\"http://www.w3.org/2000/svg\" ");
-        format!("{open}{}</svg>", self.body)
+        let defs = self.pattern_defs();
+        format!("{open}{defs}{}</svg>", self.body)
     }
 
     /// Wrap the accumulated elements in a *nested* `<svg>` positioned at
@@ -242,7 +392,8 @@ impl SvgBackend {
     /// `data-plot` stays in this fragment's own viewBox units.
     pub fn finish_fragment(self, x: f64, y: f64) -> String {
         let open = self.root_open(&format!("x=\"{}\" y=\"{}\" ", num(x), num(y)));
-        format!("{open}{}</svg>", self.body)
+        let defs = self.pattern_defs();
+        format!("{open}{defs}{}</svg>", self.body)
     }
 
     /// Emit one `<polyline>` for an already-finite run of points — see
@@ -767,50 +918,42 @@ impl DrawBackend for SvgBackend {
 
     fn draw_rect(
         &mut self,
-        (x0, y0): (f64, f64),
-        (x1, y1): (f64, f64),
+        top_left: (f64, f64),
+        bottom_right: (f64, f64),
         style: &RectStyle,
     ) -> Result<(), RenderError> {
-        if !(x0.is_finite() && y0.is_finite() && x1.is_finite() && y1.is_finite()) {
-            return Ok(());
-        }
-        let (x, y) = (x0.min(x1), y0.min(y1));
-        let (w, h) = ((x1 - x0).abs(), (y1 - y0).abs());
         let fill = style.fill.map(rgb).unwrap_or_else(|| "none".into());
-        let stroke = style.stroke.map(rgb).unwrap_or_else(|| "none".into());
-        // SVG `<rect>` takes rx/ry natively — clamp to half the shorter side
-        // so an oversized radius draws a "stadium" instead of a malformed box.
-        let r = style.corner_radius.max(0.0).min(w / 2.0).min(h / 2.0);
-        let radius = if r > 0.0 {
-            format!(" rx=\"{r:.2}\" ry=\"{r:.2}\"")
-        } else {
-            String::new()
-        };
-        let attrs = format!(
-            "x=\"{x:.2}\" y=\"{y:.2}\" width=\"{w:.2}\" height=\"{h:.2}\"{radius} fill=\"{fill}\"{} \
-             stroke=\"{stroke}\" stroke-width=\"{:.2}\"",
-            opacity_attr("fill", style.alpha),
-            finite_or(style.stroke_width, 0.0)
-        );
-        self.push_mark("rect", "bar", &attrs);
-        Ok(())
+        self.rect_markup(top_left, bottom_right, &fill, style)
+    }
+
+    /// #206: same markup [`draw_rect`](Self::draw_rect) builds, filled
+    /// with `pattern`'s registered `url(#…)` instead of `style.fill`.
+    fn draw_rect_pattern(
+        &mut self,
+        top_left: (f64, f64),
+        bottom_right: (f64, f64),
+        pattern: &FillPattern,
+        style: &RectStyle,
+    ) -> Result<(), RenderError> {
+        let fill = self.pattern_url(pattern);
+        self.rect_markup(top_left, bottom_right, &fill, style)
     }
 
     fn draw_polygon(&mut self, pts: &[(f64, f64)], style: &RectStyle) -> Result<(), RenderError> {
-        let pts = finite_pts(pts);
-        if pts.len() < 3 {
-            return Ok(());
-        }
         let fill = style.fill.map(rgb).unwrap_or_else(|| "none".into());
-        let stroke = style.stroke.map(rgb).unwrap_or_else(|| "none".into());
-        let attrs = format!(
-            "points=\"{}\" fill=\"{fill}\"{} stroke=\"{stroke}\" stroke-width=\"{:.2}\"",
-            points(&pts),
-            opacity_attr("fill", style.alpha),
-            finite_or(style.stroke_width, 0.0)
-        );
-        self.push_mark("polygon", "band", &attrs);
-        Ok(())
+        self.polygon_markup(pts, &fill, style)
+    }
+
+    /// #206: same markup [`draw_polygon`](Self::draw_polygon) builds,
+    /// filled with `pattern`'s registered `url(#…)` instead of `style.fill`.
+    fn draw_polygon_pattern(
+        &mut self,
+        pts: &[(f64, f64)],
+        pattern: &FillPattern,
+        style: &RectStyle,
+    ) -> Result<(), RenderError> {
+        let fill = self.pattern_url(pattern);
+        self.polygon_markup(pts, &fill, style)
     }
 
     /// One `<path>`, every ring a subpath (`M…Z`), `fill-rule="evenodd"` so
@@ -823,32 +966,21 @@ impl DrawBackend for SvgBackend {
         rings: &[Vec<(f64, f64)>],
         style: &RectStyle,
     ) -> Result<(), RenderError> {
-        let mut d = String::new();
-        for ring in rings {
-            let pts = finite_pts(ring);
-            if pts.len() < 3 {
-                continue;
-            }
-            d.push('M');
-            d.push_str(&format!("{},{}", num(pts[0].0), num(pts[0].1)));
-            for p in &pts[1..] {
-                d.push('L');
-                d.push_str(&format!("{},{}", num(p.0), num(p.1)));
-            }
-            d.push('Z');
-        }
-        if d.is_empty() {
-            return Ok(());
-        }
         let fill = style.fill.map(rgb).unwrap_or_else(|| "none".into());
-        let stroke = style.stroke.map(rgb).unwrap_or_else(|| "none".into());
-        let attrs = format!(
-            "d=\"{d}\" fill-rule=\"evenodd\" fill=\"{fill}\"{} stroke=\"{stroke}\" stroke-width=\"{:.2}\"",
-            opacity_attr("fill", style.alpha),
-            finite_or(style.stroke_width, 0.0)
-        );
-        self.push_mark("path", "band", &attrs);
-        Ok(())
+        self.polygon_rings_markup(rings, &fill, style)
+    }
+
+    /// #206: same markup [`draw_polygon_rings`](Self::draw_polygon_rings)
+    /// builds (holes cut out under the same even-odd rule), filled with
+    /// `pattern`'s registered `url(#…)` instead of `style.fill`.
+    fn draw_polygon_rings_pattern(
+        &mut self,
+        rings: &[Vec<(f64, f64)>],
+        pattern: &FillPattern,
+        style: &RectStyle,
+    ) -> Result<(), RenderError> {
+        let fill = self.pattern_url(pattern);
+        self.polygon_rings_markup(rings, &fill, style)
     }
 
     fn draw_text(
@@ -1074,5 +1206,108 @@ mod tests {
         assert!(!svg.contains("data-Upper"));
         assert!(!svg.contains("data-=\""));
         assert!(svg.contains("data-ok=\"valid\""));
+    }
+
+    // #206: pattern fills.
+
+    fn stripe() -> FillPattern {
+        FillPattern::Stripe {
+            fg: (10, 20, 30),
+            bg: (200, 210, 220),
+            size_px: 4.0,
+            angle_deg: 45.0,
+        }
+    }
+
+    fn pattern_id(svg: &str) -> String {
+        let i = svg.find("<pattern id=\"").unwrap() + "<pattern id=\"".len();
+        svg[i..i + svg[i..].find('"').unwrap()].to_string()
+    }
+
+    #[test]
+    fn a_pattern_fill_registers_one_defs_pattern_and_references_it() {
+        let mut b = backend();
+        b.draw_rect_pattern((0.0, 0.0), (10.0, 10.0), &stripe(), &RectStyle::default())
+            .unwrap();
+        let svg = b.finish();
+        assert_eq!(svg.matches("<pattern ").count(), 1, "{svg}");
+        let id = pattern_id(&svg);
+        assert!(
+            svg.contains(&format!("fill=\"url(#{id})\"")),
+            "rect references the registered pattern id {id}: {svg}"
+        );
+    }
+
+    #[test]
+    fn an_equal_pattern_reuses_the_same_defs_entry() {
+        let mut b = backend();
+        b.draw_rect_pattern((0.0, 0.0), (5.0, 5.0), &stripe(), &RectStyle::default())
+            .unwrap();
+        b.draw_polygon_pattern(
+            &[(0.0, 0.0), (1.0, 0.0), (1.0, 1.0)],
+            &stripe(),
+            &RectStyle::default(),
+        )
+        .unwrap();
+        let svg = b.finish();
+        assert_eq!(
+            svg.matches("<pattern ").count(),
+            1,
+            "two equal patterns share one <defs> entry: {svg}"
+        );
+    }
+
+    #[test]
+    fn different_patterns_get_their_own_defs_entries() {
+        let mut b = backend();
+        b.draw_rect_pattern((0.0, 0.0), (5.0, 5.0), &stripe(), &RectStyle::default())
+            .unwrap();
+        let other = FillPattern::Stripe {
+            fg: (1, 1, 1),
+            bg: (2, 2, 2),
+            size_px: 8.0,
+            angle_deg: 0.0,
+        };
+        b.draw_rect_pattern((0.0, 0.0), (5.0, 5.0), &other, &RectStyle::default())
+            .unwrap();
+        let svg = b.finish();
+        assert_eq!(svg.matches("<pattern ").count(), 2, "{svg}");
+    }
+
+    #[test]
+    fn no_pattern_used_means_no_defs_block_at_all() {
+        let mut b = backend();
+        b.draw_rect((0.0, 0.0), (5.0, 5.0), &RectStyle::default())
+            .unwrap();
+        let svg = b.finish();
+        assert!(!svg.contains("<defs>"), "{svg}");
+    }
+
+    #[test]
+    fn pattern_fill_cuts_out_holes_like_a_flat_fill_does() {
+        let mut b = backend();
+        let outer = vec![(0.0, 0.0), (10.0, 0.0), (10.0, 10.0), (0.0, 10.0)];
+        let hole = vec![(2.0, 2.0), (8.0, 2.0), (8.0, 8.0), (2.0, 8.0)];
+        b.draw_polygon_rings_pattern(&[outer, hole], &stripe(), &RectStyle::default())
+            .unwrap();
+        let svg = b.finish();
+        assert!(svg.contains("fill-rule=\"evenodd\""), "{svg}");
+        assert_eq!(
+            svg.matches("<path").count(),
+            1,
+            "one path, both rings: {svg}"
+        );
+    }
+
+    #[test]
+    fn two_backends_on_one_page_never_collide_on_a_pattern_id() {
+        let mut a = backend();
+        a.draw_rect_pattern((0.0, 0.0), (5.0, 5.0), &stripe(), &RectStyle::default())
+            .unwrap();
+        let mut b = backend();
+        b.draw_rect_pattern((0.0, 0.0), (5.0, 5.0), &stripe(), &RectStyle::default())
+            .unwrap();
+        let (sa, sb) = (a.finish(), b.finish());
+        assert_ne!(pattern_id(&sa), pattern_id(&sb), "{sa}\n{sb}");
     }
 }

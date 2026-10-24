@@ -140,6 +140,83 @@ impl Default for RectStyle {
     }
 }
 
+/// A pattern fill for an area that has no single colour to draw — today
+/// just a scale's `na_pattern` (#206): `ScaleFillBinned::na_pattern`,
+/// drawn instead of `na_value`'s flat colour by `geom_sf`/`geom_polygon`/
+/// `geom_rect`/`geom_tile` and the legend's "no data" key, so a classed
+/// choropleth's no-data cells read as "we have no reading here" rather
+/// than a greyed-out *value* easily mistaken for one.
+///
+/// `fg` stripes run at `angle_deg` (0 = horizontal, measured the usual
+/// screen way, clockwise from the x axis), each `size_px` wide, over a
+/// `bg` field — `fg` fills the first 30% of each cycle, `bg` the rest, a
+/// thin hatch rather than an even 50/50 stripe (ggplot2/R's own
+/// `pattern_stripe(density = 0.3)` default). More pattern kinds can join
+/// this enum later without breaking callers that match it today only via
+/// [`FillPattern::bg`]/[`FillPattern::color_at`].
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub enum FillPattern {
+    Stripe {
+        fg: (u8, u8, u8),
+        bg: (u8, u8, u8),
+        /// The width of one fg+bg cycle, in output pixels. `<= 0.0` is
+        /// treated as `1.0` (an unreasonably fine hatch rather than a
+        /// division by zero/negative-period wraparound).
+        size_px: f64,
+        /// Stripe direction in degrees (0 = horizontal).
+        angle_deg: f64,
+    },
+}
+
+impl FillPattern {
+    /// The fraction of each cycle `fg` covers (the rest is `bg`) — a thin
+    /// hatch, not a 50/50 stripe.
+    const STRIPE_FG_FRACTION: f64 = 0.3;
+
+    /// A reasonable default stripe: `fg`/`bg` as given, 4px period, 45°.
+    pub fn stripe(fg: (u8, u8, u8), bg: (u8, u8, u8)) -> FillPattern {
+        FillPattern::Stripe {
+            fg,
+            bg,
+            size_px: 4.0,
+            angle_deg: 45.0,
+        }
+    }
+
+    /// The flat colour a backend with no pattern primitive falls back to
+    /// (`plotters` — "falls back to bg", #206) — the pattern's background,
+    /// so a no-data cell still reads as *muted*, just without the hatch.
+    pub fn bg(&self) -> (u8, u8, u8) {
+        match self {
+            FillPattern::Stripe { bg, .. } => *bg,
+        }
+    }
+
+    /// This pattern's colour at screen point `(x, y)` — a raster backend
+    /// (pixel/`canvas`) fills per pixel with this ("raster stripes", #206)
+    /// rather than approximating with [`FillPattern::bg`].
+    pub fn color_at(&self, x: f64, y: f64) -> (u8, u8, u8) {
+        match self {
+            FillPattern::Stripe {
+                fg,
+                bg,
+                size_px,
+                angle_deg,
+            } => {
+                let (s, c) = angle_deg.to_radians().sin_cos();
+                let rx = x * c + y * s;
+                let size = if *size_px > 0.0 { *size_px } else { 1.0 };
+                let frac = (rx / size).rem_euclid(1.0);
+                if frac < Self::STRIPE_FG_FRACTION {
+                    *fg
+                } else {
+                    *bg
+                }
+            }
+        }
+    }
+}
+
 /// Number of line segments approximating each 90° corner of a rounded rect in
 /// backends with no native rounded-rect primitive (pixel, plotters). Higher
 /// is smoother; 8 is visually indistinguishable from a true arc at the sizes
@@ -364,6 +441,73 @@ pub trait DrawBackend {
             self.draw_polygon(ring, &ring_style)?;
         }
         Ok(())
+    }
+
+    /// Like [`draw_rect`](Self::draw_rect), but filled with `pattern`
+    /// instead of `style.fill` (`geom_rect`/`geom_tile`'s no-data cells,
+    /// #206) — `style.stroke`/`stroke_width`/`clip`/`corner_radius` still
+    /// apply, only the fill differs.
+    ///
+    /// Default: flattens `pattern` to its [`FillPattern::bg`] and draws an
+    /// ordinary [`draw_rect`](Self::draw_rect) — the `plotters` backend
+    /// has no pattern-fill primitive and keeps this default ("falls back
+    /// to bg"). The native SVG backend overrides this to register a
+    /// `<defs><pattern>` (deduped, this backend's own id prefix) and fill
+    /// with its `url(#…)` reference; the pixel/`canvas` backend overrides
+    /// it to rasterise the actual stripes per pixel ("raster stripes").
+    fn draw_rect_pattern(
+        &mut self,
+        top_left: (f64, f64),
+        bottom_right: (f64, f64),
+        pattern: &FillPattern,
+        style: &RectStyle,
+    ) -> Result<(), RenderError> {
+        self.draw_rect(
+            top_left,
+            bottom_right,
+            &RectStyle {
+                fill: Some(pattern.bg()),
+                ..style.clone()
+            },
+        )
+    }
+
+    /// Like [`draw_polygon`](Self::draw_polygon), but filled with
+    /// `pattern` instead of `style.fill` (#206). Default/override split:
+    /// see [`draw_rect_pattern`](Self::draw_rect_pattern).
+    fn draw_polygon_pattern(
+        &mut self,
+        points: &[(f64, f64)],
+        pattern: &FillPattern,
+        style: &RectStyle,
+    ) -> Result<(), RenderError> {
+        self.draw_polygon(
+            points,
+            &RectStyle {
+                fill: Some(pattern.bg()),
+                ..style.clone()
+            },
+        )
+    }
+
+    /// Like [`draw_polygon_rings`](Self::draw_polygon_rings), but filled
+    /// with `pattern` instead of `style.fill` (`geom_sf`/`geom_polygon`'s
+    /// no-data features, #206) — holes still cut out under the even-odd
+    /// rule, exactly as a flat fill would. Default/override split: see
+    /// [`draw_rect_pattern`](Self::draw_rect_pattern).
+    fn draw_polygon_rings_pattern(
+        &mut self,
+        rings: &[Vec<(f64, f64)>],
+        pattern: &FillPattern,
+        style: &RectStyle,
+    ) -> Result<(), RenderError> {
+        self.draw_polygon_rings(
+            rings,
+            &RectStyle {
+                fill: Some(pattern.bg()),
+                ..style.clone()
+            },
+        )
     }
 
     /// Like [`draw_text`](Self::draw_text), but with an optional `<title>`

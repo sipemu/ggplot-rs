@@ -13,7 +13,7 @@
 use ab_glyph::{point, Font, FontRef, PxScale, ScaleFont};
 
 use super::backend::{
-    DrawBackend, FontFace, LineStyle, PointStyle, RectStyle, TextAnchor, TextStyle,
+    DrawBackend, FillPattern, FontFace, LineStyle, PointStyle, RectStyle, TextAnchor, TextStyle,
 };
 use super::{Rect, RenderError};
 
@@ -151,6 +151,34 @@ fn fill_polygon_rings(
     c: (u8, u8, u8),
     a: f64,
 ) {
+    fill_polygon_rings_with(buf, w, h, rings, a, |_, _| c);
+}
+
+/// [`fill_polygon_rings`], but filled per pixel through `color_at(x, y)`
+/// instead of one flat colour — a scale's `na_pattern` (#206: "raster
+/// stripes"), via [`FillPattern::color_at`].
+fn fill_polygon_rings_pattern(
+    buf: &mut [u8],
+    w: usize,
+    h: usize,
+    rings: &[&[(f64, f64)]],
+    pattern: &FillPattern,
+    a: f64,
+) {
+    fill_polygon_rings_with(buf, w, h, rings, a, |x, y| pattern.color_at(x, y));
+}
+
+/// The even-odd scanline fill both [`fill_polygon_rings`] and
+/// [`fill_polygon_rings_pattern`] run, parameterised over how a pixel's
+/// colour is chosen.
+fn fill_polygon_rings_with(
+    buf: &mut [u8],
+    w: usize,
+    h: usize,
+    rings: &[&[(f64, f64)]],
+    a: f64,
+    color_at: impl Fn(f64, f64) -> (u8, u8, u8),
+) {
     let (mut y0, mut y1) = (f64::INFINITY, f64::NEG_INFINITY);
     for ring in rings {
         if ring.len() < 3 {
@@ -185,7 +213,7 @@ fn fill_polygon_rings(
         for span in xs.chunks(2) {
             if let [xa, xb] = span {
                 for x in xa.round() as i32..=xb.round() as i32 {
-                    blend(buf, w, h, x, y, c, a);
+                    blend(buf, w, h, x, y, color_at(x as f64, yc), a);
                 }
             }
         }
@@ -341,6 +369,156 @@ impl DrawBackend for PixelBackend {
                 style.alpha,
             );
         }
+        if let Some(stroke) = style.stroke {
+            for ring in rings {
+                if ring.len() < 2 {
+                    continue;
+                }
+                for w in ring.windows(2) {
+                    segment(
+                        &mut self.buf,
+                        self.width,
+                        self.height,
+                        w[0].0,
+                        w[0].1,
+                        w[1].0,
+                        w[1].1,
+                        stroke,
+                        style.stroke_width,
+                        style.alpha,
+                    );
+                }
+                if let (Some(first), Some(last)) = (ring.first(), ring.last()) {
+                    segment(
+                        &mut self.buf,
+                        self.width,
+                        self.height,
+                        last.0,
+                        last.1,
+                        first.0,
+                        first.1,
+                        stroke,
+                        style.stroke_width,
+                        style.alpha,
+                    );
+                }
+            }
+        }
+        Ok(())
+    }
+
+    /// #206: like [`draw_rect`](Self::draw_rect), but rasterises
+    /// `pattern`'s actual stripes per pixel ("raster stripes") instead of
+    /// a flat `style.fill`.
+    fn draw_rect_pattern(
+        &mut self,
+        (x0, y0): (f64, f64),
+        (x1, y1): (f64, f64),
+        pattern: &FillPattern,
+        style: &RectStyle,
+    ) -> Result<(), RenderError> {
+        let r = if style.corner_radius > 0.0 {
+            super::backend::rounded_rect_points(x0, y0, x1, y1, style.corner_radius)
+        } else {
+            vec![(x0, y0), (x1, y0), (x1, y1), (x0, y1)]
+        };
+        fill_polygon_rings_pattern(
+            &mut self.buf,
+            self.width,
+            self.height,
+            &[&r],
+            pattern,
+            style.alpha,
+        );
+        if let Some(stroke) = style.stroke {
+            let n = r.len();
+            for i in 0..n {
+                let (a, b) = (r[i], r[(i + 1) % n]);
+                segment(
+                    &mut self.buf,
+                    self.width,
+                    self.height,
+                    a.0,
+                    a.1,
+                    b.0,
+                    b.1,
+                    stroke,
+                    style.stroke_width,
+                    style.alpha,
+                );
+            }
+        }
+        Ok(())
+    }
+
+    /// #206: like [`draw_polygon`](Self::draw_polygon), rasterised
+    /// per-pixel — see [`draw_rect_pattern`](Self::draw_rect_pattern).
+    fn draw_polygon_pattern(
+        &mut self,
+        pts: &[(f64, f64)],
+        pattern: &FillPattern,
+        style: &RectStyle,
+    ) -> Result<(), RenderError> {
+        fill_polygon_rings_pattern(
+            &mut self.buf,
+            self.width,
+            self.height,
+            &[pts],
+            pattern,
+            style.alpha,
+        );
+        if let Some(stroke) = style.stroke {
+            for w in pts.windows(2) {
+                segment(
+                    &mut self.buf,
+                    self.width,
+                    self.height,
+                    w[0].0,
+                    w[0].1,
+                    w[1].0,
+                    w[1].1,
+                    stroke,
+                    style.stroke_width,
+                    style.alpha,
+                );
+            }
+            if let (Some(first), Some(last)) = (pts.first(), pts.last()) {
+                segment(
+                    &mut self.buf,
+                    self.width,
+                    self.height,
+                    last.0,
+                    last.1,
+                    first.0,
+                    first.1,
+                    stroke,
+                    style.stroke_width,
+                    style.alpha,
+                );
+            }
+        }
+        Ok(())
+    }
+
+    /// #206: like [`draw_polygon_rings`](Self::draw_polygon_rings) —
+    /// holes still cut out under the same even-odd rule — rasterised
+    /// per-pixel instead of flat-filled; see
+    /// [`draw_rect_pattern`](Self::draw_rect_pattern).
+    fn draw_polygon_rings_pattern(
+        &mut self,
+        rings: &[Vec<(f64, f64)>],
+        pattern: &FillPattern,
+        style: &RectStyle,
+    ) -> Result<(), RenderError> {
+        let ring_refs: Vec<&[(f64, f64)]> = rings.iter().map(Vec::as_slice).collect();
+        fill_polygon_rings_pattern(
+            &mut self.buf,
+            self.width,
+            self.height,
+            &ring_refs,
+            pattern,
+            style.alpha,
+        );
         if let Some(stroke) = style.stroke {
             for ring in rings {
                 if ring.len() < 2 {
@@ -556,5 +734,76 @@ mod tests {
         // still be stroked.
         let buf = backend.into_rgba();
         assert_ne!(pixel(&buf, 20, 5, 1), (255, 255, 255));
+    }
+
+    // #206: pattern fills ("raster stripes" on this backend).
+
+    fn stripe() -> FillPattern {
+        FillPattern::Stripe {
+            fg: (10, 20, 30),
+            bg: (200, 210, 220),
+            size_px: 4.0,
+            angle_deg: 0.0, // horizontal rotation -> vertical stripes along x
+        }
+    }
+
+    #[test]
+    fn a_pattern_fill_rasterises_both_colours_not_a_flat_one() {
+        let pa = Rect {
+            x: 0.0,
+            y: 0.0,
+            width: 20.0,
+            height: 20.0,
+        };
+        let mut backend = PixelBackend::new(20, 20, pa);
+        let dyn_backend: &mut dyn DrawBackend = &mut backend;
+        let square = vec![(0.0, 0.0), (20.0, 0.0), (20.0, 20.0), (0.0, 20.0)];
+        dyn_backend
+            .draw_polygon_pattern(&square, &stripe(), &RectStyle::default())
+            .unwrap();
+        let buf = backend.into_rgba();
+        let pixels: std::collections::HashSet<(u8, u8, u8)> =
+            (0..20).map(|x| pixel(&buf, 20, x, 10)).collect();
+        assert!(pixels.contains(&(10, 20, 30)), "{pixels:?}");
+        assert!(pixels.contains(&(200, 210, 220)), "{pixels:?}");
+    }
+
+    #[test]
+    fn pattern_fill_still_cuts_out_a_hole() {
+        let (w, h) = (20usize, 20usize);
+        let mut buf = vec![255u8; w * h * 4];
+        let exterior: Vec<(f64, f64)> = vec![(1.0, 1.0), (19.0, 1.0), (19.0, 19.0), (1.0, 19.0)];
+        let hole: Vec<(f64, f64)> = vec![(7.0, 7.0), (13.0, 7.0), (13.0, 13.0), (7.0, 13.0)];
+        fill_polygon_rings_pattern(&mut buf, w, h, &[&exterior, &hole], &stripe(), 1.0);
+        assert_eq!(pixel(&buf, w, 10, 10), (255, 255, 255), "hole stays blank");
+    }
+
+    #[test]
+    fn draw_rect_pattern_also_strokes_normally() {
+        let pa = Rect {
+            x: 0.0,
+            y: 0.0,
+            width: 20.0,
+            height: 20.0,
+        };
+        let mut backend = PixelBackend::new(20, 20, pa);
+        let dyn_backend: &mut dyn DrawBackend = &mut backend;
+        dyn_backend
+            .draw_rect_pattern(
+                (2.0, 2.0),
+                (18.0, 18.0),
+                &stripe(),
+                &RectStyle {
+                    fill: None,
+                    stroke: Some((0, 0, 0)),
+                    stroke_width: 1.0,
+                    alpha: 1.0,
+                    clip: true,
+                    corner_radius: 0.0,
+                },
+            )
+            .unwrap();
+        let buf = backend.into_rgba();
+        assert_ne!(pixel(&buf, 20, 2, 10), (255, 255, 255), "left edge stroked");
     }
 }

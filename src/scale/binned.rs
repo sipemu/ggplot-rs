@@ -14,6 +14,7 @@ use std::collections::HashSet;
 use crate::aes::Aesthetic;
 use crate::data::Value;
 use crate::format::format_value;
+use crate::render::backend::FillPattern;
 
 use super::Scale;
 
@@ -68,8 +69,16 @@ pub struct ScaleFillBinned {
     /// (or triple) class counts and the no-data count.
     seen: HashSet<u64>,
     /// ggplot2's `na.value` — colour for `Value::Na` and for the legend's
-    /// "no data" key. Default grey50 `(127, 127, 127)`.
+    /// "no data" key. Default grey50 `(127, 127, 127)`. Overridden by
+    /// `na_pattern` when that's set (#206).
     na_color: (u8, u8, u8),
+    /// A pattern fill (a thin hatch, by default) for `Value::Na` and the
+    /// legend's "no data" key, drawn instead of the flat `na_color` by
+    /// `geom_sf`/`geom_polygon`/`geom_rect`/`geom_tile` — a classed
+    /// choropleth's no-data cells then read as "we have no reading here"
+    /// rather than a greyed-out *value* easily mistaken for one (#206).
+    /// `None` (the default): `na_color` draws flat, as before.
+    na_pattern: Option<FillPattern>,
     na_label: String,
     name: String,
     corrected: bool,
@@ -140,6 +149,7 @@ impl ScaleFillBinned {
             na_count: 0,
             seen: HashSet::new(),
             na_color: (127, 127, 127),
+            na_pattern: None,
             na_label: "no data".to_string(),
             name: String::new(),
             corrected: edges_corrected || colors_corrected,
@@ -164,6 +174,7 @@ impl ScaleFillBinned {
             na_count: 0,
             seen: HashSet::new(),
             na_color: (127, 127, 127),
+            na_pattern: None,
             na_label: "no data".to_string(),
             name: String::new(),
             corrected,
@@ -171,9 +182,22 @@ impl ScaleFillBinned {
     }
 
     /// Colour for `Value::Na` and the legend's "no data" key (ggplot2's
-    /// `na.value`). Default grey50 `(127, 127, 127)`.
+    /// `na.value`). Default grey50 `(127, 127, 127)`. Overridden for
+    /// drawing (not for the legend count) by [`na_pattern`](Self::na_pattern)
+    /// when that's also set.
     pub fn na_color(mut self, color: (u8, u8, u8)) -> Self {
         self.na_color = color;
+        self
+    }
+
+    /// A pattern fill for `Value::Na` and the legend's "no data" key,
+    /// drawn instead of the flat [`na_color`](Self::na_color) — a classed
+    /// choropleth's no-data cells read as "no reading", not a muted
+    /// *value* (#206). `FillPattern::stripe(fg, bg)` is a reasonable
+    /// default hatch; `bg` is what a pattern-less backend (`plotters`)
+    /// falls back to.
+    pub fn na_pattern(mut self, pattern: FillPattern) -> Self {
+        self.na_pattern = Some(pattern);
         self
     }
 
@@ -300,6 +324,19 @@ impl Scale for ScaleFillBinned {
     fn domain(&self) -> Option<(f64, f64)> {
         let n = self.colors.len();
         Some((self.breaks[0], self.breaks[n]))
+    }
+
+    /// This scale's configured `na_pattern`, if any — the caller (a
+    /// geom's fill resolution, or the legend's "no data" key) only
+    /// consults this for a row/key that's already otherwise headed for
+    /// the flat `na_color` (`Value::Na`, or the "no data" legend-key
+    /// label itself); every ordinary bin colour is unaffected (#206).
+    fn na_fill_pattern(&self) -> Option<FillPattern> {
+        self.na_pattern
+    }
+
+    fn is_na_break(&self, label: &str) -> bool {
+        self.na_count > 0 && label == self.na_label_with_count()
     }
 
     fn validate(&self, warnings: &mut Vec<String>) {
@@ -433,6 +470,32 @@ mod tests {
             s.map_to_color(&Value::Str("missing (1)".to_string())),
             Some((10, 20, 30))
         );
+    }
+
+    #[test]
+    fn na_pattern_is_none_until_set() {
+        let s = scale();
+        assert_eq!(s.na_fill_pattern(), None);
+    }
+
+    #[test]
+    fn na_pattern_is_reported_only_for_the_no_data_break_label() {
+        let pattern = FillPattern::stripe((10, 20, 30), (200, 210, 220));
+        let mut s = scale().na_pattern(pattern);
+        s.train(&[Value::Na, Value::Float(5.0)]);
+        assert_eq!(s.na_fill_pattern(), Some(pattern));
+        assert!(s.is_na_break(&s.na_label_with_count()));
+        // An ordinary bin's own label is never mistaken for the na key.
+        let ordinary = s.class_label(0);
+        assert!(!s.is_na_break(&ordinary));
+    }
+
+    #[test]
+    fn no_na_break_when_nothing_trained_as_na() {
+        // `na_count == 0`: `is_na_break` is false even for the label text
+        // that *would* be the na key, since the legend never shows one.
+        let s = scale().na_pattern(FillPattern::stripe((1, 2, 3), (4, 5, 6)));
+        assert!(!s.is_na_break(&s.na_label_with_count()));
     }
 
     #[test]
