@@ -5,6 +5,37 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Added
+- **Legends for different aesthetics mapped to the same measure now merge
+  into one, like ggplot2** (#239, DataZooDE/anofox-visualization#420
+  slice 4: a map whose basemap fill and flow-line colour share one
+  measure through the same scale should show one legend, not two). A
+  new `group_mergeable_legends` groups aesthetics whose legend would
+  render identically — same effective title, same discrete/continuous-
+  ness, *identical* `breaks()` (same positions and labels, in order; a
+  binned scale's breaks already carry their bin counts in the labels, so
+  two binned scales with matching counts merge too) — into one combined
+  guide: `draw_discrete_legend_at`/`draw_discrete_legend_grid` now take a
+  group of `(Aesthetic, &dyn Scale)` instead of a single one, overlaying
+  every member's own key glyph at the same position per break (e.g. a
+  filled swatch and a colour swatch stacked, visually identical when
+  both map the same variable through the same palette); a merged
+  continuous `fill`/`colour` pair draws its colourbar once. **Fixed
+  alongside:** `legend_scales_for` used to unconditionally drop `Fill`'s
+  own legend whenever `Color` was mapped too — even to a completely
+  unrelated variable with a different title and breaks, silently losing
+  that legend instead of drawing it separately. Both aesthetics now
+  always get a legend; whether they end up as one merged guide or two
+  separate ones depends on whether they actually look identical.
+  **Known scope limit:** the B3-2 auto-wrap/explicit-grid planner and the
+  layout's own legend-size reservation (`PlotLayout`'s `legend_size`/
+  `legend_band`, and #225's `Inside` justification's own estimate) still
+  reason about ungrouped aesthetics for *sizing* purposes — a merged
+  group reserves a little more room than it strictly needs (safe
+  direction: more whitespace, not clipping), and a merged guide that also
+  needs auto-wrap/an explicit grid falls back to its representative
+  aesthetic's own plan rather than a jointly-computed one.
+
 ### Fixed
 - **`GeomSf` never wrote `data-fvalue` for a mapped `size` or `fill`** (#238,
   DataZooDE/anofox-visualization#475: a graduated-symbol map with only

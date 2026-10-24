@@ -47,14 +47,65 @@ pub(crate) fn legend_scales_for(
         }
         if let Some(scale) = scales.get(aes) {
             if !scale.breaks().is_empty() {
-                if *aes == Aesthetic::Fill && legend_scales.contains(&Aesthetic::Color) {
-                    continue;
-                }
                 legend_scales.push(aes.clone());
             }
         }
     }
     legend_scales
+}
+
+/// Group `legend_scales` into mergeable sets (#239: ggplot2 merges `fill`
+/// and `colour` guides mapped to the same measure through the same scale
+/// spec into one legend with a combined key, rather than drawing one per
+/// aesthetic — and, conversely, draws *two* legends when they don't
+/// actually match, which an earlier, cruder rule here got wrong: it
+/// unconditionally dropped `Fill`'s own legend whenever `Color` was also
+/// mapped, even to an unrelated variable with a different title and
+/// breaks). Two aesthetics merge when their scales share the same
+/// effective title (`guide.title`, else `scale.name()`), the same
+/// discrete/continuous-ness, and *identical* `breaks()` (same positions
+/// and labels, in the same order) — the same practical "do these two
+/// guides look identical" test ggplot2 itself applies; a binned scale's
+/// breaks already carry its counts in their labels, so two binned scales
+/// with the same counts per bin merge too. Order preserved: each group
+/// keeps the position its first member had in `legend_scales`.
+pub(crate) fn group_mergeable_legends(
+    scales: &ScaleSet,
+    legend_scales: &[Aesthetic],
+    guide: &GuideLegend,
+) -> Vec<Vec<Aesthetic>> {
+    struct Key {
+        title: String,
+        discrete: bool,
+        breaks: Vec<(f64, String)>,
+    }
+    let mut groups: Vec<(Key, Vec<Aesthetic>)> = Vec::new();
+    for aes in legend_scales {
+        let Some(scale) = scales.get(aes) else {
+            continue;
+        };
+        let breaks = scale.breaks();
+        let title = guide
+            .title
+            .clone()
+            .unwrap_or_else(|| scale.name().to_string());
+        let discrete = scale.is_discrete();
+        match groups
+            .iter_mut()
+            .find(|(k, _)| k.title == title && k.discrete == discrete && k.breaks == breaks)
+        {
+            Some((_, members)) => members.push(aes.clone()),
+            None => groups.push((
+                Key {
+                    title,
+                    discrete,
+                    breaks,
+                },
+                vec![aes.clone()],
+            )),
+        }
+    }
+    groups.into_iter().map(|(_, members)| members).collect()
 }
 
 /// Draw all legends for the plot.
@@ -131,12 +182,26 @@ pub fn draw_legend(
         if scale.is_discrete() {
             if is_horizontal {
                 let width = draw_discrete_legend_at(
-                    scales, aes, scale, theme, offset_x, offset_y, backend, guide, true,
+                    scales,
+                    &[((*aes).clone(), scale)],
+                    theme,
+                    offset_x,
+                    offset_y,
+                    backend,
+                    guide,
+                    true,
                 )?;
                 offset_x += width + theme.legend_spacing * 2.0;
             } else {
                 let height = draw_discrete_legend_at(
-                    scales, aes, scale, theme, offset_x, offset_y, backend, guide, false,
+                    scales,
+                    &[((*aes).clone(), scale)],
+                    theme,
+                    offset_x,
+                    offset_y,
+                    backend,
+                    guide,
+                    false,
                 )?;
                 offset_y += height + theme.legend_spacing * 2.0;
             }
@@ -156,8 +221,7 @@ pub fn draw_legend(
                 // Continuous size/alpha — draw as discrete-like with sampled breaks
                 let height = draw_discrete_legend_at(
                     scales,
-                    aes,
-                    scale,
+                    &[((*aes).clone(), scale)],
                     theme,
                     offset_x,
                     offset_y,
@@ -424,10 +488,18 @@ pub(crate) fn size_key_diameter(
 
 /// Draw a discrete legend at a given position. Returns the height used.
 #[allow(clippy::too_many_arguments)]
+/// Draw one discrete legend — or, when `group` has more than one entry
+/// (#239: guide merging), one *combined* legend whose every key overlays
+/// each aesthetic's own glyph at the same position (e.g. a filled swatch
+/// with a mapped-colour outline), the way ggplot2 merges `fill` and
+/// `colour` guides mapped to the same measure through the same scale
+/// spec into one legend instead of two. `group[0]` is the representative
+/// scale for the title, breaks and labels — `group_mergeable_legends`
+/// only ever groups aesthetics whose `breaks()` (and so their shared
+/// title) are already identical, so any member would do.
 fn draw_discrete_legend_at(
     scales: &ScaleSet,
-    aes: &Aesthetic,
-    scale: &dyn crate::scale::Scale,
+    group: &[(Aesthetic, &dyn crate::scale::Scale)],
     theme: &Theme,
     legend_x: f64,
     legend_y: f64,
@@ -435,6 +507,7 @@ fn draw_discrete_legend_at(
     guide: &GuideLegend,
     is_horizontal: bool,
 ) -> Result<f64, RenderError> {
+    let (_, scale) = &group[0];
     let mut breaks = scale.breaks();
     if breaks.is_empty() {
         return Ok(0.0);
@@ -448,8 +521,14 @@ fn draw_discrete_legend_at(
     // #236: a size legend's key box (and the row height it sits in) grows
     // to fit its largest key — see `size_key_diameter`. A no-op (both
     // `.max()`s keep the theme defaults) for every other aesthetic, and
-    // for a size legend whose largest key already fits them.
-    let diameter = size_key_diameter(aes, scales, scale, &breaks);
+    // for a size legend whose largest key already fits them. At most one
+    // `group` member is ever `Aesthetic::Size` (`LEGEND_AESTHETICS` has
+    // only one), so taking the max across the group is exactly the same
+    // as the single-aesthetic case when `group.len() == 1`.
+    let diameter = group
+        .iter()
+        .map(|(a, s)| size_key_diameter(a, scales, *s, &breaks))
+        .fold(0.0_f64, f64::max);
     let swatch_size = theme.legend_key_width.max(diameter);
     let item_height = theme.legend_key_height.max(swatch_size);
 
@@ -532,21 +611,25 @@ fn draw_discrete_legend_at(
             }
         }
 
-        // Draw the appropriate swatch based on aesthetic type
-        draw_legend_swatch(
-            backend,
-            scales,
-            aes,
-            scale,
-            theme,
-            label,
-            *pos,
-            x,
-            y,
-            center_x,
-            center_y,
-            swatch_size,
-        )?;
+        // Draw every group member's own glyph, overlaid at the same
+        // position (#239) — a single swatch for the common, unmerged
+        // case (`group.len() == 1`).
+        for (member_aes, member_scale) in group {
+            draw_legend_swatch(
+                backend,
+                scales,
+                member_aes,
+                *member_scale,
+                theme,
+                label,
+                *pos,
+                x,
+                y,
+                center_x,
+                center_y,
+                swatch_size,
+            )?;
+        }
 
         // Label
         let label_family = if theme.legend_text.family.is_empty() {
@@ -1216,6 +1299,18 @@ pub(crate) fn draw_legend_planned(
         return Ok(());
     }
 
+    // #239: group aesthetics whose legend would be visually identical
+    // (same title, breaks, discrete/continuous-ness) into one combined
+    // guide, rather than drawing one per aesthetic. Everything below that
+    // used to iterate `legend_scales` one aesthetic at a time now
+    // iterates `groups` instead; a group's first member (`representatives`)
+    // stands in for the whole group wherever only one scale's own
+    // breaks/title/discreteness is needed (sizing, the B3-2 wrap plan
+    // lookup, …) — `group_mergeable_legends` only ever groups scales
+    // whose `breaks()` already match, so any member would do.
+    let groups = group_mergeable_legends(scales, &legend_scales, guide);
+    let representatives: Vec<Aesthetic> = groups.iter().map(|g| g[0].clone()).collect();
+
     // #233: `legend_position`'s `Top` arm needs the same wrapped-row
     // count `layout_built` fed `PlotLayout::compute_with_extras` to
     // produce this `plot_area` in the first place — recomputed here from
@@ -1237,8 +1332,11 @@ pub(crate) fn draw_legend_planned(
     let legend_extra_rows = legend_rows_beyond_first(is_horizontal_hint, legend_plans);
     // #225: `Inside`'s justification needs the legend's own estimated
     // footprint and the full canvas to clamp against — cheap to compute
-    // unconditionally (ignored by every other position).
-    let legend_size_hint = estimate_legend_box(scales, &legend_scales, theme, guide, legend_plans);
+    // unconditionally (ignored by every other position). Estimated from
+    // `representatives`, not every raw aesthetic, so a merged group's
+    // height is counted once, not once per aesthetic in it.
+    let legend_size_hint =
+        estimate_legend_box(scales, &representatives, theme, guide, legend_plans);
     let canvas = backend.total_area();
     let (legend_x, legend_y, mut is_horizontal) = legend_position(
         theme,
@@ -1250,26 +1348,38 @@ pub(crate) fn draw_legend_planned(
     if let Some(dir) = theme.legend_direction {
         is_horizontal = matches!(dir, crate::theme::LegendDirection::Horizontal);
     }
-    let n_discrete = discrete_guide_count(scales, &legend_scales);
+    let n_discrete = discrete_guide_count(scales, &representatives);
     // #170: match `plan_all_legends`'s share — a continuous guide (e.g. a
     // colourbar) sharing this row has already claimed its own fixed
     // width, so step the discrete guides by what's left, not the whole
     // `legend_avail_width`.
-    let n_continuous = continuous_guide_count(scales, &legend_scales);
+    let n_continuous = continuous_guide_count(scales, &representatives);
     let continuous_width = n_continuous as f64 * continuous_guide_width(theme);
     let per_guide_width = ((legend_avail_width - continuous_width) / n_discrete as f64).max(0.0);
 
     let mut offset_y = legend_y;
     let mut offset_x = legend_x;
 
-    for aes in &legend_scales {
-        let scale = scales.get(aes).unwrap();
-        if !scale.is_discrete() {
-            // Continuous legends (colorbar, or size/alpha sampled breaks)
-            // aren't in scope for B3-2 — unchanged.
-            if matches!(aes, Aesthetic::Color | Aesthetic::Fill) {
-                let height =
-                    draw_continuous_legend_at(scale, theme, offset_x, offset_y, backend, guide)?;
+    for group in &groups {
+        let representative = &group[0];
+        let rep_scale = scales.get(representative).unwrap();
+        let scale_group: Vec<(Aesthetic, &dyn crate::scale::Scale)> = group
+            .iter()
+            .map(|a| (a.clone(), scales.get(a).unwrap()))
+            .collect();
+
+        if !rep_scale.is_discrete() {
+            // Continuous legends (colorbar, or size/alpha/linewidth
+            // sampled breaks) aren't in scope for B3-2 — unchanged.
+            if matches!(representative, Aesthetic::Color | Aesthetic::Fill) {
+                // #239: a merged continuous fill+colour pair draws one
+                // bar — `group_mergeable_legends` only merges scales
+                // whose breaks (so, in practice, colours) already match,
+                // so the other member(s) would draw the identical bar
+                // again.
+                let height = draw_continuous_legend_at(
+                    rep_scale, theme, offset_x, offset_y, backend, guide,
+                )?;
                 if is_horizontal {
                     offset_x += theme.legend_key_width
                         + theme.legend_text.size * 6.0
@@ -1280,8 +1390,7 @@ pub(crate) fn draw_legend_planned(
             } else {
                 let height = draw_discrete_legend_at(
                     scales,
-                    aes,
-                    scale,
+                    &scale_group,
                     theme,
                     offset_x,
                     offset_y,
@@ -1300,23 +1409,44 @@ pub(crate) fn draw_legend_planned(
             continue;
         }
 
-        match legend_plans.get(aes) {
+        match legend_plans.get(representative) {
             None => {
                 if is_horizontal {
                     let width = draw_discrete_legend_at(
-                        scales, aes, scale, theme, offset_x, offset_y, backend, guide, true,
+                        scales,
+                        &scale_group,
+                        theme,
+                        offset_x,
+                        offset_y,
+                        backend,
+                        guide,
+                        true,
                     )?;
                     offset_x += width + theme.legend_spacing * 2.0;
                 } else {
                     let height = draw_discrete_legend_at(
-                        scales, aes, scale, theme, offset_x, offset_y, backend, guide, false,
+                        scales,
+                        &scale_group,
+                        theme,
+                        offset_x,
+                        offset_y,
+                        backend,
+                        guide,
+                        false,
                     )?;
                     offset_y += height + theme.legend_spacing * 2.0;
                 }
             }
             Some(plan) => {
                 let height = draw_discrete_legend_grid(
-                    scales, aes, scale, theme, offset_x, offset_y, backend, guide, plan,
+                    scales,
+                    &scale_group,
+                    theme,
+                    offset_x,
+                    offset_y,
+                    backend,
+                    guide,
+                    plan,
                 )?;
                 if is_horizontal {
                     // Each discrete guide gets an equal share of the row
@@ -1337,10 +1467,11 @@ pub(crate) fn draw_legend_planned(
 /// auto-wrap). Returns the total height used (including any "+N more"
 /// row).
 #[allow(clippy::too_many_arguments)]
+/// Wrapped-grid counterpart of [`draw_discrete_legend_at`] — same `group`
+/// merging (#239).
 fn draw_discrete_legend_grid(
     scales: &ScaleSet,
-    aes: &Aesthetic,
-    scale: &dyn crate::scale::Scale,
+    group: &[(Aesthetic, &dyn crate::scale::Scale)],
     theme: &Theme,
     legend_x: f64,
     legend_y: f64,
@@ -1348,6 +1479,7 @@ fn draw_discrete_legend_grid(
     guide: &GuideLegend,
     plan: &LegendPlan,
 ) -> Result<f64, RenderError> {
+    let (_, scale) = &group[0];
     let mut breaks = scale.breaks();
     if breaks.is_empty() {
         return Ok(0.0);
@@ -1357,7 +1489,10 @@ fn draw_discrete_legend_grid(
     }
 
     // #236: same key-box growth as `draw_discrete_legend_at`.
-    let diameter = size_key_diameter(aes, scales, scale, &breaks);
+    let diameter = group
+        .iter()
+        .map(|(a, s)| size_key_diameter(a, scales, *s, &breaks))
+        .fold(0.0_f64, f64::max);
     let swatch_size = theme.legend_key_width.max(diameter);
     let item_height = theme.legend_key_height.max(swatch_size);
 
@@ -1412,20 +1547,22 @@ fn draw_discrete_legend_grid(
             }
         }
 
-        draw_legend_swatch(
-            backend,
-            scales,
-            aes,
-            scale,
-            theme,
-            label,
-            *pos,
-            x,
-            y,
-            center_x,
-            center_y,
-            swatch_size,
-        )?;
+        for (member_aes, member_scale) in group {
+            draw_legend_swatch(
+                backend,
+                scales,
+                member_aes,
+                *member_scale,
+                theme,
+                label,
+                *pos,
+                x,
+                y,
+                center_x,
+                center_y,
+                swatch_size,
+            )?;
+        }
 
         let label_family = if theme.legend_text.family.is_empty() {
             None
