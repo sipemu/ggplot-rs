@@ -5,6 +5,25 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Fixed
+- **A `Fill`/`Color`/… legend mapped only on a layer, not the plot, got no
+  panel margin and ran off the canvas** (#201, upstream issue
+  DataZooDE/anofox-visualization#439). `GGPlot::has_legend_mapping()` (the
+  early, size-independent check that decides whether to reserve space for
+  a legend at all) only inspected the plot-level `.aes(...)` mapping — never
+  a layer's own `.layer_aes(...)` override, which is exactly how a stat-fed
+  fill (`geom_hex` pre-binned by the caller and mapped with
+  `StatIdentity` + `.layer_aes(...).fill(...)`) is normally wired up. The
+  legend still drew, with correct colours (the render path draws whatever
+  guides the trained scales produce, regardless of this flag), just with no
+  margin ever reserved for it: on a narrow panel that read as the legend
+  overlapping the plot, more generally as a colourbar clipped off past the
+  canvas edge — reproduced with one layer alone, and unaffected by whether
+  a second layer (`geom_abline`, mapping nothing new) was also present.
+  `has_legend_mapping()` now also checks every layer's own effective
+  mapping (its `layer_aes`, merged with the plot-level one when the geom
+  inherits aes), skipping a layer that opted out with `show_legend(false)`.
+
 ### Added
 - `ggplot_rs::spatial::polylabel()`/`polylabel_with_distance()` (feature `sf`):
   the pole of inaccessibility of a polygon (Mapbox's `polylabel`) as a public,
