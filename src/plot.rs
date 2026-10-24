@@ -2954,8 +2954,15 @@ impl GGPlot {
                     x_label_height,
                     extras,
                 );
-                let (legend_x0, _, mut is_horizontal) =
-                    crate::guide::legend::legend_position(&built.theme, &layout0.plot_area);
+                // `y` is unused here (only `legend_x0`/`is_horizontal` feed
+                // the avail-width check below), so #233's `Top` row-count
+                // parameter can't matter — `extras.legend_extra_rows` isn't
+                // even known yet at this point in the pass.
+                let (legend_x0, _, mut is_horizontal) = crate::guide::legend::legend_position(
+                    &built.theme,
+                    &layout0.plot_area,
+                    extras.legend_extra_rows,
+                );
                 if let Some(dir) = built.theme.legend_direction {
                     is_horizontal = matches!(dir, crate::theme::LegendDirection::Horizontal);
                 }
@@ -3025,9 +3032,13 @@ impl GGPlot {
                             x_label_height,
                             extras,
                         );
+                        // `y` is unused here too, but `extras` is final by
+                        // this point, so pass its real `legend_extra_rows`
+                        // for consistency with #233's `Top` formula.
                         let (legend_x_final, _, _) = crate::guide::legend::legend_position(
                             &built.theme,
                             &final_layout.plot_area,
+                            extras.legend_extra_rows,
                         );
                         let swatch_and_gap =
                             built.theme.legend_key_width + built.theme.legend_spacing;
@@ -3228,9 +3239,14 @@ impl GGPlot {
                                     x_label_height,
                                     retry_extras,
                                 );
+                                // `y` is unused here too; `retry_extras`
+                                // only tightened `legend_extra_width`, so
+                                // its `legend_extra_rows` is still the same
+                                // real value.
                                 let (retry_x, _, _) = crate::guide::legend::legend_position(
                                     &built.theme,
                                     &retry_layout.plot_area,
+                                    retry_extras.legend_extra_rows,
                                 );
                                 let all_still_fit = plans.iter().all(|(aes, plan)| {
                                     let Some(scale) = built.scales.get(aes) else {

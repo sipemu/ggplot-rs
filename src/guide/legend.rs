@@ -96,8 +96,10 @@ pub fn draw_legend(
         return Ok(());
     }
 
-    // Compute legend origin based on position
-    let (legend_x, legend_y, mut is_horizontal) = legend_position(theme, plot_area);
+    // Compute legend origin based on position. This deprecated path never
+    // wraps a legend onto more than one row, so `legend_extra_rows` is
+    // always 0 — see `legend_position`'s doc comment.
+    let (legend_x, legend_y, mut is_horizontal) = legend_position(theme, plot_area, 0);
     // legend.direction overrides the auto layout from the position.
     if let Some(dir) = theme.legend_direction {
         is_horizontal = matches!(dir, crate::theme::LegendDirection::Horizontal);
@@ -160,9 +162,89 @@ pub fn draw_legend(
     Ok(())
 }
 
+/// How many rows beyond the first a horizontal legend wraps onto — `max`
+/// across guides sharing one row (several discrete guides side by side),
+/// `sum` for guides stacked vertically instead. Exactly `layout_built`'s
+/// own `extras.legend_extra_rows` computation, so anything derived from
+/// it here can't disagree with the `plot_area.y` that count already
+/// produced.
+fn legend_rows_beyond_first(
+    is_horizontal: bool,
+    legend_plans: &std::collections::HashMap<Aesthetic, LegendPlan>,
+) -> usize {
+    if is_horizontal {
+        legend_plans
+            .values()
+            .map(|p| p.rows.saturating_sub(1))
+            .max()
+            .unwrap_or(0)
+    } else {
+        legend_plans
+            .values()
+            .map(|p| p.rows.saturating_sub(1))
+            .sum()
+    }
+}
+
+/// A horizontal (`Top`/`Bottom`) legend's own band height —
+/// `legend_margin.top` plus `(1 + legend_extra_rows)` row-heights
+/// (`legend_key_height + legend_spacing` each) plus `legend_margin.bottom`
+/// — exactly what `PlotLayout::compute_with_extras` reserves for it
+/// (#233).
+pub(crate) fn legend_band_height(theme: &Theme, legend_extra_rows: usize) -> f64 {
+    theme.legend_margin.top
+        + (1.0 + legend_extra_rows as f64) * (theme.legend_key_height + theme.legend_spacing)
+        + theme.legend_margin.bottom
+}
+
+/// #233: how much `renderer.rs`'s title/subtitle drawing must additionally
+/// lift itself above `plot_area.y` so neither overlaps a `Top` legend —
+/// the same idea as its existing `x_axis_lift` (a top x-axis also
+/// reserves space above the panel). Zero when there's no legend to draw,
+/// or its position isn't `Top`: byte-identical to before in every other
+/// case.
+pub(crate) fn top_legend_lift(
+    theme: &Theme,
+    scales: &ScaleSet,
+    suppressed: &std::collections::HashSet<Aesthetic>,
+    legend_plans: &std::collections::HashMap<Aesthetic, LegendPlan>,
+) -> f64 {
+    if !matches!(theme.legend_position, LegendPosition::Top) {
+        return 0.0;
+    }
+    if legend_scales_for(scales, suppressed).is_empty() {
+        return 0.0;
+    }
+    let is_horizontal = match theme.legend_direction {
+        Some(dir) => matches!(dir, crate::theme::LegendDirection::Horizontal),
+        None => true, // Top is always the horizontal auto-position.
+    };
+    legend_band_height(theme, legend_rows_beyond_first(is_horizontal, legend_plans))
+}
+
 /// Compute legend origin based on position setting.
+///
+/// `legend_extra_rows` is #233's `LayoutExtras::legend_extra_rows` — a
+/// horizontal legend wrapped onto more than one row by `plan_legend`'s
+/// auto-wrap/explicit grid. Only `Top` reads it: `PlotLayout::
+/// compute_with_extras` reserves a `legend_band_height` row directly
+/// above `plot_area` (ending exactly at `plot_area.y`), so backing off
+/// `plot_area.y` by that same band content (everything but
+/// `legend_margin.top`, which is the gap *above* where drawing starts)
+/// lands the legend's first row exactly inside its reserved band — after
+/// the title/subtitle and the plot's own outer margin, rather than
+/// #233's bug (an absolute-from-canvas-origin `legend_margin.top`,
+/// overlapping both). Every other position ignores this parameter; pass
+/// `0` where the caller has no wrap plan in hand (the deprecated
+/// `draw_legend`) or the returned `y` is unused (every `legend_position`
+/// call before the final layout pass only needs its `x`/`is_horizontal`).
+///
 /// Returns (x, y, is_horizontal).
-pub(crate) fn legend_position(theme: &Theme, plot_area: &Rect) -> (f64, f64, bool) {
+pub(crate) fn legend_position(
+    theme: &Theme,
+    plot_area: &Rect,
+    legend_extra_rows: usize,
+) -> (f64, f64, bool) {
     match theme.legend_position {
         LegendPosition::Right => (
             plot_area.x + plot_area.width + theme.legend_margin.left,
@@ -176,7 +258,7 @@ pub(crate) fn legend_position(theme: &Theme, plot_area: &Rect) -> (f64, f64, boo
         ),
         LegendPosition::Top => (
             plot_area.x + theme.legend_margin.left,
-            theme.legend_margin.top,
+            plot_area.y - legend_band_height(theme, legend_extra_rows) + theme.legend_margin.top,
             true,
         ),
         LegendPosition::Bottom => (
@@ -966,7 +1048,27 @@ pub(crate) fn draw_legend_planned(
         return Ok(());
     }
 
-    let (legend_x, legend_y, mut is_horizontal) = legend_position(theme, plot_area);
+    // #233: `legend_position`'s `Top` arm needs the same wrapped-row
+    // count `layout_built` fed `PlotLayout::compute_with_extras` to
+    // produce this `plot_area` in the first place — recomputed here from
+    // `legend_plans` (the exact plans that count came from) the same way
+    // `layout_built` did, so it can never disagree with the band
+    // `plot_area.y` was actually reserved against. `is_horizontal`'s
+    // auto value only depends on the position itself (`Top`/`Bottom`),
+    // overridable by `legend_direction` same as below — computed first
+    // since `legend_position` needs it to pick `max` (several guides
+    // sharing a row) vs. `sum` (several guides stacked), the same
+    // either/or `layout_built` used.
+    let is_horizontal_hint = match theme.legend_direction {
+        Some(dir) => matches!(dir, crate::theme::LegendDirection::Horizontal),
+        None => matches!(
+            theme.legend_position,
+            LegendPosition::Top | LegendPosition::Bottom
+        ),
+    };
+    let legend_extra_rows = legend_rows_beyond_first(is_horizontal_hint, legend_plans);
+    let (legend_x, legend_y, mut is_horizontal) =
+        legend_position(theme, plot_area, legend_extra_rows);
     if let Some(dir) = theme.legend_direction {
         is_horizontal = matches!(dir, crate::theme::LegendDirection::Horizontal);
     }
