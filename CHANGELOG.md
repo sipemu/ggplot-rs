@@ -5,6 +5,15 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.28.2] — 2026-10-24
+
+Fixes and one option from DataZooDE/anofox-visualization's #318 ports:
+`ScaleDateTime::domain()`, so `PlotGrid` can align date axes (#207);
+`PlotGrid` keeps each cell's own `svg_attr`s (#208); axis label fit leaves a
+legible gap between kept tick labels (#212); a multi-geometry `geom_sf` row is
+one mark (#213); compact relative SVG path encoding for `geom_sf` (#214). No API
+breaks (cargo-semver-checks against v0.28.1).
+
 ### Added
 - `geom_sf`'s native SVG output is more compact for large boundaries
   (#214): the new `DrawBackend::draw_polygon_rings_precise` (default
