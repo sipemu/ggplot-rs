@@ -5,8 +5,8 @@
 //! (text is `<text>` with font attributes the viewer renders).
 
 use super::backend::{
-    DrawBackend, FillPattern, FontFace, LineEnd, LineStyle, PointShape, PointStyle, RectStyle,
-    TextAnchor, TextStyle,
+    DrawBackend, FillPattern, FontFace, LineEnd, LineStyle, Linetype, PointShape, PointStyle,
+    RectStyle, TextAnchor, TextStyle,
 };
 use super::{Rect, RenderError};
 
@@ -417,18 +417,7 @@ impl SvgBackend {
     /// Emit one `<polyline>` for an already-finite run of points — see
     /// [`DrawBackend::draw_line`]'s splitting at non-finite vertices.
     fn draw_line_run(&mut self, pts: &[(f64, f64)], style: &LineStyle) {
-        let dash = match style
-            .linetype
-            .pattern()
-            .iter()
-            .flat_map(|(d, g)| [*d, *g])
-            .map(|v| format!("{v}"))
-            .collect::<Vec<_>>()
-            .join(",")
-        {
-            s if s.is_empty() => String::new(),
-            s => format!(" stroke-dasharray=\"{s}\""),
-        };
+        let dash = dasharray_attr(&style.linetype);
         // `Butt` is SVG's own default: omitting the attribute keeps default
         // output byte-identical.
         let linecap = match style.lineend {
@@ -457,6 +446,23 @@ fn num(v: f64) -> String {
     } else {
         "0".to_string()
     }
+}
+
+/// ` stroke-dasharray="d,g,…"` for a linetype, or `""` for solid. Uses the
+/// sanitised [`Linetype::dash_pattern`], so a `Linetype::Custom` with NaN or
+/// negative lengths never reaches the attribute (#220).
+fn dasharray_attr(linetype: &Linetype) -> String {
+    let pattern = linetype.dash_pattern();
+    if pattern.is_empty() {
+        return String::new();
+    }
+    let s = pattern
+        .iter()
+        .flat_map(|(d, g)| [*d, *g])
+        .map(|v| format!("{v}"))
+        .collect::<Vec<_>>()
+        .join(",");
+    format!(" stroke-dasharray=\"{s}\"")
 }
 
 /// #214: `d` for [`SvgBackend::draw_polygon_rings_precise`] — one `M<x>,<y>`
@@ -971,18 +977,7 @@ impl DrawBackend for SvgBackend {
         {
             return Ok(());
         }
-        let dash = match style
-            .linetype
-            .pattern()
-            .iter()
-            .flat_map(|(d, g)| [*d, *g])
-            .map(|v| format!("{v}"))
-            .collect::<Vec<_>>()
-            .join(",")
-        {
-            s if s.is_empty() => String::new(),
-            s => format!(" stroke-dasharray=\"{s}\""),
-        };
+        let dash = dasharray_attr(&style.linetype);
         let linecap = match style.lineend {
             LineEnd::Butt => "",
             LineEnd::Round => " stroke-linecap=\"round\"",

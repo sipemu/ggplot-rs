@@ -92,21 +92,14 @@ impl Geom for GeomPath {
         let x_scale = scales.get(&Aesthetic::X);
         let y_scale = scales.get(&Aesthetic::Y);
 
-        if let Some(cc) = color_col {
-            let mut groups: Vec<(String, Vec<usize>)> = Vec::new();
-            for (i, v) in cc.iter().enumerate() {
-                let key = v.to_group_key();
-                if let Some(entry) = groups.iter_mut().find(|(k, _)| k == &key) {
-                    entry.1.push(i);
-                } else {
-                    groups.push((key, vec![i]));
-                }
-            }
-
-            for (_, indices) in &groups {
+        // One polyline per group/colour/linetype level — a mapped
+        // `linetype` alone splits the rows too, as in ggplot2 (#220).
+        if color_col.is_some() || linetype_col.is_some() {
+            let groups = super::support::row_groups(data);
+            for indices in &groups {
                 let first_idx = indices[0];
-                let line_color = scales
-                    .map_color(&Aesthetic::Color, &cc[first_idx])
+                let line_color = color_col
+                    .and_then(|cc| scales.map_color(&Aesthetic::Color, &cc[first_idx]))
                     .unwrap_or(self.color);
 
                 let lt = linetype_col

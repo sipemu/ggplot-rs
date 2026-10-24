@@ -32,7 +32,7 @@ pub fn draw_radar_guides(
             color: grid.color,
             width: grid.width,
             alpha: 1.0,
-            linetype: grid.linetype,
+            linetype: grid.linetype.clone(),
             ..Default::default()
         };
         for (ny, _) in &y_breaks {
@@ -55,7 +55,7 @@ pub fn draw_radar_guides(
             color: spoke.color,
             width: spoke.width,
             alpha: 1.0,
-            linetype: spoke.linetype,
+            linetype: spoke.linetype.clone(),
             ..Default::default()
         };
         for (p, _) in &x_breaks {

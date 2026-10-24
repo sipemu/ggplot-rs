@@ -24,7 +24,16 @@ impl PointShape {
 }
 
 /// Line type patterns.
-#[derive(Clone, Debug, Copy, PartialEq, Eq)]
+///
+/// The named variants are ggplot2's fixed patterns; [`Linetype::Custom`]
+/// takes a caller-supplied dash/gap sequence (#220), e.g.
+/// `Linetype::Custom(vec![(0.0, 10.0)])` together with
+/// [`LineEnd::Round`] draws a row of round dots every 10 px (zero-length
+/// dashes are drawn as round caps), as flow-diagram edges use.
+///
+/// `Linetype` is no longer `Copy` (a `Custom` pattern owns its `Vec`) —
+/// clone it where a copy was taken before.
+#[derive(Clone, Debug, PartialEq)]
 pub enum Linetype {
     Solid,
     Dashed,
@@ -32,10 +41,19 @@ pub enum Linetype {
     DashDot,
     LongDash,
     TwoDash,
+    /// Arbitrary `(dash, gap)` pairs in px, rendered through the same
+    /// `stroke-dasharray` / dashed-stroking path as the named variants.
+    ///
+    /// Degenerate input never panics: pairs with a non-finite value are
+    /// dropped, negative lengths are clamped to `0`, and a pattern with no
+    /// usable pairs (empty, all-NaN, or a cycle of zero total length) draws
+    /// solid. See [`Linetype::dash_pattern`].
+    Custom(Vec<(f64, f64)>),
 }
 
 impl Linetype {
-    /// All linetypes in order (for discrete scale mapping).
+    /// All named linetypes in order (for discrete scale mapping).
+    /// [`Linetype::Custom`] is not part of the cycle.
     pub const ALL: &[Linetype] = &[
         Linetype::Solid,
         Linetype::Dashed,
@@ -45,7 +63,9 @@ impl Linetype {
         Linetype::TwoDash,
     ];
 
-    /// Get dash pattern as (draw_len, gap_len) pairs in pixels.
+    /// Get the dash pattern as (draw_len, gap_len) pairs in pixels, exactly
+    /// as stored. For [`Linetype::Custom`] this is the caller's raw input;
+    /// renderers use the sanitised [`Linetype::dash_pattern`] instead.
     pub fn pattern(&self) -> &[(f64, f64)] {
         match self {
             Linetype::Solid => &[],
@@ -54,6 +74,31 @@ impl Linetype {
             Linetype::DashDot => &[(6.0, 2.0), (2.0, 2.0)],
             Linetype::LongDash => &[(10.0, 4.0)],
             Linetype::TwoDash => &[(8.0, 3.0), (3.0, 3.0)],
+            Linetype::Custom(pairs) => pairs,
+        }
+    }
+
+    /// The dash pattern a renderer should draw: [`Linetype::pattern`] with
+    /// non-finite pairs dropped and negative lengths clamped to `0`. Returns
+    /// an empty vector (solid) when nothing usable is left or one full
+    /// dash+gap cycle is shorter than 0.01 px (or overflows to infinity), so no backend ever sees a
+    /// NaN, a negative length, or a zero-length cycle (which would never
+    /// advance a dashed stroker).
+    pub fn dash_pattern(&self) -> Vec<(f64, f64)> {
+        let pairs: Vec<(f64, f64)> = self
+            .pattern()
+            .iter()
+            .filter(|(d, g)| d.is_finite() && g.is_finite())
+            .map(|&(d, g)| (d.max(0.0), g.max(0.0)))
+            .collect();
+        let cycle: f64 = pairs.iter().map(|(d, g)| d + g).sum();
+        // No gap at all is a solid line too: emit nothing rather than a
+        // dasharray with only zero gaps.
+        let gaps: f64 = pairs.iter().map(|(_, g)| g).sum();
+        if pairs.is_empty() || !cycle.is_finite() || cycle < 0.01 || gaps <= 0.0 {
+            Vec::new()
+        } else {
+            pairs
         }
     }
 }

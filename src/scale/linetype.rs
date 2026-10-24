@@ -72,7 +72,7 @@ impl Scale for ScaleLinetypeDiscrete {
     fn map_to_linetype(&self, value: &Value) -> Option<Linetype> {
         let key = value.key_str();
         let idx = self.levels.get_index_of(key.as_ref()).unwrap_or(0);
-        Some(Linetype::ALL[idx % Linetype::ALL.len()])
+        Some(Linetype::ALL[idx % Linetype::ALL.len()].clone())
     }
 
     fn clone_box(&self) -> Box<dyn Scale> {

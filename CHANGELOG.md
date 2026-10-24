@@ -5,6 +5,34 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Added
+- **`Linetype::Custom(Vec<(f64, f64)>)` — caller-supplied dash patterns**
+  (#220, upstream issue DataZooDE/anofox-visualization#421: animated
+  round-dot "flow" edges there hand-wrote `stroke-dasharray="0 10"` with
+  round caps, which the closed `Linetype` enum couldn't express). The pairs
+  are `(dash, gap)` lengths in px, written through the same
+  `stroke-dasharray` path as the named linetypes (and the same dashed
+  stroker on the plotters raster backend), so `Custom(vec![(0.0, 10.0)])`
+  plus `lineend(LineEnd::Round)` draws a dot every 10 px. It maps per group
+  like any other linetype, via `scale_linetype_manual(vec![("a",
+  Linetype::Custom(..)), ("b", Linetype::Dashed)])`, on `geom_path`,
+  `geom_line`, `geom_segment` and `geom_curve`. Degenerate input never
+  panics: the new `Linetype::dash_pattern()` (what renderers now use) drops
+  pairs with a non-finite value, clamps negative lengths to `0`, and draws
+  solid when nothing usable is left (empty, all-NaN, zero gaps, or a
+  dash+gap cycle under 0.01 px). **Breaking:** `Linetype` is no longer
+  `Copy` or `Eq` (a `Custom` pattern owns a `Vec` of `f64`s) — `.clone()`
+  where a copy was taken before; exhaustive `match`es on it need a
+  `Custom` arm.
+
+### Fixed
+- **`geom_path`/`geom_line` with a mapped `linetype` but no `color` drew
+  every group as one polyline** in the first group's linetype (found while
+  adding #220). They split rows only on `color`; they now split on
+  `group`/`color`/`fill`/`linetype` (the shared `row_groups` helper other
+  geoms already use), as ggplot2 does, so each linetype level gets its own
+  line.
+
 ## [0.28.2] — 2026-10-24
 
 Fixes and one option from DataZooDE/anofox-visualization's #318 ports:
