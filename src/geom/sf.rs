@@ -10,7 +10,9 @@ use crate::coord::Coord;
 use crate::data::{DataFrame, Value};
 use crate::position::identity::PositionIdentity;
 use crate::position::Position;
-use crate::render::backend::{DrawBackend, LineStyle, Linetype, PointShape, PointStyle, RectStyle};
+use crate::render::backend::{
+    DrawBackend, FillPattern, LineStyle, Linetype, PointShape, PointStyle, RectStyle,
+};
 use crate::render::RenderError;
 use crate::scale::ScaleSet;
 use crate::spatial::{parse_wkt, Geometry, SfProjection};
@@ -170,6 +172,7 @@ impl GeomSf {
         simplify_path(&pts, self.simplify_px)
     }
 
+    #[allow(clippy::too_many_arguments)]
     fn draw_geometry(
         &self,
         g: &Geometry,
@@ -177,6 +180,7 @@ impl GeomSf {
         fill: (u8, u8, u8),
         color: (u8, u8, u8),
         size: f64,
+        pattern: Option<&FillPattern>,
         backend: &mut dyn DrawBackend,
     ) -> Result<(), RenderError> {
         match g {
@@ -193,15 +197,27 @@ impl GeomSf {
                     self.draw_path(l, project, fill, backend)?;
                 }
             }
-            Geometry::Polygon(rings) => self.draw_rings(rings, project, fill, color, backend)?,
+            Geometry::Polygon(rings) => {
+                self.draw_rings(rings, project, fill, color, pattern, backend)?
+            }
             Geometry::MultiPolygon(polys) => {
-                for p in polys {
-                    self.draw_rings(p, project, fill, color, backend)?;
-                }
+                // #213: one mark per data row, not one per part. Every
+                // part's rings (exterior + holes) go into a single
+                // `draw_rings` call so the backend emits one `<path>` with
+                // one `M…Z` subpath per ring/part under the even-odd fill
+                // rule, instead of a separate mark (and tooltip/row-attrs)
+                // per part. Correct under evenodd even when concatenated:
+                // a point inside part A crosses A's rings an odd number of
+                // times and B's rings zero times (parts of a valid
+                // MultiPolygon never overlap), so the union still fills
+                // each part with its own holes cut out.
+                let rings: Vec<Vec<[f64; 2]>> =
+                    polys.iter().flat_map(|p| p.iter().cloned()).collect();
+                self.draw_rings(&rings, project, fill, color, pattern, backend)?;
             }
             Geometry::Collection(parts) => {
                 for part in parts {
-                    self.draw_geometry(part, project, fill, color, size, backend)?;
+                    self.draw_geometry(part, project, fill, color, size, pattern, backend)?;
                 }
             }
         }
@@ -252,10 +268,13 @@ impl GeomSf {
         )
     }
 
-    /// Draw one polygon — `rings[0]` the exterior, every other ring a hole
-    /// — as a single [`DrawBackend::draw_polygon_rings`] call, so the
+    /// Draw a set of rings — for a single `Polygon`, `rings[0]` the
+    /// exterior and every other ring a hole; for a `MultiPolygon` (#213),
+    /// every part's rings concatenated, part boundaries undistinguished —
+    /// as a single [`DrawBackend::draw_polygon_rings`] call, so the
     /// backend cuts the holes out of the fill under the even-odd rule
-    /// rather than drawing them as separate, merely-stroked shapes (#178).
+    /// rather than drawing them as separate, merely-stroked shapes (#178),
+    /// and a multi-part row draws as one mark, not one per part (#213).
     /// Each ring is simplified to the render resolution first (screen
     /// space, [`GeomSf::simplify_px`]); a ring that collapses below 3
     /// points keeps its original vertices rather than vanishing (still
@@ -266,6 +285,7 @@ impl GeomSf {
         project: &impl Fn([f64; 2]) -> (f64, f64),
         fill: (u8, u8, u8),
         color: (u8, u8, u8),
+        pattern: Option<&FillPattern>,
         backend: &mut dyn DrawBackend,
     ) -> Result<(), RenderError> {
         let mut screen_rings: Vec<Vec<(f64, f64)>> = Vec::with_capacity(rings.len());
@@ -284,17 +304,19 @@ impl GeomSf {
         if screen_rings.is_empty() {
             return Ok(());
         }
-        backend.draw_polygon_rings(
-            &screen_rings,
-            &RectStyle {
-                fill: Some(fill),
-                stroke: (self.line_width > 0.0).then_some(color),
-                stroke_width: self.line_width,
-                alpha: self.alpha,
-                clip: true,
-                corner_radius: 0.0,
-            },
-        )
+        let style = RectStyle {
+            fill: Some(fill),
+            stroke: (self.line_width > 0.0).then_some(color),
+            stroke_width: self.line_width,
+            alpha: self.alpha,
+            clip: true,
+            corner_radius: 0.0,
+        };
+        // #206: a no-data row's pattern fill, same ring set and stroke.
+        match pattern {
+            Some(p) => backend.draw_polygon_rings_pattern(&screen_rings, p, &style),
+            None => backend.draw_polygon_rings(&screen_rings, &style),
+        }
     }
 }
 
@@ -417,6 +439,11 @@ impl Geom for GeomSf {
                 .and_then(|cc| scales.map_color(&Aesthetic::Color, &cc[i]))
                 .unwrap_or(self.color);
             let size = size_of(i);
+            // #206: a no-data row (Fill mapped, value missing) draws its
+            // scale's na_pattern instead of a flat na colour, when set.
+            let pattern = fill_col
+                .filter(|fc| matches!(fc[i], Value::Na))
+                .and_then(|_| scales.na_fill_pattern(&Aesthetic::Fill));
 
             let label = label_col
                 .map(|c| value_str(&c[i]))
@@ -429,7 +456,7 @@ impl Geom for GeomSf {
                 (None, None) => None,
             });
             super::set_row_extras(backend, data, i);
-            self.draw_geometry(&g, &project, fill, color, size, backend)?;
+            self.draw_geometry(&g, &project, fill, color, size, pattern.as_ref(), backend)?;
         }
         backend.set_tooltip(None);
         super::clear_mark(backend);

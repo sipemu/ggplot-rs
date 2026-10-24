@@ -21,6 +21,42 @@ All notable changes to this project are documented here. The format follows
   (`ScaleContinuous`, `ScaleDateTime`, `ScaleDiscrete`) for the same gap —
   `ScaleDiscrete` correctly has no `domain()` and is excluded by
   `CollectX`'s own `is_discrete()` check instead, so it needed no change.
+- `geom_sf` (#213): a `MultiPolygon` row now draws as **one** mark — one
+  `<path>` with one `M…Z` subpath per ring and part under the even-odd
+  fill rule, one set of row attributes/`data-*`, one tooltip — instead of
+  one separate mark per part (a country with islands no longer produces
+  N marks sharing the same `data-row`). Single-`Polygon` output is
+  unchanged. Found porting DataZooDE/anofox-visualization#420.
+
+## [0.28.1] — 2026-10-24
+
+Pattern fills (#206): a stripe `Pattern` as `na_pattern` on `ScaleFillBinned`,
+drawn in the legend's NA key and by `geom_sf` / polygon / rect / tile (SVG
+`<defs><pattern>` with per-plot ids; raster stripes; plotters falls back to the
+background colour), for hatched no-data regions on choropleths
+(DataZooDE/anofox-visualization#420). No API breaks (cargo-semver-checks
+against v0.28.0).
+
+### Added
+- Pattern fills (#206): `render::backend::FillPattern` (`Stripe { fg, bg,
+  size_px, angle_deg }`, a thin 30%-duty-cycle hatch by default —
+  `FillPattern::stripe(fg, bg)`), `ScaleFillBinned::na_pattern(..)` (sits
+  alongside the existing `na_color`, drawn instead of it), and three new
+  `DrawBackend` methods — `draw_rect_pattern`/`draw_polygon_pattern`/
+  `draw_polygon_rings_pattern` — drawn by `geom_sf`/`geom_polygon`/
+  `geom_rect`/`geom_tile` for a `Value::Na` row and by the legend's own
+  "no data" key, instead of `na_color`'s flat colour. The native SVG
+  backend registers a per-backend-instance-prefixed `<defs><pattern>`
+  (deduped by equality) and fills with its `url(#…)`; the pixel/`canvas`
+  backend rasterises the actual stripes per pixel; `plotters` has no
+  pattern primitive and keeps the trait methods' default — a flat
+  `FillPattern::bg` fill, so a no-data region still reads as muted, just
+  without the hatch. Holes still cut out under the even-odd rule exactly
+  as a flat fill would. DataZooDE/anofox-visualization#420 — a classed
+  choropleth's no-data cells can retire their hand-written SVG `<pattern>`
+  hatch (`map/mod.rs`) onto this instead of losing it to a flat na colour
+  (a visible regression the `::MAP` → `geom_sf` port would otherwise be
+  stuck with).
 
 ## [0.28.0] — 2026-10-24
 

@@ -193,6 +193,11 @@ impl Geom for GeomTile {
             let fill_color = fill_col
                 .and_then(|fc| scales.map_color(&Aesthetic::Fill, &fc[i]))
                 .unwrap_or(self.fill);
+            // #206: a no-data cell draws its scale's na_pattern instead
+            // of a flat na colour, when set.
+            let pattern = fill_col
+                .filter(|fc| matches!(fc[i], crate::data::Value::Na))
+                .and_then(|_| scales.na_fill_pattern(&Aesthetic::Fill));
 
             // Hover tooltip: "x, y: value" — or "date: value" for calendar
             // cells, whose x/y are layout positions.
@@ -226,18 +231,25 @@ impl Geom for GeomTile {
             );
             super::set_row_extras(backend, data, i);
 
-            backend.draw_rect(
-                (left, top.min(bottom)),
-                (right, top.max(bottom)),
-                &RectStyle {
-                    fill: Some(fill_color),
-                    stroke: Some(self.color),
-                    stroke_width: self.line_width,
-                    alpha: self.alpha,
-                    clip: true,
-                    corner_radius: self.radius,
-                },
-            )?;
+            let style = RectStyle {
+                fill: Some(fill_color),
+                stroke: Some(self.color),
+                stroke_width: self.line_width,
+                alpha: self.alpha,
+                clip: true,
+                corner_radius: self.radius,
+            };
+            match &pattern {
+                Some(p) => backend.draw_rect_pattern(
+                    (left, top.min(bottom)),
+                    (right, top.max(bottom)),
+                    p,
+                    &style,
+                )?,
+                None => {
+                    backend.draw_rect((left, top.min(bottom)), (right, top.max(bottom)), &style)?
+                }
+            }
         }
         super::clear_mark(backend);
         super::clear_row_extras(backend);
