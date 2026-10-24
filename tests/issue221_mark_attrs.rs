@@ -268,3 +268,130 @@ fn group_wrap_value_is_escaped_na_is_ungrouped_and_bad_names_warn() {
         "{warnings:?}"
     );
 }
+
+#[test]
+fn layer_svg_attrs_plural_and_later_call_replaces_earlier() {
+    let (svg, warnings) = render(boxes().layer_svg_attrs([
+        ("class", "first"),
+        ("class", "second"),
+        ("data-kind", "box"),
+    ]));
+    assert!(warnings.is_empty(), "{warnings:?}");
+    assert!(svg.contains(" second\"") && !svg.contains("first"), "{svg}");
+    assert_eq!(svg.matches(r#"data-kind="box""#).count(), 2, "{svg}");
+}
+
+#[test]
+fn geom_label_box_and_text_share_the_group_and_flags() {
+    let (svg, _) = render(
+        GGPlot::new(nodes())
+            .geom_label()
+            .layer_aes(
+                Aes::new()
+                    .x("cx")
+                    .y("cy")
+                    .label("id")
+                    .class("cls")
+                    .group_wrap("of", "id")
+                    .data_attr("node", "id"),
+            )
+            .layer_svg_attr("pointer-events", "none"),
+    );
+    let open = r#"<g data-of="a">"#;
+    let start = svg.find(open).unwrap() + open.len();
+    let inner = &svg[start..start + svg[start..].find("</g>").unwrap()];
+    // The label's background rect and its text, both classed and inert.
+    assert_eq!(inner.matches("speed-1 hot").count(), 2, "{inner}");
+    assert_eq!(
+        inner.matches(r#"pointer-events="none""#).count(),
+        2,
+        "{inner}"
+    );
+    assert_eq!(inner.matches(r#"data-node="a""#).count(), 2, "{inner}");
+    assert!(!inner.contains("<title>"), "{inner}");
+}
+
+#[test]
+fn decorative_layer_keeps_class_group_and_layer_attrs() {
+    let (svg, _) = render(
+        GGPlot::new(nodes())
+            .geom_point()
+            .layer_aes(
+                Aes::new()
+                    .x("cx")
+                    .y("cy")
+                    .class("cls")
+                    .group_wrap("of", "id"),
+            )
+            .decorative()
+            .layer_svg_attr("pointer-events", "none"),
+    );
+    assert_eq!(svg.matches("<g data-of=").count(), 2, "{svg}");
+    assert!(svg.contains("speed-3"), "{svg}");
+    // A decorative mark already writes aria-hidden="true" — never twice.
+    for t in tags_with(&svg, "gg-decorative") {
+        assert_eq!(t.matches("aria-hidden").count(), 1, "{t}");
+        assert!(t.contains(r#"pointer-events="none""#), "{t}");
+    }
+}
+
+#[test]
+fn faceted_and_grid_composed_plots_group_too() {
+    let mut data = nodes();
+    data.push(scol("f", &["p", "q"]));
+    let faceted = GGPlot::new(data)
+        .geom_point()
+        .layer_aes(
+            Aes::new()
+                .x("cx")
+                .y("cy")
+                .group_wrap("of", "id")
+                .class("cls"),
+        )
+        .layer_svg_attr("aria-hidden", "true")
+        .facet_wrap("f", None);
+    let (svg, _) = render(faceted);
+    assert_eq!(svg.matches("<g data-of=").count(), 2, "{svg}");
+    assert!(
+        svg.contains(r#"aria-hidden="true" class="gg-mark gg-point speed-3""#),
+        "{svg}"
+    );
+
+    let cell = GGPlot::new(nodes())
+        .geom_point()
+        .layer_aes(
+            Aes::new()
+                .x("cx")
+                .y("cy")
+                .color("id")
+                .group_wrap("of", "id"),
+        )
+        .svg_attr("data-cell", "one");
+    let grid = ggplot_rs::compose::PlotGrid::new()
+        .add(cell)
+        .add(boxes())
+        .render_svg_native_with_size(400, 200)
+        .unwrap();
+    assert_eq!(grid.matches("<g data-of=").count(), 2, "{grid}");
+    // The cell's own svg_attr group wraps its whole content, groups inside.
+    let cell_g = grid.find(r#"<g data-cell="one">"#).unwrap();
+    assert!(grid[cell_g..].find("<g data-of=").is_some(), "{grid}");
+}
+
+#[cfg(feature = "canvas")]
+#[test]
+fn raster_backend_ignores_the_new_attributes() {
+    let p = boxes()
+        .layer_aes(
+            Aes::new()
+                .xmin("x0")
+                .xmax("x1")
+                .ymin("y0")
+                .ymax("y1")
+                .class("cls")
+                .group_wrap("of", "id"),
+        )
+        .layer_svg_attr("pointer-events", "none");
+    let (w, h, px) = p.render_rgba_with_size(100, 100).unwrap();
+    assert_eq!(px.len(), (w * h * 4) as usize);
+}

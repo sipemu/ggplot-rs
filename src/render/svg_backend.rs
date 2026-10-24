@@ -1467,6 +1467,48 @@ mod tests {
     use super::*;
     use crate::render::Rect;
 
+    /// #221: the backend re-checks everything callers hand it directly
+    /// through the public `DrawBackend` setters (defence in depth).
+    #[test]
+    fn issue221_backend_rechecks_class_group_and_layer_attrs() {
+        let mut b = backend();
+        b.set_mark_geom(Some("point"));
+        b.set_mark_class(Some("ok \"bad 1x ok".into()));
+        b.set_layer_attrs(vec![
+            ("aria-hidden".into(), "maybe".into()),
+            ("pointer-events".into(), "none\" onload=\"x".into()),
+            ("style".into(), "fill:red".into()),
+            ("class".into(), "lay".into()),
+        ]);
+        b.set_mark_group(Some(("onclick".into(), "x".into())));
+        b.draw_circle((1.0, 1.0), 1.0, &PointStyle::default())
+            .unwrap();
+        b.set_mark_group(Some(("data-of".into(), "n".into())));
+        let runs = [("a", None), ("b", Some("https://e.x"))];
+        b.draw_text_runs(&runs, (5.0, 5.0), &TextStyle::default())
+            .unwrap();
+        b.set_mark_group(None);
+        b.set_mark_geom(None);
+        let body = b.body().to_string();
+        assert!(
+            body.contains(r#"class="gg-mark gg-point lay ok""#),
+            "{body}"
+        );
+        assert!(!body.contains("bad") && !body.contains("1x"), "{body}");
+        assert!(
+            !body.contains("aria-hidden") && !body.contains("onload"),
+            "{body}"
+        );
+        assert!(
+            !body.contains("style=") && !body.contains("onclick"),
+            "{body}"
+        );
+        assert!(body.contains(r#"<g data-of="n"><text"#), "{body}");
+        assert!(body.contains("gg-text lay ok"), "{body}");
+        // A later finish() has nothing left to splice.
+        assert!(b.finish().contains(r#"<g data-of="n">"#));
+    }
+
     fn backend() -> SvgBackend {
         SvgBackend::new(
             100,

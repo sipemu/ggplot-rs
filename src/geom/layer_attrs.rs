@@ -95,3 +95,57 @@ impl Geom for LayerSvgAttrs {
         self.0.validate_layer(pre_stat_columns, stat_name)
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::geom::bar::GeomBar;
+    use crate::geom::boxplot::GeomBoxplot;
+    use crate::geom::line::GeomLine;
+    use crate::geom::point::GeomPoint;
+    use crate::geom::rect::GeomRect;
+    use crate::geom::refline::GeomHline;
+
+    fn wrap(g: impl Geom + 'static) -> LayerSvgAttrs {
+        LayerSvgAttrs(Box::new(g), vec![("class".into(), "x".into())])
+    }
+
+    #[test]
+    fn delegates_every_geom_method() {
+        let p = GeomPoint::default();
+        let w = wrap(GeomPoint::default());
+        assert_eq!(w.name(), p.name());
+        assert_eq!(w.required_aes(), p.required_aes());
+        assert_eq!(w.default_stat().name(), p.default_stat().name());
+        assert_eq!(w.default_position().name(), p.default_position().name());
+        assert_eq!(
+            format!("{:?}", w.default_params()),
+            format!("{:?}", p.default_params())
+        );
+        assert!(w.consumes_tooltips());
+        assert!(w.inherit_aes());
+        assert!(!wrap(GeomHline::new(1.0)).inherit_aes());
+        assert!(wrap(GeomBar::default()).include_zero_baseline());
+        assert!(wrap(GeomRect::default()).allows_infinite());
+        assert!(wrap(GeomLine::default()).keeps_na_as_break());
+        let b = wrap(GeomBoxplot::default());
+        assert_eq!(
+            b.mapped_only_columns(),
+            GeomBoxplot::default().mapped_only_columns()
+        );
+        assert!(b.validate_layer(&[], "identity").is_err());
+        let mut d = DataFrame::new();
+        d.add_column(
+            "outliers".to_string(),
+            vec![crate::data::Value::Str("1".into())],
+        );
+        d.add_column("ymin".to_string(), vec![crate::data::Value::Float(0.0)]);
+        d.add_column("ymax".to_string(), vec![crate::data::Value::Float(1.0)]);
+        let n = d.column_names().len();
+        b.setup_data(&mut d, &mut Vec::new());
+        assert!(d.column_names().len() >= n);
+        let mut m = wrap(GeomLine::default());
+        m.set_series_color((1, 2, 3));
+        m.apply_element_geom(&crate::theme::elements::ElementGeom::default());
+    }
+}
