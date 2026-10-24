@@ -5,6 +5,9 @@
 #[cfg(feature = "geojson")]
 pub mod geojson;
 
+mod polylabel;
+pub use polylabel::{polylabel, polylabel_with_distance};
+
 /// A 2-D coordinate `[x, y]` (longitude/easting, latitude/northing). Any Z/M
 /// ordinates in the WKT are parsed and discarded.
 pub type Coord = [f64; 2];
