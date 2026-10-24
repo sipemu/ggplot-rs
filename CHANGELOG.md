@@ -5,6 +5,23 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Fixed
+- **SVG attribute values didn't entity-escape `\t`/`\n`/`\r`** (#226,
+  upstream issue DataZooDE/anofox-visualization#420: a multi-line
+  `data-label` came out with a literal newline). The shared escaper used
+  for *both* element content and quoted attribute values left these three
+  characters literal; XML attribute-value normalisation collapses an
+  unescaped one to a plain space (the SVG spec defers to XML 1.0 §3.3.3
+  here, and every browser follows it), so a consumer reading the attribute
+  back through any XML/DOM parser silently lost the original character.
+  Split into `escape` (element content — `<text>`/`<title>`/`<tspan>`,
+  unchanged) and a new `escape_attr` (every attribute value: `svg_attr`/
+  `layer_svg_attr`, `Aes::data_attr`, `Aes::group_wrap`'s group value,
+  `class`/`data-geom`, `font-family`, and `#196`'s `href`), now entity-
+  escaping `\t`→`&#9;`, `\n`→`&#10;`, `\r`→`&#13;` in the latter. No
+  change to element content or to any value without these characters, so
+  existing output is otherwise byte-identical.
+
 ## [0.30.0] — 2026-10-24
 
 Text options for DataZooDE/anofox-visualization#421 (diagrams drawn with
