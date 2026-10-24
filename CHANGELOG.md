@@ -48,6 +48,21 @@ All notable changes to this project are documented here. The format follows
   named `"y"`, mapped to the x aesthetic) is never carried, so it can't
   silently overwrite the computed bin values.
 
+### Spatial
+
+- `ggplot_rs::spatial::polylabel()`/`polylabel_with_distance()` (feature `sf`):
+  the pole of inaccessibility of a polygon (Mapbox's `polylabel`) as a public,
+  data-space function — works on lon/lat, projected metres or screen pixels,
+  whatever plane the caller's rings are in, unlike `geom_sf_text`'s own
+  (private, screen-space-only) anchor placement. `Geometry::label_point()`
+  wraps it per geometry type (a point is itself, a `MultiPolygon`/collection
+  the pole of its largest part by area). `geom_sf_text`/`geom_sf_label`'s
+  `SfLabelAnchor::Polylabel` now delegates to this instead of carrying its
+  own copy of the algorithm. DataZooDE/anofox-visualization#420, #195 — lets
+  a consumer placing symbols/labels at a region's visual centre (graduated
+  `::SIZE` symbols on a polygon row) call the same algorithm `geom_sf_text`
+  uses, on raw data-space geometry, before any screen projection.
+
 ## [0.27.0] — 2026-10-24
 
 The DataZooDE/anofox-visualization#318 batch: a wasm-safe GAM smoother (#174),
