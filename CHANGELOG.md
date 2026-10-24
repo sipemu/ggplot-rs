@@ -6,6 +6,16 @@ All notable changes to this project are documented here. The format follows
 ## [Unreleased]
 
 ### Fixed
+- **`check.overlap` could leave adjacent continuous x tick labels touching**
+  (#212, upstream issue DataZooDE/anofox-visualization#450). The thinning
+  pass only required two kept labels' estimated bounding boxes not to
+  literally intersect — on a narrow panel (a dashboard card's plot area
+  squeezed by a right-hand legend) that could leave as little as ~1 px
+  between them, which on real font metrics reads as one garbled run (`25`
+  next to `50` as `2550`). `draw_x_axis` now also requires one space
+  character's width of clearance between every pair of kept labels, not
+  just "don't touch" — a 0/25/50/75/100 set over a ~50 px panel now keeps
+  0/50/100 instead of 0/25/50/100 with a sub-pixel gap.
 - **`PlotGrid::axis_collect(AxisCollect::CollectX)` (#175) skipped every
   column with a date x axis**, warning `plot_grid: a column's x scale is
   discrete or untrained; x domain not collected` and leaving every cell —
