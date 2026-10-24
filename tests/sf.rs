@@ -149,3 +149,142 @@ fn hover_tooltip_emitted_as_title() {
         "tooltip in: {svg}"
     );
 }
+
+/// #178: a polygon with a hole draws one `<path>` whose `d` has two
+/// subpaths (exterior + hole) under `fill-rule="evenodd"`, so the hole is
+/// cut out of the fill rather than drawn as a separately-stroked ring.
+#[test]
+fn polygon_with_a_hole_renders_as_one_evenodd_path() {
+    let mut df = DataFrame::new();
+    df.add_column(
+        "geometry".into(),
+        strs(&["POLYGON ((0 0, 10 0, 10 10, 0 10, 0 0), (3 3, 7 3, 7 7, 3 7, 3 3))"]),
+    );
+    let svg = GGPlot::new(df)
+        .aes(Aes::new())
+        .geom_sf()
+        .render_svg_native()
+        .expect("sf render");
+    assert!(svg.contains("fill-rule=\"evenodd\""), "{svg}");
+    let path_d = svg
+        .split("d=\"")
+        .nth(1)
+        .and_then(|s| s.split('"').next())
+        .expect("a path d attribute");
+    assert_eq!(path_d.matches('M').count(), 2, "exterior + hole: {path_d}");
+    assert_eq!(path_d.matches('Z').count(), 2, "{path_d}");
+}
+
+/// A multipolygon draws each part as its own evenodd path (so a part with
+/// its own hole still cuts it out), independently of its sibling parts.
+#[test]
+fn multipolygon_renders_each_part_independently() {
+    let mut df = DataFrame::new();
+    df.add_column(
+        "geometry".into(),
+        strs(&[
+            "MULTIPOLYGON (((0 0, 4 0, 4 4, 0 4, 0 0)), ((10 0, 14 0, 14 4, 10 4, 10 0), (11 1, 13 1, 13 3, 11 3, 11 1)))",
+        ]),
+    );
+    let svg = GGPlot::new(df)
+        .aes(Aes::new())
+        .geom_sf()
+        .render_svg_native()
+        .expect("sf render");
+    // One evenodd path per polygon part: the first with 1 subpath, the
+    // second (with its hole) with 2.
+    let subpath_counts: Vec<usize> = svg
+        .split("d=\"")
+        .skip(1)
+        .map(|s| s.split('"').next().unwrap_or("").matches('M').count())
+        .collect();
+    assert_eq!(subpath_counts, vec![1, 2], "{svg}");
+}
+
+/// #178: render-resolution simplification drops near-collinear vertices by
+/// default (tolerance 0.5 px), and `.simplify(0.0)` keeps every one.
+#[test]
+fn render_resolution_simplification_reduces_near_collinear_points() {
+    // A densely-sampled square ring (100 points per side, each side's points
+    // nearly collinear — a 0.05-unit wiggle, far under half a screen pixel
+    // once the panel is rendered at 400x400px over a 100x100 data extent).
+    let mut pts: Vec<(f64, f64)> = Vec::new();
+    for i in 0..100 {
+        let t = i as f64 / 100.0;
+        pts.push((t * 100.0, if i % 2 == 0 { 0.0 } else { 0.05 }));
+    }
+    for i in 0..100 {
+        let t = i as f64 / 100.0;
+        pts.push((100.0, t * 100.0));
+    }
+    for i in 0..100 {
+        let t = i as f64 / 100.0;
+        pts.push((100.0 - t * 100.0, 100.0));
+    }
+    for i in 0..100 {
+        let t = i as f64 / 100.0;
+        pts.push((0.0, 100.0 - t * 100.0));
+    }
+    let wkt = {
+        let coords: Vec<String> = pts
+            .iter()
+            .chain(pts.first())
+            .map(|(x, y)| format!("{x} {y}"))
+            .collect();
+        format!("POLYGON (({}))", coords.join(", "))
+    };
+    let count_ls = |simplify_px: f64| {
+        let mut df = DataFrame::new();
+        df.add_column("geometry".into(), strs(&[&wkt]));
+        let svg = GGPlot::new(df)
+            .aes(Aes::new())
+            .geom_sf_with(GeomSf::default().simplify(simplify_px))
+            .render_svg_native_with_size(400, 400)
+            .expect("sf render");
+        let path_d = svg
+            .split("d=\"")
+            .nth(1)
+            .and_then(|s| s.split('"').next())
+            .expect("a path d attribute")
+            .to_string();
+        path_d.matches('L').count()
+    };
+    let simplified = count_ls(0.5);
+    let unsimplified = count_ls(0.0);
+    assert_eq!(unsimplified, 400, "every vertex kept at tolerance 0");
+    assert!(
+        simplified < unsimplified / 4,
+        "simplified {simplified} should be far fewer than unsimplified {unsimplified}"
+    );
+}
+
+/// #178: a faceted plot draws each panel through `PanelBackendAdapter`
+/// (`render::renderer`), not the top-level backend directly — its own
+/// `draw_polygon_rings` forwarding needs its own coverage, separate from
+/// every other (unfaceted) test in this file.
+#[test]
+fn a_hole_renders_correctly_inside_a_facet_panel() {
+    let mut df = DataFrame::new();
+    df.add_column(
+        "geometry".into(),
+        strs(&[
+            "POLYGON ((0 0, 10 0, 10 10, 0 10, 0 0), (3 3, 7 3, 7 7, 3 7, 3 3))",
+            "POLYGON ((0 0, 10 0, 10 10, 0 10, 0 0))",
+        ]),
+    );
+    df.add_column("region".into(), strs(&["A", "B"]));
+    let svg = GGPlot::new(df)
+        .aes(Aes::new())
+        .geom_sf()
+        .facet_wrap("region", Some(2))
+        .render_svg_native()
+        .expect("faceted sf render");
+    assert!(svg.contains("fill-rule=\"evenodd\""), "{svg}");
+    let subpath_counts: Vec<usize> = svg
+        .split("d=\"")
+        .skip(1)
+        .map(|s| s.split('"').next().unwrap_or("").matches('M').count())
+        .collect();
+    // Panel A's polygon has a hole (2 subpaths); panel B's doesn't (1).
+    assert!(subpath_counts.contains(&2), "{svg}");
+}

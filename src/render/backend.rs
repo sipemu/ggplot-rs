@@ -335,6 +335,37 @@ pub trait DrawBackend {
     fn draw_polygon(&mut self, points: &[(f64, f64)], style: &RectStyle)
         -> Result<(), RenderError>;
 
+    /// Draw a polygon with holes: `rings[0]` is the exterior, every other
+    /// ring a hole cut out of it under the even-odd fill rule (`geom_sf`'s
+    /// `Polygon`, OGC/`sf` convention — see
+    /// [`spatial::Geometry::Polygon`](crate::spatial::Geometry::Polygon)).
+    /// One `stroke`/`stroke_width` draws every ring's outline, exterior and
+    /// holes alike (as `ggplot2`'s `geom_sf` does).
+    ///
+    /// Default: no real hole cut-out (for backends that pre-date this
+    /// method) — the exterior ring filled and stroked, every other ring
+    /// stroked only. Backends with a resolution-independent fill (SVG) or a
+    /// scanline rasteriser (pixel/plotters) should override this to use
+    /// their fill rule across every ring at once.
+    fn draw_polygon_rings(
+        &mut self,
+        rings: &[Vec<(f64, f64)>],
+        style: &RectStyle,
+    ) -> Result<(), RenderError> {
+        for (i, ring) in rings.iter().enumerate() {
+            let ring_style = if i == 0 {
+                style.clone()
+            } else {
+                RectStyle {
+                    fill: None,
+                    ..style.clone()
+                }
+            };
+            self.draw_polygon(ring, &ring_style)?;
+        }
+        Ok(())
+    }
+
     /// Like [`draw_text`](Self::draw_text), but with an optional `<title>`
     /// tooltip carrying the *full* text when `text` itself has been
     /// shortened (e.g. a truncated-with-ellipsis legend label, #159).
@@ -485,10 +516,14 @@ mod tests {
 
     /// A minimal backend that does not override `draw_quadratic`, to exercise
     /// the trait's default flattening implementation.
+    /// One `draw_polygon` call's recorded points and fill colour.
+    type RecordedPolygon = (Vec<(f64, f64)>, Option<(u8, u8, u8)>);
+
     #[derive(Default)]
     struct RecordingBackend {
         lines: RefCell<Vec<Vec<(f64, f64)>>>,
         circles: RefCell<Vec<((f64, f64), f64)>>,
+        polygons: RefCell<Vec<RecordedPolygon>>,
     }
 
     impl DrawBackend for RecordingBackend {
@@ -527,9 +562,12 @@ mod tests {
         }
         fn draw_polygon(
             &mut self,
-            _points: &[(f64, f64)],
-            _style: &RectStyle,
+            points: &[(f64, f64)],
+            style: &RectStyle,
         ) -> Result<(), RenderError> {
+            self.polygons
+                .borrow_mut()
+                .push((points.to_vec(), style.fill));
             Ok(())
         }
         fn plot_area(&self) -> Rect {
@@ -598,6 +636,35 @@ mod tests {
             assert_eq!(*center, (1.0, 2.0));
             assert_eq!(*radius, 3.0);
         }
+    }
+
+    /// The default `draw_polygon_rings` (for a backend pre-dating #178, or
+    /// any third-party `DrawBackend` that never overrides it) falls back to
+    /// one `draw_polygon` call per ring: the exterior filled, every other
+    /// ring (a hole) with its fill cleared — the old approximation, not a
+    /// real cut-out, but it draws *something* rather than nothing.
+    #[test]
+    fn default_draw_polygon_rings_fills_only_the_exterior() {
+        let mut b = RecordingBackend::default();
+        let exterior = vec![(0.0, 0.0), (10.0, 0.0), (10.0, 10.0), (0.0, 10.0)];
+        let hole = vec![(3.0, 3.0), (7.0, 3.0), (7.0, 7.0), (3.0, 7.0)];
+        b.draw_polygon_rings(
+            &[exterior.clone(), hole.clone()],
+            &RectStyle {
+                fill: Some((200, 50, 50)),
+                stroke: Some((0, 0, 0)),
+                stroke_width: 1.0,
+                alpha: 1.0,
+                clip: true,
+                corner_radius: 0.0,
+            },
+        )
+        .unwrap();
+        let polys = b.polygons.borrow();
+        assert_eq!(polys.len(), 2, "one draw_polygon call per ring");
+        assert_eq!(polys[0], (exterior, Some((200, 50, 50))), "exterior filled");
+        assert_eq!(polys[1].0, hole);
+        assert_eq!(polys[1].1, None, "hole not filled (no real cut-out)");
     }
 
     #[test]

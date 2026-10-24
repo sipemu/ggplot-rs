@@ -113,6 +113,14 @@ pub struct GeomSf {
     pub point_size: f64,
     /// Map projection applied to lon/lat before scaling (default: none).
     pub projection: SfProjection,
+    /// Render-resolution simplification tolerance, in output pixels
+    /// (Ramer-Douglas-Peucker, run in screen space after projecting): a
+    /// vertex closer than this to the line between its neighbours is
+    /// dropped. `0.0` disables it. Default `0.5` — a boundary made of
+    /// 10^5 points draws a fraction of that at a few hundred pixels across,
+    /// with no visible difference (#178; ported from anofox-visualization's
+    /// `map/write.rs`).
+    pub simplify_px: f64,
 }
 
 impl Default for GeomSf {
@@ -124,6 +132,7 @@ impl Default for GeomSf {
             line_width: 0.5,
             point_size: 3.0,
             projection: SfProjection::default(),
+            simplify_px: 0.5,
         }
     }
 }
@@ -133,6 +142,22 @@ impl GeomSf {
     pub fn project(mut self, projection: SfProjection) -> Self {
         self.projection = projection;
         self
+    }
+
+    /// Set the render-resolution simplification tolerance (output pixels);
+    /// `0.0` draws every vertex. See [`GeomSf::simplify_px`].
+    pub fn simplify(mut self, tolerance_px: f64) -> Self {
+        self.simplify_px = tolerance_px.max(0.0);
+        self
+    }
+
+    /// Simplify a screen-space path to within `self.simplify_px` (no-op
+    /// when that's `0` or the path is already too short to simplify).
+    fn simplified(&self, pts: Vec<(f64, f64)>) -> Vec<(f64, f64)> {
+        if self.simplify_px <= 0.0 || pts.len() < 3 {
+            return pts;
+        }
+        simplify_path(&pts, self.simplify_px)
     }
 
     fn draw_geometry(
@@ -202,6 +227,7 @@ impl GeomSf {
             return Ok(());
         }
         let pts: Vec<(f64, f64)> = cs.iter().map(|c| project(*c)).collect();
+        let pts = self.simplified(pts);
         backend.draw_line(
             &pts,
             &LineStyle {
@@ -214,6 +240,14 @@ impl GeomSf {
         )
     }
 
+    /// Draw one polygon — `rings[0]` the exterior, every other ring a hole
+    /// — as a single [`DrawBackend::draw_polygon_rings`] call, so the
+    /// backend cuts the holes out of the fill under the even-odd rule
+    /// rather than drawing them as separate, merely-stroked shapes (#178).
+    /// Each ring is simplified to the render resolution first (screen
+    /// space, [`GeomSf::simplify_px`]); a ring that collapses below 3
+    /// points keeps its original vertices rather than vanishing (still
+    /// simplified downstream by the backend's own rounding).
     fn draw_rings(
         &self,
         rings: &[Vec<[f64; 2]>],
@@ -222,36 +256,91 @@ impl GeomSf {
         color: (u8, u8, u8),
         backend: &mut dyn DrawBackend,
     ) -> Result<(), RenderError> {
-        for (ri, ring) in rings.iter().enumerate() {
+        let mut screen_rings: Vec<Vec<(f64, f64)>> = Vec::with_capacity(rings.len());
+        for ring in rings {
             if ring.len() < 3 {
                 continue;
             }
             let pts: Vec<(f64, f64)> = ring.iter().map(|c| project(*c)).collect();
-            // Exterior ring is filled + stroked; interior rings (holes) are
-            // stroked only — draw_polygon can't cut holes out of the fill.
-            let style = if ri == 0 {
-                RectStyle {
-                    fill: Some(fill),
-                    stroke: (self.line_width > 0.0).then_some(color),
-                    stroke_width: self.line_width,
-                    alpha: self.alpha,
-                    clip: true,
-                    corner_radius: 0.0,
-                }
+            let simplified = self.simplified(pts.clone());
+            screen_rings.push(if simplified.len() >= 3 {
+                simplified
             } else {
-                RectStyle {
-                    fill: None,
-                    stroke: Some(color),
-                    stroke_width: self.line_width.max(0.5),
-                    alpha: self.alpha,
-                    clip: true,
-                    corner_radius: 0.0,
-                }
-            };
-            backend.draw_polygon(&pts, &style)?;
+                pts
+            });
         }
-        Ok(())
+        if screen_rings.is_empty() {
+            return Ok(());
+        }
+        backend.draw_polygon_rings(
+            &screen_rings,
+            &RectStyle {
+                fill: Some(fill),
+                stroke: (self.line_width > 0.0).then_some(color),
+                stroke_width: self.line_width,
+                alpha: self.alpha,
+                clip: true,
+                corner_radius: 0.0,
+            },
+        )
     }
+}
+
+/// Simplify a screen-space path to within `tol` pixels (Ramer-Douglas-Peucker).
+/// The first and last points always stay. Ported from anofox-visualization's
+/// `map/write.rs` (DataZooDE/anofox-visualization#318), minus its tenth-pixel
+/// quantization — `GeomSf`'s own coordinate formatting already rounds that
+/// finely at serialization.
+fn simplify_path(pts: &[(f64, f64)], tol: f64) -> Vec<(f64, f64)> {
+    let finite: Vec<(f64, f64)> = pts
+        .iter()
+        .copied()
+        .filter(|(x, y)| x.is_finite() && y.is_finite())
+        .collect();
+    if finite.len() < 3 {
+        return finite;
+    }
+    let last = finite.len() - 1;
+    let mut keep = vec![false; finite.len()];
+    keep[0] = true;
+    keep[last] = true;
+    let mut stack = vec![(0usize, last)];
+    while let Some((a, b)) = stack.pop() {
+        if b <= a + 1 {
+            continue;
+        }
+        let (mut far, mut dmax) = (a, -1.0);
+        for (i, p) in finite.iter().enumerate().take(b).skip(a + 1) {
+            let d = seg_dist(*p, finite[a], finite[b]);
+            if d > dmax {
+                dmax = d;
+                far = i;
+            }
+        }
+        if dmax > tol {
+            keep[far] = true;
+            stack.push((a, far));
+            stack.push((far, b));
+        }
+    }
+    finite
+        .into_iter()
+        .zip(keep)
+        .filter_map(|(p, k)| k.then_some(p))
+        .collect()
+}
+
+/// Distance from `p` to the segment `a`–`b`.
+fn seg_dist(p: (f64, f64), a: (f64, f64), b: (f64, f64)) -> f64 {
+    let (dx, dy) = (b.0 - a.0, b.1 - a.1);
+    let len2 = dx * dx + dy * dy;
+    let t = if len2 > 0.0 {
+        (((p.0 - a.0) * dx + (p.1 - a.1) * dy) / len2).clamp(0.0, 1.0)
+    } else {
+        0.0
+    };
+    let (ex, ey) = (a.0 + t * dx - p.0, a.1 + t * dy - p.1);
+    (ex * ex + ey * ey).sqrt()
 }
 
 impl Geom for GeomSf {
@@ -349,5 +438,56 @@ impl Geom for GeomSf {
 
     fn set_series_color(&mut self, color: (u8, u8, u8)) {
         self.fill = color;
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn simplify_path_keeps_endpoints_and_drops_collinear_points() {
+        let line: Vec<(f64, f64)> = (0..=20)
+            .map(|i| (i as f64, if i % 2 == 0 { 0.0 } else { 0.1 }))
+            .collect();
+        let simplified = simplify_path(&line, 0.5);
+        assert_eq!(simplified, vec![(0.0, 0.0), (20.0, 0.0)]);
+    }
+
+    #[test]
+    fn simplify_path_keeps_a_real_bump() {
+        let bump = [(0.0, 0.0), (5.0, 3.0), (10.0, 0.0)];
+        assert_eq!(simplify_path(&bump, 0.5).len(), 3);
+    }
+
+    #[test]
+    fn simplify_path_zero_tolerance_is_a_no_op() {
+        let pts = [(0.0, 0.0), (1.0, 0.01), (2.0, 0.0), (3.0, 10.0)];
+        // `0.0` tolerance never simplifies (handled at the GeomSf level, not
+        // here — this exercises simplify_path itself at a tiny but nonzero
+        // tolerance, confirming points genuinely off the line stay).
+        let simplified = simplify_path(&pts, 1e-9);
+        assert_eq!(simplified.len(), 4);
+    }
+
+    #[test]
+    fn simplify_path_drops_non_finite_points() {
+        let pts = [(0.0, 0.0), (f64::NAN, 1.0), (1.0, 0.0), (2.0, 0.0)];
+        let simplified = simplify_path(&pts, 0.5);
+        assert!(simplified
+            .iter()
+            .all(|(x, y)| x.is_finite() && y.is_finite()));
+        assert_eq!(simplified.len(), 2, "endpoints of the finite run");
+    }
+
+    #[test]
+    fn default_simplify_px_is_half_a_pixel() {
+        assert_eq!(GeomSf::default().simplify_px, 0.5);
+    }
+
+    #[test]
+    fn simplify_builder_clamps_negative_to_zero() {
+        let g = GeomSf::default().simplify(-1.0);
+        assert_eq!(g.simplify_px, 0.0);
     }
 }

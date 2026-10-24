@@ -813,6 +813,44 @@ impl DrawBackend for SvgBackend {
         Ok(())
     }
 
+    /// One `<path>`, every ring a subpath (`M…Z`), `fill-rule="evenodd"` so
+    /// holes (rings after the first) are cut out of the fill — SVG's native
+    /// equivalent of the even-odd rasteriser the pixel/plotters backends run
+    /// (#178). A ring with fewer than 3 finite points is dropped; the whole
+    /// shape draws nothing when every ring is.
+    fn draw_polygon_rings(
+        &mut self,
+        rings: &[Vec<(f64, f64)>],
+        style: &RectStyle,
+    ) -> Result<(), RenderError> {
+        let mut d = String::new();
+        for ring in rings {
+            let pts = finite_pts(ring);
+            if pts.len() < 3 {
+                continue;
+            }
+            d.push('M');
+            d.push_str(&format!("{},{}", num(pts[0].0), num(pts[0].1)));
+            for p in &pts[1..] {
+                d.push('L');
+                d.push_str(&format!("{},{}", num(p.0), num(p.1)));
+            }
+            d.push('Z');
+        }
+        if d.is_empty() {
+            return Ok(());
+        }
+        let fill = style.fill.map(rgb).unwrap_or_else(|| "none".into());
+        let stroke = style.stroke.map(rgb).unwrap_or_else(|| "none".into());
+        let attrs = format!(
+            "d=\"{d}\" fill-rule=\"evenodd\" fill=\"{fill}\"{} stroke=\"{stroke}\" stroke-width=\"{:.2}\"",
+            opacity_attr("fill", style.alpha),
+            finite_or(style.stroke_width, 0.0)
+        );
+        self.push_mark("path", "band", &attrs);
+        Ok(())
+    }
+
     fn draw_text(
         &mut self,
         text: &str,
