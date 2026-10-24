@@ -1370,6 +1370,7 @@ impl DrawBackend for SvgBackend {
         } else {
             ""
         };
+        let halo = text_halo_attrs(style);
         let angle = finite_or(style.angle, 0.0);
         let transform = if angle.abs() > 0.01 {
             format!(" transform=\"rotate({angle:.1} {x:.2} {y:.2})\"")
@@ -1388,7 +1389,7 @@ impl DrawBackend for SvgBackend {
         };
         let markup = format!(
             "<text x=\"{x:.2}\" y=\"{y:.2}\" font-size=\"{:.2}\" text-anchor=\"{anchor}\" \
-             dominant-baseline=\"middle\" font-family=\"{family}\"{weight}{fstyle} fill=\"{}\"{transform}{class}>{title_tag}{}</text>",
+             dominant-baseline=\"middle\" font-family=\"{family}\"{weight}{fstyle}{halo} fill=\"{}\"{transform}{class}>{title_tag}{}</text>",
             finite_or(style.size, 12.0),
             rgb(style.color),
             escape(text)
@@ -1428,6 +1429,7 @@ impl DrawBackend for SvgBackend {
         } else {
             ""
         };
+        let halo = text_halo_attrs(style);
         let angle = finite_or(style.angle, 0.0);
         let transform = if angle.abs() > 0.01 {
             format!(" transform=\"rotate({angle:.1} {x:.2} {y:.2})\"")
@@ -1453,13 +1455,37 @@ impl DrawBackend for SvgBackend {
         }
         let markup = format!(
             "<text x=\"{x:.2}\" y=\"{y:.2}\" font-size=\"{:.2}\" text-anchor=\"{anchor}\" \
-             dominant-baseline=\"middle\" font-family=\"{family}\"{weight}{fstyle} fill=\"{}\"{transform}{class}>{inner}</text>",
+             dominant-baseline=\"middle\" font-family=\"{family}\"{weight}{fstyle}{halo} fill=\"{}\"{transform}{class}>{inner}</text>",
             finite_or(style.size, 12.0),
             rgb(style.color),
         );
         self.emit(&markup);
         Ok(())
     }
+}
+
+/// #229: the `stroke`/`stroke-width`/`stroke-linejoin`/`paint-order`
+/// attributes for a text halo (ggrepel's `bg.colour`/`bg.r`;
+/// `shadowtext`'s `bg.col`/`bg.r`), or `""` when `style.bg_colour` is
+/// `None` or `style.bg_r` is non-finite or `<= 0.0` — so the default
+/// (`bg_colour: None`) keeps existing output byte-identical. The stroke
+/// paints *under* the fill (`paint-order="stroke"`), so the halo never
+/// overlaps the glyph's own fill colour. `rgb()` already allow-lists its
+/// output to `#RRGGBB` (#221's convention: every attribute value stays
+/// escaped/allow-listed, never a raw caller string).
+fn text_halo_attrs(style: &TextStyle) -> String {
+    let Some(bg) = style.bg_colour else {
+        return String::new();
+    };
+    let r = finite_or(style.bg_r, 0.0);
+    if r <= 0.0 {
+        return String::new();
+    }
+    format!(
+        " stroke=\"{}\" stroke-width=\"{:.2}\" stroke-linejoin=\"round\" paint-order=\"stroke\"",
+        rgb(bg),
+        2.0 * r
+    )
 }
 
 #[cfg(test)]

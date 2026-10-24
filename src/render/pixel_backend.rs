@@ -578,33 +578,98 @@ impl DrawBackend for PixelBackend {
         // Approximate the SVG "middle" baseline; bold faked by a bump in coverage.
         let baseline = (y + style.size * 0.35) as f32;
         let bold = style.face == FontFace::Bold;
-        let (bw, bh, color) = (self.width, self.height, style.color);
-        let mut pen = start_x as f32;
-        for ch in text.chars() {
-            let gid = font.glyph_id(ch);
-            let glyph = gid.with_scale_and_position(scale, point(pen, baseline));
-            if let Some(outlined) = font.outline_glyph(glyph) {
-                let bounds = outlined.px_bounds();
-                outlined.draw(|gx, gy, cov| {
-                    let a = if bold {
-                        (cov as f64 * 1.4).min(1.0)
-                    } else {
-                        cov as f64
-                    };
-                    blend(
+        let (bw, bh) = (self.width, self.height);
+
+        // #229: a text halo — no native stroke-text in this backend, so
+        // approximate the SVG `stroke`/`paint-order="stroke"` outline by
+        // drawing the same glyphs in `bg_colour` at 8 offsets around the
+        // radius before the normal pass, which then paints over the
+        // middle. `bg_colour: None` (the default) skips this entirely, so
+        // existing output is unchanged.
+        if let Some(bg) = style.bg_colour {
+            let r = if style.bg_r.is_finite() {
+                style.bg_r
+            } else {
+                0.0
+            } as f32;
+            if r > 0.0 {
+                for i in 0..8 {
+                    let theta = i as f32 * std::f32::consts::FRAC_PI_4;
+                    let (dx, dy) = (r * theta.cos(), r * theta.sin());
+                    draw_glyph_pass(
                         &mut self.buf,
                         bw,
                         bh,
-                        bounds.min.x as i32 + gx as i32,
-                        bounds.min.y as i32 + gy as i32,
-                        color,
-                        a,
+                        font,
+                        scale,
+                        start_x as f32 + dx,
+                        baseline + dy,
+                        bg,
+                        bold,
+                        text,
                     );
-                });
+                }
             }
-            pen += scaled.h_advance(gid);
         }
+
+        draw_glyph_pass(
+            &mut self.buf,
+            bw,
+            bh,
+            font,
+            scale,
+            start_x as f32,
+            baseline,
+            style.color,
+            bold,
+            text,
+        );
         Ok(())
+    }
+}
+
+/// One pass of `text`'s glyphs in `color`, starting at `(start_x,
+/// baseline)` — factored out of [`PixelBackend::draw_text`] so #229's halo
+/// can run it several times (once per offset, in `bg_colour`) before the
+/// normal pass.
+#[allow(clippy::too_many_arguments)]
+fn draw_glyph_pass(
+    buf: &mut [u8],
+    bw: usize,
+    bh: usize,
+    font: &FontRef<'static>,
+    scale: PxScale,
+    start_x: f32,
+    baseline: f32,
+    color: (u8, u8, u8),
+    bold: bool,
+    text: &str,
+) {
+    let scaled = font.as_scaled(scale);
+    let mut pen = start_x;
+    for ch in text.chars() {
+        let gid = font.glyph_id(ch);
+        let glyph = gid.with_scale_and_position(scale, point(pen, baseline));
+        if let Some(outlined) = font.outline_glyph(glyph) {
+            let bounds = outlined.px_bounds();
+            outlined.draw(|gx, gy, cov| {
+                let a = if bold {
+                    (cov as f64 * 1.4).min(1.0)
+                } else {
+                    cov as f64
+                };
+                blend(
+                    buf,
+                    bw,
+                    bh,
+                    bounds.min.x as i32 + gx as i32,
+                    bounds.min.y as i32 + gy as i32,
+                    color,
+                    a,
+                );
+            });
+        }
+        pen += scaled.h_advance(gid);
     }
 }
 

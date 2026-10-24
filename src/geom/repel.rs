@@ -778,6 +778,8 @@ fn draw_repel(
                 angle: 0.0,
                 family: super::resolve_font_family("", theme),
                 face,
+                bg_colour: None,
+                bg_r: 0.0,
             },
         )?;
     }

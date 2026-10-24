@@ -165,6 +165,8 @@ fn other_backends_draw_plain_text_dropping_the_link() {
                 angle: 0.0,
                 family: None,
                 face: FontFace::Plain,
+                bg_colour: None,
+                bg_r: 0.0,
             },
         )
         .unwrap();

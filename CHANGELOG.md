@@ -6,6 +6,40 @@ All notable changes to this project are documented here. The format follows
 ## [Unreleased]
 
 ### Added
+- **`geom_text` halo (`bg_colour`/`bg_r`)** (#229, upstream issue
+  DataZooDE/anofox-visualization#421: edge labels in diagrams, e.g. "5.4K /
+  orders" on a thick edge, need an outline in the background colour so text
+  sitting directly on a line stays legible, as the old hand-written SVG's
+  `paint-order: stroke` did). `GeomText::bg_colour(..)`/`bg_r(..)` (ggrepel's
+  own parameter names). SVG: `stroke`/`stroke-width`(`= 2 * bg_r`)/
+  `stroke-linejoin="round"`/`paint-order="stroke"` on the `<text>`, so the
+  stroke paints under the fill — one element, no inline `style`. Raster:
+  no native stroke-text in either backend, so both approximate it by
+  drawing the same glyphs at 8 offsets around the radius, in `bg_colour`,
+  before the normal pass. `bg_colour: None` (the default) draws nothing,
+  so existing output — on every geom, not just `geom_text` — is
+  byte-identical. **Breaking (pre-1.0 minor):** `TextStyle` gains public
+  `bg_colour`/`bg_r` fields and `GeomText` gains the same (build either
+  with `..Default::default()` or the new builders).
+
+- **`geom_label` now respects an embedded `"\n"` as a forced line break**
+  (#229 part 2: asked to check whether a multi-line `geom_label` label
+  drew one box per line or one box around all of them, as ggplot2 does).
+  Turns out it already drew exactly one box — but only because it never
+  split on `"\n"` *at all* without an explicit `.with_wrap(..)`: the raw
+  newline sat unbroken inside a single `<text>`, which has no visual
+  line-break effect in SVG, so the label rendered squished onto one line.
+  `GeomLabel::draw` now splits on `"\n"` into forced lines before any
+  width-based wrapping (each paragraph still wraps independently when
+  `.with_wrap(..)` is set), and sizes its one box to fit the widest
+  resulting line. A plain (no `"\n"`) label's box width is untouched —
+  it still uses the pre-#176 crude char-count estimate, not the real
+  metric, so existing single-line output stays byte-identical.
+  `geom_text` has the same underlying gap (a `"\n"` there also doesn't
+  produce a visual line break without `.with_wrap(..)`) but is out of
+  scope here, since there's no box to mis-size — noted for a possible
+  follow-up.
+
 - **`geom_text`/`geom_label` fontface (bold/italic)** (#228, upstream issue
   DataZooDE/anofox-visualization#421: diagram node names/values drawn with
   `geom_text` came out regular weight in the headless SVG export where the

@@ -110,6 +110,8 @@ impl Geom for GeomAnnotationScale {
                 angle: 0.0,
                 family: None,
                 face: crate::render::backend::FontFace::Plain,
+                bg_colour: None,
+                bg_r: 0.0,
             },
         )?;
         Ok(())
@@ -260,6 +262,8 @@ impl Geom for GeomAttribution {
                 angle: 0.0,
                 family: None,
                 face: crate::render::backend::FontFace::Plain,
+                bg_colour: None,
+                bg_r: 0.0,
             },
         )
     }

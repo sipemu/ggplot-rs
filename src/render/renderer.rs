@@ -192,6 +192,8 @@ impl PlotRenderer {
                     angle: 0.0,
                     family,
                     face: theme.title.face,
+                    bg_colour: None,
+                    bg_r: 0.0,
                 },
             )?;
         }
@@ -215,6 +217,8 @@ impl PlotRenderer {
                     angle: 0.0,
                     family,
                     face: theme.subtitle.face,
+                    bg_colour: None,
+                    bg_r: 0.0,
                 },
             )?;
         }
@@ -250,6 +254,8 @@ impl PlotRenderer {
                     angle: 0.0,
                     family,
                     face: theme.caption.face,
+                    bg_colour: None,
+                    bg_r: 0.0,
                 },
             )?;
         }
@@ -329,6 +335,8 @@ impl PlotRenderer {
                     angle: 0.0,
                     family,
                     face: theme.title.face,
+                    bg_colour: None,
+                    bg_r: 0.0,
                 },
             )?;
         }
@@ -494,6 +502,8 @@ impl PlotRenderer {
                         angle: 0.0,
                         family,
                         face: theme.strip_text.face,
+                        bg_colour: None,
+                        bg_r: 0.0,
                     },
                 )?;
             }
@@ -623,6 +633,8 @@ impl PlotRenderer {
                     angle: 0.0,
                     family,
                     face: theme.title.face,
+                    bg_colour: None,
+                    bg_r: 0.0,
                 },
             )?;
         }
@@ -646,6 +658,8 @@ impl PlotRenderer {
                     angle: 0.0,
                     family,
                     face: theme.subtitle.face,
+                    bg_colour: None,
+                    bg_r: 0.0,
                 },
             )?;
         }
@@ -669,6 +683,8 @@ impl PlotRenderer {
                     angle: 0.0,
                     family,
                     face: theme.caption.face,
+                    bg_colour: None,
+                    bg_r: 0.0,
                 },
             )?;
         }
@@ -750,6 +766,8 @@ impl PlotRenderer {
                             angle: 0.0,
                             family: crate::geom::resolve_font_family("", theme),
                             face: crate::render::backend::FontFace::Plain,
+                            bg_colour: None,
+                            bg_r: 0.0,
                         },
                     )?;
                 }

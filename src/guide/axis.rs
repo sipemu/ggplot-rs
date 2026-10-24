@@ -260,6 +260,8 @@ pub fn draw_x_axis(
                     angle: theme.axis_text_x.angle,
                     family: family.clone(),
                     face: theme.axis_text_x.face,
+                    bg_colour: None,
+                    bg_r: 0.0,
                 },
             )?;
         }
@@ -311,6 +313,8 @@ pub fn draw_x_axis(
                 angle: 0.0,
                 family,
                 face: theme.axis_title_x.face,
+                bg_colour: None,
+                bg_r: 0.0,
             },
         )?;
     }
@@ -380,6 +384,8 @@ pub fn draw_y_axis(
                     angle: theme.axis_text_y.angle,
                     family,
                     face: theme.axis_text_y.face,
+                    bg_colour: None,
+                    bg_r: 0.0,
                 },
             )?;
         }
@@ -422,6 +428,8 @@ pub fn draw_y_axis(
                 angle: 270.0,
                 family,
                 face: theme.axis_title_y.face,
+                bg_colour: None,
+                bg_r: 0.0,
             },
         )?;
     }
@@ -508,6 +516,8 @@ pub fn draw_sec_y_axis(
                     angle: theme.axis_text_y.angle,
                     family,
                     face: theme.axis_text_y.face,
+                    bg_colour: None,
+                    bg_r: 0.0,
                 },
             )?;
         }
@@ -532,6 +542,8 @@ pub fn draw_sec_y_axis(
                 angle: 90.0,
                 family,
                 face: theme.axis_title_y.face,
+                bg_colour: None,
+                bg_r: 0.0,
             },
         )?;
     }

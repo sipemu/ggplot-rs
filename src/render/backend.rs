@@ -403,6 +403,18 @@ pub struct TextStyle {
     pub family: Option<String>,
     /// Font face (R's `element_text(face = ...)`).
     pub face: FontFace,
+    /// Text halo / outline colour (#229, ggrepel's `bg.colour` /
+    /// `shadowtext`'s `bg.col`): `None` (the default) draws no halo, so
+    /// existing output is byte-identical. SVG: `stroke` on the `<text>`
+    /// itself (`stroke-linejoin="round"`, `paint-order="stroke"`, so the
+    /// stroke paints under the fill rather than over it). Raster: an
+    /// outline pass in this colour before the normal fill pass.
+    pub bg_colour: Option<(u8, u8, u8)>,
+    /// Text halo radius in px (#229, ggrepel's `bg.r`) — the SVG
+    /// `stroke-width` is `2 * bg_r`. Only matters when `bg_colour` is
+    /// `Some`; `0.0` (the default) draws no halo even if `bg_colour` is
+    /// set.
+    pub bg_r: f64,
 }
 
 /// Font face / weight (R's `element_text(face = ...)`).
@@ -424,6 +436,8 @@ impl Default for TextStyle {
             angle: 0.0,
             family: None,
             face: crate::render::backend::FontFace::Plain,
+            bg_colour: None,
+            bg_r: 0.0,
         }
     }
 }
