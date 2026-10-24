@@ -310,8 +310,8 @@ impl<'a, DB: DrawingBackend> DrawBackend for PlottersAdapter<'a, DB> {
         let color = to_rgba(style.color, alpha);
         let stroke = color.stroke_width(pixel_width);
 
-        let pattern = style.linetype.pattern();
-        let sub_paths = segment_dashed(points, pattern);
+        let pattern = style.linetype.dash_pattern();
+        let sub_paths = segment_dashed(points, &pattern);
 
         for path in &sub_paths {
             for window in path.windows(2) {

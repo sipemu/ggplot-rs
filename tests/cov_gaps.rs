@@ -655,7 +655,7 @@ fn scale_linetype_discrete_unit() {
     assert_eq!(s.breaks().len(), 2);
     assert_eq!(
         s.map_to_linetype(&Value::Str("x".into())),
-        Some(Linetype::ALL[0])
+        Some(Linetype::ALL[0].clone())
     );
     s.set_name("lt");
     assert_eq!(s.name(), "lt");

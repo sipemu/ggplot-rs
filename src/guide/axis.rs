@@ -67,7 +67,7 @@ pub fn draw_x_axis(
                 color: axis_line.color,
                 width: axis_line.width,
                 alpha: 1.0,
-                linetype: axis_line.linetype,
+                linetype: axis_line.linetype.clone(),
                 ..Default::default()
             },
         )?;
@@ -234,7 +234,7 @@ pub fn draw_x_axis(
                     color: axis_ticks.color,
                     width: axis_ticks.width,
                     alpha: 1.0,
-                    linetype: axis_ticks.linetype,
+                    linetype: axis_ticks.linetype.clone(),
                     ..Default::default()
                 },
             )?;
@@ -275,7 +275,7 @@ pub fn draw_x_axis(
                     color: axis_ticks.color,
                     width: axis_ticks.width,
                     alpha: 1.0,
-                    linetype: axis_ticks.linetype,
+                    linetype: axis_ticks.linetype.clone(),
                     ..Default::default()
                 },
             )?;
@@ -341,7 +341,7 @@ pub fn draw_y_axis(
                 color: axis_line.color,
                 width: axis_line.width,
                 alpha: 1.0,
-                linetype: axis_line.linetype,
+                linetype: axis_line.linetype.clone(),
                 ..Default::default()
             },
         )?;
@@ -358,7 +358,7 @@ pub fn draw_y_axis(
                     color: axis_ticks.color,
                     width: axis_ticks.width,
                     alpha: 1.0,
-                    linetype: axis_ticks.linetype,
+                    linetype: axis_ticks.linetype.clone(),
                     ..Default::default()
                 },
             )?;
@@ -395,7 +395,7 @@ pub fn draw_y_axis(
                     color: axis_ticks.color,
                     width: axis_ticks.width,
                     alpha: 1.0,
-                    linetype: axis_ticks.linetype,
+                    linetype: axis_ticks.linetype.clone(),
                     ..Default::default()
                 },
             )?;
@@ -456,7 +456,7 @@ pub fn draw_sec_y_axis(
                 color: axis_line.color,
                 width: axis_line.width,
                 alpha: 1.0,
-                linetype: axis_line.linetype,
+                linetype: axis_line.linetype.clone(),
                 ..Default::default()
             },
         )?;
@@ -473,7 +473,7 @@ pub fn draw_sec_y_axis(
                     color: axis_ticks.color,
                     width: axis_ticks.width,
                     alpha: 1.0,
-                    linetype: axis_ticks.linetype,
+                    linetype: axis_ticks.linetype.clone(),
                     ..Default::default()
                 },
             )?;
@@ -578,7 +578,7 @@ pub fn draw_gridlines(
                     color: minor_x.color,
                     width: minor_x.width,
                     alpha: 1.0,
-                    linetype: minor_x.linetype,
+                    linetype: minor_x.linetype.clone(),
                     ..Default::default()
                 },
             )?;
@@ -595,7 +595,7 @@ pub fn draw_gridlines(
                     color: minor_y.color,
                     width: minor_y.width,
                     alpha: 1.0,
-                    linetype: minor_y.linetype,
+                    linetype: minor_y.linetype.clone(),
                     ..Default::default()
                 },
             )?;
@@ -612,7 +612,7 @@ pub fn draw_gridlines(
                     color: major_x.color,
                     width: major_x.width,
                     alpha: 1.0,
-                    linetype: major_x.linetype,
+                    linetype: major_x.linetype.clone(),
                     ..Default::default()
                 },
             )?;
@@ -629,7 +629,7 @@ pub fn draw_gridlines(
                     color: major_y.color,
                     width: major_y.width,
                     alpha: 1.0,
-                    linetype: major_y.linetype,
+                    linetype: major_y.linetype.clone(),
                     ..Default::default()
                 },
             )?;

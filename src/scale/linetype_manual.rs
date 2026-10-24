@@ -16,7 +16,7 @@ pub struct ScaleLinetypeManual {
 impl ScaleLinetypeManual {
     pub fn new(values: Vec<(&str, Linetype)>) -> Self {
         let levels: IndexSet<String> = values.iter().map(|(k, _)| k.to_string()).collect();
-        let linetypes: Vec<Linetype> = values.iter().map(|(_, lt)| *lt).collect();
+        let linetypes: Vec<Linetype> = values.into_iter().map(|(_, lt)| lt).collect();
         ScaleLinetypeManual {
             name: String::new(),
             levels,
@@ -74,7 +74,7 @@ impl Scale for ScaleLinetypeManual {
         }
         let key = value.key_str();
         let idx = self.levels.get_index_of(key.as_ref()).unwrap_or(0);
-        Some(self.linetypes[idx % self.linetypes.len()])
+        Some(self.linetypes[idx % self.linetypes.len()].clone())
     }
 
     fn clone_box(&self) -> Box<dyn Scale> {

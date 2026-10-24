@@ -185,14 +185,14 @@ impl Geom for GeomHline {
                     scales,
                     self.color,
                     self.width,
-                    self.linetype,
+                    self.linetype.clone(),
                     self.alpha,
                 ),
                 None => LineStyle {
                     color: self.color,
                     alpha: self.alpha,
                     width: self.width,
-                    linetype: self.linetype,
+                    linetype: self.linetype.clone(),
                     ..Default::default()
                 },
             };
@@ -282,14 +282,14 @@ impl Geom for GeomVline {
                     scales,
                     self.color,
                     self.width,
-                    self.linetype,
+                    self.linetype.clone(),
                     self.alpha,
                 ),
                 None => LineStyle {
                     color: self.color,
                     alpha: self.alpha,
                     width: self.width,
-                    linetype: self.linetype,
+                    linetype: self.linetype.clone(),
                     ..Default::default()
                 },
             };
@@ -443,14 +443,14 @@ impl Geom for GeomAbline {
                     scales,
                     self.color,
                     self.width,
-                    self.linetype,
+                    self.linetype.clone(),
                     self.alpha,
                 ),
                 None => LineStyle {
                     color: self.color,
                     alpha: self.alpha,
                     width: self.width,
-                    linetype: self.linetype,
+                    linetype: self.linetype.clone(),
                     ..Default::default()
                 },
             };

@@ -438,7 +438,7 @@ pub(crate) fn draw_polyline_with_linewidth(
                     color,
                     alpha,
                     width: widths[i],
-                    linetype,
+                    linetype: linetype.clone(),
                     lineend,
                 },
             )?;
