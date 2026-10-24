@@ -1617,3 +1617,29 @@ fn draw_discrete_legend_grid(
 
     Ok(title_offset + plan.rows as f64 * item_height)
 }
+
+#[cfg(test)]
+mod group_mergeable_legends_tests {
+    use super::*;
+    use crate::scale::color::RGBAColor;
+    use crate::scale::manual::ScaleManual;
+
+    #[test]
+    fn an_aesthetic_with_no_attached_scale_is_skipped_not_grouped() {
+        // #239: in the normal flow, `group_mergeable_legends` is only ever
+        // handed `legend_scales_for`'s output, which already filters to
+        // aesthetics present in `scales` — so the `let-else`'s `continue`
+        // branch (an aesthetic that slipped through with no attached
+        // scale) is otherwise unreachable from `draw_legend_planned`.
+        // Exercise it directly: `Fill` is listed but has no scale.
+        let mut scales = ScaleSet::new();
+        scales.add(Box::new(ScaleManual::new(
+            Aesthetic::Color,
+            vec![("a", RGBAColor::new(200, 0, 0))],
+        )));
+        let legend_scales = vec![Aesthetic::Color, Aesthetic::Fill];
+        let guide = GuideLegend::default();
+        let groups = group_mergeable_legends(&scales, &legend_scales, &guide);
+        assert_eq!(groups, vec![vec![Aesthetic::Color]]);
+    }
+}
