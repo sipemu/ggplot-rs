@@ -144,6 +144,9 @@ pub struct GeomAttribution {
     pub corner: MapCorner,
     pub color: (u8, u8, u8),
     pub text_size: f64,
+    /// Linked segments overriding `text` — see [`Self::link`]/[`Self::runs`].
+    /// `None`: draw `text` plain, as before #196.
+    pub runs: Option<Vec<(String, Option<String>)>>,
 }
 
 impl GeomAttribution {
@@ -153,6 +156,7 @@ impl GeomAttribution {
             corner: MapCorner::BottomRight,
             color: (130, 130, 130),
             text_size: 7.5,
+            runs: None,
         }
     }
 
@@ -160,6 +164,42 @@ impl GeomAttribution {
         self.corner = corner;
         self
     }
+
+    /// Make the whole attribution text one hyperlink — ggspatial has no
+    /// equivalent (plain text only); a source that asks for a single link
+    /// (e.g. "Made with Natural Earth" → naturalearthdata.com) wants this.
+    /// `url` must be `http(s)`; anything else is dropped at render time
+    /// with a warning rather than drawn as a link (#196).
+    pub fn link(mut self, url: impl Into<String>) -> Self {
+        let text = self.text.clone();
+        self.runs = Some(vec![(text, Some(url.into()))]);
+        self
+    }
+
+    /// Replace `text` with several runs, each independently plain or
+    /// linked (`None` href: plain) — ggspatial-style multi-segment
+    /// attribution: "© BKG" linked, a licence code linked, plain
+    /// connective text between them (DataZooDE/anofox-visualization#420's
+    /// BKG/VG2500 source note). Overrides a prior [`Self::link`] call. A
+    /// non-`http(s)` href is dropped at render time with a warning, same
+    /// as [`Self::link`] (#196).
+    pub fn runs(mut self, runs: Vec<(&str, Option<&str>)>) -> Self {
+        self.runs = Some(
+            runs.into_iter()
+                .map(|(t, u)| (t.to_string(), u.map(str::to_string)))
+                .collect(),
+        );
+        self
+    }
+}
+
+/// `url` is an absolute `http://`/`https://` URL (case-insensitive scheme),
+/// not `javascript:`, `data:`, a bare path or anything else a backend
+/// might otherwise be asked to wrap a hyperlink around (#196: "http(s)
+/// URLs only").
+fn is_http_url(url: &str) -> bool {
+    let lower = url.trim_start().to_ascii_lowercase();
+    lower.starts_with("http://") || lower.starts_with("https://")
 }
 
 impl Geom for GeomAttribution {
@@ -171,11 +211,30 @@ impl Geom for GeomAttribution {
         _theme: &Theme,
         backend: &mut dyn DrawBackend,
     ) -> Result<(), RenderError> {
-        if self.text.is_empty() {
+        // `runs` (set by `.link()`/`.runs()`) overrides plain `text`; a
+        // non-http(s) href is dropped — a warning, not a silently-wrong
+        // link (#196).
+        let runs: Vec<(String, Option<String>)> = match &self.runs {
+            Some(r) => r
+                .iter()
+                .map(|(t, u)| match u {
+                    Some(url) if !is_http_url(url) => {
+                        backend.warn(format!(
+                            "annotation_attribution: \"{url}\" is not an http(s) URL; drawing \"{t}\" as plain text"
+                        ));
+                        (t.clone(), None)
+                    }
+                    other => (t.clone(), other.clone()),
+                })
+                .collect(),
+            None => vec![(self.text.clone(), None)],
+        };
+        if runs.iter().all(|(t, _)| t.is_empty()) {
             return Ok(());
         }
         let plot_area = backend.plot_area();
-        let tw = crate::render::text::text_width(&self.text, self.text_size);
+        let full_text: String = runs.iter().map(|(t, _)| t.as_str()).collect();
+        let tw = crate::render::text::text_width(&full_text, self.text_size);
         let (anchor, x) = match self.corner {
             MapCorner::BottomLeft | MapCorner::TopLeft => (TextAnchor::Start, plot_area.x + 4.0),
             MapCorner::BottomRight | MapCorner::TopRight => {
@@ -187,8 +246,12 @@ impl Geom for GeomAttribution {
             MapCorner::TopLeft | MapCorner::TopRight => plot_area.y + 4.0 + self.text_size / 2.0,
         };
         let _ = tw; // width only needed if a background chip is added later
-        backend.draw_text(
-            &self.text,
+        let run_refs: Vec<(&str, Option<&str>)> = runs
+            .iter()
+            .map(|(t, u)| (t.as_str(), u.as_deref()))
+            .collect();
+        backend.draw_text_runs(
+            &run_refs,
             (x, y),
             &TextStyle {
                 color: self.color,
@@ -387,5 +450,46 @@ mod tests {
     #[test]
     fn default_corner_is_bottom_left() {
         assert_eq!(MapCorner::default(), MapCorner::BottomLeft);
+    }
+
+    #[test]
+    fn is_http_url_accepts_only_http_and_https() {
+        assert!(is_http_url("https://www.bkg.bund.de"));
+        assert!(is_http_url("http://example.com"));
+        assert!(is_http_url("  https://example.com")); // leading whitespace
+        assert!(is_http_url("HTTPS://EXAMPLE.COM"));
+        assert!(!is_http_url("javascript:alert(1)"));
+        assert!(!is_http_url("data:text/html,<script>"));
+        assert!(!is_http_url("//example.com"));
+        assert!(!is_http_url("example.com"));
+        assert!(!is_http_url(""));
+    }
+
+    #[test]
+    fn link_sets_a_single_run_with_the_whole_text() {
+        let g = GeomAttribution::new("Natural Earth").link("https://www.naturalearthdata.com");
+        assert_eq!(
+            g.runs,
+            Some(vec![(
+                "Natural Earth".to_string(),
+                Some("https://www.naturalearthdata.com".to_string())
+            )])
+        );
+    }
+
+    #[test]
+    fn runs_overrides_text_with_several_segments() {
+        let g = GeomAttribution::new("ignored")
+            .runs(vec![("© ", None), ("BKG", Some("https://www.bkg.bund.de"))]);
+        assert_eq!(
+            g.runs,
+            Some(vec![
+                ("© ".to_string(), None),
+                (
+                    "BKG".to_string(),
+                    Some("https://www.bkg.bund.de".to_string())
+                ),
+            ])
+        );
     }
 }

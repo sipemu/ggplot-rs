@@ -382,6 +382,30 @@ pub trait DrawBackend {
     ) -> Result<(), RenderError> {
         self.draw_text(text, pos, style)
     }
+
+    /// Draw one line as consecutive runs, each optionally an `http(s)`
+    /// hyperlink (ggspatial-style attribution: "© BKG" linked, a licence
+    /// code linked, plain connective text between them —
+    /// `annotation_attribution`'s `.link()`/`.runs()`, #196). `pos`/`style`
+    /// place and style the line as a whole, same as [`draw_text`](Self::draw_text)
+    /// — `style.anchor` aligns the *total* run sequence, not each run.
+    ///
+    /// Default: concatenates the runs' text and draws it plain with
+    /// [`draw_text`](Self::draw_text), dropping every link — the sensible
+    /// fallback for a backend with no link primitive (pixel/`canvas`,
+    /// `plotters`). The native SVG backend overrides this to wrap each
+    /// linked run in `<a href="…" target="_blank" rel="noopener">` with an
+    /// underline, inside one `<text>` element so the anchor still aligns
+    /// the whole line.
+    fn draw_text_runs(
+        &mut self,
+        runs: &[(&str, Option<&str>)],
+        pos: (f64, f64),
+        style: &TextStyle,
+    ) -> Result<(), RenderError> {
+        let joined: String = runs.iter().map(|(t, _)| *t).collect();
+        self.draw_text(&joined, pos, style)
+    }
     fn plot_area(&self) -> Rect;
     fn total_area(&self) -> Rect;
 
