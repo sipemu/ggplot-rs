@@ -6,6 +6,21 @@ All notable changes to this project are documented here. The format follows
 ## [Unreleased]
 
 ### Fixed
+- **`PlotGrid::axis_collect(AxisCollect::CollectX)` (#175) skipped every
+  column with a date x axis**, warning `plot_grid: a column's x scale is
+  discrete or untrained; x domain not collected` and leaving every cell —
+  chart included — unaligned (#207, upstream issue
+  DataZooDE/anofox-visualization#422: every `::TRACK` fixture there uses a
+  date x axis). `collect_x_domain` reads a cell's x scale via
+  `Scale::domain()`, which defaults to `None` and is overridden by
+  `ScaleContinuous` but wasn't by `ScaleDateTime` (it only implemented
+  `train()` and `expanded_domain()`) — so a date scale always looked
+  "untrained" to it, regardless of how much data it had actually trained
+  on. `ScaleDateTime::domain()` now returns its trained `(min, max)`, same
+  as `ScaleContinuous`'s. Audited every other position (`X`/`Y`) scale
+  (`ScaleContinuous`, `ScaleDateTime`, `ScaleDiscrete`) for the same gap —
+  `ScaleDiscrete` correctly has no `domain()` and is excluded by
+  `CollectX`'s own `is_discrete()` check instead, so it needed no change.
 - `geom_sf` (#213): a `MultiPolygon` row now draws as **one** mark — one
   `<path>` with one `M…Z` subpath per ring and part under the even-odd
   fill rule, one set of row attributes/`data-*`, one tooltip — instead of

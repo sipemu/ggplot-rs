@@ -8,6 +8,24 @@
 
 use ggplot_rs::prelude::*;
 
+/// A plot with a date x axis (epoch seconds, one point per day starting
+/// `start`) and y values near `magnitude` — sipemu/ggplot-rs#207's repro:
+/// `ScaleDateTime` didn't override `Scale::domain()`, so `collect_x_domain`
+/// (#175's `CollectX`) treated any column with a date x axis as
+/// "untrained" and skipped the whole column, chart included.
+fn plot_with_date_x(magnitude: f64, start: i64, days: i64) -> GGPlot {
+    let n = 20;
+    let x: Vec<Value> = (0..n)
+        .map(|i| Value::DateTime(start + 86_400 * (days * i as i64 / (n as i64 - 1))))
+        .collect();
+    let y: Vec<Value> = (0..n)
+        .map(|i| Value::Float(magnitude + (i as f64 - n as f64 / 2.0)))
+        .collect();
+    GGPlot::new(vec![("x".to_string(), x), ("y".to_string(), y)])
+        .aes(Aes::new().x("x").y("y"))
+        .geom_line()
+}
+
 /// A plot whose y values are all near `magnitude`, so its y-axis break
 /// labels are roughly `digits` characters wide — the wider the labels, the
 /// more left margin an *unaligned* panel reserves for them.
@@ -325,4 +343,73 @@ fn collect_x_on_a_discrete_x_scale_warns_and_skips_the_domain_only() {
             .any(|w| w.contains("x domain not collected")),
         "expected a warning about the discrete x scale: {warnings:?}"
     );
+}
+
+/// sipemu/ggplot-rs#207: a date x axis is exactly `collect_x_domain`'s
+/// `ScaleDateTime` blind spot — a 300px chart plus two 24px `::TRACK`-style
+/// strip cells (anofox-visualization's motivating case, same shape as
+/// [`collect_x_keeps_thin_strip_cells_at_their_requested_height_and_still_aligns_them`]
+/// above, but with a date x axis and strips covering a *narrower* date
+/// range than the chart — a `::TRACK`'s events rarely span the chart's
+/// full x range). Before the fix this warned "x domain not collected" and
+/// left the panels unaligned; after it, the plot areas and x domain must
+/// align exactly as the float-x case does, and the shared domain must be
+/// the chart's (wider) range, not the narrower strips'.
+#[test]
+fn collect_x_works_on_a_date_x_axis_chart_plus_thin_strip_cells() {
+    let start = 1_790_000_000_i64;
+    let chart = plot_with_date_x(1_000.0, start, 40);
+    // Strips: a narrower window within the chart's 40-day span, with very
+    // different y-label widths (so an unaligned left margin would differ).
+    let strip_a = plot_with_date_x(1.0, start + 86_400 * 5, 10);
+    let strip_b = plot_with_date_x(1_234_567.0, start + 86_400 * 20, 5);
+
+    let svg = PlotGrid::new()
+        .add(chart)
+        .add(strip_a)
+        .add(strip_b)
+        .ncol(1)
+        .heights(&[300.0, 24.0, 24.0])
+        .axis_collect(AxisCollect::CollectX)
+        .render_svg_native_with_size(500, 348)
+        .expect("render");
+
+    let rects = plot_rects(&svg);
+    assert_eq!(rects.len(), 3, "expected 3 panels: {svg}");
+    let (x0, w0) = (rects[0][0], rects[0][2]);
+    for (i, r) in rects.iter().enumerate() {
+        assert!(
+            (r[0] - x0).abs() < 1e-6 && (r[2] - w0).abs() < 1e-6,
+            "panel {i} plot-area x/width {r:?} does not match panel 0's ({x0}, {w0})"
+        );
+    }
+
+    let domains = xdomains(&svg);
+    assert_eq!(domains.len(), 3);
+    let d0 = domains[0];
+    for (i, d) in domains.iter().enumerate() {
+        assert!(
+            (d.0 - d0.0).abs() < 1e-6 && (d.1 - d0.1).abs() < 1e-6,
+            "panel {i} x domain {d:?} does not match panel 0's {d0:?} — \
+             ScaleDateTime::domain() regression (#207)"
+        );
+    }
+    // The shared domain is the chart's own (widest) 40-day range, not
+    // either narrower strip's.
+    let chart_span = 86_400.0 * 40.0;
+    assert!(
+        d0.1 - d0.0 >= chart_span * 0.9,
+        "shared domain should cover the chart's wide range, not a strip's narrower one: {d0:?}"
+    );
+
+    // Each strip's own rendered canvas is still exactly its requested
+    // 24px, and its panel still fits inside it (the `Align` half of
+    // `CollectX`, orthogonal to the date-domain fix above).
+    let sizes = fragment_sizes(&svg);
+    for (i, (_, h)) in sizes.iter().enumerate().skip(1) {
+        assert!(
+            (h - 24.0).abs() <= 1.0,
+            "strip panel {i} canvas height {h} should be within 1px of the requested 24px"
+        );
+    }
 }
