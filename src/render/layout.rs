@@ -29,6 +29,15 @@ pub(crate) struct LayoutExtras {
     /// the single-column `legend_size` estimate, or its later columns run
     /// off the canvas.
     pub legend_extra_width: f64,
+    /// #236: the largest mapped `size` legend key's diameter, across every
+    /// `size`-mapped scale being drawn — `0.0` (the default) when there's
+    /// no size legend, or its largest key already fits the theme's
+    /// `legend_key_width`/`legend_key_height`. `legend_size`/`legend_band`
+    /// grow the key box (and the band reserved for it) to this instead of
+    /// the flat theme default, the same way `draw_discrete_legend_at`
+    /// grows the key it actually draws — otherwise a key too big for the
+    /// reserved band spills into the panel.
+    pub legend_max_key_size: f64,
 }
 
 impl PlotLayout {
@@ -148,9 +157,17 @@ impl PlotLayout {
                 0.0
             };
 
+        // #236: a mapped `size` legend's largest key can need a bigger box
+        // than the theme's flat defaults — grow the key (and so the band
+        // reserved for it) to fit, the same way `draw_discrete_legend_at`
+        // grows the key it actually draws. A no-op (both `.max()`s keep
+        // the theme defaults) when there's no size legend.
+        let key_w = theme.legend_key_width.max(extras.legend_max_key_size);
+        let key_h = theme.legend_key_height.max(key_w);
+
         let legend_size = if has_legend {
             theme.legend_margin.left
-                + theme.legend_key_width
+                + key_w
                 + theme.legend_spacing
                 + theme.legend_text.size * 6.0
                 + theme.legend_margin.right
@@ -163,10 +180,10 @@ impl PlotLayout {
         // width-based `legend_size` — otherwise a big gap opens above the plot.
         let legend_band = if has_legend {
             theme.legend_margin.top
-                + theme.legend_key_height
+                + key_h
                 + theme.legend_spacing
                 + theme.legend_margin.bottom
-                + extras.legend_extra_rows as f64 * (theme.legend_key_height + theme.legend_spacing)
+                + extras.legend_extra_rows as f64 * (key_h + theme.legend_spacing)
         } else {
             0.0
         };

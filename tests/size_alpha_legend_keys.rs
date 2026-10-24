@@ -56,19 +56,20 @@ fn circle_radii(svg: &str) -> Vec<f64> {
 }
 
 /// `fill-opacity="…"` values from the `<rect …>` legend-key *swatches*
-/// specifically (`fill="#323232"`, the legend code's hard-coded
-/// `theme.geom.ink.unwrap_or((50, 50, 50))` for an `Alpha` key) — not the
-/// legend-key *background* rect drawn just before each swatch (always fully
-/// opaque, so it'd otherwise pollute every other entry). No `fill-opacity`
-/// attribute at all means fully opaque (`opacity_attr` omits it when alpha
-/// rounds to `1.000`).
+/// specifically (`fill="#000000"` at the default theme — #237:
+/// `theme.geom.ink.unwrap_or(theme.legend_text.color)` for an `Alpha` key,
+/// `legend_text.color` being pure black there, no longer the old fixed
+/// `(50, 50, 50)`/`"#323232"`) — not the legend-key *background* rect
+/// drawn just before each swatch (always fully opaque, so it'd otherwise
+/// pollute every other entry). No `fill-opacity` attribute at all means
+/// fully opaque (`opacity_attr` omits it when alpha rounds to `1.000`).
 fn alpha_swatch_opacities(svg: &str) -> Vec<f64> {
     svg.split("<rect ")
         .skip(1)
         .filter_map(|s| {
             let tag_end = s.find('>').unwrap_or(s.len());
             let tag = &s[..tag_end];
-            if !tag.contains("fill=\"#323232\"") {
+            if !tag.contains("fill=\"#000000\"") {
                 return None;
             }
             Some(match tag.split("fill-opacity=\"").nth(1) {

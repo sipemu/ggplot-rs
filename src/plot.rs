@@ -2933,6 +2933,22 @@ impl GGPlot {
         {
             let legend_aes =
                 crate::guide::legend::legend_scales_for(&built.scales, &built.suppressed_aes);
+            // #236: a mapped `size` legend's largest key can need a bigger
+            // box than the theme's flat defaults — independent of B3-2's
+            // discrete-guide wrap planning below, so computed unconditionally.
+            extras.legend_max_key_size = legend_aes
+                .iter()
+                .filter_map(|aes| {
+                    let scale = built.scales.get(aes)?;
+                    let breaks = scale.breaks();
+                    Some(crate::guide::legend::size_key_diameter(
+                        aes,
+                        &built.scales,
+                        scale,
+                        &breaks,
+                    ))
+                })
+                .fold(0.0_f64, f64::max);
             let has_discrete_guide = legend_aes.iter().any(|a| {
                 built
                     .scales
@@ -3366,22 +3382,16 @@ impl GGPlot {
     /// (post-build, cross-layer) suppression check — this one only needs to
     /// decide *whether to reserve space at all*, not exactly how much.
     fn has_legend_mapping(&self) -> bool {
-        fn is_legend_aes(a: &crate::aes::Aesthetic) -> bool {
-            matches!(
-                a,
-                crate::aes::Aesthetic::Color
-                    | crate::aes::Aesthetic::Fill
-                    | crate::aes::Aesthetic::Shape
-                    | crate::aes::Aesthetic::Linetype
-                    | crate::aes::Aesthetic::Size
-                    | crate::aes::Aesthetic::Alpha
-            )
-        }
+        // #241: delegates to `guide::legend::is_legend_aesthetic` (the
+        // same list `draw_legend_planned` itself draws from) rather than
+        // keeping its own copy — a second, independently-maintained list
+        // here had drifted out of sync, missing `Linewidth`.
+        use crate::guide::legend::is_legend_aesthetic;
         let plot_level = self
             .mapping
             .mappings
             .iter()
-            .any(|m| is_legend_aes(&m.aesthetic));
+            .any(|m| is_legend_aesthetic(&m.aesthetic));
         plot_level
             || self.layers.iter().any(|layer| {
                 if layer.show_legend == Some(false) {
@@ -3395,7 +3405,7 @@ impl GGPlot {
                 effective
                     .mappings
                     .iter()
-                    .any(|m| is_legend_aes(&m.aesthetic))
+                    .any(|m| is_legend_aesthetic(&m.aesthetic))
             })
     }
 }
