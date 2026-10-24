@@ -241,6 +241,7 @@ impl Geom for GeomBivariateLegend {
 mod tests {
     use super::*;
     use crate::aes::Aesthetic;
+    use crate::data::Value;
     use crate::scale::bivariate::ScaleFillBivariate;
 
     #[test]
@@ -264,5 +265,86 @@ mod tests {
     #[test]
     fn default_corner_is_bottom_right() {
         assert_eq!(LegendCorner::default(), LegendCorner::BottomRight);
+    }
+
+    #[test]
+    fn cell_size_builder_sets_the_field() {
+        let g = GeomBivariateLegend::default().cell_size(20.0);
+        assert_eq!(g.cell_size, 20.0);
+        // Clamped to a sane minimum rather than a zero/negative swatch.
+        assert_eq!(
+            GeomBivariateLegend::default().cell_size(-5.0).cell_size,
+            1.0
+        );
+    }
+
+    fn two_region_df() -> DataFrame {
+        let mut df = DataFrame::new();
+        df.add_column(
+            "geometry".into(),
+            vec![
+                Value::Str("POLYGON ((0 0, 10 0, 10 10, 0 10, 0 0))".into()),
+                Value::Str("POLYGON ((10 0, 20 0, 20 10, 10 10, 10 0))".into()),
+            ],
+        );
+        df
+    }
+
+    #[test]
+    fn empty_captions_draw_the_grid_without_axis_text() {
+        let legend = GeomBivariateLegend {
+            x_name: String::new(),
+            y_name: String::new(),
+            ..GeomBivariateLegend::default()
+        };
+        let svg = crate::plot::GGPlot::new(two_region_df())
+            .aes(crate::aes::Aes::new())
+            .bivariate_legend(legend)
+            .render_svg_native()
+            .expect("render");
+        assert!(
+            svg.contains("data-geom=\"bivariate_legend\""),
+            "grid still draws: {svg}"
+        );
+        assert_eq!(svg.matches("<text").count(), 0, "no caption text: {svg}");
+    }
+
+    #[test]
+    fn legend_background_draws_when_the_theme_enables_it() {
+        let mut theme = crate::theme::Theme::default();
+        theme.legend_background.visible = true;
+        theme.legend_background.fill = Some((40, 40, 44));
+        let legend = GeomBivariateLegend::from_scale(&ScaleFillBivariate::tertile(
+            Aesthetic::Fill,
+            (217, 95, 2),
+            (117, 112, 179),
+            "x",
+            "y",
+        ));
+        let svg = crate::plot::GGPlot::new(two_region_df())
+            .aes(crate::aes::Aes::new())
+            .bivariate_legend(legend)
+            .theme(theme)
+            .render_svg_native()
+            .expect("render");
+        assert!(svg.contains("#28282C"), "{svg}");
+    }
+
+    #[test]
+    fn ink_theme_hook_recolours_the_default_text_color() {
+        let mut g = GeomBivariateLegend::default();
+        let el = crate::theme::elements::ElementGeom {
+            ink: Some((10, 20, 30)),
+            ..Default::default()
+        };
+        g.apply_element_geom(&el);
+        assert_eq!(g.text_color, (10, 20, 30));
+        // An already-customised text_color is left alone.
+        let mut g2 = GeomBivariateLegend {
+            text_color: (1, 2, 3),
+            ..GeomBivariateLegend::default()
+        };
+        g2.apply_element_geom(&el);
+        assert_eq!(g2.text_color, (1, 2, 3));
     }
 }

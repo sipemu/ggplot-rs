@@ -413,4 +413,70 @@ mod tests {
             Some((240, 240, 240))
         );
     }
+
+    /// The boilerplate `Scale` trait methods: `map`/`name`/`set_name`/
+    /// `is_discrete`/`train`/`clone_box`. These aren't reached by a plot
+    /// that suppresses the standard per-aesthetic legend (the usual way to
+    /// use this scale, since the legend is `GeomBivariateLegend` instead —
+    /// `is_discrete`/`breaks`/`name` are legend-routing hooks, not needed
+    /// just to colour the data), so they need their own direct coverage.
+    #[test]
+    fn boilerplate_scale_trait_methods() {
+        let mut s =
+            ScaleFillBivariate::tertile(Aesthetic::Fill, (200, 0, 0), (0, 0, 200), "x", "y");
+        assert_eq!(s.aesthetic(), Aesthetic::Fill);
+        assert_eq!(s.map(&Value::Str("1-1".into())), 0.0);
+        assert_eq!(s.name(), "");
+        s.set_name("bivariate");
+        assert_eq!(s.name(), "bivariate");
+        assert!(s.is_discrete());
+        s.train(&[Value::Str("1-1".into())]); // no-op; must not panic
+        let cloned = s.clone_box();
+        assert_eq!(cloned.name(), "bivariate");
+        assert_eq!(
+            cloned.map_to_color(&Value::Str("3-3".into())),
+            s.map_to_color(&Value::Str("3-3".into()))
+        );
+    }
+
+    /// `nx == 1` or `ny == 1` (a one-dimensional "bivariate" — degenerate):
+    /// `tx`/`ty` fall back to `1.0` (the single column/row is treated as
+    /// the end of that axis's ramp) rather than dividing by zero.
+    #[test]
+    fn single_row_or_column_grid_does_not_panic() {
+        let s = ScaleFillBivariate::new(
+            Aesthetic::Fill,
+            1,
+            3,
+            (255, 255, 255),
+            (200, 0, 0),
+            (0, 0, 200),
+            "x",
+            "y",
+        );
+        for j in 1..=3 {
+            assert!(s.map_to_color(&Value::Str(format!("1-{j}"))).is_some());
+        }
+        // The single column is always tx=1.0 (end of the x ramp): row 1
+        // (ty=0, no y contribution) is exactly color_x.
+        assert_eq!(s.map_to_color(&Value::Str("1-1".into())), Some((200, 0, 0)));
+
+        let s2 = ScaleFillBivariate::new(
+            Aesthetic::Fill,
+            3,
+            1,
+            (255, 255, 255),
+            (200, 0, 0),
+            (0, 0, 200),
+            "x",
+            "y",
+        );
+        for i in 1..=3 {
+            assert!(s2.map_to_color(&Value::Str(format!("{i}-1"))).is_some());
+        }
+        assert_eq!(
+            s2.map_to_color(&Value::Str("1-1".into())),
+            Some((0, 0, 200))
+        );
+    }
 }
