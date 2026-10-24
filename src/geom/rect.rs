@@ -18,6 +18,11 @@ pub struct GeomRect {
     pub color: (u8, u8, u8),
     pub alpha: f64,
     pub line_width: f64,
+    /// Corner radius in px (ggplot2 `geom_label(label.r)`, ggchicklet
+    /// `radius`, #176). `0.0` (the default) is a plain rectangle, unchanged
+    /// from pre-#176 behaviour. Not supported under polar coords, where a
+    /// rect is drawn as an annulus sector.
+    pub radius: f64,
 }
 
 impl Default for GeomRect {
@@ -27,7 +32,16 @@ impl Default for GeomRect {
             color: (50, 50, 50),
             alpha: 0.5,
             line_width: 0.5,
+            radius: 0.0,
         }
+    }
+}
+
+impl GeomRect {
+    /// Corner radius in px (#176). See the [`radius`](Self::radius) field doc.
+    pub fn with_radius(mut self, radius_px: f64) -> Self {
+        self.radius = radius_px;
+        self
     }
 }
 
@@ -73,6 +87,9 @@ impl Geom for GeomRect {
                 stroke_width: self.line_width,
                 alpha: self.alpha,
                 clip: !coord.is_polar(),
+                // Polar coords draw a rect as an annulus sector (a polygon,
+                // not a rect) — a radius has no meaning there.
+                corner_radius: if coord.is_polar() { 0.0 } else { self.radius },
             };
             super::set_row_extras(backend, data, i);
 

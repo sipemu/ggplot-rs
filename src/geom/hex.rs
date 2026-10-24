@@ -153,6 +153,7 @@ impl Geom for GeomHex {
                     stroke_width: self.line_width,
                     alpha: self.alpha,
                     clip: true,
+                    corner_radius: 0.0,
                 },
             )?;
         }

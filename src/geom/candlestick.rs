@@ -216,6 +216,7 @@ impl Geom for GeomCandlestick {
                     stroke_width: self.line_width * 0.5,
                     alpha: self.alpha,
                     clip: true,
+                    corner_radius: 0.0,
                 },
             )
         })

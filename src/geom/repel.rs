@@ -763,6 +763,7 @@ fn draw_repel(
                     stroke_width: 0.5,
                     alpha,
                     clip: true,
+                    corner_radius: 0.0,
                 },
             )?;
             super::clear_mark(backend);

@@ -260,6 +260,7 @@ fn draw_discrete_legend_at(
                     stroke_width: theme.legend_background.width,
                     alpha: 1.0,
                     clip: false,
+                    corner_radius: 0.0,
                 },
             )?;
         }
@@ -289,6 +290,7 @@ fn draw_discrete_legend_at(
                         stroke_width: theme.legend_key.width,
                         alpha: 1.0,
                         clip: false,
+                        corner_radius: 0.0,
                     },
                 )?;
             }
@@ -402,6 +404,7 @@ fn draw_continuous_legend_at(
                     stroke_width: theme.legend_background.width,
                     alpha: 1.0,
                     clip: false,
+                    corner_radius: 0.0,
                 },
             )?;
         }
@@ -428,6 +431,7 @@ fn draw_continuous_legend_at(
                 stroke_width: 0.0,
                 alpha: 1.0,
                 clip: false,
+                corner_radius: 0.0,
             },
         )?;
     }
@@ -524,6 +528,7 @@ fn draw_legend_swatch(
                     stroke_width: 0.0,
                     alpha: 1.0,
                     clip: false,
+                    corner_radius: 0.0,
                 },
             )?;
         }
@@ -585,6 +590,7 @@ fn draw_legend_swatch(
                     stroke_width: 0.0,
                     alpha,
                     clip: false,
+                    corner_radius: 0.0,
                 },
             )?;
         }
@@ -1099,6 +1105,7 @@ fn draw_discrete_legend_grid(
                         stroke_width: theme.legend_key.width,
                         alpha: 1.0,
                         clip: false,
+                        corner_radius: 0.0,
                     },
                 )?;
             }

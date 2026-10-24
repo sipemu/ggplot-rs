@@ -68,6 +68,7 @@ fn geom_rect_infinite_bounds_span_the_panel() {
             color: (1, 2, 3),
             alpha: 0.2,
             line_width: 0.0,
+            radius: 0.0,
         })
         .layer_data(band)
         .layer_aes(Aes::new().xmin("x0").xmax("x1").ymin("y0").ymax("y1"))

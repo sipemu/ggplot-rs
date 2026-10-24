@@ -257,6 +257,7 @@ pub(crate) fn draw_heads(
                     stroke_width: linewidth,
                     alpha,
                     clip: true,
+                    corner_radius: 0.0,
                 },
             ),
             ArrowType::Open => backend.draw_line(
@@ -274,6 +275,70 @@ pub(crate) fn draw_heads(
         result?;
     }
     Ok(())
+}
+
+/// Where a straight line from a rectangle's `center` toward `toward` leaves
+/// the rectangle — i.e. the point on the rect's boundary a segment/curve
+/// endpoint should sit at so an [`arrow()`] drawn on it lands on the box's
+/// edge instead of overlapping into the box (too short) or stopping short in
+/// open space (too far).
+///
+/// `half_w`/`half_h` are the box's half-width/half-height in px; `toward` is
+/// the point the line is headed to — typically the *other* box's centre, or
+/// its own [`rect_edge_point`] result for a tighter node-link layout. This
+/// is the same "which axis clips first" test as scaling a line from the
+/// centre until it first crosses a vertical or horizontal edge: whichever of
+/// the two scale factors is smaller wins. `toward == center` (a zero-length
+/// direction) returns `center` itself rather than dividing by zero.
+///
+/// # Combining with `geom_segment`/`geom_curve` for a node-link diagram
+///
+/// Draw boxes with [`crate::geom::rect::GeomRect`]/[`crate::geom::tile::GeomTile`]
+/// (optionally `.with_radius(_)` for rounded corners, #176), then compute
+/// each edge's `(x, y)`/`(xend, yend)` with this helper before building the
+/// segment data — `geom_segment`/`geom_curve` draw straight to whatever
+/// endpoints the data gives them; they have no notion of "box" themselves:
+///
+/// ```
+/// use ggplot_rs::geom::arrow::rect_edge_point;
+///
+/// // Two boxes, by centre + half-extents.
+/// let (a_center, a_half) = ((0.0, 0.0), (40.0, 20.0));
+/// let (b_center, b_half) = ((160.0, 0.0), (40.0, 20.0));
+///
+/// // The segment's data points: each box's edge facing the other box,
+/// // not the raw centres — so the line (and its arrowhead) starts and
+/// // ends exactly at the boxes' boundaries.
+/// let start = rect_edge_point(a_center, a_half.0, a_half.1, b_center);
+/// let end = rect_edge_point(b_center, b_half.0, b_half.1, a_center);
+/// // ... feed `start`/`end` as this row's (x, y)/(xend, yend), then
+/// // `GGPlot::geom_segment_with(GeomSegment::default().arrow(arrow()))`.
+/// assert!((start.0 - 40.0).abs() < 1e-9); // right edge of box A
+/// assert!((end.0 - 120.0).abs() < 1e-9); // left edge of box B
+/// ```
+pub fn rect_edge_point(
+    center: (f64, f64),
+    half_w: f64,
+    half_h: f64,
+    toward: (f64, f64),
+) -> (f64, f64) {
+    let (dx, dy) = (toward.0 - center.0, toward.1 - center.1);
+    let sx = if dx != 0.0 {
+        half_w / dx.abs()
+    } else {
+        f64::INFINITY
+    };
+    let sy = if dy != 0.0 {
+        half_h / dy.abs()
+    } else {
+        f64::INFINITY
+    };
+    let k = sx.min(sy);
+    if k.is_finite() {
+        (center.0 + dx * k, center.1 + dy * k)
+    } else {
+        center
+    }
 }
 
 #[cfg(test)]
@@ -390,5 +455,52 @@ mod tests {
         let path = [(0.0, 0.0), (0.0, 0.0), (10.0, 0.0)];
         let a = Arrow::default().position(0.0);
         assert!(heads(&path, &a, 1.0).is_empty());
+    }
+
+    #[test]
+    fn rect_edge_point_exits_through_the_right_edge() {
+        // Target due east and further away than the box is wide: the box's
+        // vertical edge clips first.
+        let p = rect_edge_point((0.0, 0.0), 40.0, 20.0, (200.0, 0.0));
+        assert!((p.0 - 40.0).abs() < 1e-9);
+        assert!((p.1 - 0.0).abs() < 1e-9);
+    }
+
+    #[test]
+    fn rect_edge_point_exits_through_the_top_edge() {
+        // Target due north (screen "up", smaller y): the horizontal edge
+        // clips first since the box is wider than tall.
+        let p = rect_edge_point((0.0, 0.0), 40.0, 20.0, (0.0, -200.0));
+        assert!((p.0 - 0.0).abs() < 1e-9);
+        assert!((p.1 - -20.0).abs() < 1e-9);
+    }
+
+    #[test]
+    fn rect_edge_point_picks_the_axis_that_clips_first_on_a_diagonal() {
+        // A target just inside the box's own corner cone exits through the
+        // vertical edge (dx dominates): same "which scale factor is
+        // smaller" test as the consumer's exit().
+        let p = rect_edge_point((0.0, 0.0), 10.0, 10.0, (100.0, 20.0));
+        assert!(
+            (p.0 - 10.0).abs() < 1e-9,
+            "expected the right edge, got {p:?}"
+        );
+        assert!(p.1.abs() <= 10.0 + 1e-9);
+    }
+
+    #[test]
+    fn rect_edge_point_toward_the_centre_itself_returns_the_centre() {
+        let p = rect_edge_point((5.0, 5.0), 10.0, 10.0, (5.0, 5.0));
+        assert_eq!(p, (5.0, 5.0));
+    }
+
+    #[test]
+    fn rect_edge_point_is_symmetric_for_two_equal_boxes_facing_each_other() {
+        let (a, b) = ((0.0, 0.0), (160.0, 0.0));
+        let start = rect_edge_point(a, 40.0, 20.0, b);
+        let end = rect_edge_point(b, 40.0, 20.0, a);
+        assert!((start.0 - 40.0).abs() < 1e-9);
+        assert!((end.0 - 120.0).abs() < 1e-9);
+        assert!((end.0 - start.0 - 80.0).abs() < 1e-9); // the gap between boxes
     }
 }

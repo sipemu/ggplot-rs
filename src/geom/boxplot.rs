@@ -146,6 +146,7 @@ impl Geom for GeomBoxplot {
                     stroke_width: 1.0,
                     alpha: self.alpha,
                     clip: true,
+                    corner_radius: 0.0,
                 },
             )?;
 

@@ -112,6 +112,7 @@ pub(crate) fn draw_bands(
                 stroke_width: 0.0,
                 alpha,
                 clip: true,
+                corner_radius: 0.0,
             },
         )?;
     }

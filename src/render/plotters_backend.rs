@@ -370,6 +370,47 @@ impl<'a, DB: DrawingBackend> DrawBackend for PlottersAdapter<'a, DB> {
             )
         };
 
+        if style.corner_radius > 0.0 {
+            // plotters has no native rounded-rect primitive: approximate with
+            // the same polygon the pixel backend uses. Note this clips the
+            // bounding box above, not each rounded corner individually — a
+            // rounded rect that straddles the clip edge gets a straight cut.
+            let pts = super::backend::rounded_rect_points(
+                tl.0 as f64,
+                tl.1 as f64,
+                br.0 as f64,
+                br.1 as f64,
+                style.corner_radius,
+            );
+            let int_pts: Vec<(i32, i32)> =
+                pts.iter().map(|(x, y)| (*x as i32, *y as i32)).collect();
+            if let Some(fill) = style.fill {
+                let fill_color = to_rgba(fill, style.alpha);
+                self.area
+                    .draw(&Polygon::new(int_pts.clone(), fill_color.filled()))
+                    .map_err(map_err)?;
+            }
+            if let Some(stroke) = style.stroke {
+                let stroke_color = to_rgba(stroke, style.alpha);
+                let width = if style.stroke_width > 0.0 {
+                    (style.stroke_width as u32).max(1)
+                } else {
+                    0
+                };
+                let mut loop_pts = int_pts;
+                if let Some(first) = loop_pts.first().copied() {
+                    loop_pts.push(first);
+                }
+                self.area
+                    .draw(&PathElement::new(
+                        loop_pts,
+                        stroke_color.stroke_width(width),
+                    ))
+                    .map_err(map_err)?;
+            }
+            return Ok(());
+        }
+
         if let Some(fill) = style.fill {
             let fill_color = to_rgba(fill, style.alpha);
             self.area

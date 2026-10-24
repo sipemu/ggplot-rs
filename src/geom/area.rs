@@ -119,6 +119,7 @@ impl Geom for GeomArea {
                         stroke_width: 0.0,
                         alpha: self.alpha,
                         clip: true,
+                        corner_radius: 0.0,
                     },
                 )?;
             }

@@ -236,6 +236,7 @@ impl GeomSf {
                     stroke_width: self.line_width,
                     alpha: self.alpha,
                     clip: true,
+                    corner_radius: 0.0,
                 }
             } else {
                 RectStyle {
@@ -244,6 +245,7 @@ impl GeomSf {
                     stroke_width: self.line_width.max(0.5),
                     alpha: self.alpha,
                     clip: true,
+                    corner_radius: 0.0,
                 }
             };
             backend.draw_polygon(&pts, &style)?;

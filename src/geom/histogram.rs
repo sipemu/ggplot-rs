@@ -127,6 +127,7 @@ impl Geom for GeomHistogram {
                     stroke_width: 0.5,
                     alpha: self.alpha,
                     clip: true,
+                    corner_radius: 0.0,
                 },
             )?;
         }
