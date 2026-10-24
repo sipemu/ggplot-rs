@@ -147,8 +147,12 @@ pub struct GeomAttribution {
     pub color: (u8, u8, u8),
     pub text_size: f64,
     /// Linked segments overriding `text` — see [`Self::link`]/[`Self::runs`].
-    /// `None`: draw `text` plain, as before #196.
+    /// `None`: draw `text` plain, as before #196. This is row 0 — the line
+    /// closest to the corner's edge.
     pub runs: Option<Vec<(String, Option<String>)>>,
+    /// Additional stacked lines beyond row 0, each its own run list — see
+    /// [`Self::line`] (#250).
+    pub lines: Vec<Vec<(String, Option<String>)>>,
 }
 
 impl GeomAttribution {
@@ -159,6 +163,7 @@ impl GeomAttribution {
             color: (130, 130, 130),
             text_size: 7.5,
             runs: None,
+            lines: Vec::new(),
         }
     }
 
@@ -193,6 +198,26 @@ impl GeomAttribution {
         );
         self
     }
+
+    /// Append another stacked line, with its own run list (same
+    /// plain/linked-segment semantics as [`Self::runs`]) — e.g. a data
+    /// licence note that needs several lines, such as BKG's dl-de/by-2-0
+    /// note for German boundaries (DataZooDE/anofox-visualization#420).
+    /// `.runs(..)` (or plain `text`, if `.runs(..)` was never called) is
+    /// row 0; the first `.line(..)` call appends row 1, the next row 2,
+    /// and so on. Rows stack away from the corner's edge, bottom corners
+    /// upward and top corners downward, each row `text_size * 1.3` px
+    /// from the last — the same line-height multiple a single-line
+    /// attribution already uses implicitly. A single line (no `.line(..)`
+    /// calls) draws byte-identically to before #250 (#196).
+    pub fn line(mut self, runs: Vec<(&str, Option<&str>)>) -> Self {
+        self.lines.push(
+            runs.into_iter()
+                .map(|(t, u)| (t.to_string(), u.map(str::to_string)))
+                .collect(),
+        );
+        self
+    }
 }
 
 /// `url` is an absolute `http://`/`https://` URL (case-insensitive scheme),
@@ -213,12 +238,11 @@ impl Geom for GeomAttribution {
         _theme: &Theme,
         backend: &mut dyn DrawBackend,
     ) -> Result<(), RenderError> {
-        // `runs` (set by `.link()`/`.runs()`) overrides plain `text`; a
-        // non-http(s) href is dropped — a warning, not a silently-wrong
-        // link (#196).
-        let runs: Vec<(String, Option<String>)> = match &self.runs {
-            Some(r) => r
-                .iter()
+        // `runs` (set by `.link()`/`.runs()`) overrides plain `text` for
+        // row 0; a non-http(s) href is dropped — a warning, not a
+        // silently-wrong link (#196).
+        let validate_runs = |backend: &mut dyn DrawBackend, runs: &[(String, Option<String>)]| {
+            runs.iter()
                 .map(|(t, u)| match u {
                     Some(url) if !is_http_url(url) => {
                         backend.warn(format!(
@@ -228,44 +252,66 @@ impl Geom for GeomAttribution {
                     }
                     other => (t.clone(), other.clone()),
                 })
-                .collect(),
+                .collect::<Vec<(String, Option<String>)>>()
+        };
+        let row0: Vec<(String, Option<String>)> = match &self.runs {
+            Some(r) => validate_runs(backend, r),
             None => vec![(self.text.clone(), None)],
         };
-        if runs.iter().all(|(t, _)| t.is_empty()) {
+        let extra_rows: Vec<Vec<(String, Option<String>)>> = self
+            .lines
+            .iter()
+            .map(|r| validate_runs(backend, r))
+            .collect();
+        let all_empty = row0.iter().all(|(t, _)| t.is_empty())
+            && extra_rows
+                .iter()
+                .all(|row| row.iter().all(|(t, _)| t.is_empty()));
+        if all_empty {
             return Ok(());
         }
         let plot_area = backend.plot_area();
-        let full_text: String = runs.iter().map(|(t, _)| t.as_str()).collect();
-        let tw = crate::render::text::text_width(&full_text, self.text_size);
         let (anchor, x) = match self.corner {
             MapCorner::BottomLeft | MapCorner::TopLeft => (TextAnchor::Start, plot_area.x + 4.0),
             MapCorner::BottomRight | MapCorner::TopRight => {
                 (TextAnchor::End, plot_area.x + plot_area.width - 4.0)
             }
         };
-        let y = match self.corner {
+        // Row 0's baseline — unchanged from before #250. Additional rows
+        // stack away from the corner's own edge: upward (smaller y) for
+        // the bottom corners, downward (larger y) for the top corners, so
+        // a map adding more lines never needs to know any other line's
+        // position.
+        let base_y = match self.corner {
             MapCorner::BottomLeft | MapCorner::BottomRight => plot_area.y + plot_area.height - 4.0,
             MapCorner::TopLeft | MapCorner::TopRight => plot_area.y + 4.0 + self.text_size / 2.0,
         };
-        let _ = tw; // width only needed if a background chip is added later
-        let run_refs: Vec<(&str, Option<&str>)> = runs
-            .iter()
-            .map(|(t, u)| (t.as_str(), u.as_deref()))
-            .collect();
-        backend.draw_text_runs(
-            &run_refs,
-            (x, y),
-            &TextStyle {
-                color: self.color,
-                size: self.text_size,
-                anchor,
-                angle: 0.0,
-                family: None,
-                face: crate::render::backend::FontFace::Plain,
-                bg_colour: None,
-                bg_r: 0.0,
-            },
-        )
+        let line_height = self.text_size * 1.3;
+        let style = TextStyle {
+            color: self.color,
+            size: self.text_size,
+            anchor,
+            angle: 0.0,
+            family: None,
+            face: crate::render::backend::FontFace::Plain,
+            bg_colour: None,
+            bg_r: 0.0,
+        };
+        for (i, row) in std::iter::once(row0).chain(extra_rows).enumerate() {
+            if row.iter().all(|(t, _)| t.is_empty()) {
+                continue;
+            }
+            let y = match self.corner {
+                MapCorner::BottomLeft | MapCorner::BottomRight => base_y - (i as f64) * line_height,
+                MapCorner::TopLeft | MapCorner::TopRight => base_y + (i as f64) * line_height,
+            };
+            let run_refs: Vec<(&str, Option<&str>)> = row
+                .iter()
+                .map(|(t, u)| (t.as_str(), u.as_deref()))
+                .collect();
+            backend.draw_text_runs(&run_refs, (x, y), &style)?;
+        }
+        Ok(())
     }
 
     fn required_aes(&self) -> Vec<Aesthetic> {
