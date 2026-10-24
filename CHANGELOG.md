@@ -5,6 +5,21 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.27.0] — 2026-10-24
+
+The DataZooDE/anofox-visualization#318 batch: a wasm-safe GAM smoother (#174),
+`PlotGrid` axis alignment (#175), diagram primitives (#176) and the spatial set
+(#177–#182: projections, polygon holes and simplification, `geom_sf_text` /
+`geom_sf_label`, a binned fill scale with counts and an NA key,
+`annotation_scale`, a bivariate fill scale with its 3×3 legend).
+
+**Breaking (pre-1.0 minor):** new public fields on `RectStyle`, `GeomRect`,
+`GeomTile`, `GeomText` and `GeomLabel` (build them with `..Default::default()`
+or the `with_*` builders); `SfProjection` no longer derives `Eq`; a polygon's
+holes are now cut out (evenodd) instead of drawn as separate filled polygons;
+`DrawBackend` gains `draw_polygon_rings` (with a default implementation). See
+the **Migration** notes below.
+
 ### Added
 - `GeomSmooth::gam()` (`method = "gam"`) now works without the `regression`
   feature, including for `wasm32-unknown-unknown` (#174). Previously the GAM
