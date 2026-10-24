@@ -369,6 +369,7 @@ fn draw_sf_text(
                     stroke_width: 0.5,
                     alpha: style.alpha,
                     clip: true,
+                    corner_radius: 0.0,
                 },
             )?;
         }

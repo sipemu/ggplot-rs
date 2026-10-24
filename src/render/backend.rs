@@ -656,6 +656,7 @@ mod tests {
                 stroke_width: 1.0,
                 alpha: 1.0,
                 clip: true,
+                corner_radius: 0.0,
             },
         )
         .unwrap();
