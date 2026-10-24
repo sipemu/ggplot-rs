@@ -5,6 +5,16 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.29.0] — 2026-10-24
+
+Two additions for DataZooDE/anofox-visualization#421 (diagrams drawn with
+ggplot-rs geoms): `Linetype::Custom` dash patterns (#220) and allow-listed
+mark attributes for interactive SVGs, `Aes::class` /
+`GGPlot::layer_svg_attr` / `Aes::group_wrap` (#221). A minor bump, not 0.28.3:
+cargo-semver-checks against v0.28.2 reports breaking changes — `Linetype` is
+no longer `Copy`/`Eq` and gains `Custom`, and `Aesthetic` gains `Class` and
+`GroupWrap`.
+
 ### Added
 - **`Linetype::Custom(Vec<(f64, f64)>)` — caller-supplied dash patterns**
   (#220, upstream issue DataZooDE/anofox-visualization#421: animated
