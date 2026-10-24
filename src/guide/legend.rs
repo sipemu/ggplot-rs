@@ -98,8 +98,13 @@ pub fn draw_legend(
 
     // Compute legend origin based on position. This deprecated path never
     // wraps a legend onto more than one row, so `legend_extra_rows` is
-    // always 0 — see `legend_position`'s doc comment.
-    let (legend_x, legend_y, mut is_horizontal) = legend_position(theme, plot_area, 0);
+    // always 0 — see `legend_position`'s doc comment. It also predates
+    // #225's `Inside` justification and keeps the old top-left anchor
+    // (`legend_size_hint: (0.0, 0.0)`) rather than estimate it, since
+    // it's unused internally and has no direct public replacement to
+    // keep behaviourally current.
+    let (legend_x, legend_y, mut is_horizontal) =
+        legend_position(theme, plot_area, 0, (0.0, 0.0), plot_area);
     // legend.direction overrides the auto layout from the position.
     if let Some(dir) = theme.legend_direction {
         is_horizontal = matches!(dir, crate::theme::LegendDirection::Horizontal);
@@ -222,6 +227,82 @@ pub(crate) fn top_legend_lift(
     legend_band_height(theme, legend_rows_beyond_first(is_horizontal, legend_plans))
 }
 
+/// Estimate the on-canvas footprint `(width, height)` of every legend
+/// scale about to be drawn, stacked the same way `draw_legend_planned`
+/// stacks them (each one's own height summed, the widest width shared)
+/// — used only by `legend_position`'s `Inside` arm (#225) to place the
+/// *whole* legend block by justification instead of always anchoring
+/// its top-left corner there. Mirrors each draw function's own returned
+/// height/width formula exactly (`draw_continuous_legend_at`,
+/// `draw_discrete_legend_at`, `draw_discrete_legend_grid`) without
+/// drawing anything. A `legend_plans` entry (an explicit `nrow`/`ncol`
+/// grid — auto-wrap never applies to a non-horizontal legend like
+/// `Inside`) is honoured for an accurate multi-row/-column estimate;
+/// everything else uses the single-column formula.
+fn estimate_legend_box(
+    scales: &ScaleSet,
+    legend_scales: &[Aesthetic],
+    theme: &Theme,
+    guide: &GuideLegend,
+    legend_plans: &std::collections::HashMap<Aesthetic, LegendPlan>,
+) -> (f64, f64) {
+    let mut total_h = 0.0_f64;
+    let mut max_w = 0.0_f64;
+    for aes in legend_scales {
+        let Some(scale) = scales.get(aes) else {
+            continue;
+        };
+        let breaks = scale.breaks();
+        if breaks.is_empty() {
+            continue;
+        }
+        let title = guide.title.as_deref().unwrap_or_else(|| scale.name());
+        let title_offset = if !title.is_empty() {
+            theme.legend_title.size + 4.0
+        } else {
+            0.0
+        };
+        let single_col_width =
+            theme.legend_key_width + theme.legend_spacing + theme.legend_text.size * 6.0;
+        let is_continuous_bar =
+            matches!(aes, Aesthetic::Color | Aesthetic::Fill) && !scale.is_discrete();
+        let (w, h) = if is_continuous_bar {
+            (
+                single_col_width,
+                title_offset + theme.legend_key_height * 8.0,
+            )
+        } else if let Some(plan) = legend_plans.get(aes) {
+            let w = if plan.col_pitch > 0.0 {
+                plan.cols as f64 * plan.col_pitch
+            } else {
+                single_col_width
+            };
+            (w, title_offset + plan.rows as f64 * theme.legend_key_height)
+        } else {
+            (
+                single_col_width,
+                title_offset + breaks.len() as f64 * theme.legend_key_height,
+            )
+        };
+        total_h += h;
+        max_w = max_w.max(w);
+    }
+    (max_w, total_h)
+}
+
+/// Clamp a `[pos, pos + size]` span inside `[lo, hi]` — `pos` alone when
+/// `size` already overflows `[lo, hi]` (a legend taller/wider than the
+/// canvas: nothing to do but left/top-align it and let it overflow, same
+/// as #225's old unconditional top-left anchor did for every `Inside`
+/// legend).
+fn clamp_span(pos: f64, size: f64, lo: f64, hi: f64) -> f64 {
+    if size >= hi - lo {
+        lo
+    } else {
+        pos.clamp(lo, hi - size)
+    }
+}
+
 /// Compute legend origin based on position setting.
 ///
 /// `legend_extra_rows` is #233's `LayoutExtras::legend_extra_rows` — a
@@ -234,16 +315,34 @@ pub(crate) fn top_legend_lift(
 /// lands the legend's first row exactly inside its reserved band — after
 /// the title/subtitle and the plot's own outer margin, rather than
 /// #233's bug (an absolute-from-canvas-origin `legend_margin.top`,
-/// overlapping both). Every other position ignores this parameter; pass
-/// `0` where the caller has no wrap plan in hand (the deprecated
-/// `draw_legend`) or the returned `y` is unused (every `legend_position`
-/// call before the final layout pass only needs its `x`/`is_horizontal`).
+/// overlapping both).
+///
+/// `legend_size_hint` (#225) is the legend's own estimated `(width,
+/// height)` — see `estimate_legend_box` — read only by `Inside`. ggplot2
+/// defaults `legend.justification.inside` to `legend.position.inside`:
+/// the legend's own fractional point `(fx, fy)` (measured from its own
+/// bottom-left, in the same `0..=1` convention `Inside`'s `(fx, fy)`
+/// already uses) lands exactly on the panel's point `(fx, fy)`, rather
+/// than always anchoring the legend's top-left corner there (#225's
+/// bug: a legend taller than roughly `(1 - fy) * plot_area.height` —
+/// trivially true for a tall continuous colourbar near `fy = 0`, "near
+/// the bottom" — ran off the canvas, and a discrete legend with enough
+/// levels did exactly the same). `canvas` is a last-resort clamp for a
+/// legend taller or wider than the *panel*: still on the canvas, even if
+/// that means spilling outside the panel itself.
+///
+/// Every other position ignores `legend_size_hint`; callers that don't
+/// have a real estimate in hand (the deprecated `draw_legend`, or where
+/// the returned `y` is unused) pass `(0.0, 0.0)` and `plot_area` itself
+/// as `canvas` — harmless, since neither matters there.
 ///
 /// Returns (x, y, is_horizontal).
 pub(crate) fn legend_position(
     theme: &Theme,
     plot_area: &Rect,
     legend_extra_rows: usize,
+    legend_size_hint: (f64, f64),
+    canvas: &Rect,
 ) -> (f64, f64, bool) {
     match theme.legend_position {
         LegendPosition::Right => (
@@ -267,11 +366,16 @@ pub(crate) fn legend_position(
             true,
         ),
         LegendPosition::None => (0.0, 0.0, false),
-        LegendPosition::Inside(fx, fy) => (
-            plot_area.x + fx * plot_area.width,
-            plot_area.y + (1.0 - fy) * plot_area.height,
-            false,
-        ),
+        LegendPosition::Inside(fx, fy) => {
+            let (legend_w, legend_h) = legend_size_hint;
+            let raw_x = plot_area.x + fx * (plot_area.width - legend_w);
+            // fy = 1 is the panel's top in ggplot-rs's convention (y grows
+            // down in SVG space, same flip the old formula already had).
+            let raw_y = plot_area.y + (1.0 - fy) * (plot_area.height - legend_h);
+            let x = clamp_span(raw_x, legend_w, canvas.x, canvas.x + canvas.width);
+            let y = clamp_span(raw_y, legend_h, canvas.y, canvas.y + canvas.height);
+            (x, y, false)
+        }
     }
 }
 
@@ -1067,8 +1171,18 @@ pub(crate) fn draw_legend_planned(
         ),
     };
     let legend_extra_rows = legend_rows_beyond_first(is_horizontal_hint, legend_plans);
-    let (legend_x, legend_y, mut is_horizontal) =
-        legend_position(theme, plot_area, legend_extra_rows);
+    // #225: `Inside`'s justification needs the legend's own estimated
+    // footprint and the full canvas to clamp against — cheap to compute
+    // unconditionally (ignored by every other position).
+    let legend_size_hint = estimate_legend_box(scales, &legend_scales, theme, guide, legend_plans);
+    let canvas = backend.total_area();
+    let (legend_x, legend_y, mut is_horizontal) = legend_position(
+        theme,
+        plot_area,
+        legend_extra_rows,
+        legend_size_hint,
+        &canvas,
+    );
     if let Some(dir) = theme.legend_direction {
         is_horizontal = matches!(dir, crate::theme::LegendDirection::Horizontal);
     }
