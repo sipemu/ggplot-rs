@@ -317,6 +317,23 @@ pub(crate) fn resolve_font_family(geom_family: &str, theme: &Theme) -> Option<St
     }
 }
 
+/// Parse a per-row `Aes::fontface` (#228) string the same way `theme()`'s
+/// `face` is (`src/theme/config.rs::text`): `"plain"`/`"normal"` ->
+/// [`FontFace::Plain`], `"bold"` -> `Bold`, `"italic"`/`"oblique"` ->
+/// `Italic`, case-insensitive. `None` for anything else, so the caller falls
+/// back to the geom's own fixed fontface — a row's unparseable value is
+/// silently ignored rather than a build-time warning, since it's only known
+/// once the data is in hand.
+pub(crate) fn parse_fontface(raw: &str) -> Option<crate::render::backend::FontFace> {
+    use crate::render::backend::FontFace;
+    match raw.to_lowercase().as_str() {
+        "plain" | "normal" => Some(FontFace::Plain),
+        "bold" => Some(FontFace::Bold),
+        "italic" | "oblique" => Some(FontFace::Italic),
+        _ => None,
+    }
+}
+
 /// Clear all per-mark metadata after a geom has drawn its marks.
 pub(crate) fn clear_mark(backend: &mut dyn DrawBackend) {
     set_mark(backend, None, None, None, None);

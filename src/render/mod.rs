@@ -22,6 +22,7 @@ pub struct Rect {
 
 /// Rendering error type.
 #[derive(Debug)]
+#[non_exhaustive]
 pub enum RenderError {
     MissingAesthetic(String),
     BackendError(String),

@@ -6,6 +6,7 @@ use super::Stat;
 
 /// Smoothing method selection.
 #[derive(Clone, Debug, Default)]
+#[non_exhaustive]
 pub enum SmoothMethod {
     /// Linear regression (y = mx + b).
     #[default]

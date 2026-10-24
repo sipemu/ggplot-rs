@@ -34,6 +34,7 @@ impl PointShape {
 /// `Linetype` is no longer `Copy` (a `Custom` pattern owns its `Vec`) —
 /// clone it where a copy was taken before.
 #[derive(Clone, Debug, PartialEq)]
+#[non_exhaustive]
 pub enum Linetype {
     Solid,
     Dashed,
@@ -406,6 +407,7 @@ pub struct TextStyle {
 
 /// Font face / weight (R's `element_text(face = ...)`).
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
+#[non_exhaustive]
 pub enum FontFace {
     #[default]
     Plain,

@@ -3,7 +3,7 @@ use crate::coord::Coord;
 use crate::data::DataFrame;
 use crate::position::identity::PositionIdentity;
 use crate::position::Position;
-use crate::render::backend::{DrawBackend, RectStyle, TextAnchor, TextStyle};
+use crate::render::backend::{DrawBackend, FontFace, RectStyle, TextAnchor, TextStyle};
 use crate::render::text::{wrap_text, wrapped_block_width};
 use crate::render::RenderError;
 use crate::scale::ScaleSet;
@@ -34,9 +34,18 @@ pub struct GeomText {
     /// (CSS-style; ggplot2's `lineheight` is the same idea). Only matters
     /// when `wrap_width` is set and the label wraps to more than one line.
     pub line_height: f64,
+    /// Font face (#228, ggplot2's `fontface`): bold/italic, same semantics
+    /// and enum as [`crate::geom::repel::GeomTextRepel::fontface`]. A row's
+    /// mapped `Aes::fontface` (if valid) wins over this fixed setting.
+    pub fontface: FontFace,
 }
 
 impl GeomText {
+    /// Fixed font face (#228); a mapped `Aes::fontface` wins per row.
+    pub fn with_fontface(mut self, face: FontFace) -> Self {
+        self.fontface = face;
+        self
+    }
     pub fn with_hjust(mut self, hjust: f64) -> Self {
         self.hjust = hjust;
         self
@@ -82,6 +91,7 @@ impl Default for GeomText {
             check_overlap: false,
             wrap_width: None,
             line_height: 1.2,
+            fontface: FontFace::Plain,
         }
     }
 }
@@ -104,6 +114,7 @@ impl Geom for GeomText {
         let label_col = data
             .column("label")
             .ok_or(RenderError::MissingAesthetic("label".into()))?;
+        let fontface_col = data.column("fontface");
 
         let plot_area = backend.plot_area();
         let xm = super::support::XMapper::new(data, scales);
@@ -120,6 +131,13 @@ impl Geom for GeomText {
             let nx = xm.map(&x_col[i], i);
             let ny = y_scale.map(|s| s.map(&y_col[i])).unwrap_or(0.0);
             let (px, py) = coord.transform((nx, ny), &plot_area);
+
+            // #228: a mapped `Aes::fontface` wins over the fixed setting.
+            let face = fontface_col
+                .map(|c| &c[i])
+                .filter(|v| !v.is_na())
+                .and_then(|v| super::parse_fontface(&v.to_group_key()))
+                .unwrap_or(self.fontface);
 
             let text = label_col[i].to_group_key();
             let lines = match self.wrap_width {
@@ -173,7 +191,7 @@ impl Geom for GeomText {
                         anchor: anchor.clone(),
                         angle: 0.0,
                         family: family.clone(),
-                        face: crate::render::backend::FontFace::Plain,
+                        face,
                     },
                 )?;
             }
@@ -235,9 +253,19 @@ pub struct GeomLabel {
     /// `geom_label(label.r)`, #176). `0.0` (the default) is a plain
     /// rectangle, unchanged from pre-#176 behaviour.
     pub radius: f64,
+    /// Font face (#228, ggplot2's `fontface`): bold/italic, same semantics
+    /// and enum as [`crate::geom::repel::GeomLabelRepel::fontface`]. A
+    /// row's mapped `Aes::fontface` (if valid) wins over this fixed
+    /// setting.
+    pub fontface: FontFace,
 }
 
 impl GeomLabel {
+    /// Fixed font face (#228); a mapped `Aes::fontface` wins per row.
+    pub fn with_fontface(mut self, face: FontFace) -> Self {
+        self.fontface = face;
+        self
+    }
     pub fn with_hjust(mut self, hjust: f64) -> Self {
         self.hjust = hjust;
         self
@@ -293,6 +321,7 @@ impl Default for GeomLabel {
             wrap_width: None,
             line_height: 1.2,
             radius: 0.0,
+            fontface: FontFace::Plain,
         }
     }
 }
@@ -315,6 +344,7 @@ impl Geom for GeomLabel {
         let label_col = data
             .column("label")
             .ok_or(RenderError::MissingAesthetic("label".into()))?;
+        let fontface_col = data.column("fontface");
 
         let plot_area = backend.plot_area();
         let xm = super::support::XMapper::new(data, scales);
@@ -331,6 +361,13 @@ impl Geom for GeomLabel {
             let nx = xm.map(&x_col[i], i);
             let ny = y_scale.map(|s| s.map(&y_col[i])).unwrap_or(0.0);
             let (px, py) = coord.transform((nx, ny), &plot_area);
+
+            // #228: a mapped `Aes::fontface` wins over the fixed setting.
+            let face = fontface_col
+                .map(|c| &c[i])
+                .filter(|v| !v.is_na())
+                .and_then(|v| super::parse_fontface(&v.to_group_key()))
+                .unwrap_or(self.fontface);
 
             let text = label_col[i].to_group_key();
             // Unwrapped (pre-#176, the default) keeps the exact old box width:
@@ -405,7 +442,7 @@ impl Geom for GeomLabel {
                         anchor: anchor.clone(),
                         angle: 0.0,
                         family: family.clone(),
-                        face: crate::render::backend::FontFace::Plain,
+                        face,
                     },
                 )?;
             }

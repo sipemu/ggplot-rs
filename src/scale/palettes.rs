@@ -2,6 +2,7 @@ use super::color::RGBAColor;
 
 /// Named palette types.
 #[derive(Clone, Debug)]
+#[non_exhaustive]
 pub enum PaletteName {
     // Qualitative
     Set1,

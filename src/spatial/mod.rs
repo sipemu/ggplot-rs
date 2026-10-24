@@ -68,6 +68,7 @@ const EARTH_RADIUS: f64 = 6_371_008.8;
 /// ported from anofox-visualization's `map/project.rs`
 /// (DataZooDE/anofox-visualization#318).
 #[derive(Debug, Clone, Copy, PartialEq, Default)]
+#[non_exhaustive]
 pub enum SfProjection {
     /// Longitude/latitude used directly (equirectangular / plate carrée).
     #[default]

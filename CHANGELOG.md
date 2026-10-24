@@ -5,6 +5,53 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Added
+- **`geom_text`/`geom_label` fontface (bold/italic)** (#228, upstream issue
+  DataZooDE/anofox-visualization#421: diagram node names/values drawn with
+  `geom_text` came out regular weight in the headless SVG export where the
+  old hand-written SVG was bold). `GeomText::with_fontface(..)` /
+  `GeomLabel::with_fontface(..)` set a fixed face; `Aes::fontface(col)`
+  maps it per row, parsed the same strings `theme()`'s `face` accepts
+  (`"plain"`/`"normal"`, `"bold"`, `"italic"`/`"oblique"`, case-insensitive)
+  — an unparseable or `NA` row value falls back to the fixed setting, no
+  build warning. Same `FontFace` enum and SVG `font-weight`/`font-style`
+  attributes `GeomTextRepel`/`GeomLabelRepel` already used; the raster
+  backends' existing bold/italic support (plotters) or bold-only
+  approximation (the pixel backend — no italic glyph variant) is
+  unchanged. Default is `FontFace::Plain`, so existing output is
+  byte-identical. **Breaking:** `Aesthetic` gains a `Fontface` variant —
+  exhaustive `match`es need an arm.
+
+### Breaking
+- **`#[non_exhaustive]` on the public enums that have repeatedly grown new
+  variants** (#228 follow-up: this release breaks exhaustive `match`es on
+  `Aesthetic` again, the third time — `Class`/`GroupWrap` in #221, now
+  `Fontface` — and `Linetype` grew `Custom` in #220; rather than keep
+  paying that cost every time one of these open-ended catalogs grows, mark
+  them once so the *next* addition is a minor bump instead of a major
+  one). Marked: `Aesthetic` and `Linetype` (named above); `FontFace`
+  (ggplot2's `fontface` has a fourth `"bold.italic"` value we don't
+  support yet — see #228's issue); `SfProjection` (gained `EqualEarth` in
+  #182, an open catalog of map projections); `PaletteName` (an open
+  catalog of named colour palettes); `SmoothMethod`, `CompareMethod`,
+  `CorMethod`, `QQDistribution` (open catalogs of statistical
+  methods/distributions — R's own `cor()`/`qqnorm()` equivalents already
+  support more than we implement, e.g. Kendall correlation); `ScaleTransform`
+  (an open catalog of scale transforms); `RenderError`, `GGError` (error
+  enums — idiomatic to leave open for new failure cases, std's own
+  `io::ErrorKind` does the same). Not marked: enums mirroring a fixed,
+  already-complete external spec with no realistic fourth option (SVG's
+  `text-anchor`/`stroke-linecap` keywords, ggplot2's `scales = "fixed"` /
+  `"free_x"` / `"free_y"` / `"free"`, `MappingStage`'s before/after-stat
+  pair) and `Value`/`GroupKey`, the pervasive internal data-value types
+  matched exhaustively throughout the crate's own code (unaffected either
+  way — `#[non_exhaustive]` only restricts *external* crates — but with no
+  benefit to outside callers either, since nothing constructs or matches
+  them from outside). `#[non_exhaustive]` only gates external crates'
+  exhaustive `match`es and doesn't restrict constructing existing variants,
+  so no in-crate code (including `tests/`, compiled as an external crate)
+  needed a wildcard arm added — verified by a full build and test run.
+
 ## [0.29.0] — 2026-10-24
 
 Two additions for DataZooDE/anofox-visualization#421 (diagrams drawn with
