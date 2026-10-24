@@ -32,6 +32,29 @@ All notable changes to this project are documented here. The format follows
   `group`/`color`/`fill`/`linetype` (the shared `row_groups` helper other
   geoms already use), as ggplot2 does, so each linetype level gets its own
   line.
+
+## [0.28.2] — 2026-10-24
+
+Fixes and one option from DataZooDE/anofox-visualization's #318 ports:
+`ScaleDateTime::domain()`, so `PlotGrid` can align date axes (#207);
+`PlotGrid` keeps each cell's own `svg_attr`s (#208); axis label fit leaves a
+legible gap between kept tick labels (#212); a multi-geometry `geom_sf` row is
+one mark (#213); compact relative SVG path encoding for `geom_sf` (#214). No API
+breaks (cargo-semver-checks against v0.28.1).
+
+### Added
+- `geom_sf`'s native SVG output is more compact for large boundaries
+  (#214): the new `DrawBackend::draw_polygon_rings_precise` (default
+  impl just forwards to the existing `draw_polygon_rings[_pattern]`, so
+  no other backend or geom changes) lets a caller ask for relative-command,
+  configurable-decimal-precision path data instead of absolute `M`/`L`
+  2-decimal commands. `GeomSf` opts in automatically, tied to its own
+  `simplify_px` (1 decimal whenever simplification is on, the default);
+  `.simplify(0.0)` keeps the exact absolute encoding. Every other
+  `draw_polygon_rings[_pattern]` caller (`geom_rect`/`geom_tile`/
+  `geom_polygon`) is untouched, so their output doesn't move. Found
+  porting DataZooDE/anofox-visualization#420.
+### Fixed
 - **`check.overlap` could leave adjacent continuous x tick labels touching**
   (#212, upstream issue DataZooDE/anofox-visualization#450). The thinning
   pass only required two kept labels' estimated bounding boxes not to

@@ -555,6 +555,37 @@ pub trait DrawBackend {
         )
     }
 
+    /// Like [`draw_polygon_rings`](Self::draw_polygon_rings)/
+    /// [`draw_polygon_rings_pattern`](Self::draw_polygon_rings_pattern),
+    /// but lets the caller ask for a compact path encoding at a given
+    /// decimal `precision` — relative commands after the first `M`
+    /// instead of absolute `L` per point, geometrically identical within
+    /// that precision (#214). `geom_sf` ties `precision` to its own
+    /// `simplify_px` (more simplification tolerates coarser precision);
+    /// every other caller of the two methods above is untouched, so their
+    /// output doesn't move.
+    ///
+    /// Default: `precision` is ignored and this just dispatches to
+    /// [`draw_polygon_rings`](Self::draw_polygon_rings)/
+    /// [`draw_polygon_rings_pattern`](Self::draw_polygon_rings_pattern) —
+    /// correct (if not byte-compact) for every backend, including ones
+    /// that pre-date this method. Only the native SVG backend, which
+    /// actually writes path text, overrides it to shrink the encoding
+    /// when `precision` is `Some`.
+    fn draw_polygon_rings_precise(
+        &mut self,
+        rings: &[Vec<(f64, f64)>],
+        pattern: Option<&FillPattern>,
+        precision: Option<u8>,
+        style: &RectStyle,
+    ) -> Result<(), RenderError> {
+        let _ = precision;
+        match pattern {
+            Some(p) => self.draw_polygon_rings_pattern(rings, p, style),
+            None => self.draw_polygon_rings(rings, style),
+        }
+    }
+
     /// Like [`draw_text`](Self::draw_text), but with an optional `<title>`
     /// tooltip carrying the *full* text when `text` itself has been
     /// shortened (e.g. a truncated-with-ellipsis legend label, #159).
