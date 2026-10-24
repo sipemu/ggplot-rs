@@ -25,6 +25,28 @@ All notable changes to this project are documented here. The format follows
   where a copy was taken before; exhaustive `match`es on it need a
   `Custom` arm.
 
+- **Allow-listed mark attributes for interactive SVGs: `Aes::class`,
+  `GGPlot::layer_svg_attr`, `Aes::group_wrap`** (#221, upstream issue
+  DataZooDE/anofox-visualization#421: diagram nodes drawn with ggplot-rs
+  geoms need CSS hooks, inert label layers and one addressable element per
+  node — all without inline `style`, so a strict CSP with no
+  `unsafe-inline` still holds). `Aes::class(col)` appends a row's CSS class
+  tokens (each `[A-Za-z][A-Za-z0-9_-]*`; invalid tokens dropped with one
+  warning per layer) to the mark's own `class="gg-mark gg-<kind>"`.
+  `GGPlot::layer_svg_attr(name, value)` (and `layer_svg_attrs`) puts an
+  attribute on every mark of the last layer; the allow-list is `class`,
+  `aria-hidden` (`true`/`false`), `pointer-events` (SVG keywords) and
+  `data-*` — `style`, `on*` and everything else are ignored with a warning.
+  `Aes::group_wrap("of", col)` draws every mark whose row has the same
+  value, across all layers mapping the same name, inside one
+  `<g data-of="<value>">`, placed where that group's first mark would have
+  been (so a box layer then a label layer become one `<g>` per node). All
+  three are SVG-only (new `DrawBackend::set_mark_class`/`set_mark_group`/
+  `set_layer_attrs`, default no-ops) and read by every geom that reads
+  `data_attr`; `geom_text`/`geom_label` now read `data_attr`, `class` and
+  `group_wrap` too. **Breaking:** `Aesthetic` gains `Class` and
+  `GroupWrap(String)` variants — exhaustive `match`es need arms.
+
 ### Fixed
 - **`geom_path`/`geom_line` with a mapped `linetype` but no `color` drew
   every group as one polyline** in the first group's linetype (found while

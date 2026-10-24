@@ -1359,6 +1359,18 @@ impl DrawBackend for Measure<'_> {
     fn set_mark_attrs(&mut self, attrs: Vec<(String, String)>) {
         self.inner.set_mark_attrs(attrs)
     }
+
+    fn set_mark_class(&mut self, class: Option<String>) {
+        self.inner.set_mark_class(class)
+    }
+
+    fn set_mark_group(&mut self, group: Option<(String, String)>) {
+        self.inner.set_mark_group(group)
+    }
+
+    fn set_layer_attrs(&mut self, attrs: Vec<(String, String)>) {
+        self.inner.set_layer_attrs(attrs)
+    }
     fn wants_formatted_values(&self) -> bool {
         self.inner.wants_formatted_values()
     }

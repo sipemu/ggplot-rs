@@ -52,6 +52,23 @@ pub struct SvgBackend {
     /// HTML page never lets one's `url(#…)` resolve into another's
     /// `<pattern>` (SVG ids share one DOM-wide namespace once inlined).
     id_prefix: String,
+    /// #221: `Aes::class` tokens for the next drawn mark(s) — see
+    /// [`DrawBackend::set_mark_class`].
+    mark_user_class: Option<String>,
+    /// #221: the caller-named group `(attr, value)` the next drawn mark(s)
+    /// belong to — see [`DrawBackend::set_mark_group`].
+    mark_group: Option<(String, String)>,
+    /// #221: the current layer's `GGPlot::layer_svg_attr`s — see
+    /// [`DrawBackend::set_layer_attrs`].
+    layer_attrs: Vec<(String, String)>,
+    /// #221: each group's `(attr, value, accumulated markup)`, in order of
+    /// first appearance.
+    groups: Vec<(String, String, String)>,
+    /// #221: `(byte offset into body, index into groups)` — where each
+    /// group's `<g>` is spliced in by [`Self::flush_groups`]. Offsets are
+    /// non-decreasing (a group's slot is the body length when its first
+    /// mark arrives, and the body only ever grows at the end).
+    group_slots: Vec<(usize, usize)>,
 }
 
 /// Source for [`SvgBackend::id_prefix`] — process-wide, so every backend
@@ -87,6 +104,11 @@ impl SvgBackend {
                 "gg{:x}",
                 NEXT_ID_PREFIX.fetch_add(1, std::sync::atomic::Ordering::Relaxed)
             ),
+            mark_user_class: None,
+            mark_group: None,
+            layer_attrs: Vec::new(),
+            groups: Vec::new(),
+            group_slots: Vec::new(),
         }
     }
 
@@ -256,9 +278,66 @@ impl SvgBackend {
         self.body.push_str(markup);
     }
 
-    /// The accumulated body markup (without the root element).
-    pub(crate) fn body(&self) -> &str {
+    /// The accumulated body markup (without the root element), with every
+    /// pending `group_wrap` group (#221) spliced in.
+    pub(crate) fn body(&mut self) -> &str {
+        self.flush_groups();
         &self.body
+    }
+
+    /// Append one drawn mark: into its `group_wrap` group's buffer while a
+    /// layer's mark has one (#221), else straight onto the body.
+    fn emit(&mut self, markup: &str) {
+        let key = match (&self.mark_group, &self.mark_geom) {
+            (Some(k), Some(_)) => k,
+            _ => {
+                self.body.push_str(markup);
+                return;
+            }
+        };
+        match self
+            .groups
+            .iter_mut()
+            .find(|(n, v, _)| n == &key.0 && v == &key.1)
+        {
+            Some((_, _, content)) => content.push_str(markup),
+            None => {
+                self.group_slots.push((self.body.len(), self.groups.len()));
+                self.groups
+                    .push((key.0.clone(), key.1.clone(), markup.to_string()));
+            }
+        }
+    }
+
+    /// Splice every pending group (#221) into the body as
+    /// `<g data-<name>="<value>">…</g>` at its first mark's position. The
+    /// attribute name was validated by `Aes::group_wrap`/`resolve_mappings`
+    /// and is re-checked here (defence in depth, as for `mark_attrs`); a
+    /// group with an invalid name is spliced in unwrapped.
+    fn flush_groups(&mut self) {
+        if self.group_slots.is_empty() {
+            return;
+        }
+        let groups = std::mem::take(&mut self.groups);
+        let slots = std::mem::take(&mut self.group_slots);
+        let extra: usize = groups
+            .iter()
+            .map(|(n, v, c)| n.len() + v.len() + c.len() + 12)
+            .sum();
+        let mut out = String::with_capacity(self.body.len() + extra);
+        let mut last = 0;
+        for (off, gi) in slots {
+            out.push_str(&self.body[last..off]);
+            last = off;
+            let (name, value, content) = &groups[gi];
+            if is_valid_mark_attr_name(name) {
+                out.push_str(&format!("<g {name}=\"{}\">{content}</g>", escape(value)));
+            } else {
+                out.push_str(content);
+            }
+        }
+        out.push_str(&self.body[last..]);
+        self.body = out;
     }
 
     /// Wrap the accumulated body in a `<g>` carrying `attrs` (escaped) — a
@@ -268,6 +347,7 @@ impl SvgBackend {
     /// `svg_attr`s). A no-op for an empty `attrs` — unaffected output,
     /// same as every other panel without a `svg_attr` call.
     pub(crate) fn wrap_body_in_group(&mut self, attrs: &[(String, String)]) {
+        self.flush_groups();
         if attrs.is_empty() {
             return;
         }
@@ -286,11 +366,81 @@ impl SvgBackend {
 
     /// ` class="gg-mark gg-<kind>" data-geom="<geom>"` while a layer's geom is
     /// drawing; empty for axes, grid lines, legends and backgrounds.
+    ///
+    /// #221: the layer's `layer_svg_attr("class", …)` tokens, then the
+    /// row's `Aes::class` tokens, are appended (each re-validated, defence
+    /// in depth; duplicates written once) — still one `class` attribute.
     fn mark_class(&self, kind: &str) -> String {
         match &self.mark_geom {
-            Some(g) => format!(" class=\"gg-mark gg-{kind}\" data-geom=\"{}\"", escape(g)),
+            Some(g) => {
+                let mut class = format!("gg-mark gg-{kind}");
+                let layer = self
+                    .layer_attrs
+                    .iter()
+                    .filter(|(n, _)| n == "class")
+                    .map(|(_, v)| v.as_str());
+                let mut seen: Vec<&str> = Vec::new();
+                for t in layer
+                    .chain(self.mark_user_class.as_deref())
+                    .flat_map(str::split_whitespace)
+                {
+                    if crate::aes::is_valid_class_token(t) && !seen.contains(&t) {
+                        seen.push(t);
+                        class.push(' ');
+                        class.push_str(t);
+                    }
+                }
+                format!(" class=\"{class}\" data-geom=\"{}\"", escape(g))
+            }
             None => String::new(),
         }
+    }
+
+    /// #221: ` aria-hidden="…" pointer-events="…"` from the current layer's
+    /// `layer_svg_attr`s (only while a layer draws). `aria_hidden_written`
+    /// skips the layer's `aria-hidden` when the mark already carries one
+    /// (a mark part — arrowhead/decorative — always writes `"true"`).
+    fn layer_flag_attrs(&self, aria_hidden_written: bool) -> String {
+        let mut out = String::new();
+        if self.mark_geom.is_none() {
+            return out;
+        }
+        for (name, value) in &self.layer_attrs {
+            let ok = match name.as_str() {
+                "aria-hidden" => !aria_hidden_written && matches!(value.as_str(), "true" | "false"),
+                "pointer-events" => POINTER_EVENTS_VALUES.contains(&value.as_str()),
+                _ => false,
+            };
+            if ok {
+                out.push_str(&format!(" {name}=\"{value}\""));
+            }
+        }
+        out
+    }
+
+    /// #221: the `data-*` attributes a layer's text mark carries — the
+    /// layer's `layer_svg_attr("data-…")`s, then the row's `Aes::data_attr`
+    /// ones (a row attr replaces a layer attr of the same name). Text marks
+    /// don't go through [`Self::push_mark`] (no `<title>`, no built-ins).
+    fn text_data_attrs(&self) -> String {
+        let mut pairs: Vec<(&str, &str)> = Vec::new();
+        if self.mark_geom.is_none() {
+            return String::new();
+        }
+        for (name, val) in self.layer_attrs.iter().chain(self.mark_attrs.iter()) {
+            if !is_valid_mark_attr_name(name) {
+                continue;
+            }
+            match pairs.iter_mut().find(|(n, _)| n == name) {
+                Some(existing) => existing.1 = val,
+                None => pairs.push((name, val)),
+            }
+        }
+        let mut out = String::new();
+        for (name, val) in pairs {
+            out.push_str(&format!(" {name}=\"{}\"", escape(val)));
+        }
+        out
     }
 
     /// Emit `<tag attrs/>`, or `<tag attrs data-…><title>tip</title></tag>`
@@ -331,7 +481,10 @@ impl SvgBackend {
         if let Some(fvalue) = &self.mark_fvalue {
             pairs.push(("data-fvalue".to_string(), fvalue.clone()));
         }
-        for (name, val) in &self.mark_attrs {
+        // #221: the layer's own `data-*` (`layer_svg_attr`) first, so a
+        // row's `data_attr` of the same name replaces it.
+        let layer_data = self.layer_attrs.iter().filter(|_| self.mark_geom.is_some());
+        for (name, val) in layer_data.chain(self.mark_attrs.iter()) {
             if !is_valid_mark_attr_name(name) {
                 continue;
             }
@@ -357,6 +510,7 @@ impl SvgBackend {
         if self.mark_part.is_some() {
             data.push_str(" aria-hidden=\"true\"");
         }
+        data.push_str(&self.layer_flag_attrs(self.mark_part.is_some()));
         // The class goes last so existing attribute sequences stay
         // byte-identical. Exactly one `class` attribute is ever written here
         // (no `data_attr` mapping can be named bare `class` — see
@@ -371,7 +525,7 @@ impl SvgBackend {
                 None => format!("<{tag} {attrs}{data}/>"),
             }
         };
-        self.body.push_str(&mark);
+        self.emit(&mark);
     }
 
     fn root_open(&self, prefix: &str) -> String {
@@ -398,7 +552,8 @@ impl SvgBackend {
     /// Wrap the accumulated elements in a complete `<svg>` document. The
     /// `data-plot` attribute records the panel (data) area in viewBox units so a
     /// host can map screen coordinates back to data (e.g. for zoom/crosshair).
-    pub fn finish(self) -> String {
+    pub fn finish(mut self) -> String {
+        self.flush_groups();
         let open = self.root_open("xmlns=\"http://www.w3.org/2000/svg\" ");
         let defs = self.pattern_defs();
         format!("{open}{defs}{}</svg>", self.body)
@@ -408,7 +563,8 @@ impl SvgBackend {
     /// `(x, y)` in a parent SVG's user space — no `xmlns` (it inherits the
     /// parent's namespace), so the result can be pasted into a larger SVG as-is.
     /// `data-plot` stays in this fragment's own viewBox units.
-    pub fn finish_fragment(self, x: f64, y: f64) -> String {
+    pub fn finish_fragment(mut self, x: f64, y: f64) -> String {
+        self.flush_groups();
         let open = self.root_open(&format!("x=\"{}\" y=\"{}\" ", num(x), num(y)));
         let defs = self.pattern_defs();
         format!("{open}{defs}{}</svg>", self.body)
@@ -730,6 +886,68 @@ fn is_valid_mark_attr_name(name: &str) -> bool {
     }
 }
 
+/// `pointer-events` keyword values accepted by
+/// [`validate_layer_svg_attr`] (#221) — SVG 1.1's full list.
+const POINTER_EVENTS_VALUES: &[&str] = &[
+    "auto",
+    "none",
+    "visiblePainted",
+    "visibleFill",
+    "visibleStroke",
+    "visible",
+    "painted",
+    "fill",
+    "stroke",
+    "all",
+    "bounding-box",
+];
+
+/// Validate one `GGPlot::layer_svg_attr(name, value)` (#221). The
+/// allow-list: `class` (space-separated tokens, each
+/// `[A-Za-z][A-Za-z0-9_-]*`; invalid tokens are dropped, the rest kept),
+/// `aria-hidden` (`"true"`/`"false"`), `pointer-events` (an SVG keyword,
+/// e.g. `"none"`), and `data-*` (same name rules as `Aes::data_attr`).
+/// Everything else — notably `style`, `on*` handlers, `id` — is rejected.
+/// Returns the attribute to keep (if any) and pushes a warning for anything
+/// dropped.
+pub(crate) fn validate_layer_svg_attr(
+    name: &str,
+    value: &str,
+    warnings: &mut Vec<String>,
+) -> Option<(String, String)> {
+    let keep = |v: &str| Some((name.to_string(), v.to_string()));
+    match name {
+        "class" => {
+            let (ok, bad) = crate::aes::split_class_tokens(value);
+            if !bad.is_empty() {
+                warnings.push(format!(
+                    "layer_svg_attr(\"class\"): invalid class token(s) {bad:?} (must match [A-Za-z][A-Za-z0-9_-]*) — dropped"
+                ));
+            }
+            if ok.is_empty() {
+                None
+            } else {
+                keep(&ok.join(" "))
+            }
+        }
+        "aria-hidden" if matches!(value, "true" | "false") => keep(value),
+        "pointer-events" if POINTER_EVENTS_VALUES.contains(&value) => keep(value),
+        "aria-hidden" | "pointer-events" => {
+            warnings.push(format!(
+                "layer_svg_attr(\"{name}\"): value {value:?} is not allowed — ignored"
+            ));
+            None
+        }
+        _ if is_valid_mark_attr_name(name) => keep(value),
+        _ => {
+            warnings.push(format!(
+                "layer_svg_attr(\"{name}\") is not on the allow-list (class, aria-hidden, pointer-events, data-*) — ignored"
+            ));
+            None
+        }
+    }
+}
+
 fn rgb((r, g, b): (u8, u8, u8)) -> String {
     format!("#{r:02X}{g:02X}{b:02X}")
 }
@@ -849,6 +1067,18 @@ impl DrawBackend for SvgBackend {
 
     fn set_mark_fx(&mut self, value: Option<String>) {
         self.mark_fx = value;
+    }
+
+    fn set_mark_class(&mut self, class: Option<String>) {
+        self.mark_user_class = class;
+    }
+
+    fn set_mark_group(&mut self, group: Option<(String, String)>) {
+        self.mark_group = group;
+    }
+
+    fn set_layer_attrs(&mut self, attrs: Vec<(String, String)>) {
+        self.layer_attrs = attrs;
     }
 
     fn draw_circle(
@@ -1146,18 +1376,24 @@ impl DrawBackend for SvgBackend {
         } else {
             String::new()
         };
-        let class = self.mark_class("text");
+        let class = format!(
+            "{}{}{}",
+            self.text_data_attrs(),
+            self.layer_flag_attrs(false),
+            self.mark_class("text")
+        );
         let title_tag = match title {
             Some(t) => format!("<title>{}</title>", escape(t)),
             None => String::new(),
         };
-        self.body.push_str(&format!(
+        let markup = format!(
             "<text x=\"{x:.2}\" y=\"{y:.2}\" font-size=\"{:.2}\" text-anchor=\"{anchor}\" \
              dominant-baseline=\"middle\" font-family=\"{family}\"{weight}{fstyle} fill=\"{}\"{transform}{class}>{title_tag}{}</text>",
             finite_or(style.size, 12.0),
             rgb(style.color),
             escape(text)
-        ));
+        );
+        self.emit(&markup);
         Ok(())
     }
 
@@ -1198,7 +1434,12 @@ impl DrawBackend for SvgBackend {
         } else {
             String::new()
         };
-        let class = self.mark_class("text");
+        let class = format!(
+            "{}{}{}",
+            self.text_data_attrs(),
+            self.layer_flag_attrs(false),
+            self.mark_class("text")
+        );
         let mut inner = String::new();
         for (text, href) in runs {
             match href {
@@ -1210,12 +1451,13 @@ impl DrawBackend for SvgBackend {
                 None => inner.push_str(&format!("<tspan>{}</tspan>", escape(text))),
             }
         }
-        self.body.push_str(&format!(
+        let markup = format!(
             "<text x=\"{x:.2}\" y=\"{y:.2}\" font-size=\"{:.2}\" text-anchor=\"{anchor}\" \
              dominant-baseline=\"middle\" font-family=\"{family}\"{weight}{fstyle} fill=\"{}\"{transform}{class}>{inner}</text>",
             finite_or(style.size, 12.0),
             rgb(style.color),
-        ));
+        );
+        self.emit(&markup);
         Ok(())
     }
 }
@@ -1224,6 +1466,48 @@ impl DrawBackend for SvgBackend {
 mod tests {
     use super::*;
     use crate::render::Rect;
+
+    /// #221: the backend re-checks everything callers hand it directly
+    /// through the public `DrawBackend` setters (defence in depth).
+    #[test]
+    fn issue221_backend_rechecks_class_group_and_layer_attrs() {
+        let mut b = backend();
+        b.set_mark_geom(Some("point"));
+        b.set_mark_class(Some("ok \"bad 1x ok".into()));
+        b.set_layer_attrs(vec![
+            ("aria-hidden".into(), "maybe".into()),
+            ("pointer-events".into(), "none\" onload=\"x".into()),
+            ("style".into(), "fill:red".into()),
+            ("class".into(), "lay".into()),
+        ]);
+        b.set_mark_group(Some(("onclick".into(), "x".into())));
+        b.draw_circle((1.0, 1.0), 1.0, &PointStyle::default())
+            .unwrap();
+        b.set_mark_group(Some(("data-of".into(), "n".into())));
+        let runs = [("a", None), ("b", Some("https://e.x"))];
+        b.draw_text_runs(&runs, (5.0, 5.0), &TextStyle::default())
+            .unwrap();
+        b.set_mark_group(None);
+        b.set_mark_geom(None);
+        let body = b.body().to_string();
+        assert!(
+            body.contains(r#"class="gg-mark gg-point lay ok""#),
+            "{body}"
+        );
+        assert!(!body.contains("bad") && !body.contains("1x"), "{body}");
+        assert!(
+            !body.contains("aria-hidden") && !body.contains("onload"),
+            "{body}"
+        );
+        assert!(
+            !body.contains("style=") && !body.contains("onclick"),
+            "{body}"
+        );
+        assert!(body.contains(r#"<g data-of="n"><text"#), "{body}");
+        assert!(body.contains("gg-text lay ok"), "{body}");
+        // A later finish() has nothing left to splice.
+        assert!(b.finish().contains(r#"<g data-of="n">"#));
+    }
 
     fn backend() -> SvgBackend {
         SvgBackend::new(

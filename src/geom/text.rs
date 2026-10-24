@@ -112,6 +112,11 @@ impl Geom for GeomText {
         let mut drawn_bboxes: Vec<(f64, f64, f64, f64)> = Vec::new();
 
         for i in 0..data.nrows() {
+            // #221: `Aes::class`/`group_wrap`/`data_attr` per row.
+            super::set_row_extras(backend, data, i);
+            // Text geoms don't consume tooltips (the build warns if one is
+            // mapped) — keep the label box `<title>`-free as before.
+            backend.set_tooltip(None);
             let nx = xm.map(&x_col[i], i);
             let ny = y_scale.map(|s| s.map(&y_col[i])).unwrap_or(0.0);
             let (px, py) = coord.transform((nx, ny), &plot_area);
@@ -173,6 +178,7 @@ impl Geom for GeomText {
                 )?;
             }
         }
+        super::clear_row_extras(backend);
 
         Ok(())
     }
@@ -317,6 +323,11 @@ impl Geom for GeomLabel {
         let mut drawn_bboxes: Vec<(f64, f64, f64, f64)> = Vec::new();
 
         for i in 0..data.nrows() {
+            // #221: `Aes::class`/`group_wrap`/`data_attr` per row.
+            super::set_row_extras(backend, data, i);
+            // Text geoms don't consume tooltips (the build warns if one is
+            // mapped) — keep the label box `<title>`-free as before.
+            backend.set_tooltip(None);
             let nx = xm.map(&x_col[i], i);
             let ny = y_scale.map(|s| s.map(&y_col[i])).unwrap_or(0.0);
             let (px, py) = coord.transform((nx, ny), &plot_area);
@@ -399,6 +410,7 @@ impl Geom for GeomLabel {
                 )?;
             }
         }
+        super::clear_row_extras(backend);
 
         Ok(())
     }

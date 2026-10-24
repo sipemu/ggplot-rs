@@ -24,6 +24,18 @@ fn target_column(aesthetic: &Aesthetic, warnings: &mut Vec<String>) -> Option<St
         // plain `"tooltip"` an unrelated raw source column could also be
         // named — the same class of bug `DataAttr`'s internal prefix fixes.
         Aesthetic::Tooltip => Some(TOOLTIP_INTERNAL_NAME.to_string()),
+        Aesthetic::Class => Some(crate::aes::CLASS_INTERNAL_NAME.to_string()),
+        Aesthetic::GroupWrap(target) => {
+            match crate::aes::validated_group_wrap_internal_name(target) {
+                Some(internal) => Some(internal),
+                None => {
+                    warnings.push(format!(
+                        "aes: group_wrap target {target:?} is invalid or reserved; skipped"
+                    ));
+                    None
+                }
+            }
+        }
         other => Some(other.col_name().to_string()),
     }
 }

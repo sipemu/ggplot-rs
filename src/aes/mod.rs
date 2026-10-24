@@ -40,6 +40,18 @@ pub enum Aesthetic {
     /// (`aes::validated_data_attr_internal_name`), the single authoritative
     /// gate regardless of how the mapping was created.
     DataAttr(String),
+    /// CSS class tokens on the mark (#221, [`Aes::class`]): a
+    /// space-separated list, each token matching `[A-Za-z][A-Za-z0-9_-]*`
+    /// (invalid tokens are dropped with a build warning). Routed through
+    /// [`CLASS_INTERNAL_NAME`] the same way `Tooltip` is. No scale, no
+    /// legend.
+    Class,
+    /// A caller-named group wrapper (#221, [`Aes::group_wrap`]): every mark
+    /// whose row has the same value — across all layers that map the same
+    /// name — is drawn inside one `<g data-<name>="<value>">`. The `String`
+    /// is the full attribute name (`"data-<name>"`), validated like
+    /// [`DataAttr`](Self::DataAttr)'s. No scale, no legend.
+    GroupWrap(String),
     /// Financial OHLC aesthetics (`geom_candlestick` / `geom_ohlc`); they
     /// share the y position scale.
     Open,
@@ -93,6 +105,8 @@ impl Aesthetic {
             Aesthetic::Linewidth => "linewidth",
             Aesthetic::Tooltip => "tooltip",
             Aesthetic::DataAttr(name) => name,
+            Aesthetic::Class => "class",
+            Aesthetic::GroupWrap(name) => name,
             Aesthetic::Open => "open",
             Aesthetic::High => "high",
             Aesthetic::Low => "low",
@@ -320,6 +334,56 @@ impl Aes {
         }
         self.push(col, Aesthetic::DataAttr(format!("data-{name}")))
     }
+
+    /// CSS class tokens on each mark, from `col` (#221): the row's value is
+    /// split on whitespace and every token must match
+    /// `[A-Za-z][A-Za-z0-9_-]*`; an invalid token is dropped (with one build
+    /// warning per layer), the rest are kept. The tokens are appended to the
+    /// mark's own `class="gg-mark gg-<kind>"` — there is never a second
+    /// `class` attribute, and never an inline `style` (so a strict CSP with
+    /// no `unsafe-inline` still holds: style the classes from an external
+    /// stylesheet). Read by every geom that reads [`data_attr`](Self::data_attr),
+    /// plus `geom_text`/`geom_label`. For one constant class on a whole
+    /// layer use [`GGPlot::layer_svg_attr`](crate::plot::GGPlot::layer_svg_attr)
+    /// `("class", "…")` instead.
+    pub fn class(self, col: &str) -> Self {
+        self.push(col, Aesthetic::Class)
+    }
+
+    /// Wrap marks in caller-named groups (#221): every mark whose row has
+    /// the same `col` value is drawn inside one `<g data-<name>="<value>">`
+    /// — across *all* layers that map `group_wrap` with the same `name` — so
+    /// client code can address (or tween) e.g. a diagram node's box, label
+    /// and badge as one element: `querySelector('[data-of="node-7"]')`.
+    ///
+    /// `name` follows [`data_attr`](Self::data_attr)'s rules
+    /// (`[a-z0-9][a-z0-9-]*`, not reserved); a leading `data-` is accepted
+    /// and stripped, so `group_wrap("of", …)` and `group_wrap("data-of", …)`
+    /// are the same. An invalid name is skipped with a build warning. A row
+    /// whose value is NA is drawn ungrouped.
+    ///
+    /// Paint order: a group is placed where its *first* mark would have
+    /// been drawn, and later marks of the same group are appended inside
+    /// it. So with a box layer then a label layer, both grouped by node,
+    /// the output is `<g data-of="a">box-a label-a</g><g data-of="b">box-b
+    /// label-b</g>` — node `b`'s box now paints over node `a`'s label,
+    /// which only matters if they overlap. Ungrouped marks keep their
+    /// positions. SVG backend only; raster backends ignore grouping.
+    pub fn group_wrap(mut self, name: &str, col: &str) -> Self {
+        let suffix = name.strip_prefix("data-").unwrap_or(name);
+        if !is_valid_data_attr_name(suffix) {
+            let reason = if RESERVED_DATA_ATTR_NAMES.contains(&suffix) {
+                "reserved (written by ggplot-rs itself)"
+            } else {
+                "invalid (must match [a-z0-9][a-z0-9-]*)"
+            };
+            self.warnings.push(format!(
+                "aes: group_wrap name {name:?} is {reason}; skipped"
+            ));
+            return self;
+        }
+        self.push(col, Aesthetic::GroupWrap(format!("data-{suffix}")))
+    }
     /// Opening price (`geom_candlestick` / `geom_ohlc`).
     pub fn open(self, col: &str) -> Self {
         self.push(col, Aesthetic::Open)
@@ -465,6 +529,49 @@ pub(crate) const DATA_ATTR_INTERNAL_PREFIX: &str = "\u{0}ggplot-rs:data-attr:";
 /// of bug `DATA_ATTR_INTERNAL_PREFIX` fixes for `data_attr`); routing it
 /// through the same internal-prefix scheme closes that for tooltips too.
 pub(crate) const TOOLTIP_INTERNAL_NAME: &str = "\u{0}ggplot-rs:tooltip";
+
+/// Internal storage name for a validated `Aes::class` mapping (#221) — see
+/// [`INTERNAL_PREFIX`]; same reasoning as [`TOOLTIP_INTERNAL_NAME`].
+pub(crate) const CLASS_INTERNAL_NAME: &str = "\u{0}ggplot-rs:class";
+
+/// Internal storage prefix for a validated `Aes::group_wrap` mapping
+/// (#221), followed by the full `data-<name>` attribute — see
+/// [`INTERNAL_PREFIX`]; same reasoning as [`DATA_ATTR_INTERNAL_PREFIX`].
+pub(crate) const GROUP_WRAP_INTERNAL_PREFIX: &str = "\u{0}ggplot-rs:group-wrap:";
+
+/// One CSS class token (#221): `^[A-Za-z][A-Za-z0-9_-]*$`. Deliberately
+/// narrower than CSS allows (no escapes, no leading digit or `-`), so a
+/// token can never break out of the attribute or need escaping.
+pub(crate) fn is_valid_class_token(token: &str) -> bool {
+    let mut chars = token.chars();
+    match chars.next() {
+        Some(c) if c.is_ascii_alphabetic() => {}
+        _ => return false,
+    }
+    chars.all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '-')
+}
+
+/// Split `value` on whitespace into `(valid tokens, rejected tokens)` —
+/// see [`is_valid_class_token`]. Duplicate valid tokens are kept once.
+pub(crate) fn split_class_tokens(value: &str) -> (Vec<String>, Vec<String>) {
+    let (mut ok, mut bad) = (Vec::<String>::new(), Vec::new());
+    for t in value.split_whitespace() {
+        if !is_valid_class_token(t) {
+            bad.push(t.to_string());
+        } else if !ok.iter().any(|o| o == t) {
+            ok.push(t.to_string());
+        }
+    }
+    (ok, bad)
+}
+
+/// Validate a `group_wrap` mapping's target (`"data-<name>"`, as stored in
+/// [`Aesthetic::GroupWrap`]) and return its internal column name — the
+/// same single authoritative gate [`validated_data_attr_internal_name`] is.
+pub(crate) fn validated_group_wrap_internal_name(target: &str) -> Option<String> {
+    let suffix = target.strip_prefix("data-")?;
+    is_valid_data_attr_name(suffix).then(|| format!("{GROUP_WRAP_INTERNAL_PREFIX}{target}"))
+}
 
 /// Internal storage names for `GeomBoxplot::setup_data`'s outlier-extent
 /// columns — see [`INTERNAL_PREFIX`] (review #158 finding 5: these used to

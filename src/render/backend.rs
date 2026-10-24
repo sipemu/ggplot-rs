@@ -700,6 +700,28 @@ pub trait DrawBackend {
     /// no-op.
     fn set_mark_fx(&mut self, _value: Option<String>) {}
 
+    /// Extra CSS class tokens for subsequently-drawn marks (#221's
+    /// `Aes::class`), space-separated and already validated by the caller;
+    /// `None` clears them, per row. The SVG backend appends them to the
+    /// mark's own `class="gg-mark gg-<kind>"` (re-validating every token as
+    /// defence in depth). Default: no-op.
+    fn set_mark_class(&mut self, _class: Option<String>) {}
+
+    /// Put subsequently-drawn marks into the caller-named group
+    /// `(attribute name, value)` — e.g. `("data-of", "node-7")` — until
+    /// cleared with `None` (#221's `Aes::group_wrap`). The SVG backend
+    /// collects every mark with the same pair into one `<g name="value">`,
+    /// placed where the group's first mark was drawn. Default: no-op (a
+    /// raster backend has no grouping).
+    fn set_mark_group(&mut self, _group: Option<(String, String)>) {}
+
+    /// Per-layer SVG attributes for every mark the current layer draws
+    /// (#221's [`GGPlot::layer_svg_attr`](crate::plot::GGPlot::layer_svg_attr)):
+    /// `class` tokens, `aria-hidden`, `pointer-events`, `data-*`, already
+    /// validated by the caller. An empty `Vec` clears them (set before a
+    /// layer draws, cleared after). Default: no-op.
+    fn set_layer_attrs(&mut self, _attrs: Vec<(String, String)>) {}
+
     /// Draw a point with a specific shape. Default delegates to draw_circle for Circle.
     fn draw_shape(
         &mut self,

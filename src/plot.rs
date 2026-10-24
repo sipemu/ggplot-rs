@@ -129,6 +129,10 @@ pub struct GGPlot {
     /// ([`svg_formatted_values`](Self::svg_formatted_values)). Default off;
     /// byte-identical output when off.
     pub(crate) svg_formatted_values: bool,
+    /// #221: validated [`layer_svg_attr`](Self::layer_svg_attr)s as
+    /// `(layer index, name, value)`, applied by wrapping that layer's geom
+    /// at build time.
+    pub(crate) layer_svg_attrs: Vec<(usize, String, String)>,
 }
 
 impl GGPlot {
@@ -157,6 +161,7 @@ impl GGPlot {
             root_attrs: Vec::new(),
             svg_warnings_attr: false,
             svg_formatted_values: false,
+            layer_svg_attrs: Vec::new(),
         }
     }
 
@@ -1230,6 +1235,67 @@ impl GGPlot {
             }
         }
         self
+    }
+
+    /// Add one SVG attribute to **every mark** of the most recently added
+    /// layer (#221) — e.g. to make a label layer drawn over node boxes inert,
+    /// so hover/click and screen readers pass through to the box below:
+    ///
+    /// ```
+    /// # use ggplot_rs::{aes::Aes, data::Value, GGPlot};
+    /// # let data = vec![("x".to_string(), vec![Value::Float(1.0)]),
+    /// #   ("y".to_string(), vec![Value::Float(1.0)]),
+    /// #   ("l".to_string(), vec![Value::Str("a".into())])];
+    /// let svg = GGPlot::new(data)
+    ///     .aes(Aes::new().x("x").y("y").label("l"))
+    ///     .geom_text()
+    ///     .layer_svg_attr("aria-hidden", "true")
+    ///     .layer_svg_attr("pointer-events", "none")
+    ///     .layer_svg_attr("class", "node-label")
+    ///     .render_svg_native_with_size(200, 200)
+    ///     .unwrap();
+    /// assert!(svg.contains(r#"aria-hidden="true" pointer-events="none""#));
+    /// ```
+    ///
+    /// The allow-list is deliberately small: `class` (space-separated
+    /// tokens, each `[A-Za-z][A-Za-z0-9_-]*`, appended to the mark's own
+    /// `gg-mark gg-<kind>` class; invalid tokens are dropped), `aria-hidden`
+    /// (`"true"`/`"false"`), `pointer-events` (an SVG keyword such as
+    /// `"none"`), and `data-*` (`Aes::data_attr`'s name rules; a row's own
+    /// `data_attr` of the same name wins). Anything else — in particular
+    /// `style` and `on*` handlers, so a strict CSP without `unsafe-inline`
+    /// still holds — is ignored with a build warning, as is a bad value or a
+    /// call before any layer. A later call with the same name replaces the
+    /// earlier value. Values are escaped on output. For a per-row class use
+    /// [`Aes::class`](crate::aes::Aes::class); to wrap several layers' marks
+    /// per key in one `<g>`, [`Aes::group_wrap`](crate::aes::Aes::group_wrap).
+    /// SVG backend only.
+    pub fn layer_svg_attr(mut self, name: impl Into<String>, value: impl Into<String>) -> Self {
+        let (name, value) = (name.into(), value.into());
+        let Some(idx) = self.layers.len().checked_sub(1) else {
+            self.warnings.push(format!(
+                "layer_svg_attr(\"{name}\") called before any layer was added — ignored"
+            ));
+            return self;
+        };
+        if let Some((n, v)) =
+            crate::render::svg_backend::validate_layer_svg_attr(&name, &value, &mut self.warnings)
+        {
+            self.layer_svg_attrs
+                .retain(|(i, k, _)| !(*i == idx && *k == n));
+            self.layer_svg_attrs.push((idx, n, v));
+        }
+        self
+    }
+
+    /// [`layer_svg_attr`](Self::layer_svg_attr) for several attributes at once.
+    pub fn layer_svg_attrs<N: Into<String>, V: Into<String>>(
+        self,
+        attrs: impl IntoIterator<Item = (N, V)>,
+    ) -> Self {
+        attrs
+            .into_iter()
+            .fold(self, |p, (n, v)| p.layer_svg_attr(n, v))
     }
 
     // ─── Scales ──────────────────────────────────────────────────

@@ -77,6 +77,8 @@ impl ScaleSet {
                 // to the mark's attributes — no visual mapping, no legend.
                 | Aesthetic::Tooltip
                 | Aesthetic::DataAttr(_)
+                | Aesthetic::Class
+                | Aesthetic::GroupWrap(_)
                 // Boxplot stat="identity" hinges/outliers (B3-5) live on
                 // the y scale (via `column_aesthetic`/`Y_FAMILY`/the
                 // build's stat_aes training list), not a scale of their

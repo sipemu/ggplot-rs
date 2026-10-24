@@ -169,6 +169,20 @@ impl DrawBackend for MuteMarks<'_> {
         self.inner.warn(message);
     }
 
+    // Styling/structure, not data-point metadata (#221): forwarded, so a
+    // decorative layer can still be classed, grouped and made inert.
+    fn set_mark_class(&mut self, class: Option<String>) {
+        self.inner.set_mark_class(class)
+    }
+
+    fn set_mark_group(&mut self, group: Option<(String, String)>) {
+        self.inner.set_mark_group(group)
+    }
+
+    fn set_layer_attrs(&mut self, attrs: Vec<(String, String)>) {
+        self.inner.set_layer_attrs(attrs)
+    }
+
     fn wants_formatted_values(&self) -> bool {
         self.inner.wants_formatted_values()
     }
