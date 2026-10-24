@@ -5,6 +5,17 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.30.0] — 2026-10-24
+
+Text options for DataZooDE/anofox-visualization#421 (diagrams drawn with
+ggplot-rs geoms): `fontface` on `geom_text`/`geom_label` (#228) and a text
+halo, `GeomText::bg_colour`/`bg_r` (#229); `geom_label` now breaks lines at
+`\n`. Breaking (cargo-semver-checks against v0.29.0): `GeomText`,
+`GeomLabel` and `TextStyle` gain public fields, `Aesthetic` gains `Fontface`,
+and the public enums that keep growing variants (`Aesthetic`, `Linetype`,
+`FontFace`, `SfProjection`, …) are now `#[non_exhaustive]`, so adding
+variants later is no longer a breaking change.
+
 ### Added
 - **`geom_text` halo (`bg_colour`/`bg_r`)** (#229, upstream issue
   DataZooDE/anofox-visualization#421: edge labels in diagrams, e.g. "5.4K /
