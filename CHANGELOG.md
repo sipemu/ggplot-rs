@@ -5,6 +5,18 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Added
+- `geom_sf`'s native SVG output is more compact for large boundaries
+  (#214): the new `DrawBackend::draw_polygon_rings_precise` (default
+  impl just forwards to the existing `draw_polygon_rings[_pattern]`, so
+  no other backend or geom changes) lets a caller ask for relative-command,
+  configurable-decimal-precision path data instead of absolute `M`/`L`
+  2-decimal commands. `GeomSf` opts in automatically, tied to its own
+  `simplify_px` (1 decimal whenever simplification is on, the default);
+  `.simplify(0.0)` keeps the exact absolute encoding. Every other
+  `draw_polygon_rings[_pattern]` caller (`geom_rect`/`geom_tile`/
+  `geom_polygon`) is untouched, so their output doesn't move. Found
+  porting DataZooDE/anofox-visualization#420.
 ### Fixed
 - **`check.overlap` could leave adjacent continuous x tick labels touching**
   (#212, upstream issue DataZooDE/anofox-visualization#450). The thinning

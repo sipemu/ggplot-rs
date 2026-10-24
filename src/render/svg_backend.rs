@@ -459,6 +459,76 @@ fn num(v: f64) -> String {
     }
 }
 
+/// #214: `d` for [`SvgBackend::draw_polygon_rings_precise`] — one `M<x>,<y>`
+/// per ring (the first point, absolute) followed by one `l` command whose
+/// coordinate pairs are **deltas from the previous point**, SVG's implicit
+/// lineto-repeat (`l dx1,dy1 dx2,dy2 …`), each number rounded to
+/// `precision` decimals with trailing zeros trimmed. Deltas are typically
+/// far smaller than absolute screen coordinates, and the single `l` letter
+/// (vs. one `L` per point) is the other half of the size win; see
+/// [`push_num`] for the separator-omission this relies on. A ring under 3
+/// finite points is dropped, same as the absolute encoder.
+fn compact_rings_d(rings: &[Vec<(f64, f64)>], precision: u8) -> String {
+    let mut d = String::new();
+    for ring in rings {
+        let pts = finite_pts(ring);
+        if pts.len() < 3 {
+            continue;
+        }
+        d.push('M');
+        push_num(&mut d, &fmt_compact(pts[0].0, precision));
+        push_num(&mut d, &fmt_compact(pts[0].1, precision));
+        if pts.len() > 1 {
+            d.push('l');
+            let mut prev = pts[0];
+            for p in &pts[1..] {
+                push_num(&mut d, &fmt_compact(p.0 - prev.0, precision));
+                push_num(&mut d, &fmt_compact(p.1 - prev.1, precision));
+                prev = *p;
+            }
+        }
+        d.push('z');
+    }
+    d
+}
+
+/// Append `s` (a formatted number) to `d`, inserting a comma first only
+/// when one is actually needed to keep the path parseable: right after a
+/// digit, with the new number *not* itself starting with `-` (whose sign
+/// already disambiguates where the previous number ended, SVG's own
+/// "no separator needed before a negative number" rule — the "no
+/// redundant separators" #214 asks for). Right after a command letter
+/// (`M`/`l`/`z`) no separator is ever needed.
+fn push_num(d: &mut String, s: &str) {
+    let needs_sep =
+        matches!(d.chars().last(), Some(c) if c.is_ascii_digit()) && !s.starts_with('-');
+    if needs_sep {
+        d.push(',');
+    }
+    d.push_str(s);
+}
+
+/// Format `v` to `precision` decimals, then trim trailing zeros and a
+/// trailing `.` (`"5.0"` → `"5"`, `"1.20"` → `"1.2"`) — the SVG path
+/// grammar allows a bare integer anywhere a number is valid. Non-finite
+/// becomes `"0"`; `-0`-after-rounding (e.g. a tiny negative delta that
+/// rounds to zero) becomes `"0"` too, not `"-0"`.
+fn fmt_compact(v: f64, precision: u8) -> String {
+    if !v.is_finite() {
+        return "0".to_string();
+    }
+    let s = format!("{v:.*}", precision as usize);
+    let trimmed = if s.contains('.') {
+        s.trim_end_matches('0').trim_end_matches('.')
+    } else {
+        s.as_str()
+    };
+    match trimmed {
+        "" | "-" | "-0" => "0".to_string(),
+        other => other.to_string(),
+    }
+}
+
 fn finite_or(v: f64, fallback: f64) -> f64 {
     if v.is_finite() {
         v
@@ -1001,6 +1071,42 @@ impl DrawBackend for SvgBackend {
         self.polygon_rings_markup(rings, &fill, style)
     }
 
+    /// #214: with `precision` set, writes a compact `d` (absolute `M` per
+    /// ring, then one `l` with implicit-repeat relative coordinate pairs,
+    /// rounded to `precision` decimals) instead of the one-`L`-per-point
+    /// absolute encoding [`Self::polygon_rings_markup`] builds. `None`
+    /// falls back to the trait default (today's encoding, unchanged).
+    fn draw_polygon_rings_precise(
+        &mut self,
+        rings: &[Vec<(f64, f64)>],
+        pattern: Option<&FillPattern>,
+        precision: Option<u8>,
+        style: &RectStyle,
+    ) -> Result<(), RenderError> {
+        let Some(precision) = precision else {
+            return match pattern {
+                Some(p) => self.draw_polygon_rings_pattern(rings, p, style),
+                None => self.draw_polygon_rings(rings, style),
+            };
+        };
+        let d = compact_rings_d(rings, precision);
+        if d.is_empty() {
+            return Ok(());
+        }
+        let fill = match pattern {
+            Some(p) => self.pattern_url(p),
+            None => style.fill.map(rgb).unwrap_or_else(|| "none".into()),
+        };
+        let stroke = style.stroke.map(rgb).unwrap_or_else(|| "none".into());
+        let attrs = format!(
+            "d=\"{d}\" fill-rule=\"evenodd\" fill=\"{fill}\"{} stroke=\"{stroke}\" stroke-width=\"{:.2}\"",
+            opacity_attr("fill", style.alpha),
+            finite_or(style.stroke_width, 0.0)
+        );
+        self.push_mark("path", "band", &attrs);
+        Ok(())
+    }
+
     fn draw_text(
         &mut self,
         text: &str,
@@ -1345,5 +1451,160 @@ mod tests {
             .unwrap();
         let (sa, sb) = (a.finish(), b.finish());
         assert_ne!(pattern_id(&sa), pattern_id(&sb), "{sa}\n{sb}");
+    }
+
+    /// #214: decode a [`compact_rings_d`]-style `d` back into absolute
+    /// points, for the round-trip test below. Relies on the same
+    /// separator rule [`push_num`] writes: a number starts right after a
+    /// command letter, right after a comma, or right at a `-` sign (which
+    /// needs no comma before it); every other digit boundary has an
+    /// explicit comma.
+    fn decode_compact_d(d: &str) -> Vec<Vec<(f64, f64)>> {
+        let b = d.as_bytes();
+        let mut i = 0;
+        let read_num = |b: &[u8], i: &mut usize| -> f64 {
+            let start = *i;
+            if *i < b.len() && b[*i] == b'-' {
+                *i += 1;
+            }
+            while *i < b.len() && b[*i].is_ascii_digit() {
+                *i += 1;
+            }
+            if *i < b.len() && b[*i] == b'.' {
+                *i += 1;
+                while *i < b.len() && b[*i].is_ascii_digit() {
+                    *i += 1;
+                }
+            }
+            std::str::from_utf8(&b[start..*i]).unwrap().parse().unwrap()
+        };
+        let is_num_start = |c: u8| c.is_ascii_digit() || c == b'-' || c == b'.';
+        let mut rings = Vec::new();
+        let mut current = Vec::new();
+        let mut cursor = (0.0, 0.0);
+        while i < b.len() {
+            match b[i] {
+                b'M' => {
+                    if !current.is_empty() {
+                        rings.push(std::mem::take(&mut current));
+                    }
+                    i += 1;
+                    let x = read_num(b, &mut i);
+                    if i < b.len() && b[i] == b',' {
+                        i += 1;
+                    }
+                    let y = read_num(b, &mut i);
+                    cursor = (x, y);
+                    current.push(cursor);
+                }
+                b'l' => {
+                    i += 1;
+                    while i < b.len() && is_num_start(b[i]) {
+                        let dx = read_num(b, &mut i);
+                        if i < b.len() && b[i] == b',' {
+                            i += 1;
+                        }
+                        let dy = read_num(b, &mut i);
+                        if i < b.len() && b[i] == b',' {
+                            i += 1;
+                        }
+                        cursor = (cursor.0 + dx, cursor.1 + dy);
+                        current.push(cursor);
+                    }
+                }
+                b'z' => {
+                    i += 1;
+                    if !current.is_empty() {
+                        rings.push(std::mem::take(&mut current));
+                    }
+                }
+                _ => i += 1,
+            }
+        }
+        if !current.is_empty() {
+            rings.push(current);
+        }
+        rings
+    }
+
+    /// A noisy, roughly-circular ring with `n` points, the shape of a
+    /// simplified real boundary (not axis-aligned, no repeating deltas).
+    fn noisy_ring(n: usize, cx: f64, cy: f64, r: f64) -> Vec<(f64, f64)> {
+        (0..n)
+            .map(|i| {
+                let t = i as f64 / n as f64 * std::f64::consts::TAU;
+                let wobble = 1.0 + 0.03 * ((i * 7) as f64).sin();
+                (cx + r * wobble * t.cos(), cy + r * wobble * t.sin())
+            })
+            .collect()
+    }
+
+    #[test]
+    fn compact_encoding_is_well_under_the_absolute_encodings_size() {
+        // Isolated from simplification entirely: the same 2,000-point
+        // ring, encoded both ways directly (no GeomSf/simplify_px
+        // involved) — the byte-size win is the encoding alone.
+        let ring = noisy_ring(2000, 400.0, 300.0, 280.0);
+        let mut b = backend();
+        b.draw_polygon_rings(std::slice::from_ref(&ring), &RectStyle::default())
+            .unwrap();
+        let absolute_svg = b.finish();
+        let absolute_d = absolute_svg
+            .split("d=\"")
+            .nth(1)
+            .and_then(|s| s.split('"').next())
+            .expect("absolute path d");
+
+        let compact_d = compact_rings_d(std::slice::from_ref(&ring), 1);
+
+        assert!(
+            compact_d.len() * 3 < absolute_d.len() * 2,
+            "compact {} bytes should be well under 2/3 of absolute {} bytes",
+            compact_d.len(),
+            absolute_d.len()
+        );
+    }
+
+    #[test]
+    fn compact_encoding_round_trips_within_precision() {
+        let ring = noisy_ring(40, 100.0, 80.0, 60.0);
+        let precision: u8 = 1;
+        let d = compact_rings_d(std::slice::from_ref(&ring), precision);
+        let decoded = decode_compact_d(&d);
+        assert_eq!(decoded.len(), 1, "{d}");
+        assert_eq!(decoded[0].len(), ring.len(), "{d}");
+        // Each step's rounding error is at most half a unit of precision;
+        // reconstructed points accumulate it additively from M, so the
+        // tolerance at point k scales with k (still a tight, provable
+        // bound, not an arbitrary constant).
+        let step_tol = 0.5 * 10f64.powi(-(precision as i32));
+        for (k, (orig, got)) in ring.iter().zip(decoded[0].iter()).enumerate() {
+            let tol = step_tol * (k as f64 + 1.0) + 1e-9;
+            assert!(
+                (orig.0 - got.0).abs() <= tol && (orig.1 - got.1).abs() <= tol,
+                "point {k}: {orig:?} vs {got:?} (tol {tol}): {d}"
+            );
+        }
+    }
+
+    #[test]
+    fn compact_encoding_round_trips_a_hole_and_a_multipolygons_parts() {
+        // Two parts (first a plain square, second a square with a hole) —
+        // exactly the ring-set shape `GeomSf::draw_rings` now passes
+        // through for a MultiPolygon row (#213) or a Polygon with holes.
+        let part1 = vec![(0.0, 0.0), (20.0, 0.0), (20.0, 20.0), (0.0, 20.0)];
+        let part2_outer = vec![(50.0, 0.0), (90.0, 0.0), (90.0, 40.0), (50.0, 40.0)];
+        let part2_hole = vec![(60.0, 10.0), (80.0, 10.0), (80.0, 30.0), (60.0, 30.0)];
+        let rings = vec![part1.clone(), part2_outer.clone(), part2_hole.clone()];
+        let d = compact_rings_d(&rings, 1);
+        let decoded = decode_compact_d(&d);
+        assert_eq!(decoded.len(), 3, "{d}");
+        for (orig, got) in [part1, part2_outer, part2_hole].iter().zip(decoded.iter()) {
+            assert_eq!(orig.len(), got.len(), "{d}");
+            for (o, g) in orig.iter().zip(got.iter()) {
+                assert!((o.0 - g.0).abs() <= 0.1 && (o.1 - g.1).abs() <= 0.1, "{d}");
+            }
+        }
+        assert!(d.contains("M0,0l20,0,0,20-20,0z"), "{d}");
     }
 }
