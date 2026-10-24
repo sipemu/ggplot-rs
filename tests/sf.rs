@@ -172,7 +172,10 @@ fn polygon_with_a_hole_renders_as_one_evenodd_path() {
         .and_then(|s| s.split('"').next())
         .expect("a path d attribute");
     assert_eq!(path_d.matches('M').count(), 2, "exterior + hole: {path_d}");
-    assert_eq!(path_d.matches('Z').count(), 2, "{path_d}");
+    // #214: geom_sf's default encoding closes each subpath with lowercase
+    // `z` (relative-command convention) now, not `Z` — functionally
+    // identical, SVG's closepath takes no parameters.
+    assert_eq!(path_d.matches('z').count(), 2, "{path_d}");
 }
 
 /// A multipolygon draws each part as its own evenodd path (so a part with

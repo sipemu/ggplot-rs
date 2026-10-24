@@ -299,11 +299,15 @@ impl GeomSf {
             clip: true,
             corner_radius: 0.0,
         };
+        // #214: a compact (relative-command) path encoding, at 1-decimal
+        // precision, whenever render-resolution simplification is on at
+        // all (the default) — simplified vertices already give up exact
+        // position to within `simplify_px`, so rounding to a tenth of a
+        // pixel on top loses nothing visible. `.simplify(0.0)` (every
+        // vertex, no tolerance) keeps the exact absolute encoding instead.
+        let precision = (self.simplify_px > 0.0).then_some(1u8);
         // #206: a no-data row's pattern fill, same ring set and stroke.
-        match pattern {
-            Some(p) => backend.draw_polygon_rings_pattern(&screen_rings, p, &style),
-            None => backend.draw_polygon_rings(&screen_rings, &style),
-        }
+        backend.draw_polygon_rings_precise(&screen_rings, pattern, precision, &style)
     }
 }
 
