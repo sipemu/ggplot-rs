@@ -315,7 +315,14 @@ fn expected() -> Vec<(&'static str, u64)> {
         ("violin", 0x68cd485311890ec4),
         ("errorbar", 0xe7abdb6d7e210a85),
         ("errorbar_dodge", 0x5728c4bd5983c21c),
-        ("size", 0xa5314ef4d0585c40),
+        // #237 (fix/size-legend-keys-236): a legend key with no mapped
+        // colour of its own (here, `size`'s swatch) now falls back to
+        // `theme.geom.ink`, then `theme.legend_text.color`, instead of a
+        // fixed dark grey that was nearly invisible on a dark panel. The
+        // default theme's `legend_text.color` is pure black, not that old
+        // grey, so this plot's unmapped swatch colour changes too. See
+        // CHANGELOG [Unreleased].
+        ("size", 0x44ec9b5af301ad94),
         ("wide_axis", 0xc0df1cb8d594b7d2),
         ("big_legend", 0x0a625a0466236f03),
     ]

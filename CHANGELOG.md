@@ -19,6 +19,23 @@ All notable changes to this project are documented here. The format follows
   when neither is, matching `set_mark_formatted`'s existing no-formatter
   behaviour.
 
+- **Legend keys for `size` (and other non-fill aesthetics) used a fixed
+  dark grey, ignoring the theme, so they were almost invisible on a dark
+  panel** (#237; seen in DataZooDE/anofox-visualization#475's dark-mode
+  map with graduated symbols — bubble charts have the same problem). A
+  key with no aesthetic-mapped colour of its own (`Shape`, `Linetype`,
+  `Size`, `Alpha`, `Linewidth` — `Color`/`Fill` always map a real colour
+  from the data) now falls back to `theme.geom.ink`, then
+  `theme.legend_text.color`, instead of a hard-coded `(50, 50, 50)` —
+  the same two-tier fallback an unmapped panel mark
+  (`GeomPoint`/`GeomText`'s `apply_element_geom`) already prefers
+  `geom.ink` for, extended one tier further since a key glyph has no
+  mapped colour of its own to start from. **Visible default change:**
+  the base theme's `legend_text.color` is pure black (`(0, 0, 0)`), not
+  the old fallback's dark grey — intentional, not a regression (two
+  `default_output_0{22,23}` snapshot hashes updated accordingly, each
+  with its own explanatory comment in the test).
+
 - **A `size` legend drew every key past a certain size as the same
   circle** (#236, blocking DataZooDE/anofox-visualization#420 slice 3's
   graduated-symbol maps: `100`/`200`/`300` all looked identical).

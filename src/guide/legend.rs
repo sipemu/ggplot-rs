@@ -742,6 +742,22 @@ fn draw_continuous_legend_at(
 /// Shared by the unchanged [`draw_discrete_legend_at`] and the B3-2
 /// planner-driven [`draw_legend_planned`], so both draw pixel-identical
 /// swatches.
+///
+/// A key with no aesthetic-mapped colour of its own (`Shape`, `Linetype`,
+/// `Size`, `Alpha`, `Linewidth` — `Color`/`Fill` always have one, from
+/// `scales.map_color`) falls back to `theme.geom.ink`, then
+/// `theme.legend_text.color` (#237: a *fixed* dark grey here was almost
+/// invisible on a dark panel in a theme that sets `legend_text.color`
+/// for readability but never thought to also set the less commonly used
+/// `geom.ink`) — the same two-tier fallback `GeomPoint`/`GeomText`'s own
+/// `apply_element_geom` effectively uses for an unmapped panel mark
+/// (`ink` if the theme sets it, otherwise its own default), extended one
+/// more tier since a key glyph has no mapped colour of its own to start
+/// from the way a panel mark's default colour does. **Visible default
+/// change:** the base theme's `legend_text.color` is pure black
+/// (`(0, 0, 0)`), not the old fallback's dark grey (`(50, 50, 50)`) — a
+/// small, intentional difference (documented in the CHANGELOG), not a
+/// behaviour-preserving refactor.
 #[allow(clippy::too_many_arguments)]
 fn draw_legend_swatch(
     backend: &mut dyn DrawBackend,
@@ -791,7 +807,7 @@ fn draw_legend_swatch(
                 (center_x, center_y),
                 swatch_size / 3.0,
                 &PointStyle {
-                    color: theme.geom.ink.unwrap_or((50, 50, 50)),
+                    color: theme.geom.ink.unwrap_or(theme.legend_text.color),
                     alpha: 1.0,
                     filled: true,
                     shape,
@@ -803,7 +819,7 @@ fn draw_legend_swatch(
             backend.draw_line(
                 &[(x + 2.0, center_y), (x + swatch_size - 2.0, center_y)],
                 &LineStyle {
-                    color: theme.geom.ink.unwrap_or((50, 50, 50)),
+                    color: theme.geom.ink.unwrap_or(theme.legend_text.color),
                     width: 1.5,
                     alpha: 1.0,
                     linetype: lt,
@@ -820,7 +836,7 @@ fn draw_legend_swatch(
                 (center_x, center_y),
                 size.min(swatch_size / 2.0),
                 &PointStyle {
-                    color: theme.geom.ink.unwrap_or((50, 50, 50)),
+                    color: theme.geom.ink.unwrap_or(theme.legend_text.color),
                     alpha: 1.0,
                     filled: true,
                     shape: crate::render::backend::PointShape::Circle,
@@ -836,7 +852,7 @@ fn draw_legend_swatch(
                 (x, y),
                 (x + swatch_size, y + swatch_size),
                 &RectStyle {
-                    fill: Some(theme.geom.ink.unwrap_or((50, 50, 50))),
+                    fill: Some(theme.geom.ink.unwrap_or(theme.legend_text.color)),
                     stroke: None,
                     stroke_width: 0.0,
                     alpha,
@@ -850,7 +866,7 @@ fn draw_legend_swatch(
             backend.draw_line(
                 &[(x + 2.0, center_y), (x + swatch_size - 2.0, center_y)],
                 &LineStyle {
-                    color: theme.geom.ink.unwrap_or((50, 50, 50)),
+                    color: theme.geom.ink.unwrap_or(theme.legend_text.color),
                     width: width.min(swatch_size),
                     alpha: 1.0,
                     linetype: Linetype::Solid,

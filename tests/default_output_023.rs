@@ -197,7 +197,12 @@ fn expected() -> Vec<(&'static str, u64)> {
         // y=0. See this case's data-fn comment above and CHANGELOG
         // [0.24.0].
         ("all_positive_stack", 0x236f799c5fa67957),
-        ("two_discrete_guides", 0x1c9247192286f120),
+        // #237 (fix/size-legend-keys-236): the `shape` legend's key glyph
+        // has no mapped colour of its own, so it now falls back to
+        // `theme.geom.ink`, then `theme.legend_text.color` (pure black in
+        // the base theme) instead of a fixed dark grey — a documented
+        // follow-up, not a regression. See CHANGELOG [Unreleased].
+        ("two_discrete_guides", 0xa2c3eed5edc8e2e2),
         ("one_discrete_guide", 0x98da47e69ace53db),
         ("ncol_fits", 0x4bbbea598fcaaceb),
         ("ncol_reduces", 0xfb022ae18760d3b7),
