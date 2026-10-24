@@ -399,6 +399,14 @@ impl Scale for ScaleDateTime {
         }
     }
 
+    fn domain(&self) -> Option<(f64, f64)> {
+        if self.trained && self.min.is_finite() && self.max.is_finite() {
+            Some((self.min, self.max))
+        } else {
+            None
+        }
+    }
+
     fn expanded_domain(&self) -> Option<(f64, f64)> {
         if !self.trained || !self.min.is_finite() || !self.max.is_finite() {
             return None;

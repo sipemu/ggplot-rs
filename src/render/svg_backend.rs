@@ -261,6 +261,24 @@ impl SvgBackend {
         &self.body
     }
 
+    /// Wrap the accumulated body in a `<g>` carrying `attrs` (escaped) — a
+    /// `PlotGrid` cell's own `svg_attr`s (#208), which belong on that
+    /// cell's content, not the cell's own root `<svg>` (ggplot-rs's own
+    /// `root_data_attrs`/`data-panel`) or the grid's root (the grid's own
+    /// `svg_attr`s). A no-op for an empty `attrs` — unaffected output,
+    /// same as every other panel without a `svg_attr` call.
+    pub(crate) fn wrap_body_in_group(&mut self, attrs: &[(String, String)]) {
+        if attrs.is_empty() {
+            return;
+        }
+        let mut open = String::from("<g");
+        for (k, v) in attrs {
+            open.push_str(&format!(" {k}=\"{}\"", escape(v)));
+        }
+        open.push('>');
+        self.body = format!("{open}{}</g>", self.body);
+    }
+
     /// Take the warnings reported while drawing (see [`DrawBackend::warn`]).
     pub fn take_warnings(&mut self) -> Vec<String> {
         std::mem::take(&mut self.warnings)

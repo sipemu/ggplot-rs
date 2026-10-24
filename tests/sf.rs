@@ -181,7 +181,7 @@ fn polygon_with_a_hole_renders_as_one_evenodd_path() {
 /// A multipolygon draws each part as its own evenodd path (so a part with
 /// its own hole still cuts it out), independently of its sibling parts.
 #[test]
-fn multipolygon_renders_each_part_independently() {
+fn multipolygon_parts_render_as_evenodd_subpaths_of_one_path() {
     let mut df = DataFrame::new();
     df.add_column(
         "geometry".into(),
@@ -194,14 +194,16 @@ fn multipolygon_renders_each_part_independently() {
         .geom_sf()
         .render_svg_native()
         .expect("sf render");
-    // One evenodd path per polygon part: the first with 1 subpath, the
-    // second (with its hole) with 2.
+    // #213: one mark (one evenodd `<path>`) for the whole MultiPolygon
+    // row, not one per part — 3 subpaths total (the first part's
+    // exterior, the second part's exterior, the second part's hole).
+    assert_eq!(svg.matches("<path ").count(), 1, "{svg}");
     let subpath_counts: Vec<usize> = svg
         .split("d=\"")
         .skip(1)
         .map(|s| s.split('"').next().unwrap_or("").matches('M').count())
         .collect();
-    assert_eq!(subpath_counts, vec![1, 2], "{svg}");
+    assert_eq!(subpath_counts, vec![3], "{svg}");
 }
 
 /// #178: render-resolution simplification drops near-collinear vertices by
@@ -290,4 +292,73 @@ fn a_hole_renders_correctly_inside_a_facet_panel() {
         .collect();
     // Panel A's polygon has a hole (2 subpaths); panel B's doesn't (1).
     assert!(subpath_counts.contains(&2), "{svg}");
+}
+
+/// #213: a MultiPolygon row (3 disjoint parts, one of them with a hole)
+/// draws as **one** mark — one `<path>` carrying one set of row
+/// attributes and 4 subpaths (3 exterior rings + 1 hole), not 3 separate
+/// `<path>` elements. A single-`Polygon` row's output is unchanged.
+#[test]
+fn a_multipolygon_row_draws_as_one_mark_not_one_per_part() {
+    let mut df = DataFrame::new();
+    df.add_column(
+        "geometry".into(),
+        strs(&[
+            // 3 parts; the middle one has a hole.
+            "MULTIPOLYGON (\
+                ((0 0, 2 0, 2 2, 0 2, 0 0)), \
+                ((10 0, 20 0, 20 10, 10 10, 10 0), (13 3, 17 3, 17 7, 13 7, 13 3)), \
+                ((30 0, 32 0, 32 2, 30 2, 30 0)))",
+            "POLYGON ((0 20, 10 20, 10 30, 0 30, 0 20))",
+        ]),
+    );
+    df.add_column("rowid".into(), strs(&["multi", "single"]));
+
+    let svg = GGPlot::new(df)
+        .aes(Aes::new().data_attr("row", "rowid"))
+        .geom_sf()
+        .render_svg_native()
+        .expect("sf render");
+
+    // Exactly one mark (one `<path ... data-row="multi" ...>`) for the
+    // 3-part row, not one per part.
+    assert_eq!(
+        svg.matches("data-row=\"multi\"").count(),
+        1,
+        "one mark for the whole MultiPolygon row: {svg}"
+    );
+    assert_eq!(
+        svg.matches("data-row=\"single\"").count(),
+        1,
+        "single Polygon row unaffected: {svg}"
+    );
+
+    // Pull each `<path ...>` element out whole, so a `d=` attribute is
+    // matched against its own element's `data-row`, not a neighbour's.
+    fn path_for<'a>(svg: &'a str, needle: &str) -> &'a str {
+        svg.split("<path ")
+            .find(|el| el.contains(needle))
+            .expect("mark present")
+    }
+    fn d_of(el: &str) -> &str {
+        el.split("d=\"")
+            .nth(1)
+            .and_then(|after| after.split('"').next())
+            .unwrap_or("")
+    }
+
+    // That one mark's path data has 4 subpaths (3 parts' exteriors + the
+    // middle part's hole), drawn fill-rule evenodd.
+    let multi_el = path_for(&svg, "data-row=\"multi\"");
+    let multi_d = d_of(multi_el);
+    assert_eq!(
+        multi_d.matches('M').count(),
+        4,
+        "3 exterior rings + 1 hole in one path: {multi_d}"
+    );
+    assert!(multi_el.contains("fill-rule=\"evenodd\""), "{multi_el}");
+
+    // Single Polygon's subpath count is still exactly 1 (unchanged).
+    let single_d = d_of(path_for(&svg, "data-row=\"single\""));
+    assert_eq!(single_d.matches('M').count(), 1, "{single_d}");
 }

@@ -205,6 +205,69 @@ fn without_any_svg_attr_calls_output_is_unaffected() {
     assert!(!svg.contains("data-warnings"));
 }
 
+/// The value of attribute `name` on the `n`-th (0-based) `<g ...>` tag.
+fn group_attr<'a>(svg: &'a str, n: usize, name: &str) -> Option<&'a str> {
+    let tag_start = svg.match_indices("<g ").nth(n)?.0;
+    let head = &svg[tag_start..tag_start + svg[tag_start..].find('>').unwrap()];
+    let key = format!(" {name}=\"");
+    let i = head.find(&key)? + key.len();
+    Some(&head[i..i + head[i..].find('"').unwrap()])
+}
+
+/// sipemu/ggplot-rs#208: a cell's own `svg_attr` used to be silently
+/// dropped once composed into a `PlotGrid` — found via
+/// DataZooDE/anofox-visualization#422, where every `::TRACK` cell's
+/// `data-track` attribute never reached the composed SVG, and the browser
+/// (which reads it) never saw it. Each cell's own attributes now land on a
+/// `<g>` wrapping that cell's content; the grid's own `svg_attr`s (set on
+/// the `PlotGrid` itself, as in `plotgrid_has_the_same_svg_attr_api`
+/// above) still land on the grid's root, and neither leaks into the
+/// other.
+#[test]
+fn a_cells_own_svg_attr_survives_plotgrid_composition() {
+    let svg = (base_plot().svg_attr("data-track", "true")
+        | base_plot().svg_attr("data-track", "false"))
+    .render_svg_native_with_size(600, 300)
+    .unwrap();
+    assert_eq!(group_attr(&svg, 0, "data-track"), Some("true"), "{svg}");
+    assert_eq!(group_attr(&svg, 1, "data-track"), Some("false"), "{svg}");
+    // Not duplicated on the grid's own root.
+    assert_eq!(root_attr(&svg, "data-track"), None, "{svg}");
+}
+
+/// Two *different* names on two cells, to rule out one cell's attribute
+/// leaking onto the other's `<g>` rather than just being present somewhere
+/// in the document.
+#[test]
+fn distinct_per_cell_svg_attrs_each_land_on_their_own_cell_only() {
+    let svg = (base_plot().svg_attr("data-a", "1") | base_plot().svg_attr("data-b", "2"))
+        .render_svg_native_with_size(600, 300)
+        .unwrap();
+    assert_eq!(group_attr(&svg, 0, "data-a"), Some("1"), "{svg}");
+    assert_eq!(
+        group_attr(&svg, 0, "data-b"),
+        None,
+        "cell 0 got cell 1's attr: {svg}"
+    );
+    assert_eq!(group_attr(&svg, 1, "data-b"), Some("2"), "{svg}");
+    assert_eq!(
+        group_attr(&svg, 1, "data-a"),
+        None,
+        "cell 1 got cell 0's attr: {svg}"
+    );
+}
+
+/// A cell without any `svg_attr` call gets no `<g>` wrapper at all — same
+/// "unaffected when unused" guarantee as the plot-level API
+/// (`without_any_svg_attr_calls_output_is_unaffected` above).
+#[test]
+fn a_cell_without_svg_attr_gets_no_group_wrapper() {
+    let svg = (base_plot() | base_plot())
+        .render_svg_native_with_size(600, 300)
+        .unwrap();
+    assert!(!svg.contains("<g "), "{svg}");
+}
+
 #[test]
 fn plotgrid_svg_attrs_sets_several_at_once() {
     let p = || base_plot();
