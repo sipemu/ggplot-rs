@@ -31,6 +31,19 @@ All notable changes to this project are documented here. The format follows
   needs auto-wrap/an explicit grid falls back to its representative
   aesthetic's own plan rather than a jointly-computed one.
 
+## [0.30.1] — 2026-10-24
+
+Legend and scale fixes found while porting DataZooDE/anofox-visualization's
+maps onto `geom_sf` (#420): SVG attribute values escape tab/newline/CR
+(#226); a Top legend lands in its reserved band below the title/subtitle
+(#233); an Inside legend is justified by its position, like ggplot2 (#225,
+behaviour change for Inside legends); size legend keys are drawn at their
+mapped size (#236); a linewidth-only legend reserves its space (#241);
+non-fill legend keys follow the theme's ink (#237); `ScaleFillBinned` keeps
+duplicate (zero-width) class edges (#240); `geom_sf` writes `data-fvalue`
+for a mapped fill/size (#238). No API breaks (cargo-semver-checks against
+v0.30.0).
+
 ### Fixed
 - **Behaviour change: a plot mapping both `fill` and `colour`, to different
   variables, now draws both legends instead of silently dropping `fill`'s**
