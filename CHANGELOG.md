@@ -5,6 +5,13 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.30.2] — 2026-10-24
+
+Legends for aesthetics with the same title, breaks and labels merge into one
+guide, like ggplot2 (#239); fill's legend is no longer dropped when colour maps
+a different variable (behaviour fix: such plots now show both legends). No API
+breaks.
+
 ### Added
 - **Legends for different aesthetics mapped to the same measure now merge
   into one, like ggplot2** (#239, DataZooDE/anofox-visualization#420
