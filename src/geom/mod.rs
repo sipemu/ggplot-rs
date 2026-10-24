@@ -27,6 +27,7 @@ pub mod freqpoly;
 pub mod hex;
 pub mod histogram;
 pub mod jitter;
+pub(crate) mod layer_attrs;
 pub mod line;
 pub mod linerange;
 pub mod path;
@@ -396,6 +397,28 @@ pub(crate) fn set_row_extras(backend: &mut dyn DrawBackend, data: &DataFrame, ro
         }
     }
     backend.set_mark_attrs(attrs);
+    // #221: `Aes::class` tokens (sanitized at build time) and the
+    // `Aes::group_wrap` group — always set, so a row never inherits an
+    // earlier row's.
+    let class = data
+        .column(crate::aes::CLASS_INTERNAL_NAME)
+        .and_then(|c| c.get(row))
+        .filter(|v| !v.is_na())
+        .map(tip_value)
+        .filter(|s| !s.is_empty());
+    backend.set_mark_class(class);
+    let mut group = None;
+    for name in data.column_names() {
+        if let Some(target) = name.strip_prefix(crate::aes::GROUP_WRAP_INTERNAL_PREFIX) {
+            if let Some(v) = data.column(name).and_then(|c| c.get(row)) {
+                if !v.is_na() {
+                    group = Some((target.to_string(), tip_value(v)));
+                    break;
+                }
+            }
+        }
+    }
+    backend.set_mark_group(group);
 }
 
 /// Clear interactive-aesthetic attributes *and* the tooltip after a layer
@@ -405,6 +428,8 @@ pub(crate) fn set_row_extras(backend: &mut dyn DrawBackend, data: &DataFrame, ro
 pub(crate) fn clear_row_extras(backend: &mut dyn DrawBackend) {
     backend.set_tooltip(None);
     backend.set_mark_attrs(Vec::new());
+    backend.set_mark_class(None);
+    backend.set_mark_group(None);
 }
 
 /// Draw one group's polyline (path/line), honouring a per-point `linewidth`.

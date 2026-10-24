@@ -232,6 +232,7 @@ impl PlotBuilder {
             root_attrs: _,
             svg_warnings_attr: _,
             svg_formatted_values: _,
+            layer_svg_attrs,
         } = plot;
         let mut theme = theme;
         if theme.aspect_ratio.is_none() {
@@ -261,7 +262,19 @@ impl PlotBuilder {
         // computed stat (density/histogram) is estimated per panel, not pooled.
         let facet_vars = Self::facet_vars(&facet);
 
-        for layer in layers {
+        for (li, mut layer) in layers.into_iter().enumerate() {
+            // #221: a layer with `layer_svg_attr`s draws through a wrapper
+            // that hands them to the backend around its own `draw`.
+            let attrs: Vec<(String, String)> = layer_svg_attrs
+                .iter()
+                .filter(|(i, _, _)| *i == li)
+                .map(|(_, n, v)| (n.clone(), v.clone()))
+                .collect();
+            if !attrs.is_empty() {
+                let geom =
+                    std::mem::replace(&mut layer.geom, Box::new(crate::geom::blank::GeomBlank));
+                layer.geom = Box::new(crate::geom::layer_attrs::LayerSvgAttrs(geom, attrs));
+            }
             let built = Self::build_layer(
                 layer,
                 &plot_data,
@@ -1126,6 +1139,32 @@ impl PlotBuilder {
                 })
                 .collect();
             working_data.add_column(crate::aes::TOOLTIP_INTERNAL_NAME.to_string(), rendered);
+        }
+
+        // #221: sanitize `Aes::class` values once per layer — keep valid
+        // tokens, drop the rest with one warning — so `set_row_extras`
+        // hands the backend only clean tokens.
+        if let Some(col) = working_data.column_mut(crate::aes::CLASS_INTERNAL_NAME) {
+            let mut rejected: Vec<String> = Vec::new();
+            for v in col.iter_mut() {
+                if v.is_na() {
+                    continue;
+                }
+                let (ok, bad) = crate::aes::split_class_tokens(&crate::geom::tip_value(v));
+                for b in bad {
+                    if !rejected.contains(&b) {
+                        rejected.push(b);
+                    }
+                }
+                *v = crate::data::Value::Str(ok.join(" "));
+            }
+            if !rejected.is_empty() {
+                let shown: Vec<&String> = rejected.iter().take(5).collect();
+                warnings.push(format!(
+                    "{geom_label}: class: {} invalid class token(s) dropped (must match [A-Za-z][A-Za-z0-9_-]*), e.g. {shown:?}",
+                    rejected.len()
+                ));
+            }
         }
 
         Ok(BuiltLayer {
