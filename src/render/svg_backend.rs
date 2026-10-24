@@ -909,6 +909,64 @@ impl DrawBackend for SvgBackend {
         ));
         Ok(())
     }
+
+    /// #196: each linked run becomes `<a href="…" target="_blank"
+    /// rel="noopener"><tspan text-decoration="underline">…</tspan></a>`
+    /// (`rel="noopener"` so the opened tab can't reach back via
+    /// `window.opener`); a plain run is a bare `<tspan>`. All runs sit
+    /// inside one `<text>`, so `style.anchor` aligns their combined width
+    /// exactly as it would a single run's.
+    fn draw_text_runs(
+        &mut self,
+        runs: &[(&str, Option<&str>)],
+        (x, y): (f64, f64),
+        style: &TextStyle,
+    ) -> Result<(), RenderError> {
+        if !(x.is_finite() && y.is_finite()) {
+            return Ok(());
+        }
+        let anchor = match style.anchor {
+            TextAnchor::Start => "start",
+            TextAnchor::Middle => "middle",
+            TextAnchor::End => "end",
+        };
+        let family = escape(style.family.as_deref().unwrap_or("sans-serif"));
+        let weight = if style.face == FontFace::Bold {
+            " font-weight=\"bold\""
+        } else {
+            ""
+        };
+        let fstyle = if style.face == FontFace::Italic {
+            " font-style=\"italic\""
+        } else {
+            ""
+        };
+        let angle = finite_or(style.angle, 0.0);
+        let transform = if angle.abs() > 0.01 {
+            format!(" transform=\"rotate({angle:.1} {x:.2} {y:.2})\"")
+        } else {
+            String::new()
+        };
+        let class = self.mark_class("text");
+        let mut inner = String::new();
+        for (text, href) in runs {
+            match href {
+                Some(u) => inner.push_str(&format!(
+                    "<a href=\"{}\" target=\"_blank\" rel=\"noopener\"><tspan text-decoration=\"underline\">{}</tspan></a>",
+                    escape(u),
+                    escape(text)
+                )),
+                None => inner.push_str(&format!("<tspan>{}</tspan>", escape(text))),
+            }
+        }
+        self.body.push_str(&format!(
+            "<text x=\"{x:.2}\" y=\"{y:.2}\" font-size=\"{:.2}\" text-anchor=\"{anchor}\" \
+             dominant-baseline=\"middle\" font-family=\"{family}\"{weight}{fstyle} fill=\"{}\"{transform}{class}>{inner}</text>",
+            finite_or(style.size, 12.0),
+            rgb(style.color),
+        ));
+        Ok(())
+    }
 }
 
 #[cfg(test)]

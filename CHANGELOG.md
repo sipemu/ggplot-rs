@@ -79,6 +79,22 @@ All notable changes to this project are documented here. The format follows
   the data (stable for equal/missing sizes), so a big circle never hides a
   smaller one at the same spot — the ggplot2/ggspatial graduated-symbol-map
   convention. DataZooDE/anofox-visualization#420, #194.
+- `DrawBackend::draw_text_runs` (feature `sf`): draw one line as consecutive
+  runs, each optionally an `http(s)` hyperlink. Default: concatenates the
+  runs and draws them plain via `draw_text` (pixel/`canvas`, `plotters`
+  backends); the native SVG backend overrides it to wrap each linked run
+  in `<a href="…" target="_blank" rel="noopener">` with an underline,
+  inside one `<text>` so `text-anchor` still aligns the whole line.
+- `GeomAttribution::link(url)`/`.runs(segments)` (`annotation_attribution`):
+  make the whole attribution text one hyperlink, or replace it with
+  several independently plain-or-linked segments (ggspatial-style — "©
+  BKG" linked, a licence code linked, plain connective text between
+  them). A non-`http(s)` URL (`javascript:`, `data:`, a bare path, …) is
+  dropped at render time with a warning rather than drawn as a link.
+  DataZooDE/anofox-visualization#420, #196 — the BKG/VG2500 source note
+  (`© BKG (year) dl-de/by-2-0, Datenquellen: …`, each term separately
+  linked, as the licence's attribution terms require) can retire its
+  hand-written `<a>`-wrapped `<text>` furniture onto this.
 
 ## [0.27.0] — 2026-10-24
 
