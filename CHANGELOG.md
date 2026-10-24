@@ -18,6 +18,15 @@ All notable changes to this project are documented here. The format follows
   a consumer placing symbols/labels at a region's visual centre (graduated
   `::SIZE` symbols on a polygon row) call the same algorithm `geom_sf_text`
   uses, on raw data-space geometry, before any screen projection.
+- `GeomSf` gains a `size` aesthetic on `Point`/`MultiPoint` rows
+  (`aes(size = "pop")`, feature `sf`) — graduated symbols, typically paired
+  with `scale_size_area()` so circle *area* is proportional to the value
+  (the same fallback chain `geom_point`'s `draw_points` uses: a trained
+  scale wins, else the raw numeric value, else the unmapped `point_size`
+  default). Rows now draw largest-size-first regardless of their order in
+  the data (stable for equal/missing sizes), so a big circle never hides a
+  smaller one at the same spot — the ggplot2/ggspatial graduated-symbol-map
+  convention. DataZooDE/anofox-visualization#420, #194.
 
 ## [0.27.0] — 2026-10-24
 
