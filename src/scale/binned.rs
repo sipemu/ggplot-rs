@@ -84,13 +84,20 @@ pub struct ScaleFillBinned {
     corrected: bool,
 }
 
-/// At least two increasing, finite edges: non-finite values dropped,
-/// sorted, exact duplicates collapsed; fewer than two left falls back to
-/// `[0.0, 1.0]` (a single degenerate bin) rather than panicking.
+/// At least two increasing, finite edges: non-finite values dropped and
+/// sorted; fewer than two left falls back to `[0.0, 1.0]` (a single
+/// degenerate bin) rather than panicking.
+///
+/// Equal adjacent edges are kept rather than collapsed (sipemu/ggplot-rs#240):
+/// a quantile split (or any other caller-supplied break set) can legitimately
+/// repeat an edge, e.g. `[35.0, 150.0, 150.0]` for a class whose upper bin
+/// holds only the maximum. Deduping such edges away used to merge two
+/// classes into one and change the caller's requested class count; keeping
+/// them instead produces a *zero-width* bin, which [`bin_index`] and
+/// [`ScaleFillBinned::class_label`] give dedicated handling.
 fn sorted_edges(breaks: Vec<f64>) -> (Vec<f64>, bool) {
     let mut v: Vec<f64> = breaks.into_iter().filter(|f| f.is_finite()).collect();
     v.sort_by(f64::total_cmp);
-    v.dedup();
     if v.len() >= 2 {
         (v, false)
     } else {
@@ -207,29 +214,56 @@ impl ScaleFillBinned {
         self
     }
 
-    /// The half-open `[breaks[i], breaks[i+1])` bin index for `v`
-    /// (clamped into range first; the last bin is closed at its upper
-    /// edge, so the maximum trained/data value lands in it rather than
-    /// falling just outside every bin).
+    /// The bin index for `v` (clamped into range first).
+    ///
+    /// An ordinary bin `i` is half-open, `[breaks[i], breaks[i+1])`; the
+    /// last bin is closed at its upper edge too, so the maximum
+    /// trained/data value lands in it rather than falling just outside
+    /// every bin. A **zero-width** bin (`breaks[i] == breaks[i+1]`, e.g.
+    /// from a quantile split whose top class holds only the maximum,
+    /// sipemu/ggplot-rs#240) is closed at *both* ends instead, so it
+    /// captures values equal to its single shared edge rather than losing
+    /// them to whichever neighbour the half-open rule would otherwise hand
+    /// them to. Bins are scanned low to high and the first match wins, so
+    /// when several consecutive bins share the same point the lowest-index
+    /// one claims it (ggplot2's `cut(..., right = TRUE)` convention, with
+    /// the first bin additionally closed on the left so the global minimum
+    /// is never dropped).
     fn bin_index(&self, v: f64) -> usize {
         let n = self.colors.len();
         let v = v.clamp(self.breaks[0], self.breaks[n]);
-        for (i, w) in self.breaks[1..n].iter().enumerate() {
-            if v < *w {
+        for i in 0..n {
+            let (lo, hi) = (self.breaks[i], self.breaks[i + 1]);
+            let hit = if i == n - 1 {
+                v >= lo && v <= hi // last bin: closed at both ends
+            } else if lo == hi {
+                v == lo // zero-width bin: closed at both ends
+            } else {
+                v >= lo && v < hi // ordinary bin: half-open
+            };
+            if hit {
                 return i;
             }
         }
         n - 1
     }
 
-    /// `"{lo}–{hi} ({count})"` for bin `i`.
+    /// `"{lo}–{hi} ({count})"` for bin `i`, or just `"{v} ({count})"` when
+    /// `i` is a zero-width bin (`breaks[i] == breaks[i + 1]`, #240) — a
+    /// range like "150–150" would misstate a bin that in fact holds only
+    /// the single value 150.
     fn class_label(&self, i: usize) -> String {
-        format!(
-            "{}–{} ({})",
-            format_value(&Value::Float(self.breaks[i])),
-            format_value(&Value::Float(self.breaks[i + 1])),
-            self.counts[i]
-        )
+        let (lo, hi) = (self.breaks[i], self.breaks[i + 1]);
+        if lo == hi {
+            format!("{} ({})", format_value(&Value::Float(lo)), self.counts[i])
+        } else {
+            format!(
+                "{}–{} ({})",
+                format_value(&Value::Float(lo)),
+                format_value(&Value::Float(hi)),
+                self.counts[i]
+            )
+        }
     }
 
     /// `"{na_label} ({na_count})"`.
@@ -548,5 +582,119 @@ mod tests {
         assert_eq!(s.counts, vec![0, 0, 0]);
         assert_eq!(s.na_count, 0);
         assert_eq!(s.breaks, vec![0.0, 10.0, 50.0, 100.0]);
+    }
+
+    // --- #240: duplicate (zero-width) class edges ----------------------
+
+    /// A duplicate edge at the *maximum* — the motivating case from #240
+    /// (a quantile split whose top class holds only the maximum, e.g.
+    /// `[35, 150, 150]` over two cells 35 and 150).
+    #[test]
+    fn duplicate_edge_at_the_max_keeps_both_classes_and_colours() {
+        let mut s = ScaleFillBinned::new(
+            Aesthetic::Fill,
+            vec![35.0, 150.0, 150.0],
+            vec![(0, 0, 255), (255, 0, 0)],
+        );
+        assert!(
+            !s.corrected,
+            "a legitimate zero-width bin is not a fallback"
+        );
+        assert_eq!(s.colors.len(), 2, "caller's requested class count is kept");
+        assert_eq!(
+            s.colors,
+            vec![(0, 0, 255), (255, 0, 0)],
+            "distinct colours per class"
+        );
+
+        s.train(&[Value::Float(35.0), Value::Float(150.0)]);
+        assert_eq!(s.counts, vec![1, 1], "each cell counted into its own class");
+        assert_eq!(s.bin_index(35.0), 0);
+        assert_eq!(
+            s.bin_index(150.0),
+            1,
+            "the zero-width bin claims its own edge value"
+        );
+        assert_eq!(s.map_to_color(&Value::Float(150.0)), Some((255, 0, 0)));
+
+        let breaks = s.breaks();
+        let labels: Vec<&str> = breaks.iter().map(|(_, l)| l.as_str()).collect();
+        assert_eq!(
+            labels,
+            vec!["35–150 (1)", "150 (1)"],
+            "the zero-width class's label/count is a single value, not a 150–150 range"
+        );
+    }
+
+    /// A duplicate edge at the *minimum* — the lowest bin is zero-width and
+    /// must still claim the global minimum (left-closed first bin).
+    #[test]
+    fn duplicate_edge_at_the_min_keeps_both_classes_and_colours() {
+        let mut s = ScaleFillBinned::new(
+            Aesthetic::Fill,
+            vec![0.0, 0.0, 10.0],
+            vec![(0, 0, 255), (255, 0, 0)],
+        );
+        assert!(!s.corrected);
+        assert_eq!(s.colors.len(), 2);
+
+        s.train(&[Value::Float(0.0), Value::Float(0.0), Value::Float(5.0)]);
+        assert_eq!(s.counts, vec![2, 1]);
+        assert_eq!(s.bin_index(0.0), 0, "the zero-width bin claims the minimum");
+        assert_eq!(s.bin_index(5.0), 1);
+        assert_eq!(s.map_to_color(&Value::Float(0.0)), Some((0, 0, 255)));
+
+        let breaks = s.breaks();
+        let labels: Vec<&str> = breaks.iter().map(|(_, l)| l.as_str()).collect();
+        assert_eq!(labels, vec!["0 (2)", "0–10 (1)"]);
+    }
+
+    /// A duplicate edge in the *middle* — between two otherwise ordinary
+    /// classes.
+    #[test]
+    fn duplicate_edge_in_the_middle_keeps_all_classes_and_colours() {
+        let mut s = ScaleFillBinned::new(
+            Aesthetic::Fill,
+            vec![0.0, 50.0, 50.0, 100.0],
+            vec![(0, 0, 255), (0, 255, 0), (255, 0, 0)],
+        );
+        assert!(!s.corrected);
+        assert_eq!(s.colors.len(), 3, "all three requested classes survive");
+        assert_eq!(s.colors, vec![(0, 0, 255), (0, 255, 0), (255, 0, 0)]);
+
+        s.train(&[Value::Float(25.0), Value::Float(50.0), Value::Float(75.0)]);
+        assert_eq!(
+            s.counts,
+            vec![1, 1, 1],
+            "the shared edge value goes to the middle (zero-width) bin"
+        );
+        assert_eq!(s.bin_index(25.0), 0);
+        assert_eq!(
+            s.bin_index(50.0),
+            1,
+            "the zero-width middle bin wins the tie over its neighbours"
+        );
+        assert_eq!(s.bin_index(75.0), 2);
+        assert_eq!(s.map_to_color(&Value::Float(50.0)), Some((0, 255, 0)));
+
+        let breaks = s.breaks();
+        let labels: Vec<&str> = breaks.iter().map(|(_, l)| l.as_str()).collect();
+        assert_eq!(labels, vec!["0–50 (1)", "50 (1)", "50–100 (1)"]);
+    }
+
+    /// The fix must not perturb the ordinary (non-degenerate) case this
+    /// crate already shipped: same inputs, same bins/colours/labels as
+    /// before #240.
+    #[test]
+    fn non_degenerate_edges_are_unaffected() {
+        let s = scale();
+        assert_eq!(s.breaks, vec![0.0, 10.0, 50.0, 100.0]);
+        assert_eq!(s.colors, vec![(0, 0, 255), (0, 255, 0), (255, 0, 0)]);
+        assert_eq!(s.bin_index(0.0), 0);
+        assert_eq!(s.bin_index(9.999), 0);
+        assert_eq!(s.bin_index(10.0), 1);
+        assert_eq!(s.bin_index(49.999), 1);
+        assert_eq!(s.bin_index(50.0), 2);
+        assert_eq!(s.bin_index(100.0), 2);
     }
 }

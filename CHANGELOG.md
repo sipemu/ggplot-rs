@@ -41,6 +41,24 @@ All notable changes to this project are documented here. The format follows
   every existing `Inside` legend not already anchored at `(0, 1)` (the
   old implicit top-left-corner default) now renders at a different
   pixel position — intentional, this is the fix.
+- **`ScaleFillBinned::new`/`::two` collapsed a duplicate (zero-width) class
+  edge, merging two classes into one colour** (#240, found via DataZooDE/
+  anofox-visualization#420 slice 4: a hexbin with `::CLASSES 'quantile 2'`
+  over two cells 35 and 150 — a valid quantile split whose upper class
+  holds only the maximum, giving explicit breaks `[35, 150, 150]`).
+  `sorted_edges` deduped the equal edges before binning, so the caller's
+  requested class count silently shrank and both classes fell back to
+  `default_colors(1, …)`, the same colour despite different class
+  indices. Duplicate edges are now kept: a zero-width bin
+  (`breaks[i] == breaks[i + 1]`) is closed at *both* ends instead of the
+  ordinary half-open rule, so it claims values equal to its own edge
+  rather than losing them to a neighbour, and its legend label is the
+  single value ("150 (1)") rather than a zero-width range ("150–150
+  (1)"). Ties are broken by scanning low to high and keeping the
+  lowest-index match (ggplot2's `cut(..., right = TRUE)`, with the first
+  bin additionally closed on the left so the global minimum is never
+  dropped). Non-degenerate breaks (no duplicates) bin, colour and label
+  identically to before.
 
 - **`LegendPosition::Top` drew from an absolute canvas
   `y = legend_margin.top`, ignoring the title/subtitle and the plot's own
