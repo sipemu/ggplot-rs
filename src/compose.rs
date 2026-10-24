@@ -25,6 +25,7 @@
 
 use std::ops::{BitOr, Div};
 
+use crate::aes::Aesthetic;
 use crate::guide::legend;
 use crate::plot::{GGError, GGPlot, RenderMeta};
 use crate::render::backend::{
@@ -33,7 +34,8 @@ use crate::render::backend::{
 use crate::render::renderer::PlotRenderer;
 use crate::render::svg_backend::{root_data_attrs, SvgBackend};
 use crate::render::{Rect, RenderError};
-use crate::theme::{LegendPosition, Theme};
+use crate::theme::elements::{ElementLine, ElementText};
+use crate::theme::{AxisLabelFit, LegendPosition, Theme};
 
 /// Panel-tag sequence (patchwork's `tag_levels`).
 #[derive(Clone, Debug, PartialEq)]
@@ -109,6 +111,42 @@ fn roman(mut n: usize) -> String {
     s
 }
 
+/// How a [`PlotGrid`] aligns its own direct cells' plot areas and x scale
+/// within each column (patchwork's `plot_layout(axes = ...)`, applied to
+/// the x axis and plot-area alignment specifically — sipemu/
+/// ggplot-rs#175, tracked from DataZooDE/anofox-visualization#318). Only a
+/// column of [`GridCell::Plot`] cells participates; a [`GridCell::Spacer`]
+/// or a nested [`PlotGrid`] cell keeps its own layout, and a column with
+/// fewer than two plot cells is a no-op. Set via [`PlotGrid::axis_collect`].
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum AxisCollect {
+    /// Each cell keeps its own margins, x axis and x domain (default).
+    #[default]
+    Keep,
+    /// Equal left/right plot-area insets within each column, from the
+    /// widest y-axis label requirement in that column — the same idea as
+    /// anofox-visualization's `track.rs` `left = max(...)` fallback, done
+    /// here as one layout pass (`GGPlot::layout_built`'s own arithmetic)
+    /// rather than a render-measure-render loop. Every cell in the column
+    /// also switches to [`AxisLabelFit::Shift`](crate::theme::AxisLabelFit::Shift)
+    /// so an overflowing outer tick label can never perturb the alignment.
+    /// A cell set thinner than the plotting engine's 50px panel-height
+    /// floor via [`PlotGrid::heights`](Self::heights) (an
+    /// anofox-visualization `::TRACK` strip, typically 16-30px) gets a
+    /// centred `aspect_ratio` instead, so its panel comes out exactly as
+    /// tall as the cell rather than overflowing it — `track.rs`'s own
+    /// `Fit::correct` `aspect` trick, computed from the same layout pass.
+    /// Domains and axis text are otherwise untouched.
+    Align,
+    /// [`Align`](Self::Align), plus one x domain shared across the column
+    /// — the union of every cell's own trained x domain — with x-axis
+    /// ticks/title/labels drawn only on the bottom cell. Skipped (with a
+    /// warning), for a column whose x scale is discrete or untrained on
+    /// any cell, in which case the column still gets [`Align`](Self::Align)'s
+    /// plot-area alignment.
+    CollectX,
+}
+
 /// Where a [`PlotGrid`] puts its collected legends.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub enum GridLegendPosition {
@@ -182,6 +220,7 @@ pub struct PlotGrid {
     legend_position: GridLegendPosition,
     spacing: f64,
     theme: Theme,
+    axis_collect: AxisCollect,
     op: Option<Op>,
     /// Extra root `<svg>` attributes requested via [`PlotGrid::svg_attr`]/
     /// [`PlotGrid::svg_attrs`], validated and applied at render time.
@@ -212,6 +251,7 @@ impl Default for PlotGrid {
             legend_position: GridLegendPosition::Right,
             spacing: 0.0,
             theme: Theme::default(),
+            axis_collect: AxisCollect::Keep,
             op: None,
             root_attrs: Vec::new(),
             svg_warnings_attr: false,
@@ -317,6 +357,14 @@ impl PlotGrid {
     /// Where collected legends go.
     pub fn legend_position(mut self, pos: GridLegendPosition) -> Self {
         self.legend_position = pos;
+        self
+    }
+
+    /// Align this grid's own direct cells' plot areas and/or x scale,
+    /// one column at a time — see [`AxisCollect`] (sipemu/ggplot-rs#175).
+    /// Default [`AxisCollect::Keep`] (no change, byte-identical output).
+    pub fn axis_collect(mut self, mode: AxisCollect) -> Self {
+        self.axis_collect = mode;
         self
     }
 
@@ -587,6 +635,7 @@ struct PreparedGrid {
     caption: Option<String>,
     spacing: f64,
     theme: Theme,
+    axis_collect: AxisCollect,
 }
 
 impl Prepared {
@@ -636,6 +685,7 @@ fn prepare_grid(grid: PlotGrid, ctx: &mut PrepCtx) -> Result<Prepared, GGError> 
         caption: grid.caption,
         spacing: grid.spacing,
         theme,
+        axis_collect: grid.axis_collect,
     })))
 }
 
@@ -879,7 +929,7 @@ fn render_prepared(
             Ok(())
         }
         Prepared::Grid(g) => {
-            let g = *g;
+            let mut g = *g;
             let theme = &g.theme;
             let m = &theme.plot_margin;
             // Header / footer bands.
@@ -923,6 +973,16 @@ fn render_prepared(
             let body_h = (bottom - top).max(1.0);
             let cols = tracks(&g.widths, g.ncol, area.width, g.spacing);
             let rows = tracks(&g.heights, g.nrow, body_h, g.spacing);
+            if g.axis_collect != AxisCollect::Keep {
+                align_axes(
+                    &mut g.cells,
+                    (g.ncol, g.nrow, g.byrow),
+                    &cols,
+                    &rows,
+                    g.axis_collect,
+                    warnings,
+                );
+            }
             for (k, cell) in g.cells.into_iter().enumerate() {
                 let (r, c) = if g.byrow {
                     (k / g.ncol, k % g.ncol)
@@ -948,6 +1008,188 @@ fn render_prepared(
                 render_prepared(cell, &rect, page, warnings)?;
             }
             Ok(())
+        }
+    }
+}
+
+/// sipemu/ggplot-rs#175: align a grid's own direct cells' plot areas and/or
+/// x domain, column by column ([`AxisCollect::Align`]/[`AxisCollect::CollectX`]).
+/// `cols`/`rows` are this grid's own track sizes (same for every cell in a
+/// column/row), already computed by the caller. Only `Prepared::Plot` cells
+/// participate; a column with fewer than two of them is left untouched.
+fn align_axes(
+    cells: &mut [Prepared],
+    // (ncol, nrow, byrow) — bundled so the function stays under clippy's
+    // argument-count limit.
+    (ncol, nrow, byrow): (usize, usize, bool),
+    cols: &[(f64, f64)],
+    rows: &[(f64, f64)],
+    mode: AxisCollect,
+    warnings: &mut Vec<String>,
+) {
+    let idx_of = |r: usize, c: usize| -> usize {
+        if byrow {
+            r * ncol + c
+        } else {
+            c * nrow + r
+        }
+    };
+    for c in 0..ncol {
+        let cw = cols.get(c).map_or(0.0, |t| t.1);
+        if !cw.is_finite() || cw <= 0.0 {
+            continue;
+        }
+        // (row, cell index) of every plot cell in this column, top to
+        // bottom. A spacer or a nested grid is skipped — it keeps its own
+        // layout and doesn't count toward "the bottom cell" either.
+        let plot_cells: Vec<(usize, usize)> = (0..nrow)
+            .filter_map(|r| {
+                let k = idx_of(r, c);
+                (k < cells.len() && matches!(cells[k], Prepared::Plot(_))).then_some((r, k))
+            })
+            .collect();
+        if plot_cells.len() < 2 {
+            continue; // nothing to align against in this column
+        }
+        let bottom_row = plot_cells.iter().map(|&(r, _)| r).max().unwrap();
+
+        // Switch every cell to `Shift` (so an overflowing outer label can
+        // never grow its margins behind our back) and, under `CollectX`,
+        // blank every non-bottom cell's x axis *before* measuring, so the
+        // measurement already reflects what's actually drawn.
+        for &(r, k) in &plot_cells {
+            if let Prepared::Plot(p) = &mut cells[k] {
+                p.built.theme.axis_text_x_fit = AxisLabelFit::Shift;
+                if mode == AxisCollect::CollectX && r != bottom_row {
+                    p.built.theme.axis_text_x = ElementText::blank();
+                    p.built.theme.axis_title_x = ElementText::blank();
+                    p.built.theme.axis_ticks_x = Some(ElementLine::blank());
+                }
+            }
+        }
+
+        // Each cell's own plot-area rect at this column's width — pure
+        // layout arithmetic (`GGPlot::layout_built`, the same computation
+        // the real render pass makes), not a drawn-and-measured SVG, so
+        // this whole pass costs one extra layout per cell, not a redraw.
+        // `y`/`height` are kept too, for the thin-cell correction below —
+        // changing a cell's left/right margin never moves them (only
+        // top/bottom margins and the vertical bands do), so one layout
+        // call per cell covers both passes.
+        let mut natural: Vec<(f64, f64, f64, f64, f64)> = Vec::with_capacity(plot_cells.len());
+        for &(r, k) in &plot_cells {
+            let ch = rows.get(r).map_or(0.0, |t| t.1);
+            match &mut cells[k] {
+                Prepared::Plot(p) => {
+                    let layout = GGPlot::layout_built(
+                        &mut p.built,
+                        &p.meta,
+                        cw.floor().max(1.0) as u32,
+                        ch.floor().max(1.0) as u32,
+                    );
+                    natural.push((
+                        layout.plot_area.x,
+                        layout.plot_area.x + layout.plot_area.width,
+                        layout.plot_area.y,
+                        layout.plot_area.height,
+                        ch,
+                    ));
+                }
+                _ => unreachable!("plot_cells only holds Prepared::Plot indices"),
+            }
+        }
+
+        // Equal left/right insets: every cell's left margin grows to the
+        // widest left requirement in the column, and likewise for the
+        // right (anofox-visualization's `track.rs` `left = max(...)`
+        // fallback, generalised to both edges and computed once).
+        let target_left = natural.iter().fold(f64::MIN, |m, &(l, ..)| m.max(l));
+        let target_right_inset = natural
+            .iter()
+            .fold(f64::MIN, |m, &(_, r, ..)| m.max(cw - r));
+        let width = cw - target_right_inset - target_left;
+        if target_left.is_finite() && target_right_inset.is_finite() {
+            for (&(_, k), &(nl, nr, ..)) in plot_cells.iter().zip(&natural) {
+                if let Prepared::Plot(p) = &mut cells[k] {
+                    p.built.theme.plot_margin.left += (target_left - nl).max(0.0);
+                    p.built.theme.plot_margin.right += (target_right_inset - (cw - nr)).max(0.0);
+                }
+            }
+        }
+
+        // A cell thinner than the plotting engine's 50px panel-height
+        // floor (anofox-visualization's `::TRACK` strips, ~16-30px) would
+        // otherwise overflow its own canvas: `layout_built` never shrinks
+        // a panel below 50px on its own. Mirror `track.rs`'s `Fit::correct`
+        // `aspect` trick — a centred `aspect_ratio` set so the panel comes
+        // out exactly as tall as what's actually left after the margins —
+        // but computed once from this same `layout_built` measurement
+        // instead of track.rs's render-measure-render loop. A cell that
+        // already fits (the common case — a normal chart cell) is
+        // untouched.
+        if width.is_finite() && width > 0.0 {
+            for (&(_, k), &(_, _, y, h, ch)) in plot_cells.iter().zip(&natural) {
+                if let Prepared::Plot(p) = &mut cells[k] {
+                    let bottom_budget = ch - p.built.theme.plot_margin.bottom;
+                    if y + h > bottom_budget + 0.5 {
+                        let fits = (ch - y - p.built.theme.plot_margin.bottom).max(8.0);
+                        p.built.theme.aspect_ratio = Some(fits / width);
+                        p.built.theme.plot_margin.top -= (h - fits) / 2.0;
+                    }
+                }
+            }
+        }
+
+        if mode == AxisCollect::CollectX {
+            collect_x_domain(cells, &plot_cells, warnings);
+        }
+    }
+}
+
+/// Train one x domain across a column's cells — the union of every cell's
+/// own trained domain — then pin every cell's x scale to it
+/// ([`ScaleSet::set_limits`](crate::scale::ScaleSet::set_limits), the same
+/// mechanism `coord_cartesian_zoom` uses). Each scale keeps its own
+/// `expand`; since every cell now trains the same raw domain, identical
+/// `expand` settings produce an identical expanded (drawn) domain too.
+/// Skipped, with a warning, when any cell's x scale is discrete or
+/// untrained — there's no well-defined union of levels or of nothing.
+fn collect_x_domain(
+    cells: &mut [Prepared],
+    plot_cells: &[(usize, usize)],
+    warnings: &mut Vec<String>,
+) {
+    let mut domains = Vec::with_capacity(plot_cells.len());
+    for &(_, k) in plot_cells {
+        let d = match &cells[k] {
+            Prepared::Plot(p) => match p.built.scales.get(&Aesthetic::X) {
+                Some(s) if !s.is_discrete() => s.domain(),
+                _ => None,
+            },
+            _ => None,
+        };
+        match d {
+            Some(d) => domains.push(d),
+            None => {
+                warnings.push(
+                    "plot_grid: a column's x scale is discrete or untrained; x domain not \
+                     collected"
+                        .to_string(),
+                );
+                return;
+            }
+        }
+    }
+    let lo = domains.iter().map(|d| d.0).fold(f64::INFINITY, f64::min);
+    let hi = domains
+        .iter()
+        .map(|d| d.1)
+        .fold(f64::NEG_INFINITY, f64::max);
+    if lo.is_finite() && hi.is_finite() && hi >= lo {
+        for &(_, k) in plot_cells {
+            if let Prepared::Plot(p) = &mut cells[k] {
+                p.built.scales.set_limits(&Aesthetic::X, lo, hi);
+            }
         }
     }
 }
@@ -1138,6 +1380,7 @@ impl PlotGrid {
             && self.caption.is_none()
             && self.tags.is_none()
             && !self.collect_legends
+            && self.axis_collect == AxisCollect::Keep
     }
 }
 
