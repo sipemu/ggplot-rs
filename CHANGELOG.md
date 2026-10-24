@@ -82,6 +82,23 @@ All notable changes to this project are documented here. The format follows
   re-blessing; a hole now actually shows the panel background through
   it. `GeomSf { .. }` struct-literal callers gain the new `simplify_px`
   field (`..Default::default()` already covers it).
+- `GGPlot::annotation_scale()`/`annotation_scale_with(..)` (`GeomAnnotationScale`,
+  feature `sf`): a metric scale bar in a panel corner — ggspatial's
+  `annotation_scale()`. A "nice" 1/2/5 × 10ⁿ distance is picked from the
+  trained X scale's domain at the panel's centre height (correct for a
+  non-conformal projection like Equal Earth/Albers too, not just a
+  uniform one), capped at `max_width_px` (default 90) and omitted
+  entirely below 12px. Assumes the X/Y domain is in metres (any `geom_sf`
+  projection other than `SfProjection::PlateCarree`) — same constraint
+  ggspatial's own `annotation_scale()` has for an unprojected CRS; it
+  draws a (wrong, undetectable-as-wrong-by-magnitude) bar from the raw
+  degree domain rather than guessing.
+- `GGPlot::annotation_attribution(text)`/`_with(..)` (`GeomAttribution`,
+  feature `sf`): a small, muted attribution text in a panel corner (e.g.
+  `"© Natural Earth"`) — plain text only, no hyperlink (`DrawBackend` has
+  no link primitive; out of scope for this change).
+  anofox-visualization's own scale bar and attribution (`map/mod.rs`) can
+  retire onto these (DataZooDE/anofox-visualization#318, #181).
 
 Diagram primitives (#176): a node-link diagram (boxes with wrapped labels,
 rounded corners, arrows between box edges) can now be drawn with geoms
