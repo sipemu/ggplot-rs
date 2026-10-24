@@ -686,12 +686,15 @@ mod tests {
     /// the trait's default flattening implementation.
     /// One `draw_polygon` call's recorded points and fill colour.
     type RecordedPolygon = (Vec<(f64, f64)>, Option<(u8, u8, u8)>);
+    /// One `draw_rect` call's corners and fill colour.
+    type RecordedRect = ((f64, f64), (f64, f64), Option<(u8, u8, u8)>);
 
     #[derive(Default)]
     struct RecordingBackend {
         lines: RefCell<Vec<Vec<(f64, f64)>>>,
         circles: RefCell<Vec<((f64, f64), f64)>>,
         polygons: RefCell<Vec<RecordedPolygon>>,
+        rects: RefCell<Vec<RecordedRect>>,
     }
 
     impl DrawBackend for RecordingBackend {
@@ -714,10 +717,13 @@ mod tests {
         }
         fn draw_rect(
             &mut self,
-            _top_left: (f64, f64),
-            _bottom_right: (f64, f64),
-            _style: &RectStyle,
+            top_left: (f64, f64),
+            bottom_right: (f64, f64),
+            style: &RectStyle,
         ) -> Result<(), RenderError> {
+            self.rects
+                .borrow_mut()
+                .push((top_left, bottom_right, style.fill));
             Ok(())
         }
         fn draw_text(
@@ -833,6 +839,58 @@ mod tests {
         assert_eq!(polys[0], (exterior, Some((200, 50, 50))), "exterior filled");
         assert_eq!(polys[1].0, hole);
         assert_eq!(polys[1].1, None, "hole not filled (no real cut-out)");
+    }
+
+    // #206: the default `draw_*_pattern` methods (a backend with no
+    // pattern-fill primitive — `plotters` is the real-world case, this
+    // mock stands in for it) flatten to the pattern's own `bg` and call
+    // the plain draw method, unchanged otherwise.
+
+    fn stripe() -> FillPattern {
+        FillPattern::stripe((10, 20, 30), (200, 210, 220))
+    }
+
+    #[test]
+    fn default_draw_rect_pattern_flattens_to_bg() {
+        let mut b = RecordingBackend::default();
+        b.draw_rect_pattern(
+            (0.0, 0.0),
+            (10.0, 10.0),
+            &stripe(),
+            &RectStyle {
+                stroke: Some((0, 0, 0)),
+                ..Default::default()
+            },
+        )
+        .unwrap();
+        let rects = b.rects.borrow();
+        assert_eq!(rects.len(), 1);
+        assert_eq!(rects[0], ((0.0, 0.0), (10.0, 10.0), Some(stripe().bg())));
+    }
+
+    #[test]
+    fn default_draw_polygon_pattern_flattens_to_bg() {
+        let mut b = RecordingBackend::default();
+        let pts = vec![(0.0, 0.0), (1.0, 0.0), (0.0, 1.0)];
+        b.draw_polygon_pattern(&pts, &stripe(), &RectStyle::default())
+            .unwrap();
+        let polys = b.polygons.borrow();
+        assert_eq!(polys.len(), 1);
+        assert_eq!(polys[0], (pts, Some(stripe().bg())));
+    }
+
+    #[test]
+    fn default_draw_polygon_rings_pattern_flattens_to_bg_per_ring() {
+        let mut b = RecordingBackend::default();
+        let exterior = vec![(0.0, 0.0), (10.0, 0.0), (10.0, 10.0), (0.0, 10.0)];
+        let hole = vec![(3.0, 3.0), (7.0, 3.0), (7.0, 7.0), (3.0, 7.0)];
+        b.draw_polygon_rings_pattern(&[exterior.clone(), hole], &stripe(), &RectStyle::default())
+            .unwrap();
+        let polys = b.polygons.borrow();
+        // Same fallback shape as draw_polygon_rings's own default: the
+        // exterior filled (with the pattern's bg), the hole not.
+        assert_eq!(polys[0], (exterior, Some(stripe().bg())));
+        assert_eq!(polys[1].1, None);
     }
 
     #[test]
