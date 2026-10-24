@@ -6,6 +6,28 @@ All notable changes to this project are documented here. The format follows
 ## [Unreleased]
 
 ### Fixed
+- **`LegendPosition::Inside(fx, fy)` always anchored the legend's
+  top-left corner at the panel's `(fx, fy)` point** (#225, retitled from
+  "continuous legend ticks render off-canvas" after investigation found
+  the ticks were never actually wrong relative to the bar — every tick's
+  y comes from the exact same `bar_top`/`bar_height` the bar's own
+  slices use, checked across three continuous scale types). The real
+  bug: a legend tall enough — a continuous colourbar's fixed 8-key-height
+  bar, or a discrete legend with enough levels — anchored near `fy = 0`
+  ("near the bottom") grew *downward* from there regardless, routinely
+  running off the canvas bottom; discrete legends "looked fine" in
+  casual testing only because they're usually short. Now matches
+  ggplot2: `legend.justification.inside` defaults to
+  `legend.position.inside`, so the legend's own fractional point `(fx,
+  fy)` — measured from its own bottom-left, the same `0..=1` convention
+  `(fx, fy)` already uses — lands exactly on the panel's `(fx, fy)`
+  point (`fx=0`/`fy=0` anchors its left/bottom edge, `fx=1`/`fy=1` its
+  right/top edge, `0.5` centers it), rather than always its top-left
+  corner. A canvas-level clamp is the last-resort safety net for a
+  legend taller or wider than the panel itself. **Behaviour change:**
+  every existing `Inside` legend not already anchored at `(0, 1)` (the
+  old implicit top-left-corner default) now renders at a different
+  pixel position — intentional, this is the fix.
 - **`ScaleFillBinned::new`/`::two` collapsed a duplicate (zero-width) class
   edge, merging two classes into one colour** (#240, found via DataZooDE/
   anofox-visualization#420 slice 4: a hexbin with `::CLASSES 'quantile 2'`
