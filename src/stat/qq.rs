@@ -42,6 +42,7 @@ pub fn ppoints(n: usize) -> Vec<f64> {
 /// Theoretical distribution of a QQ plot, with its parameters (ggplot2's
 /// `distribution` + `dparams`).
 #[derive(Clone, Copy, Debug, PartialEq)]
+#[non_exhaustive]
 pub enum QQDistribution {
     /// Normal (`qnorm`), default `mean = 0, sd = 1`.
     Normal { mean: f64, sd: f64 },

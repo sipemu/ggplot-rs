@@ -2,6 +2,7 @@ use crate::data::Value;
 
 /// Scale transformation types.
 #[derive(Clone, Debug)]
+#[non_exhaustive]
 pub enum ScaleTransform {
     Identity,
     Log10,

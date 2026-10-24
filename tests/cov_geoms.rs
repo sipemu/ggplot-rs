@@ -873,6 +873,7 @@ fn text_and_label() {
                 check_overlap: true,
                 wrap_width: None,
                 line_height: 1.2,
+                fontface: FontFace::Plain,
             }),
         "text_with",
     );
@@ -898,6 +899,7 @@ fn text_and_label() {
                 wrap_width: None,
                 line_height: 1.2,
                 radius: 0.0,
+                fontface: FontFace::Plain,
             }),
         "label_with",
     );

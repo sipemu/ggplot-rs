@@ -13,6 +13,7 @@ use super::Stat;
 
 /// Group-comparison test for [`StatCompareMeans`].
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+#[non_exhaustive]
 pub enum CompareMethod {
     /// ggpubr's default: Wilcoxon rank-sum for two groups, Kruskal-Wallis for
     /// more than two.

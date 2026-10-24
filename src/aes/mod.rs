@@ -5,6 +5,7 @@ pub use mapping::{apply_after_stat, resolve_mappings};
 
 /// All supported aesthetic channels.
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
+#[non_exhaustive]
 pub enum Aesthetic {
     X,
     Y,
@@ -27,6 +28,15 @@ pub enum Aesthetic {
     Radius,
     /// Stroke width for segment/curve/path/line (R's `linewidth`).
     Linewidth,
+    /// Per-row font face for `geom_text`/`geom_label` (#228, R's
+    /// `fontface`): `"plain"`/`"normal"`, `"bold"`, `"italic"`/`"oblique"`
+    /// (case-insensitive), the same strings `theme()`'s `face` accepts. An
+    /// unparseable value falls back to the geom's own fixed `fontface`
+    /// (`GeomText`/`GeomLabel`'s `.with_fontface(..)`, default `Plain`) —
+    /// no build warning, since the value is only known per row. Carries its
+    /// value straight through to [`crate::render::backend::TextStyle::face`]
+    /// — no scale, no legend (like `Tooltip`/`Class`).
+    Fontface,
     /// A custom `<title>` hover tooltip, replacing the geom's own. Routed
     /// through [`crate::aes::TOOLTIP_INTERNAL_NAME`] in `resolve_mappings`,
     /// the same way `DataAttr` is, so an unrelated raw column literally
@@ -103,6 +113,7 @@ impl Aesthetic {
             Aesthetic::Angle => "angle",
             Aesthetic::Radius => "radius",
             Aesthetic::Linewidth => "linewidth",
+            Aesthetic::Fontface => "fontface",
             Aesthetic::Tooltip => "tooltip",
             Aesthetic::DataAttr(name) => name,
             Aesthetic::Class => "class",
@@ -311,6 +322,16 @@ impl Aes {
     /// do.
     pub fn tooltip(self, col: &str) -> Self {
         self.push(col, Aesthetic::Tooltip)
+    }
+
+    /// Per-row font face for `geom_text`/`geom_label` from `col` (#228, R's
+    /// `aes(fontface = ...)`): each row's value is parsed the same way
+    /// `theme()`'s `face` is (`"plain"`/`"normal"`, `"bold"`,
+    /// `"italic"`/`"oblique"`, case-insensitive); an unparseable or `NA`
+    /// value falls back to the geom's own fixed `.with_fontface(..)`. No
+    /// scale, no legend (like [`tooltip`](Self::tooltip)).
+    pub fn fontface(self, col: &str) -> Self {
+        self.push(col, Aesthetic::Fontface)
     }
 
     /// A custom `data-<name>` attribute on the mark, from `col`. `name` must

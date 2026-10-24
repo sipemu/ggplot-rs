@@ -3381,6 +3381,7 @@ pub(crate) struct RenderMeta {
 
 /// Top-level error type.
 #[derive(Debug)]
+#[non_exhaustive]
 pub enum GGError {
     Render(RenderError),
     UnsupportedFormat(String),

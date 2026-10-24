@@ -11,6 +11,7 @@ use super::Stat;
 
 /// Correlation method for [`StatCor`].
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+#[non_exhaustive]
 pub enum CorMethod {
     /// Pearson product-moment correlation.
     #[default]
