@@ -5,6 +5,32 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Added
+- **Legends for different aesthetics mapped to the same measure now merge
+  into one, like ggplot2** (#239, DataZooDE/anofox-visualization#420
+  slice 4: a map whose basemap fill and flow-line colour share one
+  measure through the same scale should show one legend, not two). A
+  new `group_mergeable_legends` groups aesthetics whose legend would
+  render identically — same effective title, same discrete/continuous-
+  ness, *identical* `breaks()` (same positions and labels, in order; a
+  binned scale's breaks already carry their bin counts in the labels, so
+  two binned scales with matching counts merge too) — into one combined
+  guide: `draw_discrete_legend_at`/`draw_discrete_legend_grid` now take a
+  group of `(Aesthetic, &dyn Scale)` instead of a single one, overlaying
+  every member's own key glyph at the same position per break (e.g. a
+  filled swatch and a colour swatch stacked, visually identical when
+  both map the same variable through the same palette); a merged
+  continuous `fill`/`colour` pair draws its colourbar once. See the
+  **behaviour change** below (Fixed) for the `legend_scales_for` drop
+  bug this also fixes. **Known scope limit:** the B3-2 auto-wrap/explicit-grid planner and the
+  layout's own legend-size reservation (`PlotLayout`'s `legend_size`/
+  `legend_band`, and #225's `Inside` justification's own estimate) still
+  reason about ungrouped aesthetics for *sizing* purposes — a merged
+  group reserves a little more room than it strictly needs (safe
+  direction: more whitespace, not clipping), and a merged guide that also
+  needs auto-wrap/an explicit grid falls back to its representative
+  aesthetic's own plan rather than a jointly-computed one.
+
 ## [0.30.1] — 2026-10-24
 
 Legend and scale fixes found while porting DataZooDE/anofox-visualization's
@@ -19,6 +45,29 @@ for a mapped fill/size (#238). No API breaks (cargo-semver-checks against
 v0.30.0).
 
 ### Fixed
+- **Behaviour change: a plot mapping both `fill` and `colour`, to different
+  variables, now draws both legends instead of silently dropping `fill`'s**
+  (#239). `legend_scales_for` had an unconditional rule — drop `Fill`'s
+  legend whenever `Color` was mapped too, regardless of whether they were
+  actually the same measure. That rule predates this crate's ability to
+  merge genuinely-identical legends (above), so it was dropping a legend
+  a user had every reason to expect, with no way to get it back.
+  **Before:** `.aes(Aes::new().color("g1").fill("g2"))` with `g1` and `g2`
+  different variables drew *one* legend, for `colour` only; `fill`'s
+  labels and key were simply absent, with no warning. **After:** the same
+  plot draws *two* legends, one per variable, each with its own title/
+  labels — matching what every other pair of simultaneously-mapped
+  aesthetics already did. A plot where `fill` and `colour` map the *same*
+  variable through the *same* scale is unaffected: it continues to show
+  one legend, now via the explicit merge logic above rather than this
+  blanket drop. No public API changed, but existing output for the
+  affected case (a previously-dropped `fill` legend on a `fill`+`colour`
+  plot with *different* variables) gains a second legend box and a wider
+  reserved legend area — flagged here for anyone diffing rendered output
+  across versions. Covered by
+  `fill_and_colour_with_different_variables_give_two_legends` in the new
+  `tests/guide_merging_239.rs`.
+
 - **`GeomSf` never wrote `data-fvalue` for a mapped `size` or `fill`** (#238,
   DataZooDE/anofox-visualization#475: a graduated-symbol map with only
   `::SIZE` mapped, no colour measure, lost its €/% tooltip formatting
