@@ -1,6 +1,6 @@
 use crate::coord::Coord;
 use crate::render::backend::{DrawBackend, LineStyle, TextAnchor, TextStyle};
-use crate::render::text::{axis_label_priority, label_bbox};
+use crate::render::text::{axis_label_priority, label_bbox, text_width};
 use crate::render::{Rect, RenderError};
 use crate::scale::Scale;
 use crate::theme::{AxisLabelFit, Theme};
@@ -109,13 +109,27 @@ pub fn draw_x_axis(
             let n = onscreen.len();
             let mut kept: Vec<(f64, f64, f64)> = Vec::with_capacity(n); // (x0, x2, px)
             keep = vec![false; n];
+            // A minimum legible gap between two *kept* labels, not just "the
+            // bboxes don't literally touch" (sipemu/ggplot-rs#212): a label-
+            // width estimate close enough to a font's real metrics (`size`'s
+            // own table is tuned for one house font) can leave adjacent
+            // labels a pixel or two apart on paper but visually touching
+            // once actually rendered — a run like "25" next to "50" then
+            // reads as the single garbled "2550". ggplot2's own
+            // check.overlap has no such margin (a print figure can afford a
+            // tight fit); this is for an interactive dashboard, where a
+            // readable gap matters more than keeping one extra label. One
+            // space character's width is a natural, already-tabulated unit
+            // for "a visually clear gap" — not print-figure kerning, just
+            // enough that two numbers never read as one.
+            let min_gap = text_width(" ", size);
             for p in axis_label_priority(n) {
                 let idx = p - 1; // 1-indexed in the ggplot2 sense
                 let (_, px, label) = onscreen[idx];
                 let bbox = label_bbox(label, size, px, 0.0, angle, anchor_frac);
                 let overlaps = kept.iter().any(|&(kx0, kx2, kpx)| {
                     if !rotated {
-                        bbox[0] < kx2 && bbox[2] > kx0
+                        bbox[0] < kx2 + min_gap && bbox[2] > kx0 - min_gap
                     } else {
                         // Parallel rotated labels on one baseline: the
                         // perpendicular distance across the text direction

@@ -160,6 +160,93 @@ fn check_overlap_thins_30_crowded_breaks_keeping_first_and_last() {
     );
 }
 
+/// #212: 5 breaks (0/25/50/75/100, as `extended_breaks()` picks for a
+/// 0..100-ish domain) over a ~50 px panel — the exact shape a narrow
+/// dashboard card's right-hand legend leaves a hex/scatter chart's x axis
+/// (DataZooDE/anofox-visualization#450). Without a minimum legible gap, two
+/// adjacent kept labels can land a pixel or two apart — not literally
+/// overlapping by the bbox test, but close enough that two numbers read as
+/// one run (e.g. "25" beside "50" as "2550"). `check_overlap` must thin
+/// *below* what a literal "do these bboxes touch" test would keep, for a
+/// recognisable gap between every pair of labels that survive.
+#[test]
+fn check_overlap_leaves_a_legible_gap_not_just_a_non_overlap() {
+    let x: Vec<Value> = vec![0.0, 25.0, 50.0, 75.0, 100.0]
+        .into_iter()
+        .map(Value::Float)
+        .collect();
+    let y: Vec<Value> = vec![0.0, 1.0, 2.0, 3.0, 4.0]
+        .into_iter()
+        .map(Value::Float)
+        .collect();
+    let f = x.clone();
+    let data = vec![
+        ("x".to_string(), x),
+        ("y".to_string(), y),
+        ("f".to_string(), f),
+    ];
+    let scale = ScaleContinuous::new().with_breaks(vec![0.0, 25.0, 50.0, 75.0, 100.0]);
+    // A right-hand continuous fill legend, same as the narrow-dashboard-card
+    // case that surfaced this (#450) — eats most of a 163 px panel, leaving
+    // the x axis only ~50 px.
+    let mut fill =
+        ggplot_rs::scale::color::ScaleColorContinuous::new(ggplot_rs::aes::Aesthetic::Fill)
+            .with_colors(
+                ggplot_rs::scale::color::RGBAColor {
+                    r: 230,
+                    g: 235,
+                    b: 250,
+                    a: 1.0,
+                },
+                ggplot_rs::scale::color::RGBAColor {
+                    r: 20,
+                    g: 50,
+                    b: 160,
+                    a: 1.0,
+                },
+            );
+    {
+        use ggplot_rs::scale::Scale;
+        fill.set_name("count");
+    }
+    let svg = render(
+        GGPlot::new(data)
+            .aes(Aes::new().x("x").y("y").fill("f"))
+            .geom_point()
+            .scale_x_continuous(scale)
+            .scale_fill(fill)
+            .axis_text_x_check_overlap(true),
+        163,
+        280,
+    );
+    assert!(
+        panel_width(&svg) < 60.0,
+        "fixture should reproduce the narrow panel: {}",
+        panel_width(&svg)
+    );
+    let kept: Vec<(&str, f64)> = ["0", "25", "50", "75", "100"]
+        .into_iter()
+        .filter_map(|l| label_x(&svg, l).map(|x| (l, x)))
+        .collect();
+    assert!(kept.len() >= 2, "too few labels survived: {kept:?}");
+    // No two *kept* labels' bboxes sit closer than one space character's
+    // width apart — the minimum edge-to-edge gap `check_overlap` now
+    // enforces (not just "centres are a few px apart": a wide label like
+    // "100" can still reach into its neighbour even when their centres are
+    // comfortably separated).
+    let min_gap = ggplot_rs::render::text::text_width(" ", 8.8);
+    let half_width = |l: &str| ggplot_rs::render::text::text_width(l, 8.8) / 2.0;
+    for w in kept.windows(2) {
+        let gap = (w[1].1 - half_width(w[1].0)) - (w[0].1 + half_width(w[0].0));
+        assert!(
+            gap > min_gap,
+            "{} and {} are only {gap}px apart edge to edge (min {min_gap}px): {kept:?}",
+            w[0].0,
+            w[1].0
+        );
+    }
+}
+
 /// The same thinning, but with the labels rotated 45° — exercises the
 /// parallel-distance overlap test (`|Δx|·|sin a| < size`) instead of the
 /// flat bbox test.
