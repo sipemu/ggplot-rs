@@ -19,6 +19,18 @@ const LEGEND_AESTHETICS: &[Aesthetic] = &[
     Aesthetic::Linewidth,
 ];
 
+/// Whether `a` is one of [`LEGEND_AESTHETICS`] (#241: `has_legend_mapping`'s
+/// own `is_legend_aes` check, in `plot.rs`'s layout-building pass, had
+/// drifted into a second, incomplete copy of this list — missing
+/// `Linewidth`, so a plot mapping only `linewidth` reserved *no* legend
+/// space at all, and its legend then drew with nothing held back for it,
+/// running off the canvas). Delegating to this one list means the two
+/// checks — "should this aesthetic reserve layout space" and "should this
+/// aesthetic actually draw a legend" — can't drift apart again.
+pub(crate) fn is_legend_aesthetic(a: &Aesthetic) -> bool {
+    LEGEND_AESTHETICS.contains(a)
+}
+
 /// The aesthetics that would get a legend, in the same order and with the
 /// same color/fill de-duplication `draw_legend` and `draw_legend_planned`
 /// use. Shared with `layout_built` (B3-2), so the "is this the single
@@ -262,26 +274,27 @@ fn estimate_legend_box(
         } else {
             0.0
         };
-        let single_col_width =
-            theme.legend_key_width + theme.legend_spacing + theme.legend_text.size * 6.0;
+        // #236: a size legend's key box (and the row height it sits in)
+        // grows to fit its largest key — see `size_key_diameter`.
+        let diameter = size_key_diameter(aes, scales, scale, &breaks);
+        let key_width = theme.legend_key_width.max(diameter);
+        let key_height = theme.legend_key_height.max(key_width);
+        let single_col_width = key_width + theme.legend_spacing + theme.legend_text.size * 6.0;
         let is_continuous_bar =
             matches!(aes, Aesthetic::Color | Aesthetic::Fill) && !scale.is_discrete();
         let (w, h) = if is_continuous_bar {
-            (
-                single_col_width,
-                title_offset + theme.legend_key_height * 8.0,
-            )
+            (single_col_width, title_offset + key_height * 8.0)
         } else if let Some(plan) = legend_plans.get(aes) {
             let w = if plan.col_pitch > 0.0 {
                 plan.cols as f64 * plan.col_pitch
             } else {
                 single_col_width
             };
-            (w, title_offset + plan.rows as f64 * theme.legend_key_height)
+            (w, title_offset + plan.rows as f64 * key_height)
         } else {
             (
                 single_col_width,
-                title_offset + breaks.len() as f64 * theme.legend_key_height,
+                title_offset + breaks.len() as f64 * key_height,
             )
         };
         total_h += h;
@@ -379,6 +392,36 @@ pub(crate) fn legend_position(
     }
 }
 
+/// For an `Aesthetic::Size` scale, the largest mapped key's diameter
+/// across `breaks` (#236: ggplot2 draws each size key at its break's own
+/// mapped size and grows the key box to fit the largest one, rather than
+/// clamping every key to the fixed default swatch size — which made
+/// every key past a certain size draw identically, the reported bug).
+/// `0.0` for every other aesthetic, or if every mapped size already fits
+/// the theme's default `legend_key_width`, so a caller can just `.max()`
+/// it into the usual fixed size with no special-casing and no change to
+/// existing output when nothing needs the extra room.
+pub(crate) fn size_key_diameter(
+    aes: &Aesthetic,
+    scales: &ScaleSet,
+    scale: &dyn crate::scale::Scale,
+    breaks: &[(f64, String)],
+) -> f64 {
+    if *aes != Aesthetic::Size {
+        return 0.0;
+    }
+    let max_r = breaks
+        .iter()
+        .map(|(pos, label)| {
+            scale
+                .map_fraction_to_size(*pos)
+                .or_else(|| scales.map_size(&Value::Str(label.clone())))
+                .unwrap_or(3.0)
+        })
+        .fold(0.0_f64, f64::max);
+    max_r * 2.0
+}
+
 /// Draw a discrete legend at a given position. Returns the height used.
 #[allow(clippy::too_many_arguments)]
 fn draw_discrete_legend_at(
@@ -402,8 +445,13 @@ fn draw_discrete_legend_at(
         breaks.reverse();
     }
 
-    let item_height = theme.legend_key_height;
-    let swatch_size = theme.legend_key_width;
+    // #236: a size legend's key box (and the row height it sits in) grows
+    // to fit its largest key — see `size_key_diameter`. A no-op (both
+    // `.max()`s keep the theme defaults) for every other aesthetic, and
+    // for a size legend whose largest key already fits them.
+    let diameter = size_key_diameter(aes, scales, scale, &breaks);
+    let swatch_size = theme.legend_key_width.max(diameter);
+    let item_height = theme.legend_key_height.max(swatch_size);
 
     // Draw legend title (guide title overrides scale name)
     let title = guide.title.as_deref().unwrap_or_else(|| scale.name());
@@ -1292,8 +1340,10 @@ fn draw_discrete_legend_grid(
         breaks.reverse();
     }
 
-    let swatch_size = theme.legend_key_width;
-    let item_height = theme.legend_key_height;
+    // #236: same key-box growth as `draw_discrete_legend_at`.
+    let diameter = size_key_diameter(aes, scales, scale, &breaks);
+    let swatch_size = theme.legend_key_width.max(diameter);
+    let item_height = theme.legend_key_height.max(swatch_size);
 
     let title = guide.title.as_deref().unwrap_or_else(|| scale.name());
     let legend_family = if theme.legend_title.family.is_empty() {

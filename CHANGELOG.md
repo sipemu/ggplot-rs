@@ -19,6 +19,35 @@ All notable changes to this project are documented here. The format follows
   when neither is, matching `set_mark_formatted`'s existing no-formatter
   behaviour.
 
+- **A `size` legend drew every key past a certain size as the same
+  circle** (#236, blocking DataZooDE/anofox-visualization#420 slice 3's
+  graduated-symbol maps: `100`/`200`/`300` all looked identical).
+  `draw_legend_swatch`'s `Size` arm clamped each key's radius to half the
+  *fixed* default swatch size (`legend_key_width / 2`, 6px), so any break
+  mapping past that ceiling got clipped down to it. A new
+  `size_key_diameter` computes the largest mapped key's diameter instead,
+  which now grows the key box (and the legend band reserved for it)
+  everywhere it matters: both per-row draw paths, `estimate_legend_box`
+  (#225's `Inside` justification) and `PlotLayout`'s own
+  `legend_size`/`legend_band` reservation (a new `LayoutExtras::
+  legend_max_key_size`). A size legend whose keys already fit the
+  default stays byte-identical.
+
+- **A continuous `linewidth` legend was laid out outside the plot area /
+  canvas** (#241, blocking DataZooDE/anofox-visualization#420 slice 4's
+  flow maps). `has_legend_mapping` — the check deciding whether to
+  reserve *any* legend space in the layout — kept its own, independently
+  maintained copy of "which aesthetics draw a legend" that had drifted
+  out of sync with `guide::legend::LEGEND_AESTHETICS`, missing
+  `Linewidth`. A plot mapping only `linewidth` (no colour/fill/shape/
+  linetype/size/alpha) therefore reserved zero legend space, and the
+  legend then drew with nothing held back for it, running off the
+  canvas. Now delegates to the one authoritative list (a new
+  `is_legend_aesthetic`) instead of keeping a second copy that can drift
+  again. **Behaviour change:** a plot mapping only `linewidth` now has a
+  narrower panel (room reserved for its legend, like every other mapped
+  aesthetic already had) — intentional, this is the fix.
+
 - **`LegendPosition::Inside(fx, fy)` always anchored the legend's
   top-left corner at the panel's `(fx, fy)` point** (#225, retitled from
   "continuous legend ticks render off-canvas" after investigation found
