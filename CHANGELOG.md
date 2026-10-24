@@ -5,6 +5,18 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.28.0] — 2026-10-24
+
+Follow-ups from DataZooDE/anofox-visualization's #318 ports: a size aesthetic
+on `geom_sf` points (#194), a public data-space `spatial::polylabel` (#195),
+linked attribution text (#196), per-group fill/colour on `geom_histogram` /
+`geom_freqpoly` with bins shared across groups (#197), and a reserved legend
+margin for a layer-only fill/colour mapping such as `geom_hex` (#201).
+
+No API breaks (cargo-semver-checks against v0.27.0). **Visible change:**
+grouped histograms now share one set of bins across groups (ggplot2's
+behaviour) instead of binning each group on its own range.
+
 ### Fixed
 - **A `Fill`/`Color`/… legend mapped only on a layer, not the plot, got no
   panel margin and ran off the canvas** (#201, upstream issue
