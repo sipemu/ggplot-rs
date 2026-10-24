@@ -100,6 +100,32 @@ fn with_fontface_italic_sets_font_style_on_geom_text_and_geom_label() {
 }
 
 #[test]
+fn with_fontface_builder_method_sets_the_fixed_face() {
+    // The tests above build GeomText/GeomLabel via a struct literal
+    // (`fontface: FontFace::X, ..Default::default()`); this exercises the
+    // `.with_fontface(..)` builder itself, the intended public entry
+    // point for a fixed (non-per-row) face.
+    let data = frame(vec![
+        ("x", floats(&[1.0])),
+        ("y", floats(&[1.0])),
+        ("label", strs(&["hi"])),
+    ]);
+    let text_svg = GGPlot::new(data.clone())
+        .aes(Aes::new().x("x").y("y").label("label"))
+        .geom_text_with(GeomText::default().with_fontface(FontFace::Bold))
+        .render_svg_native_with_size(300, 200)
+        .unwrap();
+    assert!(text_svg.contains("font-weight=\"bold\""), "{text_svg}");
+
+    let label_svg = GGPlot::new(data)
+        .aes(Aes::new().x("x").y("y").label("label"))
+        .geom_label_with(GeomLabel::default().with_fontface(FontFace::Italic))
+        .render_svg_native_with_size(300, 200)
+        .unwrap();
+    assert!(label_svg.contains("font-style=\"italic\""), "{label_svg}");
+}
+
+#[test]
 fn mapped_fontface_wins_per_row_over_the_fixed_setting() {
     // Fixed setting is Italic; the per-row mapping overrides each row to
     // its own value — "bold" on row 0, "plain" on row 1 (no italic left
