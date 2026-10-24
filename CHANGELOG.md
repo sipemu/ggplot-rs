@@ -21,6 +21,21 @@ All notable changes to this project are documented here. The format follows
   (`ScaleContinuous`, `ScaleDateTime`, `ScaleDiscrete`) for the same gap —
   `ScaleDiscrete` correctly has no `domain()` and is excluded by
   `CollectX`'s own `is_discrete()` check instead, so it needed no change.
+- **`PlotGrid` silently dropped each cell's own `GGPlot::svg_attr`/
+  `svg_attrs`** once composed (#208, upstream issue
+  DataZooDE/anofox-visualization#422: every `::TRACK` cell's `data-track`
+  attribute never reached the composed SVG). `prepare_plot` never carried
+  `GGPlot::root_attrs` past `build_for_render` (which consumes and drops
+  it), and `render_prepared`'s per-cell render only ever wrote
+  `root_data_attrs` + `data-panel` to the cell's own root `<svg>`. A
+  cell's own `svg_attr`s are now captured alongside `svg_formatted_values`
+  (the same `build_for_render`-discards-it problem that field already
+  had) and applied — allow-listed and collision-checked exactly as a
+  lone plot's or the grid's own, via the same `validate_root_attrs` — on
+  a `<g>` wrapping that cell's content, so they don't collide with
+  ggplot-rs's own per-cell root attributes or the grid's own `svg_attr`s
+  on the grid's root. A cell with no `svg_attr` call gets no `<g>`
+  wrapper at all — unaffected output.
 - `geom_sf` (#213): a `MultiPolygon` row now draws as **one** mark — one
   `<path>` with one `M…Z` subpath per ring and part under the even-odd
   fill rule, one set of row attributes/`data-*`, one tooltip — instead of
