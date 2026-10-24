@@ -5,6 +5,49 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- `geom_histogram`/`geom_freqpoly`: per-group fill/colour (`aes(fill = group)`
+  / `aes(color = group)`), overlaid (`position_identity`, the default — pair
+  with a low `alpha` to see through), stacked (`position_stack`, reads the
+  new `ymin` `GeomHistogram` draws) or dodged (`position_dodge2`, which
+  already narrowed `xmin`/`xmax` on a continuous axis — its `width` must be
+  set to the bar's own width, e.g. the `binwidth`, the same way a caller
+  would set it for any other continuous-axis dodge). `StatBin` is now
+  `panelwise` (ggplot2's own `stat_bin` behaviour): bins are computed once
+  over every group's pooled x range — not each group its own — so
+  overlaid/stacked/dodged bars from different groups land on the same grid
+  (`GeomHistogram::draw` resolves each bar's fill through the fill scale per
+  row, the same `fill_col`/`map_color` idiom `GeomBar` already uses;
+  `GeomFreqpoly::draw` now splits its rows by group and draws one line per
+  group, the same `row_groups` idiom `GeomQQLine` uses — previously it
+  "worked" for a grouped `aes(color=)` only by accident, through the
+  per-group stat calls `panelwise` just replaced, and would have drawn one
+  zigzag line through every group's points in a single colour once `StatBin`
+  started receiving every group's rows together). A fill/colour legend
+  trains the same way any other `aes(fill=)`/`aes(color=)` mapping does — no
+  geom-specific change needed.
+  (sipemu/ggplot-rs#197, needed by DataZooDE/anofox-visualization#423;
+  `GeomHistogram::draw` previously only ever used one literal fill colour,
+  never reading a per-row aesthetic the way `GeomDensity` already did.)
+
+### Changed
+
+- `StatBin`'s per-group output (any `aes(fill=)`/`aes(color=)`/`aes(group=)`
+  mapping) now includes a row for every bin of every group, even one a
+  group has no values in (`count = 0`), so a sparse group's bars/line don't
+  silently stop partway through the x range instead of continuing at zero —
+  matching ggplot2. `density` is normalised within each group's own total
+  (not the pooled grand total), also ggplot2's default.
+- `StatBin`'s output now carries forward any other column present on its
+  input (previously dropped) — the same "carry the group's first row"
+  idiom `StatAlign`/`StatQQDist` already use, and needed so `fill`/`color`
+  survive onto the per-group bins above. A pre-stat column that happens to
+  share a name with one of `StatBin`'s own reserved output columns (`x`,
+  `y`, `count`, `density`, `xmin`, `xmax` — e.g. a data column literally
+  named `"y"`, mapped to the x aesthetic) is never carried, so it can't
+  silently overwrite the computed bin values.
+
 ## [0.27.0] — 2026-10-24
 
 The DataZooDE/anofox-visualization#318 batch: a wasm-safe GAM smoother (#174),
