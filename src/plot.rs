@@ -882,6 +882,21 @@ impl GGPlot {
         self.add_geom_with(geom)
     }
 
+    /// The square `n × m` guide for a
+    /// [`ScaleFillBivariate`](crate::scale::bivariate::ScaleFillBivariate)
+    /// fill scale (feature `sf`): two axis captions, biscale's own legend
+    /// shape — drawn as a furniture layer, not through the ordinary
+    /// per-aesthetic legend (set `.legend_position(LegendPosition::None)`
+    /// to hide that one). [`GeomBivariateLegend::from_scale`] builds this
+    /// from the same scale used for the fill, so the swatches match.
+    #[cfg(feature = "sf")]
+    pub fn bivariate_legend(
+        self,
+        geom: crate::geom::bivariate_legend::GeomBivariateLegend,
+    ) -> Self {
+        self.add_geom(geom)
+    }
+
     pub fn geom_curve(self) -> Self {
         self.add_geom(GeomCurve::default())
     }

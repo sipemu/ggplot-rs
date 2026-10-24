@@ -63,6 +63,28 @@ All notable changes to this project are documented here. The format follows
   additionally draws a background box, like `geom_label`.
   anofox-visualization's own label placement (`map/labels.rs`) can
   retire onto this (DataZooDE/anofox-visualization#318, #179).
+- `ScaleFillBivariate` (biscale-style; `scale::bivariate::ScaleFillBivariate`)
+  + `GeomBivariateLegend` (`GGPlot::bivariate_legend(..)`, feature `sf`): a
+  fill scale mapping two already-binned variables (a `"{x}-{y}"` composite
+  class, 1-indexed — the `biscale` R package's own convention; the binning
+  itself stays the caller's job, as `ScaleFillBinned`'s break maths does)
+  to an `nx × ny` palette, and its square legend guide with two axis
+  captions. Each cell is `base − tx·(base − color_x) − ty·(base −
+  color_y)` per channel (clamped): exactly `base` at low-low, exactly
+  `color_x`/`color_y` at the pure-axis corners, compounding toward the
+  high-high corner — `base` is white for light, or a theme's card colour
+  "lifted" for dark (plan-maps.md §15's D10); a CIE76 ΔE test checks the
+  9 cells stay distinguishable for both. `GeomBivariateLegend::from_scale`
+  builds the legend from the same scale used for the fill, and (like
+  `annotation_scale`) draws as a furniture layer, not through the ordinary
+  per-aesthetic legend — `.legend_position(LegendPosition::None)` hides
+  that one. Verified `geom_sf`'s ordinary Fill legend already follows an
+  arbitrary custom theme (legend background/text/title colour, font
+  family) with no new code needed — it rides the same generic
+  discrete-legend path every other geom's Fill/Colour legend does, no
+  sf-specific carve-out exists. anofox-visualization's own bivariate
+  palette (planned, `docs/plans/plan-maps.md` M2d) can build on this
+  (DataZooDE/anofox-visualization#318, #182).
 - `geom_sf`'s `Polygon` now draws every ring (exterior + holes) as one
   shape under the even-odd fill rule, via a new
   `DrawBackend::draw_polygon_rings` (default impl: the old
