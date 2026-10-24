@@ -806,4 +806,44 @@ mod tests {
         let buf = backend.into_rgba();
         assert_ne!(pixel(&buf, 20, 2, 10), (255, 255, 255), "left edge stroked");
     }
+
+    #[test]
+    fn draw_rect_pattern_still_rounds_its_corners() {
+        let pa = Rect {
+            x: 0.0,
+            y: 0.0,
+            width: 20.0,
+            height: 20.0,
+        };
+        let mut backend = PixelBackend::new(20, 20, pa);
+        let dyn_backend: &mut dyn DrawBackend = &mut backend;
+        dyn_backend
+            .draw_rect_pattern(
+                (0.0, 0.0),
+                (20.0, 20.0),
+                &stripe(),
+                &RectStyle {
+                    fill: None,
+                    stroke: None,
+                    stroke_width: 0.0,
+                    alpha: 1.0,
+                    clip: true,
+                    corner_radius: 8.0,
+                },
+            )
+            .unwrap();
+        let buf = backend.into_rgba();
+        // A true corner is cut off by the rounding; the centre is well
+        // inside and always filled regardless of the radius.
+        assert_eq!(
+            pixel(&buf, 20, 0, 0),
+            (255, 255, 255),
+            "corner rounded away"
+        );
+        assert_ne!(
+            pixel(&buf, 20, 10, 10),
+            (255, 255, 255),
+            "centre still filled"
+        );
+    }
 }

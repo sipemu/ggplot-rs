@@ -1239,6 +1239,24 @@ mod tests {
     }
 
     #[test]
+    fn a_rounded_rect_pattern_still_rounds_its_corners() {
+        let mut b = backend();
+        b.draw_rect_pattern(
+            (0.0, 0.0),
+            (10.0, 10.0),
+            &stripe(),
+            &RectStyle {
+                corner_radius: 3.0,
+                ..Default::default()
+            },
+        )
+        .unwrap();
+        let svg = b.finish();
+        assert!(svg.contains("rx=\"3.00\""), "{svg}");
+        assert!(svg.contains("fill=\"url(#"), "{svg}");
+    }
+
+    #[test]
     fn an_equal_pattern_reuses_the_same_defs_entry() {
         let mut b = backend();
         b.draw_rect_pattern((0.0, 0.0), (5.0, 5.0), &stripe(), &RectStyle::default())

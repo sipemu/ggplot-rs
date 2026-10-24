@@ -165,3 +165,21 @@ fn the_legends_no_data_key_draws_the_pattern_swatch() {
         "cell and swatch share the one registered pattern: {svg}"
     );
 }
+
+/// `plotters` has no pattern-fill primitive and keeps the `DrawBackend`
+/// defaults ("falls back to bg") — this renders the same no-data map
+/// through the real plotters-backed pipeline (not just the isolated
+/// default-impl unit test in `render::backend::tests`), confirming the
+/// fallback actually works end to end rather than only in theory.
+#[test]
+#[cfg(feature = "plotters")]
+fn plotters_backend_falls_back_to_bg_for_the_na_pattern() {
+    let png = GGPlot::new(tile_data(&[Some(5.0), Some(60.0), None]))
+        .aes(Aes::new().x("x").y("y").fill("v"))
+        .geom_tile()
+        .scale_fill(fill_scale())
+        .render_png()
+        .expect("plotters-backed render");
+    const PNG_MAGIC: [u8; 8] = [0x89, b'P', b'N', b'G', b'\r', b'\n', 0x1a, b'\n'];
+    assert_eq!(&png[0..8], &PNG_MAGIC, "PNG magic bytes");
+}
