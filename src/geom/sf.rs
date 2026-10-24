@@ -201,9 +201,19 @@ impl GeomSf {
                 self.draw_rings(rings, project, fill, color, pattern, backend)?
             }
             Geometry::MultiPolygon(polys) => {
-                for p in polys {
-                    self.draw_rings(p, project, fill, color, pattern, backend)?;
-                }
+                // #213: one mark per data row, not one per part. Every
+                // part's rings (exterior + holes) go into a single
+                // `draw_rings` call so the backend emits one `<path>` with
+                // one `M…Z` subpath per ring/part under the even-odd fill
+                // rule, instead of a separate mark (and tooltip/row-attrs)
+                // per part. Correct under evenodd even when concatenated:
+                // a point inside part A crosses A's rings an odd number of
+                // times and B's rings zero times (parts of a valid
+                // MultiPolygon never overlap), so the union still fills
+                // each part with its own holes cut out.
+                let rings: Vec<Vec<[f64; 2]>> =
+                    polys.iter().flat_map(|p| p.iter().cloned()).collect();
+                self.draw_rings(&rings, project, fill, color, pattern, backend)?;
             }
             Geometry::Collection(parts) => {
                 for part in parts {
@@ -258,10 +268,13 @@ impl GeomSf {
         )
     }
 
-    /// Draw one polygon — `rings[0]` the exterior, every other ring a hole
-    /// — as a single [`DrawBackend::draw_polygon_rings`] call, so the
+    /// Draw a set of rings — for a single `Polygon`, `rings[0]` the
+    /// exterior and every other ring a hole; for a `MultiPolygon` (#213),
+    /// every part's rings concatenated, part boundaries undistinguished —
+    /// as a single [`DrawBackend::draw_polygon_rings`] call, so the
     /// backend cuts the holes out of the fill under the even-odd rule
-    /// rather than drawing them as separate, merely-stroked shapes (#178).
+    /// rather than drawing them as separate, merely-stroked shapes (#178),
+    /// and a multi-part row draws as one mark, not one per part (#213).
     /// Each ring is simplified to the render resolution first (screen
     /// space, [`GeomSf::simplify_px`]); a ring that collapses below 3
     /// points keeps its original vertices rather than vanishing (still

@@ -16,6 +16,12 @@ All notable changes to this project are documented here. The format follows
   character's width of clearance between every pair of kept labels, not
   just "don't touch" — a 0/25/50/75/100 set over a ~50 px panel now keeps
   0/50/100 instead of 0/25/50/100 with a sub-pixel gap.
+- `geom_sf` (#213): a `MultiPolygon` row now draws as **one** mark — one
+  `<path>` with one `M…Z` subpath per ring and part under the even-odd
+  fill rule, one set of row attributes/`data-*`, one tooltip — instead of
+  one separate mark per part (a country with islands no longer produces
+  N marks sharing the same `data-row`). Single-`Polygon` output is
+  unchanged. Found porting DataZooDE/anofox-visualization#420.
 
 ## [0.28.1] — 2026-10-24
 
