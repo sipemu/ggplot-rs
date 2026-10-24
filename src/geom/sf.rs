@@ -459,6 +459,19 @@ impl Geom for GeomSf {
                 (None, Some(f)) => Some(f),
                 (None, None) => None,
             });
+            // `data-fvalue` (B2-4), same formatter-applied-to-the-raw-value
+            // writer as `GeomPoint`/`GeomHex` (#238): `fill` is this geom's
+            // primary data channel (a choropleth's measure, or a graduated
+            // symbol's colour) so it wins when mapped; a `size`-only
+            // graduated-symbol map (no fill measure, #238's motivating case)
+            // falls back to `size`'s own formatter.
+            if let Some(fc) = fill_col {
+                super::set_mark_formatted(backend, scales, None, &Aesthetic::Fill, Some(&fc[i]));
+            } else if let Some(sc) = size_col {
+                super::set_mark_formatted(backend, scales, None, &Aesthetic::Size, Some(&sc[i]));
+            } else {
+                super::set_mark_formatted(backend, scales, None, &Aesthetic::Fill, None);
+            }
             super::set_row_extras(backend, data, i);
             self.draw_geometry(&g, &project, fill, color, size, pattern.as_ref(), backend)?;
         }

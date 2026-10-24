@@ -6,6 +6,19 @@ All notable changes to this project are documented here. The format follows
 ## [Unreleased]
 
 ### Fixed
+- **`GeomSf` never wrote `data-fvalue` for a mapped `size` or `fill`** (#238,
+  DataZooDE/anofox-visualization#475: a graduated-symbol map with only
+  `::SIZE` mapped, no colour measure, lost its €/% tooltip formatting
+  compared to the old writer). Every other geom that reads a formattable
+  value (`GeomPoint`'s `y`, `GeomHex`'s `fill`, …) already writes
+  `data-fvalue` — the relevant scale's formatter applied to the row's raw
+  value — through `set_mark_formatted`; `GeomSf::draw` never called it at
+  all. It now does: `fill` (the geom's primary data channel — a
+  choropleth's measure, or a graduated symbol's colour) wins when mapped,
+  falling back to `size` when `fill` isn't mapped, and writing nothing
+  when neither is, matching `set_mark_formatted`'s existing no-formatter
+  behaviour.
+
 - **`LegendPosition::Inside(fx, fy)` always anchored the legend's
   top-left corner at the panel's `(fx, fy)` point** (#225, retitled from
   "continuous legend ticks render off-canvas" after investigation found
