@@ -33,6 +33,14 @@ All notable changes to this project are documented here. The format follows
 
 ### Changed
 
+- **Visible for existing grouped histograms**: `geom_histogram`/`geom_freqpoly`
+  with `aes(fill=)`/`aes(color=)`/`aes(group=)` already ran `StatBin` once per
+  group, each computing its own bin edges from only that group's x range — so
+  two groups' bars could land on different grids (different widths, offset
+  edges). `StatBin` is now `panelwise`: bins are computed once over every
+  group's *pooled* x range and shared, matching ggplot2. A grouped
+  histogram/freqpoly already in use may shift bar positions/widths and bin
+  count to match.
 - `StatBin`'s per-group output (any `aes(fill=)`/`aes(color=)`/`aes(group=)`
   mapping) now includes a row for every bin of every group, even one a
   group has no values in (`count = 0`), so a sparse group's bars/line don't
