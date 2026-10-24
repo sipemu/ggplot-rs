@@ -81,6 +81,11 @@ impl Geom for GeomRect {
             let fill_color = fill_col
                 .and_then(|fc| scales.map_color(&Aesthetic::Fill, &fc[i]))
                 .unwrap_or(self.fill);
+            // #206: a no-data row draws its scale's na_pattern instead of
+            // a flat na colour, when set.
+            let pattern = fill_col
+                .filter(|fc| matches!(fc[i], crate::data::Value::Na))
+                .and_then(|_| scales.na_fill_pattern(&Aesthetic::Fill));
             let style = RectStyle {
                 fill: Some(fill_color),
                 stroke: (self.line_width > 0.0).then_some(self.color),
@@ -96,13 +101,26 @@ impl Geom for GeomRect {
             if coord.is_polar() {
                 // Under polar coords a rect is an annulus sector (gauge bands).
                 let pts = super::col::polar_sector(coord, &plot_area, nxmin, nxmax, nymin, nymax);
-                backend.draw_polygon(&pts, &style)?;
+                match &pattern {
+                    Some(p) => backend.draw_polygon_pattern(&pts, p, &style)?,
+                    None => backend.draw_polygon(&pts, &style)?,
+                }
                 continue;
             }
 
             let (left, top) = coord.transform((nxmin, nymax), &plot_area);
             let (right, bottom) = coord.transform((nxmax, nymin), &plot_area);
-            backend.draw_rect((left, top.min(bottom)), (right, top.max(bottom)), &style)?;
+            match &pattern {
+                Some(p) => backend.draw_rect_pattern(
+                    (left, top.min(bottom)),
+                    (right, top.max(bottom)),
+                    p,
+                    &style,
+                )?,
+                None => {
+                    backend.draw_rect((left, top.min(bottom)), (right, top.max(bottom)), &style)?
+                }
+            }
         }
         super::clear_mark(backend);
         super::clear_row_extras(backend);

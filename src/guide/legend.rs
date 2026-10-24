@@ -519,18 +519,27 @@ fn draw_legend_swatch(
     match aes {
         Aesthetic::Color | Aesthetic::Fill => {
             let color = scales.map_color(aes, &value).unwrap_or((127, 127, 127));
-            backend.draw_rect(
-                (x, y),
-                (x + swatch_size, y + swatch_size),
-                &RectStyle {
-                    fill: Some(color),
-                    stroke: None,
-                    stroke_width: 0.0,
-                    alpha: 1.0,
-                    clip: false,
-                    corner_radius: 0.0,
-                },
-            )?;
+            let style = RectStyle {
+                fill: Some(color),
+                stroke: None,
+                stroke_width: 0.0,
+                alpha: 1.0,
+                clip: false,
+                corner_radius: 0.0,
+            };
+            // #206: the "no data" key draws its scale's na_pattern
+            // instead of a flat swatch, when set.
+            if scale.is_na_break(label) {
+                if let Some(p) = scale.na_fill_pattern() {
+                    return backend.draw_rect_pattern(
+                        (x, y),
+                        (x + swatch_size, y + swatch_size),
+                        &p,
+                        &style,
+                    );
+                }
+            }
+            backend.draw_rect((x, y), (x + swatch_size, y + swatch_size), &style)?;
         }
         Aesthetic::Shape => {
             let shape = scales

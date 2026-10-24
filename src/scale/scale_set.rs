@@ -167,6 +167,14 @@ impl ScaleSet {
         self.get(aes).and_then(|s| s.map_to_color(value))
     }
 
+    /// The `aes` scale's configured na-pattern, if any (`ScaleFillBinned::
+    /// na_pattern`, #206) — a geom checks this for a row/key it would
+    /// otherwise draw with the scale's flat na colour, before falling
+    /// back to [`map_color`](Self::map_color)'s plain result.
+    pub fn na_fill_pattern(&self, aes: &Aesthetic) -> Option<crate::render::backend::FillPattern> {
+        self.get(aes).and_then(|s| s.na_fill_pattern())
+    }
+
     /// Map a value to a point shape through the shape scale.
     pub fn map_shape(&self, value: &Value) -> Option<PointShape> {
         self.get(&Aesthetic::Shape)

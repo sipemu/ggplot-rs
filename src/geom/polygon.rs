@@ -84,6 +84,11 @@ impl Geom for GeomPolygon {
             let fill_color = fill_col
                 .and_then(|fc| scales.map_color(&Aesthetic::Fill, &fc[first_idx]))
                 .unwrap_or(self.fill);
+            // #206: a no-data group draws its scale's na_pattern instead
+            // of a flat na colour, when set.
+            let pattern = fill_col
+                .filter(|fc| matches!(fc[first_idx], crate::data::Value::Na))
+                .and_then(|_| scales.na_fill_pattern(&Aesthetic::Fill));
 
             let stroke_color = color_col
                 .and_then(|cc| scales.map_color(&Aesthetic::Color, &cc[first_idx]))
@@ -110,19 +115,20 @@ impl Geom for GeomPolygon {
             super::set_mark_formatted(backend, scales, None, &Aesthetic::Y, None);
             super::set_row_extras(backend, data, first_idx);
 
-            backend.draw_polygon(
-                &points,
-                &RectStyle {
-                    fill: Some(fill_color),
-                    // No outline when line_width <= 0 (e.g. filled contour bands,
-                    // where per-triangle strokes would show the triangulation).
-                    stroke: (self.line_width > 0.0).then_some(stroke_color),
-                    stroke_width: self.line_width,
-                    alpha: self.alpha,
-                    clip: true,
-                    corner_radius: 0.0,
-                },
-            )?;
+            let style = RectStyle {
+                fill: Some(fill_color),
+                // No outline when line_width <= 0 (e.g. filled contour bands,
+                // where per-triangle strokes would show the triangulation).
+                stroke: (self.line_width > 0.0).then_some(stroke_color),
+                stroke_width: self.line_width,
+                alpha: self.alpha,
+                clip: true,
+                corner_radius: 0.0,
+            };
+            match &pattern {
+                Some(p) => backend.draw_polygon_pattern(&points, p, &style)?,
+                None => backend.draw_polygon(&points, &style)?,
+            }
         }
         super::clear_mark(backend);
         super::clear_row_extras(backend);

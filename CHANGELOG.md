@@ -5,6 +5,27 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Added
+- Pattern fills (#206): `render::backend::FillPattern` (`Stripe { fg, bg,
+  size_px, angle_deg }`, a thin 30%-duty-cycle hatch by default —
+  `FillPattern::stripe(fg, bg)`), `ScaleFillBinned::na_pattern(..)` (sits
+  alongside the existing `na_color`, drawn instead of it), and three new
+  `DrawBackend` methods — `draw_rect_pattern`/`draw_polygon_pattern`/
+  `draw_polygon_rings_pattern` — drawn by `geom_sf`/`geom_polygon`/
+  `geom_rect`/`geom_tile` for a `Value::Na` row and by the legend's own
+  "no data" key, instead of `na_color`'s flat colour. The native SVG
+  backend registers a per-backend-instance-prefixed `<defs><pattern>`
+  (deduped by equality) and fills with its `url(#…)`; the pixel/`canvas`
+  backend rasterises the actual stripes per pixel; `plotters` has no
+  pattern primitive and keeps the trait methods' default — a flat
+  `FillPattern::bg` fill, so a no-data region still reads as muted, just
+  without the hatch. Holes still cut out under the even-odd rule exactly
+  as a flat fill would. DataZooDE/anofox-visualization#420 — a classed
+  choropleth's no-data cells can retire their hand-written SVG `<pattern>`
+  hatch (`map/mod.rs`) onto this instead of losing it to a flat na colour
+  (a visible regression the `::MAP` → `geom_sf` port would otherwise be
+  stuck with).
+
 ## [0.28.0] — 2026-10-24
 
 Follow-ups from DataZooDE/anofox-visualization's #318 ports: a size aesthetic
