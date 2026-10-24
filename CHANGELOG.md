@@ -5,6 +5,15 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.28.1] — 2026-10-24
+
+Pattern fills (#206): a stripe `Pattern` as `na_pattern` on `ScaleFillBinned`,
+drawn in the legend's NA key and by `geom_sf` / polygon / rect / tile (SVG
+`<defs><pattern>` with per-plot ids; raster stripes; plotters falls back to the
+background colour), for hatched no-data regions on choropleths
+(DataZooDE/anofox-visualization#420). No API breaks (cargo-semver-checks
+against v0.28.0).
+
 ### Added
 - Pattern fills (#206): `render::backend::FillPattern` (`Stripe { fg, bg,
   size_px, angle_deg }`, a thin 30%-duty-cycle hatch by default —
