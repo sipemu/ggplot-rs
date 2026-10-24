@@ -104,12 +104,22 @@ impl Stat for StatSf {
 ///
 /// The `fill` aesthetic is the primary data channel (colours polygons, points
 /// and lines alike — e.g. `aes(fill = region)` for a choropleth); polygons also
-/// take a `color` border.
+/// take a `color` border. A `size` aesthetic on `Point`/`MultiPoint` rows
+/// (`aes(size = "pop")`, graduated symbols — typically paired with
+/// `scale_size_area()` so the circle *area* is proportional to the value)
+/// scales each point's radius independently and draws largest first, so a
+/// big circle never hides a smaller one at the same spot
+/// (DataZooDE/anofox-visualization#420, #194; ggplot2/ggspatial convention).
 pub struct GeomSf {
     pub fill: (u8, u8, u8),
     pub color: (u8, u8, u8),
     pub alpha: f64,
     pub line_width: f64,
+    /// A `Point`/`MultiPoint` row's circle radius when no `size` aesthetic
+    /// is mapped, or its mapped value doesn't resolve (no scale trained,
+    /// non-numeric). A mapped `size` (e.g. `aes(size = "pop")`, typically
+    /// with `scale_size_area()` for graduated symbols) overrides this per
+    /// row — see [`Geom::draw`]'s largest-first draw order.
     pub point_size: f64,
     /// Map projection applied to lon/lat before scaling (default: none).
     pub projection: SfProjection,
@@ -166,14 +176,15 @@ impl GeomSf {
         project: &impl Fn([f64; 2]) -> (f64, f64),
         fill: (u8, u8, u8),
         color: (u8, u8, u8),
+        size: f64,
         backend: &mut dyn DrawBackend,
     ) -> Result<(), RenderError> {
         match g {
             Geometry::Empty => {}
-            Geometry::Point(c) => self.draw_point(*c, project, fill, backend)?,
+            Geometry::Point(c) => self.draw_point(*c, project, fill, size, backend)?,
             Geometry::MultiPoint(cs) => {
                 for c in cs {
-                    self.draw_point(*c, project, fill, backend)?;
+                    self.draw_point(*c, project, fill, size, backend)?;
                 }
             }
             Geometry::LineString(cs) => self.draw_path(cs, project, fill, backend)?,
@@ -190,7 +201,7 @@ impl GeomSf {
             }
             Geometry::Collection(parts) => {
                 for part in parts {
-                    self.draw_geometry(part, project, fill, color, backend)?;
+                    self.draw_geometry(part, project, fill, color, size, backend)?;
                 }
             }
         }
@@ -202,11 +213,12 @@ impl GeomSf {
         c: [f64; 2],
         project: &impl Fn([f64; 2]) -> (f64, f64),
         color: (u8, u8, u8),
+        size: f64,
         backend: &mut dyn DrawBackend,
     ) -> Result<(), RenderError> {
         backend.draw_circle(
             project(c),
-            self.point_size,
+            size,
             &PointStyle {
                 color,
                 alpha: self.alpha,
@@ -357,6 +369,7 @@ impl Geom for GeomSf {
             .ok_or(RenderError::MissingAesthetic("geometry".into()))?;
         let fill_col = data.column("fill");
         let color_col = data.column("color");
+        let size_col = data.column("size");
         // A `label` mapping (and/or the fill value) becomes a hover tooltip.
         let label_col = data.column("label");
 
@@ -371,8 +384,27 @@ impl Geom for GeomSf {
             let ny = y_scale.map(|s| s.map(&vy)).unwrap_or(0.0);
             coord.transform((nx, ny), &plot_area)
         };
+        // A mapped `size` (graduated symbols, e.g. `aes(size = "pop")` with
+        // `scale_size_area()`) resolves to this row's circle radius — see
+        // `PointDefaults`/`draw_points` in `geom/point.rs` for the same
+        // fallback chain (a trained scale wins, else the raw numeric value,
+        // else the unmapped `point_size` default).
+        let size_of = |i: usize| -> f64 {
+            size_col
+                .and_then(|c| scales.map_size(&c[i]))
+                .or_else(|| size_col.and_then(|c| c[i].as_f64()))
+                .unwrap_or(self.point_size)
+        };
+        // Largest symbol first, so a big circle never covers a smaller one
+        // drawn at the same spot (ggplot2/graduated-symbol-map convention).
+        // Stable: rows without a `size` aesthetic (or tied sizes) keep their
+        // original relative order.
+        let mut order: Vec<usize> = (0..data.nrows()).collect();
+        if size_col.is_some() {
+            order.sort_by(|&a, &b| size_of(b).total_cmp(&size_of(a)));
+        }
 
-        for i in 0..data.nrows() {
+        for i in order {
             let g = match &geom_col[i] {
                 Value::Str(s) => parse_wkt(s),
                 _ => None,
@@ -384,6 +416,7 @@ impl Geom for GeomSf {
             let color = color_col
                 .and_then(|cc| scales.map_color(&Aesthetic::Color, &cc[i]))
                 .unwrap_or(self.color);
+            let size = size_of(i);
 
             let label = label_col
                 .map(|c| value_str(&c[i]))
@@ -396,7 +429,7 @@ impl Geom for GeomSf {
                 (None, None) => None,
             });
             super::set_row_extras(backend, data, i);
-            self.draw_geometry(&g, &project, fill, color, backend)?;
+            self.draw_geometry(&g, &project, fill, color, size, backend)?;
         }
         backend.set_tooltip(None);
         super::clear_mark(backend);
