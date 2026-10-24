@@ -66,9 +66,9 @@ or the `with_*` builders is unaffected.
 
 - **Rounded rectangles** (ggplot2 `geom_label(label.r)`, ggchicklet
   `radius`): `RectStyle` gains a `corner_radius: f64` field (default `0.0`,
-  a plain rectangle). `GeomRect`/`GeomTile` gain a
-  `radius` field and `.with_radius(px)` builder method; `GeomLabel` gains
-  the same for its background box. `svg_backend` emits a native `rx`/`ry`;
+  a plain rectangle). `GeomRect`/`GeomTile` gain a `radius` field and
+  `.with_radius(px)` builder method; `GeomLabel` gains the same for its
+  background box. `svg_backend` emits a native `rx`/`ry`;
   `pixel_backend` (feature `canvas`) and `plotters_backend` (feature
   `plotters`), which have no rounded-rect primitive, approximate it as a
   polygon via the new `render::backend::rounded_rect_points` helper.

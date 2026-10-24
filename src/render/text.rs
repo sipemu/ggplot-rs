@@ -332,6 +332,29 @@ mod tests {
     }
 
     #[test]
+    fn wrap_text_hard_break_flushes_a_pending_line_first() {
+        // "ab" fits its own line (`cur` is non-empty) before the second
+        // word triggers a hard break — the hard-break path must flush
+        // `cur` as its own line rather than lose or merge it.
+        let lines = wrap_text("ab supercalifragilisticexpialidocious", 40.0, 10.0);
+        assert_eq!(lines[0], "ab");
+        assert!(lines.len() > 2, "{lines:?}");
+        assert_eq!(lines[1..].concat(), "supercalifragilisticexpialidocious");
+        for l in &lines {
+            assert!(text_width(l, 10.0) <= 40.0 + 1e-6);
+        }
+    }
+
+    #[test]
+    fn wrap_text_width_too_narrow_for_even_one_character_still_terminates() {
+        // A width narrower than any single character: hard-breaking can't
+        // cut further (`chars.len() <= 1`), so it gives up and keeps that
+        // one character whole rather than looping forever.
+        let lines = wrap_text("i", 0.5, 10.0);
+        assert_eq!(lines, vec!["i".to_string()]);
+    }
+
+    #[test]
     fn wrap_text_empty_input_is_one_empty_line() {
         assert_eq!(wrap_text("", 100.0, 10.0), vec![String::new()]);
     }

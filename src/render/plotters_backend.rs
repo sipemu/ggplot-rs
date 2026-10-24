@@ -341,7 +341,7 @@ impl<'a, DB: DrawingBackend> DrawBackend for PlottersAdapter<'a, DB> {
         bottom_right: (f64, f64),
         style: &RectStyle,
     ) -> Result<(), RenderError> {
-        let (tl_f, br_f) = if style.clip {
+        let (tl, br) = if style.clip {
             // Clamp rect to plot area (data elements only)
             let clamped_tl = clip_point(top_left.0, top_left.1, &self.plot_area);
             let clamped_br = clip_point(bottom_right.0, bottom_right.1, &self.plot_area);
@@ -358,10 +358,16 @@ impl<'a, DB: DrawingBackend> DrawBackend for PlottersAdapter<'a, DB> {
                 }
             }
 
-            (clamped_tl, clamped_br)
+            (
+                (clamped_tl.0 as i32, clamped_tl.1 as i32),
+                (clamped_br.0 as i32, clamped_br.1 as i32),
+            )
         } else {
             // No clipping — backgrounds, strips, legends
-            (top_left, bottom_right)
+            (
+                (top_left.0 as i32, top_left.1 as i32),
+                (bottom_right.0 as i32, bottom_right.1 as i32),
+            )
         };
 
         if style.corner_radius > 0.0 {
@@ -370,10 +376,10 @@ impl<'a, DB: DrawingBackend> DrawBackend for PlottersAdapter<'a, DB> {
             // bounding box above, not each rounded corner individually — a
             // rounded rect that straddles the clip edge gets a straight cut.
             let pts = super::backend::rounded_rect_points(
-                tl_f.0,
-                tl_f.1,
-                br_f.0,
-                br_f.1,
+                tl.0 as f64,
+                tl.1 as f64,
+                br.0 as f64,
+                br.1 as f64,
                 style.corner_radius,
             );
             let int_pts: Vec<(i32, i32)> =
@@ -404,9 +410,6 @@ impl<'a, DB: DrawingBackend> DrawBackend for PlottersAdapter<'a, DB> {
             }
             return Ok(());
         }
-
-        let tl = (tl_f.0 as i32, tl_f.1 as i32);
-        let br = (br_f.0 as i32, br_f.1 as i32);
 
         if let Some(fill) = style.fill {
             let fill_color = to_rgba(fill, style.alpha);

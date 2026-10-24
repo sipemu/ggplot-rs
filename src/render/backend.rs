@@ -224,6 +224,28 @@ mod rounded_rect_tests {
     }
 
     #[test]
+    fn negative_radius_also_falls_back_to_a_plain_rectangle() {
+        // `radius.max(0.0)` guards a caller passing a negative radius
+        // (e.g. a miscomputed value) — it must not panic or produce a
+        // garbage polygon, just the same plain-rect fallback as 0.0.
+        let pts = rounded_rect_points(0.0, 0.0, 10.0, 20.0, -5.0);
+        assert_eq!(
+            pts,
+            vec![(0.0, 0.0), (10.0, 0.0), (10.0, 20.0), (0.0, 20.0)]
+        );
+    }
+
+    #[test]
+    fn x_and_y_are_order_independent() {
+        // Callers may pass (x1, y1) before (x0, y0) (e.g. a box whose
+        // ymax < ymin before min/max normalisation elsewhere) — the
+        // function itself must normalise, not assume sorted input.
+        let forward = rounded_rect_points(0.0, 0.0, 10.0, 20.0, 3.0);
+        let swapped = rounded_rect_points(10.0, 20.0, 0.0, 0.0, 3.0);
+        assert_eq!(forward, swapped);
+    }
+
+    #[test]
     fn radius_is_clamped_to_half_the_shorter_side() {
         // A radius bigger than the box collapses to a "stadium": every point
         // must stay within the rect's bounds.
