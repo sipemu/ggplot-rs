@@ -32,7 +32,7 @@ use crate::render::backend::{
     DrawBackend, LineStyle, PointStyle, RectStyle, TextAnchor, TextStyle,
 };
 use crate::render::renderer::PlotRenderer;
-use crate::render::svg_backend::{root_data_attrs, SvgBackend};
+use crate::render::svg_backend::{root_data_attrs, validate_root_attrs, SvgBackend};
 use crate::render::{Rect, RenderError};
 use crate::theme::elements::{ElementLine, ElementText};
 use crate::theme::{AxisLabelFit, LegendPosition, Theme};
@@ -615,6 +615,14 @@ struct PreparedPlot {
     /// so it has to be captured here and carried to the cell's own
     /// backend in `render_prepared`.
     svg_formatted_values: bool,
+    /// The cell's own `GGPlot::svg_attr`/`svg_attrs` (#208): same reason
+    /// as `svg_formatted_values` above — `build_for_render` discards
+    /// `GGPlot::root_attrs`, so it's captured here and applied in
+    /// `render_prepared`, on a `<g>` wrapping the cell's own content (the
+    /// cell's root `<svg>` carries `root_data_attrs` and `data-panel`
+    /// already; the grid's root carries the *grid's* own `svg_attr`s —
+    /// neither is this cell's to share).
+    root_attrs: Vec<(String, String)>,
 }
 
 enum Prepared {
@@ -716,6 +724,7 @@ fn prepare_plot(mut plot: GGPlot, ctx: &mut PrepCtx) -> Result<PreparedPlot, GGE
         plot.theme.legend_position = LegendPosition::None;
     }
     let svg_formatted_values = plot.svg_formatted_values;
+    let root_attrs = plot.root_attrs.clone();
     let (built, mut meta) = plot.build_for_render()?;
     if let Some(pos) = collect {
         meta.has_legend = false;
@@ -738,6 +747,7 @@ fn prepare_plot(mut plot: GGPlot, ctx: &mut PrepCtx) -> Result<PreparedPlot, GGE
         meta,
         panel,
         svg_formatted_values,
+        root_attrs,
     })
 }
 
@@ -905,6 +915,7 @@ fn render_prepared(
                 meta,
                 panel,
                 svg_formatted_values,
+                root_attrs,
             } = *p;
             let (cw, ch) = (
                 area.width.floor().max(1.0) as u32,
@@ -917,12 +928,22 @@ fn render_prepared(
             attrs.push(("data-panel".into(), panel.clone()));
             backend.set_root_attrs(attrs);
             PlotRenderer::render(&built, &mut backend).map_err(GGError::Render)?;
+            // #208: this cell's own `svg_attr`s go on a `<g>` wrapping its
+            // content, not the cell's root `<svg>` (that one is
+            // `root_data_attrs` + `data-panel`, ggplot-rs's own) nor the
+            // grid's root (that one is the *grid's* own `svg_attr`s) — so
+            // `existing` is empty: nothing built-in to collide with here,
+            // only a name reused across two `svg_attr` calls.
+            let mut attr_warnings = Vec::new();
+            let group_attrs = validate_root_attrs(&root_attrs, &[], "plot", &mut attr_warnings);
+            backend.wrap_body_in_group(&group_attrs);
             warnings.extend(
                 built
                     .warnings
                     .iter()
                     .cloned()
                     .chain(backend.take_warnings())
+                    .chain(attr_warnings)
                     .map(|w| format!("panel {panel}: {w}")),
             );
             page.push_raw(&backend.finish_fragment(area.x, area.y));
