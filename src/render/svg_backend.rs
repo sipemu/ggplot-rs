@@ -331,7 +331,10 @@ impl SvgBackend {
             last = off;
             let (name, value, content) = &groups[gi];
             if is_valid_mark_attr_name(name) {
-                out.push_str(&format!("<g {name}=\"{}\">{content}</g>", escape(value)));
+                out.push_str(&format!(
+                    "<g {name}=\"{}\">{content}</g>",
+                    escape_attr(value)
+                ));
             } else {
                 out.push_str(content);
             }
@@ -353,7 +356,7 @@ impl SvgBackend {
         }
         let mut open = String::from("<g");
         for (k, v) in attrs {
-            open.push_str(&format!(" {k}=\"{}\"", escape(v)));
+            open.push_str(&format!(" {k}=\"{}\"", escape_attr(v)));
         }
         open.push('>');
         self.body = format!("{open}{}</g>", self.body);
@@ -390,7 +393,7 @@ impl SvgBackend {
                         class.push_str(t);
                     }
                 }
-                format!(" class=\"{class}\" data-geom=\"{}\"", escape(g))
+                format!(" class=\"{class}\" data-geom=\"{}\"", escape_attr(g))
             }
             None => String::new(),
         }
@@ -438,7 +441,7 @@ impl SvgBackend {
         }
         let mut out = String::new();
         for (name, val) in pairs {
-            out.push_str(&format!(" {name}=\"{}\"", escape(val)));
+            out.push_str(&format!(" {name}=\"{}\"", escape_attr(val)));
         }
         out
     }
@@ -505,7 +508,7 @@ impl SvgBackend {
         }
         let mut data = String::new();
         for (name, val) in &pairs {
-            data.push_str(&format!(" {name}=\"{}\"", escape(val)));
+            data.push_str(&format!(" {name}=\"{}\"", escape_attr(val)));
         }
         if self.mark_part.is_some() {
             data.push_str(" aria-hidden=\"true\"");
@@ -533,7 +536,7 @@ impl SvgBackend {
         let (w, h) = (self.total_area.width as i64, self.total_area.height as i64);
         let mut extra = String::new();
         for (k, v) in &self.root_attrs {
-            extra.push_str(&format!(" {k}=\"{}\"", escape(v)));
+            extra.push_str(&format!(" {k}=\"{}\"", escape_attr(v)));
         }
         let plot = if self.plot_attr {
             format!(
@@ -952,13 +955,35 @@ fn rgb((r, g, b): (u8, u8, u8)) -> String {
     format!("#{r:02X}{g:02X}{b:02X}")
 }
 
-/// Escape text for use in SVG element content *and* quoted attribute values.
-/// Quotes must be escaped too: data values land in `data-x="…"`, and the SVG is
-/// routinely inlined into HTML, so an unescaped `"` would let data inject
-/// attributes (e.g. event handlers). Characters that are not legal in XML 1.0
-/// (C0 controls other than tab/LF/CR) are dropped so the document stays
+/// Escape text for use in SVG element *content* (`<text>`/`<title>`/
+/// `<tspan>` text nodes). Quotes are escaped too: a `"` inside content is
+/// harmless to SVG itself, but the document is routinely inlined into
+/// HTML, where an unescaped `"` closing out of an attribute could matter
+/// if this ever moved context — escaping it is free and one less thing to
+/// reason about. `\t`/`\n`/`\r` are kept literal here (see `escape_attr`,
+/// its sibling for *attribute* values, for why those three need different
+/// treatment there). Characters that are not legal in XML 1.0 (C0
+/// controls other than tab/LF/CR) are dropped so the document stays
 /// well-formed.
 fn escape(s: &str) -> String {
+    escape_impl(s, false)
+}
+
+/// Escape text for use in a *quoted SVG attribute value* (#226) — a
+/// `data-*`/`href`/`class`/`font-family`/etc. attribute, as opposed to
+/// `escape`'s element content. Everything `escape` does, plus `\t`/`\n`/
+/// `\r` entity-escaped (`&#9;`/`&#10;`/`&#13;`) instead of left literal.
+/// XML attribute-value normalisation collapses an unescaped tab/newline/CR
+/// inside an attribute value to a plain space (the SVG spec defers to
+/// XML 1.0 §3.3.3 here, and browsers follow it), so a caller reading a
+/// multi-line `data-label` or similar back loses the original character
+/// unless it's entity-escaped — entity-escaping round-trips it exactly
+/// through any XML/DOM parser.
+fn escape_attr(s: &str) -> String {
+    escape_impl(s, true)
+}
+
+fn escape_impl(s: &str, in_attr: bool) -> String {
     let mut out = String::with_capacity(s.len());
     for c in s.chars() {
         match c {
@@ -967,6 +992,9 @@ fn escape(s: &str) -> String {
             '>' => out.push_str("&gt;"),
             '"' => out.push_str("&quot;"),
             '\'' => out.push_str("&#39;"),
+            '\t' if in_attr => out.push_str("&#9;"),
+            '\n' if in_attr => out.push_str("&#10;"),
+            '\r' if in_attr => out.push_str("&#13;"),
             '\t' | '\n' | '\r' => out.push(c),
             c if (c as u32) < 0x20 || c == '\u{FFFE}' || c == '\u{FFFF}' => {}
             c => out.push(c),
@@ -1359,7 +1387,7 @@ impl DrawBackend for SvgBackend {
             TextAnchor::Middle => "middle",
             TextAnchor::End => "end",
         };
-        let family = escape(style.family.as_deref().unwrap_or("sans-serif"));
+        let family = escape_attr(style.family.as_deref().unwrap_or("sans-serif"));
         let weight = if style.face == FontFace::Bold {
             " font-weight=\"bold\""
         } else {
@@ -1418,7 +1446,7 @@ impl DrawBackend for SvgBackend {
             TextAnchor::Middle => "middle",
             TextAnchor::End => "end",
         };
-        let family = escape(style.family.as_deref().unwrap_or("sans-serif"));
+        let family = escape_attr(style.family.as_deref().unwrap_or("sans-serif"));
         let weight = if style.face == FontFace::Bold {
             " font-weight=\"bold\""
         } else {
@@ -1447,7 +1475,7 @@ impl DrawBackend for SvgBackend {
             match href {
                 Some(u) => inner.push_str(&format!(
                     "<a href=\"{}\" target=\"_blank\" rel=\"noopener\"><tspan text-decoration=\"underline\">{}</tspan></a>",
-                    escape(u),
+                    escape_attr(u),
                     escape(text)
                 )),
                 None => inner.push_str(&format!("<tspan>{}</tspan>", escape(text))),

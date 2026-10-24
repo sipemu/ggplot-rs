@@ -50,6 +50,26 @@ fn link_wraps_the_whole_text_in_an_anchor() {
 }
 
 #[test]
+fn a_newline_in_the_link_url_is_entity_escaped_in_the_href_attribute() {
+    // #226: the `href` is a quoted attribute value — a literal `\n` inside
+    // it would be collapsed to a space by XML attribute-value
+    // normalisation, silently changing the URL. Still passes the
+    // http(s)-prefix check, so it's a real (if contrived) path here.
+    let geom = GeomAttribution::new("note").link("https://example.com/a\nb");
+    let svg = GGPlot::new(df())
+        .aes(Aes::new())
+        .geom_sf()
+        .annotation_attribution_with(geom)
+        .render_svg_native_with_size(300, 300)
+        .unwrap();
+    assert!(
+        svg.contains("href=\"https://example.com/a&#10;b\""),
+        "{svg}"
+    );
+    assert!(!svg.contains('\n'), "{svg}");
+}
+
+#[test]
 fn runs_mix_linked_and_plain_segments_in_one_text_element() {
     let geom = GeomAttribution::new("").runs(vec![
         ("© ", None),
