@@ -874,6 +874,8 @@ fn text_and_label() {
                 wrap_width: None,
                 line_height: 1.2,
                 fontface: FontFace::Plain,
+                bg_colour: None,
+                bg_r: 0.0,
             }),
         "text_with",
     );

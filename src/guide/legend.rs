@@ -237,6 +237,8 @@ fn draw_discrete_legend_at(
                 angle: 0.0,
                 family: legend_family,
                 face: theme.legend_title.face,
+                bg_colour: None,
+                bg_r: 0.0,
             },
         )?;
         theme.legend_title.size + 4.0
@@ -328,6 +330,8 @@ fn draw_discrete_legend_at(
                 angle: 0.0,
                 family: label_family,
                 face: theme.legend_text.face,
+                bg_colour: None,
+                bg_r: 0.0,
             },
         )?;
         if is_horizontal {
@@ -382,6 +386,8 @@ fn draw_continuous_legend_at(
                 angle: 0.0,
                 family: cont_family,
                 face: theme.legend_title.face,
+                bg_colour: None,
+                bg_r: 0.0,
             },
         )?;
         theme.legend_title.size + 4.0
@@ -488,6 +494,8 @@ fn draw_continuous_legend_at(
                 angle: 0.0,
                 family: tick_family,
                 face: theme.legend_text.face,
+                bg_colour: None,
+                bg_r: 0.0,
             },
         )?;
     }
@@ -1088,6 +1096,8 @@ fn draw_discrete_legend_grid(
                 angle: 0.0,
                 family: legend_family,
                 face: theme.legend_title.face,
+                bg_colour: None,
+                bg_r: 0.0,
             },
         )?;
         theme.legend_title.size + 4.0
@@ -1154,6 +1164,8 @@ fn draw_discrete_legend_grid(
                 angle: 0.0,
                 family: label_family,
                 face: theme.legend_text.face,
+                bg_colour: None,
+                bg_r: 0.0,
             },
             entry.label_override.as_deref().map(|_| label.as_str()),
         )?;
@@ -1178,6 +1190,8 @@ fn draw_discrete_legend_grid(
                 angle: 0.0,
                 family: label_family,
                 face: theme.legend_text.face,
+                bg_colour: None,
+                bg_r: 0.0,
             },
         )?;
     }

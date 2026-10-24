@@ -381,6 +381,8 @@ fn draw_sf_text(
             angle: 0.0,
             family: font.clone(),
             face: FontFace::Plain,
+            bg_colour: None,
+            bg_r: 0.0,
         };
         if let Some((halo_color, r)) = style.halo {
             const DIRS: usize = 8;

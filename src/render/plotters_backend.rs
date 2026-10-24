@@ -452,67 +452,48 @@ impl<'a, DB: DrawingBackend> DrawBackend for PlottersAdapter<'a, DB> {
             crate::render::backend::FontFace::Bold => FontStyle::Bold,
             crate::render::backend::FontFace::Italic => FontStyle::Italic,
         };
-        let font = (family, style.size).into_font().style(font_style);
-
-        let pos_adj = match style.anchor {
-            TextAnchor::Start => plotters::style::text_anchor::Pos::new(
-                plotters::style::text_anchor::HPos::Left,
-                plotters::style::text_anchor::VPos::Center,
-            ),
-            TextAnchor::Middle => plotters::style::text_anchor::Pos::new(
-                plotters::style::text_anchor::HPos::Center,
-                plotters::style::text_anchor::VPos::Center,
-            ),
-            TextAnchor::End => plotters::style::text_anchor::Pos::new(
-                plotters::style::text_anchor::HPos::Right,
-                plotters::style::text_anchor::VPos::Center,
-            ),
-        };
-
         let angle_i = style.angle.round() as i32;
-        if angle_i != 0 {
-            let (font_transform, rotated_pos) = match angle_i.rem_euclid(360) {
-                80..=100 => (
-                    FontTransform::Rotate90,
-                    plotters::style::text_anchor::Pos::new(
-                        plotters::style::text_anchor::HPos::Center,
-                        plotters::style::text_anchor::VPos::Center,
-                    ),
-                ),
-                170..=190 => (
-                    FontTransform::Rotate180,
-                    plotters::style::text_anchor::Pos::new(
-                        plotters::style::text_anchor::HPos::Center,
-                        plotters::style::text_anchor::VPos::Center,
-                    ),
-                ),
-                // 270° or -90° or 45° approximation (common ggplot2 x-axis rotation)
-                _ => (
-                    FontTransform::Rotate270,
-                    plotters::style::text_anchor::Pos::new(
-                        plotters::style::text_anchor::HPos::Right,
-                        plotters::style::text_anchor::VPos::Center,
-                    ),
-                ),
+
+        // #229: a text halo — this backend has no native stroke-text, so
+        // approximate the SVG `stroke`/`paint-order="stroke"` outline by
+        // drawing the same text at 8 offsets around the radius, in
+        // `bg_colour`, before the normal pass. `bg_colour: None` (the
+        // default) skips this entirely, so existing output is unchanged.
+        if let Some(bg) = style.bg_colour {
+            let r = if style.bg_r.is_finite() {
+                style.bg_r
+            } else {
+                0.0
             };
-
-            let text_style = plotters::prelude::TextStyle::from((family, style.size).into_font())
-                .color(&color)
-                .transform(font_transform)
-                .pos(rotated_pos);
-
-            self.area
-                .draw_text(text, &text_style, (pos.0 as i32, pos.1 as i32))
-                .map_err(map_err)?;
-        } else {
-            let text_style = plotters::prelude::TextStyle::from(font)
-                .color(&color)
-                .pos(pos_adj);
-            self.area
-                .draw_text(text, &text_style, (pos.0 as i32, pos.1 as i32))
-                .map_err(map_err)?;
+            if r > 0.0 {
+                let halo_color = to_rgba(bg, 1.0);
+                for i in 0..8 {
+                    let theta = i as f64 * std::f64::consts::FRAC_PI_4;
+                    let offset = (pos.0 + r * theta.cos(), pos.1 + r * theta.sin());
+                    self.draw_text_pass(
+                        text,
+                        offset,
+                        style.anchor.clone(),
+                        family,
+                        style.size,
+                        font_style,
+                        angle_i,
+                        halo_color,
+                    )?;
+                }
+            }
         }
 
+        self.draw_text_pass(
+            text,
+            pos,
+            style.anchor.clone(),
+            family,
+            style.size,
+            font_style,
+            angle_i,
+            color,
+        )?;
         Ok(())
     }
 
@@ -725,5 +706,90 @@ impl<'a, DB: DrawingBackend> DrawBackend for PlottersAdapter<'a, DB> {
 
     fn total_area(&self) -> Rect {
         self.total_area.clone()
+    }
+}
+
+impl<'a, DB: DrawingBackend> PlottersAdapter<'a, DB> {
+    /// One pass of `text` in `color` at `pos` — factored out of
+    /// `draw_text` so #229's halo can run it several times (once per
+    /// offset, in `bg_colour`) before the normal pass.
+    ///
+    /// (Kept in its own inherent `impl` block: a trait `impl` can't be
+    /// split across two blocks, so this can't live inside
+    /// `impl DrawBackend for PlottersAdapter` alongside the trait's own
+    /// methods.)
+    #[allow(clippy::too_many_arguments)]
+    fn draw_text_pass(
+        &mut self,
+        text: &str,
+        pos: (f64, f64),
+        anchor: TextAnchor,
+        family: &str,
+        size: f64,
+        font_style: FontStyle,
+        angle_i: i32,
+        color: RGBAColor,
+    ) -> Result<(), RenderError> {
+        let font = (family, size).into_font().style(font_style);
+
+        let pos_adj = match anchor {
+            TextAnchor::Start => plotters::style::text_anchor::Pos::new(
+                plotters::style::text_anchor::HPos::Left,
+                plotters::style::text_anchor::VPos::Center,
+            ),
+            TextAnchor::Middle => plotters::style::text_anchor::Pos::new(
+                plotters::style::text_anchor::HPos::Center,
+                plotters::style::text_anchor::VPos::Center,
+            ),
+            TextAnchor::End => plotters::style::text_anchor::Pos::new(
+                plotters::style::text_anchor::HPos::Right,
+                plotters::style::text_anchor::VPos::Center,
+            ),
+        };
+
+        if angle_i != 0 {
+            let (font_transform, rotated_pos) = match angle_i.rem_euclid(360) {
+                80..=100 => (
+                    FontTransform::Rotate90,
+                    plotters::style::text_anchor::Pos::new(
+                        plotters::style::text_anchor::HPos::Center,
+                        plotters::style::text_anchor::VPos::Center,
+                    ),
+                ),
+                170..=190 => (
+                    FontTransform::Rotate180,
+                    plotters::style::text_anchor::Pos::new(
+                        plotters::style::text_anchor::HPos::Center,
+                        plotters::style::text_anchor::VPos::Center,
+                    ),
+                ),
+                // 270° or -90° or 45° approximation (common ggplot2 x-axis rotation)
+                _ => (
+                    FontTransform::Rotate270,
+                    plotters::style::text_anchor::Pos::new(
+                        plotters::style::text_anchor::HPos::Right,
+                        plotters::style::text_anchor::VPos::Center,
+                    ),
+                ),
+            };
+
+            let text_style = plotters::prelude::TextStyle::from((family, size).into_font())
+                .color(&color)
+                .transform(font_transform)
+                .pos(rotated_pos);
+
+            self.area
+                .draw_text(text, &text_style, (pos.0 as i32, pos.1 as i32))
+                .map_err(map_err)?;
+        } else {
+            let text_style = plotters::prelude::TextStyle::from(font)
+                .color(&color)
+                .pos(pos_adj);
+            self.area
+                .draw_text(text, &text_style, (pos.0 as i32, pos.1 as i32))
+                .map_err(map_err)?;
+        }
+
+        Ok(())
     }
 }

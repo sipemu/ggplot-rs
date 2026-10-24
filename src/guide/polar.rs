@@ -88,6 +88,8 @@ pub fn draw_radar_guides(
                     angle: 0.0,
                     family: family(&theme.axis_text_x.family),
                     face: theme.axis_text_x.face,
+                    bg_colour: None,
+                    bg_r: 0.0,
                 },
             )?;
         }
@@ -110,6 +112,8 @@ pub fn draw_radar_guides(
                     angle: 0.0,
                     family: family(&theme.axis_text_y.family),
                     face: theme.axis_text_y.face,
+                    bg_colour: None,
+                    bg_r: 0.0,
                 },
             )?;
         }

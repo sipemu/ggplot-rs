@@ -138,6 +138,8 @@ impl Geom for GeomBracket {
                             angle: 0.0,
                             family: super::resolve_font_family("", theme),
                             face: FontFace::Plain,
+                            bg_colour: None,
+                            bg_r: 0.0,
                         },
                     )?;
                 }

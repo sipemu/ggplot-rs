@@ -38,6 +38,15 @@ pub struct GeomText {
     /// and enum as [`crate::geom::repel::GeomTextRepel::fontface`]. A row's
     /// mapped `Aes::fontface` (if valid) wins over this fixed setting.
     pub fontface: FontFace,
+    /// Text halo colour (#229, ggrepel's `bg.colour`/`bg.r`; `shadowtext`'s
+    /// `bg.col`/`bg.r`): an outline in this colour behind the text, so a
+    /// label placed directly on a line or a busy background stays legible
+    /// without a box. `None` (the default) draws no halo — set together
+    /// with [`bg_r`](Self::bg_r), which is `0.0` (no halo) until set.
+    pub bg_colour: Option<(u8, u8, u8)>,
+    /// Text halo radius in px (#229, ggrepel's `bg.r`). Only matters once
+    /// [`bg_colour`](Self::bg_colour) is set.
+    pub bg_r: f64,
 }
 
 impl GeomText {
@@ -46,6 +55,21 @@ impl GeomText {
         self.fontface = face;
         self
     }
+
+    /// Text halo colour (#229, ggrepel's `bg.colour`) — set
+    /// [`bg_r`](Self::bg_r) too, or the halo has zero width and draws
+    /// nothing.
+    pub fn bg_colour(mut self, colour: (u8, u8, u8)) -> Self {
+        self.bg_colour = Some(colour);
+        self
+    }
+
+    /// Text halo radius in px (#229, ggrepel's `bg.r`).
+    pub fn bg_r(mut self, r: f64) -> Self {
+        self.bg_r = r;
+        self
+    }
+
     pub fn with_hjust(mut self, hjust: f64) -> Self {
         self.hjust = hjust;
         self
@@ -92,6 +116,8 @@ impl Default for GeomText {
             wrap_width: None,
             line_height: 1.2,
             fontface: FontFace::Plain,
+            bg_colour: None,
+            bg_r: 0.0,
         }
     }
 }
@@ -192,6 +218,8 @@ impl Geom for GeomText {
                         angle: 0.0,
                         family: family.clone(),
                         face,
+                        bg_colour: self.bg_colour,
+                        bg_r: self.bg_r,
                     },
                 )?;
             }
@@ -370,21 +398,47 @@ impl Geom for GeomLabel {
                 .unwrap_or(self.fontface);
 
             let text = label_col[i].to_group_key();
-            // Unwrapped (pre-#176, the default) keeps the exact old box width:
-            // a crude char-count estimate, not the real `text_width` metric
-            // `with_wrap` uses — changing it would shift every existing
-            // geom_label()'s box width with no opt-in. Wrapping is new, so it
-            // has no old behaviour to preserve: it sizes the box to fit the
-            // wrapped lines using the real metric.
+            // #229: an embedded `"\n"` is a forced line break (ggplot2's
+            // `geom_label` behaviour) — split on it *before* any
+            // width-based wrapping, so `"a\nb"` always draws two lines
+            // inside one box, never one box with a literal raw newline
+            // sitting unbroken inside the `<text>` (SVG has no visual
+            // effect for that; most renderers just collapse it to
+            // whitespace). `str::lines()` handles "\r\n" too; an empty
+            // label keeps the single empty line the old code already drew.
+            let text_len = text.len();
+            let paragraphs: Vec<String> = if text.is_empty() {
+                vec![text]
+            } else {
+                text.lines().map(str::to_string).collect()
+            };
             let (lines, half_w) = match self.wrap_width {
                 Some(w) => {
-                    let lines = wrap_text(&text, w, self.size);
+                    let lines = paragraphs
+                        .iter()
+                        .flat_map(|p| wrap_text(p, w, self.size))
+                        .collect::<Vec<_>>();
                     let half_w = wrapped_block_width(&lines, self.size) / 2.0 + self.padding;
                     (lines, half_w)
                 }
+                // No `wrap_width` and no forced break (the overwhelming
+                // common case): keep the exact pre-#176 box width, a
+                // crude char-count estimate, not the real `text_width`
+                // metric `with_wrap` uses below — changing it would shift
+                // every existing single-line `geom_label()`'s box width
+                // with no opt-in.
+                None if paragraphs.len() <= 1 => {
+                    let half_w = text_len as f64 * self.size * 0.6 / 2.0 + self.padding;
+                    (paragraphs, half_w)
+                }
+                // A forced multi-line label with no explicit wrap: there's
+                // no old behaviour to preserve (a `"\n"` here used to
+                // produce one wrongly-sized box with unbroken text, a
+                // bug — see above), so size the box to fit every line
+                // with the real metric, like the `Some(w)` branch.
                 None => {
-                    let half_w = text.len() as f64 * self.size * 0.6 / 2.0 + self.padding;
-                    (vec![text], half_w)
+                    let half_w = wrapped_block_width(&paragraphs, self.size) / 2.0 + self.padding;
+                    (paragraphs, half_w)
                 }
             };
             let lh = self.size * self.line_height;
@@ -443,6 +497,8 @@ impl Geom for GeomLabel {
                         angle: 0.0,
                         family: family.clone(),
                         face,
+                        bg_colour: None,
+                        bg_r: 0.0,
                     },
                 )?;
             }

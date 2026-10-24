@@ -195,6 +195,8 @@ impl Geom for GeomBivariateLegend {
                     angle: 0.0,
                     family: font.clone(),
                     face: crate::render::backend::FontFace::Plain,
+                    bg_colour: None,
+                    bg_r: 0.0,
                 },
             )?;
         }
@@ -209,6 +211,8 @@ impl Geom for GeomBivariateLegend {
                     angle: 90.0,
                     family: font,
                     face: crate::render::backend::FontFace::Plain,
+                    bg_colour: None,
+                    bg_r: 0.0,
                 },
             )?;
         }

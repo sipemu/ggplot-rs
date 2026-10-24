@@ -882,6 +882,8 @@ fn text_style(el: &crate::theme::elements::ElementText, anchor: TextAnchor) -> T
         angle: 0.0,
         family: (!el.family.is_empty()).then(|| el.family.clone()),
         face: el.face,
+        bg_colour: None,
+        bg_r: 0.0,
     }
 }
 
