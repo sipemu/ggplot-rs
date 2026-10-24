@@ -44,6 +44,25 @@ All notable changes to this project are documented here. The format follows
   `f64` fields); `PartialEq`/`Debug`/`Clone`/`Copy` are unaffected, so this
   only matters to code that put `SfProjection` in an `Eq`-bound generic
   (none in this crate).
+- `geom_sf_text()`/`geom_sf_label()` (+ `_with`): labels placed inside
+  `geom_sf` polygons, ggplot2's `geom_sf_text`/`geom_sf_label`. An
+  anchor is either the ring's centroid or its pole of inaccessibility
+  (`SfLabelAnchor::Polylabel`, Mapbox's algorithm — the inside point
+  farthest from the outline, so a C-shaped region's label stays in the
+  spine rather than the centroid, which can fall outside; default).
+  `.check_overlap(true)` drops a lower-priority label (the mapped `size`
+  aesthetic if present, else the region's screen area, larger first)
+  that would collide with one already placed or fall outside the panel —
+  `geom_sf_text`'s own `StatSf` trains the X/Y scales on the labelled
+  geometry's extent even with no `geom_sf` layer sharing the plot, like
+  ggplot2's. `.halo(color, r)` draws a shadowtext-style halo (`r` px out
+  in 8 directions, in `color`, behind the label) for legibility over a
+  busy fill — a backend-agnostic approximation built from plain
+  `draw_text` calls, so it needs no `DrawBackend`/`TextStyle` changes and
+  works identically on the SVG/pixel/plotters backends. `geom_sf_label`
+  additionally draws a background box, like `geom_label`.
+  anofox-visualization's own label placement (`map/labels.rs`) can
+  retire onto this (DataZooDE/anofox-visualization#318, #179).
 
 ## [0.26.0] — 2026-10-24
 

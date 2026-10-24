@@ -827,6 +827,30 @@ impl GGPlot {
         self.add_geom_with(geom)
     }
 
+    /// Labels placed inside `geom_sf` polygons (feature `sf`): `label`
+    /// aesthetic, `geometry` column — ggplot2's `geom_sf_text`.
+    #[cfg(feature = "sf")]
+    pub fn geom_sf_text(self) -> Self {
+        self.add_geom(crate::geom::sf_text::GeomSfText::default())
+    }
+
+    #[cfg(feature = "sf")]
+    pub fn geom_sf_text_with(self, geom: crate::geom::sf_text::GeomSfText) -> Self {
+        self.add_geom_with(geom)
+    }
+
+    /// Like [`geom_sf_text`](Self::geom_sf_text), on a background box —
+    /// ggplot2's `geom_sf_label`.
+    #[cfg(feature = "sf")]
+    pub fn geom_sf_label(self) -> Self {
+        self.add_geom(crate::geom::sf_text::GeomSfLabel::default())
+    }
+
+    #[cfg(feature = "sf")]
+    pub fn geom_sf_label_with(self, geom: crate::geom::sf_text::GeomSfLabel) -> Self {
+        self.add_geom_with(geom)
+    }
+
     pub fn geom_curve(self) -> Self {
         self.add_geom(GeomCurve::default())
     }
