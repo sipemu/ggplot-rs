@@ -5,6 +5,10 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.30.3] — 2026-10-25
+
+`GeomAttribution` holds several stacked lines, each with its own runs (`.line(runs)`, #250), for multi-line data licences such as BKG's. No API breaks.
+
 ### Added
 - **`GeomAttribution` (`annotation_attribution`) can hold several stacked
   lines, each its own run list** (#250, DataZooDE/anofox-visualization#420
