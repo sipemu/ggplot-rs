@@ -1773,3 +1773,46 @@ mod group_mergeable_legends_tests {
         assert_eq!(groups, vec![vec![Aesthetic::Color]]);
     }
 }
+
+/// #211: direct unit coverage for the two private helpers
+/// `draw_continuous_legend_at`'s vertical/horizontal split relies on —
+/// exercised indirectly by every colourbar-drawing integration test
+/// already, but called here directly too so their own branches/math
+/// are pinned regardless of how the compiler happens to inline them.
+#[cfg(test)]
+mod continuous_bar_dims_tests {
+    use super::*;
+
+    #[test]
+    fn dims_swap_between_vertical_and_horizontal() {
+        let theme = Theme::default();
+        let (w, h) = continuous_bar_dims(&theme, false);
+        assert_eq!(w, theme.legend_key_width);
+        assert_eq!(h, theme.legend_key_height * 8.0);
+
+        let (w, h) = continuous_bar_dims(&theme, true);
+        assert_eq!(w, theme.legend_key_height * 8.0);
+        assert_eq!(h, theme.legend_key_width);
+    }
+
+    #[test]
+    fn horizontal_bar_height_adds_a_title_line_only_when_there_is_a_title() {
+        let theme = Theme::default();
+        let without_title = continuous_horizontal_bar_height(&theme, false);
+        let with_title = continuous_horizontal_bar_height(&theme, true);
+        assert!(with_title > without_title);
+        assert!(((with_title - without_title) - (theme.legend_title.size + 4.0)).abs() < 1e-9);
+
+        // Matches `continuous_bar_dims`'s own horizontal thickness plus
+        // the fixed tick/spacing/label overhead — not just a positive
+        // number, the exact formula `draw_continuous_legend_at` relies
+        // on to never disagree with what `plot.rs` reserves for it.
+        let (_, thickness) = continuous_bar_dims(&theme, true);
+        let tick_len = 3.0;
+        let label_line = theme.legend_text.size + 4.0;
+        assert!(
+            (without_title - (thickness + tick_len + theme.legend_spacing + label_line)).abs()
+                < 1e-9
+        );
+    }
+}
