@@ -69,6 +69,16 @@ pub struct SvgBackend {
     /// non-decreasing (a group's slot is the body length when its first
     /// mark arrives, and the body only ever grows at the end).
     group_slots: Vec<(usize, usize)>,
+    /// #255: accessible name text ([`GGPlot::svg_title`](crate::plot::GGPlot::svg_title)),
+    /// written as a `<title id="{id_prefix}-title">` first child of the
+    /// root `<svg>` plus `role="img"`/`aria-labelledby`. Default `None`;
+    /// byte-identical output when not set.
+    svg_title: Option<String>,
+    /// #255: accessible description text ([`GGPlot::svg_desc`](crate::plot::GGPlot::svg_desc)),
+    /// written as a `<desc id="{id_prefix}-desc">` first child of the root
+    /// `<svg>` (after `<title>`, if any) plus `role="img"`/`aria-describedby`.
+    /// Default `None`; byte-identical output when not set.
+    svg_desc: Option<String>,
 }
 
 /// Source for [`SvgBackend::id_prefix`] — process-wide, so every backend
@@ -109,6 +119,8 @@ impl SvgBackend {
             layer_attrs: Vec::new(),
             groups: Vec::new(),
             group_slots: Vec::new(),
+            svg_title: None,
+            svg_desc: None,
         }
     }
 
@@ -270,6 +282,22 @@ impl SvgBackend {
     /// Omit the root `data-plot` attribute (composite pages).
     pub(crate) fn without_plot_attr(&mut self) {
         self.plot_attr = false;
+    }
+
+    /// #255: set the root `<svg>`'s accessible name text
+    /// ([`GGPlot::svg_title`](crate::plot::GGPlot::svg_title)). `None`
+    /// (the default) omits the `<title>` child and the `role`/
+    /// `aria-labelledby` attributes entirely.
+    pub(crate) fn set_svg_title(&mut self, title: Option<String>) {
+        self.svg_title = title;
+    }
+
+    /// #255: set the root `<svg>`'s accessible description text
+    /// ([`GGPlot::svg_desc`](crate::plot::GGPlot::svg_desc)). `None` (the
+    /// default) omits the `<desc>` child and the `role`/
+    /// `aria-describedby` attributes entirely.
+    pub(crate) fn set_svg_desc(&mut self, desc: Option<String>) {
+        self.svg_desc = desc;
     }
 
     /// Append pre-rendered, already-escaped SVG markup (e.g. a nested plot
@@ -549,7 +577,46 @@ impl SvgBackend {
         } else {
             String::new()
         };
-        format!("<svg {prefix}width=\"{w}\" height=\"{h}\" viewBox=\"0 0 {w} {h}\"{plot}{extra}>")
+        // #255: `role="img"` plus `aria-labelledby`/`aria-describedby`
+        // pointing at the `<title>`/`<desc>` children `access_children`
+        // writes as the root's first children — only when a title/desc
+        // was actually set, so default output stays byte-identical.
+        let mut access = String::new();
+        if self.svg_title.is_some() || self.svg_desc.is_some() {
+            access.push_str(" role=\"img\"");
+        }
+        if self.svg_title.is_some() {
+            access.push_str(&format!(" aria-labelledby=\"{}-title\"", self.id_prefix));
+        }
+        if self.svg_desc.is_some() {
+            access.push_str(&format!(" aria-describedby=\"{}-desc\"", self.id_prefix));
+        }
+        format!(
+            "<svg {prefix}width=\"{w}\" height=\"{h}\" viewBox=\"0 0 {w} {h}\"{plot}{access}{extra}>"
+        )
+    }
+
+    /// #255: `<title>`/`<desc>` markup for the root `<svg>`'s first
+    /// children (SVG accessibility practice puts them before any other
+    /// content), ids matching [`root_open`]'s `aria-labelledby`/
+    /// `aria-describedby`. Empty when neither was set.
+    fn access_children(&self) -> String {
+        let mut out = String::new();
+        if let Some(t) = &self.svg_title {
+            out.push_str(&format!(
+                "<title id=\"{}-title\">{}</title>",
+                self.id_prefix,
+                escape(t)
+            ));
+        }
+        if let Some(d) = &self.svg_desc {
+            out.push_str(&format!(
+                "<desc id=\"{}-desc\">{}</desc>",
+                self.id_prefix,
+                escape(d)
+            ));
+        }
+        out
     }
 
     /// Wrap the accumulated elements in a complete `<svg>` document. The
@@ -558,8 +625,9 @@ impl SvgBackend {
     pub fn finish(mut self) -> String {
         self.flush_groups();
         let open = self.root_open("xmlns=\"http://www.w3.org/2000/svg\" ");
+        let access = self.access_children();
         let defs = self.pattern_defs();
-        format!("{open}{defs}{}</svg>", self.body)
+        format!("{open}{access}{defs}{}</svg>", self.body)
     }
 
     /// Wrap the accumulated elements in a *nested* `<svg>` positioned at
@@ -569,8 +637,9 @@ impl SvgBackend {
     pub fn finish_fragment(mut self, x: f64, y: f64) -> String {
         self.flush_groups();
         let open = self.root_open(&format!("x=\"{}\" y=\"{}\" ", num(x), num(y)));
+        let access = self.access_children();
         let defs = self.pattern_defs();
-        format!("{open}{defs}{}</svg>", self.body)
+        format!("{open}{access}{defs}{}</svg>", self.body)
     }
 
     /// Emit one `<polyline>` for an already-finite run of points — see
