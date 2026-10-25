@@ -133,6 +133,16 @@ pub struct GGPlot {
     /// `(layer index, name, value)`, applied by wrapping that layer's geom
     /// at build time.
     pub(crate) layer_svg_attrs: Vec<(usize, String, String)>,
+    /// #255: accessible name for the rendered root `<svg>`
+    /// ([`svg_title`](Self::svg_title)) — a `<title>` first child plus
+    /// `role="img"`/`aria-labelledby`. Default `None`; byte-identical
+    /// output when not set.
+    pub(crate) svg_title: Option<String>,
+    /// #255: accessible description for the rendered root `<svg>`
+    /// ([`svg_desc`](Self::svg_desc)) — a `<desc>` first child plus
+    /// `role="img"`/`aria-describedby`. Default `None`; byte-identical
+    /// output when not set.
+    pub(crate) svg_desc: Option<String>,
 }
 
 impl GGPlot {
@@ -162,6 +172,8 @@ impl GGPlot {
             svg_warnings_attr: false,
             svg_formatted_values: false,
             layer_svg_attrs: Vec::new(),
+            svg_title: None,
+            svg_desc: None,
         }
     }
 
@@ -2001,6 +2013,32 @@ impl GGPlot {
         self
     }
 
+    /// Give the rendered root `<svg>` an accessible name: a `<title>`
+    /// written (escaped) as its first child, plus `role="img"` and
+    /// `aria-labelledby` pointing at that `<title>`'s id — the SVG
+    /// accessibility practice of naming an image via `role="img"` +
+    /// `aria-labelledby`/`-describedby` rather than a bare `<title>`,
+    /// which some screen readers treat as a tooltip instead of a name.
+    /// Pairs with [`svg_desc`](Self::svg_desc) for a longer description;
+    /// either may be set alone. Default off (`None`), so output stays
+    /// byte-identical when this is never called.
+    pub fn svg_title(mut self, title: impl Into<String>) -> Self {
+        self.svg_title = Some(title.into());
+        self
+    }
+
+    /// Give the rendered root `<svg>` an accessible description: a
+    /// `<desc>` written (escaped) as a first child (after `<title>`, if
+    /// [`svg_title`](Self::svg_title) is also set), plus `role="img"` and
+    /// `aria-describedby` pointing at that `<desc>`'s id — e.g. a data
+    /// summary like "4 regions; highest Bavaria (5.2); 1 without data".
+    /// Default off (`None`), so output stays byte-identical when this is
+    /// never called.
+    pub fn svg_desc(mut self, desc: impl Into<String>) -> Self {
+        self.svg_desc = Some(desc.into());
+        self
+    }
+
     /// Transform the coordinate space at draw time (R's `coord_trans`) — stats are
     /// computed on raw data but drawn on non-linear axes. Pass a per-axis
     /// [`ScaleTransform`] (e.g. `Some(ScaleTransform::Log10)`), `None` to leave an
@@ -2485,10 +2523,14 @@ impl GGPlot {
         let root_attrs = self.root_attrs.clone();
         let svg_warnings_attr = self.svg_warnings_attr;
         let svg_formatted_values = self.svg_formatted_values;
+        let svg_title = self.svg_title.clone();
+        let svg_desc = self.svg_desc.clone();
         let (built, layout) = self.prepare(w, h)?;
         let pa = layout.plot_area.clone();
         let mut backend = crate::render::svg_backend::SvgBackend::new(w, h, pa.clone());
         backend.set_formatted_values(svg_formatted_values);
+        backend.set_svg_title(svg_title.clone());
+        backend.set_svg_desc(svg_desc.clone());
         let existing_root_attrs = if svg_root_data {
             let attrs = crate::render::svg_backend::root_data_attrs(&built);
             backend.set_root_attrs(attrs.clone());
@@ -2509,6 +2551,19 @@ impl GGPlot {
         let mut reserved = existing_root_attrs;
         if svg_warnings_attr {
             reserved.push(("data-warnings".to_string(), String::new()));
+        }
+        // #255: `role`/`aria-labelledby`/`aria-describedby` are written
+        // directly by `SvgBackend::root_open` when a title/desc was set —
+        // reserve them so a colliding `svg_attr` call is dropped with a
+        // warning instead of duplicating the attribute.
+        if svg_title.is_some() || svg_desc.is_some() {
+            reserved.push(("role".to_string(), String::new()));
+        }
+        if svg_title.is_some() {
+            reserved.push(("aria-labelledby".to_string(), String::new()));
+        }
+        if svg_desc.is_some() {
+            reserved.push(("aria-describedby".to_string(), String::new()));
         }
         let extra = crate::render::svg_backend::validate_root_attrs(
             &root_attrs,
