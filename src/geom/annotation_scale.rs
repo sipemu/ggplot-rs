@@ -18,6 +18,7 @@ use crate::data::{DataFrame, Value};
 use crate::position::identity::PositionIdentity;
 use crate::position::Position;
 use crate::render::backend::{DrawBackend, LineStyle, Linetype, TextAnchor, TextStyle};
+use crate::render::text::{text_width, truncate_to_width, wrap_text};
 use crate::render::RenderError;
 use crate::scale::ScaleSet;
 use crate::stat::identity::StatIdentity;
@@ -25,6 +26,12 @@ use crate::stat::Stat;
 use crate::theme::Theme;
 
 use super::{Geom, GeomParams};
+
+/// One attribution run: text, plus an optional `http(s)` link href — see
+/// [`GeomAttribution::runs`].
+type AttributionRun = (String, Option<String>);
+/// One attribution line's run list — see [`GeomAttribution::runs`].
+type AttributionRow = Vec<AttributionRun>;
 
 /// Which panel corner a scale bar / attribution sits in.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
@@ -34,6 +41,21 @@ pub enum MapCorner {
     BottomRight,
     TopLeft,
     TopRight,
+}
+
+/// What [`GeomAttribution::fit`] does once shrinking a line's text size
+/// down to its floor still isn't enough to keep it inside the panel
+/// (#258).
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
+pub enum AttributionOverflow {
+    /// Truncate the line with a trailing "…" (ggplot-rs's own
+    /// [`crate::render::text::truncate_to_width`], same as a legend's
+    /// label-truncation fallback, #159).
+    #[default]
+    Ellipsis,
+    /// Wrap the remainder onto additional physical lines, pushing any
+    /// further attribution lines further from the corner's edge.
+    Wrap,
 }
 
 /// A metric scale bar (ggspatial's `annotation_scale()`): a "nice" 1/2/5 ×
@@ -157,10 +179,17 @@ pub struct GeomAttribution {
     /// Linked segments overriding `text` — see [`Self::link`]/[`Self::runs`].
     /// `None`: draw `text` plain, as before #196. This is row 0 — the line
     /// closest to the corner's edge.
-    pub runs: Option<Vec<(String, Option<String>)>>,
+    pub runs: Option<Vec<AttributionRun>>,
     /// Additional stacked lines beyond row 0, each its own run list — see
     /// [`Self::line`] (#250).
-    pub lines: Vec<Vec<(String, Option<String>)>>,
+    pub lines: Vec<AttributionRow>,
+    /// Fit-to-panel floor size in px, or `None` to disable fitting (the
+    /// default, byte-identical to before #258) — see [`Self::fit`].
+    pub fit_min_text_size: Option<f64>,
+    /// What to do once shrinking alone can't fit a line — see
+    /// [`Self::fit_overflow`]. Only consulted when `fit_min_text_size` is
+    /// `Some`.
+    pub fit_overflow: AttributionOverflow,
 }
 
 impl GeomAttribution {
@@ -172,6 +201,8 @@ impl GeomAttribution {
             text_size: 7.5,
             runs: None,
             lines: Vec::new(),
+            fit_min_text_size: None,
+            fit_overflow: AttributionOverflow::Ellipsis,
         }
     }
 
@@ -226,6 +257,74 @@ impl GeomAttribution {
         );
         self
     }
+
+    /// Fit each attribution line inside the final panel width: once the
+    /// panel is narrow enough that a line would overflow at `text_size`
+    /// (e.g. a `Right` legend eating into the panel), shrink that line's
+    /// text size down to `min_size`, then — if it still doesn't fit —
+    /// truncate or wrap it (see [`Self::fit_overflow`]). Default: `None`
+    /// (fitting off), which keeps output byte-identical to before #258;
+    /// call this to opt in. `min_size` is clamped to `text_size` itself
+    /// (shrinking never enlarges a line) and to a sane positive floor.
+    pub fn fit(mut self, min_size: f64) -> Self {
+        self.fit_min_text_size = Some(min_size.max(0.1));
+        self
+    }
+
+    /// Once [`Self::fit`]'s shrinking alone isn't enough, choose
+    /// truncate-with-ellipsis (the default) or wrap onto additional
+    /// physical lines (#258). Has no effect unless `.fit(..)` was called.
+    pub fn fit_overflow(mut self, overflow: AttributionOverflow) -> Self {
+        self.fit_overflow = overflow;
+        self
+    }
+}
+
+/// Shrinks `row`'s text size toward `min_size` (clamped to `base_size`) so
+/// its concatenated text fits `max_width` px, then truncates (ellipsis) or
+/// wraps once shrinking alone isn't enough — see [`GeomAttribution::fit`]
+/// (#258). Returns the text size to draw at, and the physical lines to
+/// draw: almost always one line (`row` unchanged) — more than one only
+/// when `overflow` is [`AttributionOverflow::Wrap`] and the line still
+/// doesn't fit at `min_size`. Mangling a row into a truncated/wrapped
+/// plain line drops its per-run link structure (the href no longer
+/// matches a shortened substring), so that only happens as a last resort.
+fn fit_row(
+    row: &[AttributionRun],
+    base_size: f64,
+    min_size: f64,
+    max_width: f64,
+    overflow: AttributionOverflow,
+) -> (f64, Vec<AttributionRow>) {
+    let min_size = min_size.min(base_size).max(0.1);
+    if !(max_width.is_finite()) || max_width <= 0.0 {
+        return (base_size, vec![row.to_vec()]);
+    }
+    let concat: String = row.iter().map(|(t, _)| t.as_str()).collect();
+    let full_width = text_width(&concat, base_size);
+    if full_width <= max_width {
+        return (base_size, vec![row.to_vec()]);
+    }
+    // `text_width` scales linearly with size, so this lands close to the
+    // exact fitting size in one step; the `<=` check below covers any
+    // rounding slack.
+    let shrunk_size = (base_size * max_width / full_width).max(min_size);
+    if text_width(&concat, shrunk_size) <= max_width {
+        return (shrunk_size, vec![row.to_vec()]);
+    }
+    match overflow {
+        AttributionOverflow::Ellipsis => {
+            let truncated = truncate_to_width(&concat, max_width, min_size).unwrap_or(concat);
+            (min_size, vec![vec![(truncated, None)]])
+        }
+        AttributionOverflow::Wrap => {
+            let lines = wrap_text(&concat, max_width, min_size);
+            (
+                min_size,
+                lines.into_iter().map(|l| vec![(l, None)]).collect(),
+            )
+        }
+    }
 }
 
 /// `url` is an absolute `http://`/`https://` URL (case-insensitive scheme),
@@ -249,7 +348,7 @@ impl Geom for GeomAttribution {
         // `runs` (set by `.link()`/`.runs()`) overrides plain `text` for
         // row 0; a non-http(s) href is dropped — a warning, not a
         // silently-wrong link (#196).
-        let validate_runs = |backend: &mut dyn DrawBackend, runs: &[(String, Option<String>)]| {
+        let validate_runs = |backend: &mut dyn DrawBackend, runs: &[AttributionRun]| {
             runs.iter()
                 .map(|(t, u)| match u {
                     Some(url) if !is_http_url(url) => {
@@ -260,13 +359,13 @@ impl Geom for GeomAttribution {
                     }
                     other => (t.clone(), other.clone()),
                 })
-                .collect::<Vec<(String, Option<String>)>>()
+                .collect::<Vec<AttributionRun>>()
         };
-        let row0: Vec<(String, Option<String>)> = match &self.runs {
+        let row0: AttributionRow = match &self.runs {
             Some(r) => validate_runs(backend, r),
             None => vec![(self.text.clone(), None)],
         };
-        let extra_rows: Vec<Vec<(String, Option<String>)>> = self
+        let extra_rows: Vec<AttributionRow> = self
             .lines
             .iter()
             .map(|r| validate_runs(backend, r))
@@ -294,18 +393,33 @@ impl Geom for GeomAttribution {
             MapCorner::BottomLeft | MapCorner::BottomRight => plot_area.y + plot_area.height - 4.0,
             MapCorner::TopLeft | MapCorner::TopRight => plot_area.y + 4.0 + self.text_size / 2.0,
         };
+        // Spacing between physical lines is always based on the nominal
+        // `text_size`, not any one line's shrunk size — a safe upper
+        // bound that never lets a shrunk (smaller) line collide with its
+        // neighbour.
         let line_height = self.text_size * 1.3;
-        let style = TextStyle {
-            color: self.color,
-            size: self.text_size,
-            anchor,
-            angle: 0.0,
-            family: None,
-            face: crate::render::backend::FontFace::Plain,
-            bg_colour: None,
-            bg_r: 0.0,
-        };
-        for (i, row) in std::iter::once(row0).chain(extra_rows).enumerate() {
+        // `.fit(min_size)` (#258): each logical row (row0, then each
+        // `.line(..)`) may expand into more than one physical line when
+        // wrapped, so collect the physical lines up front rather than
+        // enumerate the logical rows directly.
+        let logical_rows = std::iter::once(row0).chain(extra_rows);
+        let physical_lines: Vec<(f64, AttributionRow)> =
+            if let Some(min_size) = self.fit_min_text_size {
+                let max_width = (plot_area.width - 8.0).max(0.0);
+                logical_rows
+                    .flat_map(|row| {
+                        let (size, lines) =
+                            fit_row(&row, self.text_size, min_size, max_width, self.fit_overflow);
+                        lines
+                            .into_iter()
+                            .map(move |l| (size, l))
+                            .collect::<Vec<_>>()
+                    })
+                    .collect()
+            } else {
+                logical_rows.map(|r| (self.text_size, r)).collect()
+            };
+        for (i, (size, row)) in physical_lines.into_iter().enumerate() {
             if row.iter().all(|(t, _)| t.is_empty()) {
                 continue;
             }
@@ -317,6 +431,16 @@ impl Geom for GeomAttribution {
                 .iter()
                 .map(|(t, u)| (t.as_str(), u.as_deref()))
                 .collect();
+            let style = TextStyle {
+                color: self.color,
+                size,
+                anchor: anchor.clone(),
+                angle: 0.0,
+                family: None,
+                face: crate::render::backend::FontFace::Plain,
+                bg_colour: None,
+                bg_r: 0.0,
+            };
             backend.draw_text_runs(&run_refs, (x, y), &style)?;
         }
         Ok(())
@@ -549,5 +673,225 @@ mod tests {
                 ),
             ])
         );
+    }
+
+    #[test]
+    fn fit_is_off_by_default() {
+        let g = GeomAttribution::new("x");
+        assert_eq!(g.fit_min_text_size, None);
+        assert_eq!(g.fit_overflow, AttributionOverflow::Ellipsis);
+    }
+
+    #[test]
+    fn fit_row_leaves_a_fitting_row_untouched_at_full_size() {
+        let row = vec![("short".to_string(), None)];
+        let (size, lines) = fit_row(&row, 8.0, 4.0, 1000.0, AttributionOverflow::Ellipsis);
+        assert_eq!(size, 8.0);
+        assert_eq!(lines, vec![row]);
+    }
+
+    #[test]
+    fn fit_row_shrinks_toward_the_floor_when_that_alone_fits() {
+        let row = vec![("a moderately long attribution line".to_string(), None)];
+        let full_width = text_width(&row[0].0, 8.0);
+        // A width the full-size line overflows, but that a size still
+        // above the floor can satisfy.
+        let max_width = full_width * 0.7;
+        let (size, lines) = fit_row(&row, 8.0, 4.0, max_width, AttributionOverflow::Ellipsis);
+        assert!(size < 8.0 && size >= 4.0, "size = {size}");
+        assert_eq!(lines, vec![row]); // unchanged text — only size shrank
+        assert!(text_width(&lines[0][0].0, size) <= max_width + 1e-6);
+    }
+
+    #[test]
+    fn fit_row_truncates_with_ellipsis_once_the_floor_still_overflows() {
+        let row = vec![(
+            "https://example.com/sources · geometry modified (simplified)".to_string(),
+            None,
+        )];
+        let max_width = 40.0; // too narrow even at the 4px floor
+        let (size, lines) = fit_row(&row, 8.0, 4.0, max_width, AttributionOverflow::Ellipsis);
+        assert_eq!(size, 4.0);
+        assert_eq!(lines.len(), 1);
+        assert_eq!(lines[0].len(), 1);
+        assert!(lines[0][0].0.ends_with('…'), "line = {:?}", lines[0][0].0);
+        assert!(text_width(&lines[0][0].0, size) <= max_width + 1e-6);
+    }
+
+    #[test]
+    fn fit_row_wraps_once_the_floor_still_overflows() {
+        let row = vec![(
+            "https://example.com/sources geometry modified simplified".to_string(),
+            None,
+        )];
+        let max_width = 40.0;
+        let (size, lines) = fit_row(&row, 8.0, 4.0, max_width, AttributionOverflow::Wrap);
+        assert_eq!(size, 4.0);
+        assert!(lines.len() > 1, "expected multiple wrapped lines");
+        for line in &lines {
+            assert_eq!(line.len(), 1);
+            assert!(text_width(&line[0].0, size) <= max_width + 1e-6);
+        }
+    }
+
+    /// Records every `draw_text`/`draw_text_runs` call's text, position and
+    /// size, with a configurable `plot_area` — enough to check an
+    /// attribution line's bbox against a narrow panel.
+    struct RecordingBackend {
+        area: crate::render::Rect,
+        calls: Vec<(String, (f64, f64), f64, TextAnchor)>,
+    }
+
+    impl RecordingBackend {
+        fn new(area: crate::render::Rect) -> Self {
+            RecordingBackend {
+                area,
+                calls: Vec::new(),
+            }
+        }
+    }
+
+    impl DrawBackend for RecordingBackend {
+        fn draw_circle(
+            &mut self,
+            _c: (f64, f64),
+            _r: f64,
+            _s: &crate::render::backend::PointStyle,
+        ) -> Result<(), RenderError> {
+            Ok(())
+        }
+        fn draw_line(&mut self, _p: &[(f64, f64)], _s: &LineStyle) -> Result<(), RenderError> {
+            Ok(())
+        }
+        fn draw_rect(
+            &mut self,
+            _tl: (f64, f64),
+            _br: (f64, f64),
+            _s: &crate::render::backend::RectStyle,
+        ) -> Result<(), RenderError> {
+            Ok(())
+        }
+        fn draw_text(
+            &mut self,
+            text: &str,
+            pos: (f64, f64),
+            style: &TextStyle,
+        ) -> Result<(), RenderError> {
+            self.calls
+                .push((text.to_string(), pos, style.size, style.anchor.clone()));
+            Ok(())
+        }
+        fn draw_polygon(
+            &mut self,
+            _p: &[(f64, f64)],
+            _s: &crate::render::backend::RectStyle,
+        ) -> Result<(), RenderError> {
+            Ok(())
+        }
+        fn plot_area(&self) -> crate::render::Rect {
+            self.area.clone()
+        }
+        fn total_area(&self) -> crate::render::Rect {
+            self.area.clone()
+        }
+    }
+
+    fn anchor_fraction(anchor: TextAnchor) -> f64 {
+        match anchor {
+            TextAnchor::Start => 0.0,
+            TextAnchor::Middle => 0.5,
+            TextAnchor::End => 1.0,
+        }
+    }
+
+    #[test]
+    fn fit_keeps_every_line_inside_a_narrow_panel_with_a_right_legend() {
+        // A 390px-wide page minus a ~90px Right legend, same shape as
+        // DataZooDE/anofox-visualization#505/#258.
+        let area = crate::render::Rect {
+            x: 0.0,
+            y: 0.0,
+            width: 60.0,
+            height: 300.0,
+        };
+        let mut backend = RecordingBackend::new(area.clone());
+        let g = GeomAttribution::new(
+            "https://sg.geodatenzentrum.de/web_public/gdz/lizenz · geometry modified (simplified)",
+        )
+        .fit(4.0);
+        let scales = ScaleSet::new();
+        let coord = CoordCartesian::default();
+        g.draw(
+            &DataFrame::new(),
+            &coord,
+            &scales,
+            &Theme::default(),
+            &mut backend,
+        )
+        .unwrap();
+        assert_eq!(backend.calls.len(), 1);
+        let (text, pos, size, anchor) = &backend.calls[0];
+        let w = text_width(text, *size);
+        let frac = anchor_fraction(anchor.clone());
+        let x0 = pos.0 - w * frac;
+        let x1 = x0 + w;
+        assert!(
+            x0 >= area.x - 1e-6 && x1 <= area.x + area.width + 1e-6,
+            "line overflowed the panel: x0={x0} x1={x1} area=[{},{}]",
+            area.x,
+            area.x + area.width
+        );
+    }
+
+    #[test]
+    fn fit_off_by_default_leaves_a_wide_panel_unchanged() {
+        let area = crate::render::Rect {
+            x: 0.0,
+            y: 0.0,
+            width: 400.0,
+            height: 300.0,
+        };
+        let mut backend = RecordingBackend::new(area.clone());
+        let g = GeomAttribution::new("a short note"); // no `.fit(..)` call
+        let scales = ScaleSet::new();
+        let coord = CoordCartesian::default();
+        g.draw(
+            &DataFrame::new(),
+            &coord,
+            &scales,
+            &Theme::default(),
+            &mut backend,
+        )
+        .unwrap();
+        assert_eq!(backend.calls.len(), 1);
+        assert_eq!(backend.calls[0].2, g.text_size); // size unchanged
+    }
+
+    #[test]
+    fn fit_off_by_default_also_leaves_a_narrow_panel_unchanged() {
+        // Byte-identical-by-default (#258): without `.fit(..)`, even a
+        // panel too narrow for the line draws at the nominal size, same
+        // as before this feature existed.
+        let area = crate::render::Rect {
+            x: 0.0,
+            y: 0.0,
+            width: 60.0,
+            height: 300.0,
+        };
+        let mut backend = RecordingBackend::new(area.clone());
+        let g = GeomAttribution::new(
+            "https://sg.geodatenzentrum.de/web_public/gdz/lizenz · geometry modified (simplified)",
+        );
+        let scales = ScaleSet::new();
+        let coord = CoordCartesian::default();
+        g.draw(
+            &DataFrame::new(),
+            &coord,
+            &scales,
+            &Theme::default(),
+            &mut backend,
+        )
+        .unwrap();
+        assert_eq!(backend.calls[0].2, g.text_size);
     }
 }
