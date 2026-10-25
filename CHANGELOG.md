@@ -31,6 +31,16 @@ Accessible SVG root title/description (`GGPlot::svg_title` / `svg_desc`, #255); 
   vertical bar are unaffected and stay byte-identical.
 
 ### Added
+- **`GeomAttribution::fit`/`fit_overflow` — keep attribution lines inside
+  a narrow panel** (#258; DataZooDE/anofox-visualization#505's Right
+  legend takes ~90px off a 390px page, overflowing BKG's source-note
+  line). Opt in with `.fit(min_size)`: once a line would overflow the
+  panel at `text_size`, it shrinks that line down toward `min_size`,
+  then — if shrinking alone still isn't enough — truncates it with a
+  trailing "…" (the default) or wraps it onto another physical line;
+  `.fit_overflow(AttributionOverflow::Wrap)` picks wrapping instead.
+  Default: `fit_min_text_size` is `None` (fitting off), so output stays
+  byte-identical unless `.fit(..)` is called.
 - **`GGPlot::svg_title`/`svg_desc` — an accessible name/description for
   the rendered root `<svg>`** (#255; DataZooDE/anofox-visualization#420
   slice 5 lost its hand-written `<desc>{summary}</desc>` on the map SVG
