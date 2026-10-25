@@ -6,6 +6,18 @@ All notable changes to this project are documented here. The format follows
 ## [Unreleased]
 
 ### Added
+- **`GGPlot::svg_title`/`svg_desc` — an accessible name/description for
+  the rendered root `<svg>`** (#255; DataZooDE/anofox-visualization#420
+  slice 5 lost its hand-written `<desc>{summary}</desc>` on the map SVG
+  once maps started drawing through ggplot-rs). `svg_title(text)` writes
+  an escaped `<title id="...">` as the root `<svg>`'s first child;
+  `svg_desc(text)` writes an escaped `<desc id="...">` (after `<title>`,
+  if also set); either adds `role="img"` plus `aria-labelledby`/
+  `aria-describedby` pointing at the id, per SVG accessibility practice
+  (naming an image via `role="img"` + `aria-labelledby`/`-describedby`
+  rather than a bare `<title>`, which some screen readers treat as a
+  tooltip instead of a name). Both are off by default (`None`), so
+  output stays byte-identical when neither is called.
 - **`geom_text` honours an embedded `"\n"` as a forced line break**
   (#249, the same behaviour `geom_label` got in #229; DataZooDE/
   anofox-visualization#487: diagram edge labels like `"5.4K\norders"`).

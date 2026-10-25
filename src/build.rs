@@ -233,6 +233,8 @@ impl PlotBuilder {
             svg_warnings_attr: _,
             svg_formatted_values: _,
             layer_svg_attrs,
+            svg_title: _,
+            svg_desc: _,
         } = plot;
         let mut theme = theme;
         if theme.aspect_ratio.is_none() {
