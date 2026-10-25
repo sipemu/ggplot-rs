@@ -141,6 +141,14 @@ impl Geom for GeomAnnotationScale {
 
 /// A small, muted attribution text (ggspatial's `annotation_scale()`
 /// sibling convention: `"© Natural Earth"` etc.) in a panel corner.
+///
+/// `#[non_exhaustive]` (#250/#176 precedent): build via [`Self::new`] and
+/// the `.corner(..)`/`.link(..)`/`.runs(..)`/`.line(..)` builders, not a
+/// struct literal — this keeps a future field additive. `GeomText`/
+/// `GeomLabel` stay plain `pub` structs (downstream code builds those
+/// with `..Default::default()` literals, which `#[non_exhaustive]` would
+/// forbid); `GeomAttribution` has no such existing convention to protect.
+#[non_exhaustive]
 pub struct GeomAttribution {
     pub text: String,
     pub corner: MapCorner,
