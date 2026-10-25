@@ -15,6 +15,25 @@ All notable changes to this project are documented here. The format follows
   (`bg_colour`/`bg_r`, #229) applied to every line. A plain (no `"\n"`)
   label draws byte-identically to before this change.
 
+## [0.30.3] — 2026-10-25
+
+`GeomAttribution` holds several stacked lines, each with its own runs (`.line(runs)`, #250), for multi-line data licences such as BKG's. No API breaks.
+
+### Added
+- **`GeomAttribution` (`annotation_attribution`) can hold several stacked
+  lines, each its own run list** (#250, DataZooDE/anofox-visualization#420
+  slice 5: a data licence note such as BKG's dl-de/by-2-0 note for German
+  boundaries needs 2–3 independently-linked lines at the same corner).
+  New `GeomAttribution::line(runs)` appends another line beyond row 0
+  (set by the existing `.runs(..)`, or plain `text` if `.runs(..)` was
+  never called); each call's `runs` keeps the same plain/linked-segment
+  semantics as `.runs(..)` (#196: per-run escaping, allow-listed
+  `http(s)` link schemes). Lines stack away from the corner's own edge —
+  upward for the bottom corners, downward for the top corners — each
+  `text_size * 1.3` px from the last, so a map adding more lines never
+  needs to know any other line's position. A single line (no `.line(..)`
+  calls) draws byte-identically to before this change.
+
 ## [0.30.2] — 2026-10-24
 
 Legends for aesthetics with the same title, breaks and labels merge into one
