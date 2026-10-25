@@ -3316,6 +3316,65 @@ impl GGPlot {
             }
         }
 
+        // #211: a continuous colourbar at `Top`/`Bottom` (or
+        // `legend_direction(Horizontal)`) draws wide × short instead of
+        // its usual tall × narrow bar (see `draw_continuous_legend_at`),
+        // with its tick labels below rather than beside it — reserve the
+        // extra band height that needs beyond the flat discrete-row
+        // height `legend_band` already assumes. Independent of the
+        // `has_discrete_guide` block above (a plot can have a continuous
+        // colourbar with no discrete guide at all), so computed
+        // unconditionally here, right before the layout that actually
+        // matters reads `extras`.
+        if has_legend
+            && !matches!(
+                built.theme.legend_position,
+                crate::theme::LegendPosition::None
+            )
+        {
+            let is_horizontal = match built.theme.legend_direction {
+                Some(dir) => matches!(dir, crate::theme::LegendDirection::Horizontal),
+                None => matches!(
+                    built.theme.legend_position,
+                    crate::theme::LegendPosition::Top | crate::theme::LegendPosition::Bottom
+                ),
+            };
+            if is_horizontal {
+                let legend_aes =
+                    crate::guide::legend::legend_scales_for(&built.scales, &built.suppressed_aes);
+                let continuous_colourbar = legend_aes.iter().find_map(|aes| {
+                    if !matches!(
+                        aes,
+                        crate::aes::Aesthetic::Color | crate::aes::Aesthetic::Fill
+                    ) {
+                        return None;
+                    }
+                    let scale = built.scales.get(aes)?;
+                    if scale.is_discrete() {
+                        return None;
+                    }
+                    Some(scale)
+                });
+                if let Some(scale) = continuous_colourbar {
+                    let title = built
+                        .guide_legend
+                        .title
+                        .as_deref()
+                        .unwrap_or_else(|| scale.name());
+                    let bar_height = crate::guide::legend::continuous_horizontal_bar_height(
+                        &built.theme,
+                        !title.is_empty(),
+                    );
+                    let key_h = built
+                        .theme
+                        .legend_key_height
+                        .max(extras.legend_max_key_size);
+                    extras.continuous_horizontal_legend_extra_height =
+                        (bar_height - key_h).max(0.0);
+                }
+            }
+        }
+
         PlotLayout::compute_with_extras(
             w as f64,
             h as f64,

@@ -38,6 +38,14 @@ pub(crate) struct LayoutExtras {
     /// grows the key it actually draws — otherwise a key too big for the
     /// reserved band spills into the panel.
     pub legend_max_key_size: f64,
+    /// #211: how much taller the Top/Bottom legend band must be, beyond
+    /// the flat discrete-row height (`key_h`) `legend_band` already
+    /// assumes, to fit a horizontally-drawn continuous colourbar's
+    /// title/bar/ticks/labels (see
+    /// [`continuous_horizontal_bar_height`](crate::guide::legend::continuous_horizontal_bar_height)).
+    /// `0.0` (the default) when there's no continuous color/fill legend
+    /// drawn horizontally, or its own band already fits in `key_h`.
+    pub continuous_horizontal_legend_extra_height: f64,
 }
 
 impl PlotLayout {
@@ -181,6 +189,11 @@ impl PlotLayout {
         let legend_band = if has_legend {
             theme.legend_margin.top
                 + key_h
+                // #211: a horizontally-drawn continuous colourbar's own
+                // title/bar/ticks/labels can need more than the flat
+                // discrete-row height above — added once, not per extra
+                // row (a continuous colourbar never wraps rows).
+                + extras.continuous_horizontal_legend_extra_height
                 + theme.legend_spacing
                 + theme.legend_margin.bottom
                 + extras.legend_extra_rows as f64 * (key_h + theme.legend_spacing)
