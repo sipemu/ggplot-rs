@@ -5,6 +5,10 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.31.1] — 2026-10-25
+
+Accessible SVG root title/description (`GGPlot::svg_title` / `svg_desc`, #255); a continuous colourbar at Top/Bottom is drawn horizontally (#211, behaviour fix for those positions). No API breaks (cargo-semver-checks against v0.31.0: 202/202).
+
 ### Fixed
 - **A continuous colourbar at `legend_position(Top)`/`Bottom` (or
   `legend_direction(Horizontal)`) now draws horizontally** (#211,
