@@ -95,15 +95,22 @@ fn fontfamily_attribute_entity_escapes_an_embedded_newline() {
 fn text_and_title_content_are_unaffected_a_literal_newline_stays_literal() {
     // #226 is attribute values only; `escape` (element content) keeps its
     // existing behaviour — a regression guard so a future refactor can't
-    // accidentally widen the attribute fix onto content too.
+    // accidentally widen the attribute fix onto content too. Exercised via
+    // a tooltip's `<title>` content (not `geom_text`'s own `<text>`
+    // content): since #249, `geom_text` deliberately *does* treat an
+    // embedded `"\n"` as a forced line break rather than writing it
+    // literally into one `<text>` — see `tests/geom_text_forced_linebreak_249.rs`
+    // — so it no longer exercises this invariant, but `<title>` content
+    // still writes a raw column value straight through `escape()`.
     let data = frame(vec![
         ("x", floats(&[1.0])),
         ("y", floats(&[1.0])),
-        ("label", strs(&["a\nb"])),
+        ("note", strs(&["a\nb"])),
     ]);
     let svg = GGPlot::new(data)
-        .aes(Aes::new().x("x").y("y").label("label"))
-        .geom_text()
+        .aes(Aes::new().x("x").y("y"))
+        .geom_point()
+        .tooltip("{note}")
         .render_svg_native_with_size(300, 200)
         .unwrap();
     assert!(svg.contains("a\nb"), "{svg}");

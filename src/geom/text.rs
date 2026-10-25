@@ -166,9 +166,25 @@ impl Geom for GeomText {
                 .unwrap_or(self.fontface);
 
             let text = label_col[i].to_group_key();
+            // #249: an embedded `"\n"` is a forced line break, the same
+            // `geom_label` behaviour since #229 — split on it *before* any
+            // width-based wrapping, so `"a\nb"` always draws two lines
+            // instead of one `<text>` with a literal raw newline inside it
+            // (SVG has no visual effect for that; most renderers just
+            // collapse it to whitespace). `str::lines()` handles "\r\n"
+            // too; an empty label keeps the single empty line the old code
+            // already drew.
+            let paragraphs: Vec<String> = if text.is_empty() {
+                vec![text]
+            } else {
+                text.lines().map(str::to_string).collect()
+            };
             let lines = match self.wrap_width {
-                Some(w) => wrap_text(&text, w, self.size),
-                None => vec![text],
+                Some(w) => paragraphs
+                    .iter()
+                    .flat_map(|p| wrap_text(p, w, self.size))
+                    .collect::<Vec<_>>(),
+                None => paragraphs,
             };
             let lh = self.size * self.line_height;
             let n = lines.len() as f64;
