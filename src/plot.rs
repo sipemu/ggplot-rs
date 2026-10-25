@@ -914,6 +914,18 @@ impl GGPlot {
         self.add_geom(geom)
     }
 
+    /// Like [`Self::bivariate_legend`], but with each cell's row count
+    /// drawn centred in its swatch — build with
+    /// [`GeomBivariateLegend::counts`](crate::geom::bivariate_legend::GeomBivariateLegend::counts)
+    /// (#259).
+    #[cfg(feature = "sf")]
+    pub fn bivariate_legend_counts(
+        self,
+        geom: crate::geom::bivariate_legend::GeomBivariateLegendCounts,
+    ) -> Self {
+        self.add_geom(geom)
+    }
+
     pub fn geom_curve(self) -> Self {
         self.add_geom(GeomCurve::default())
     }

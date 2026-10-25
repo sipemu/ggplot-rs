@@ -6,6 +6,20 @@ All notable changes to this project are documented here. The format follows
 ## [Unreleased]
 
 ### Added
+- **`GeomBivariateLegend::counts` — optional per-cell row counts** (#259;
+  DataZooDE/anofox-visualization#506's bivariate choropleths, #149 M2d,
+  want each swatch's row count the way their old hand-written legend
+  did). `.counts(Vec<Vec<usize>>)` is indexed `counts[j][i]`, the same
+  order as `draw`'s own `for j in 0..ny { for i in 0..nx }` loop, and
+  returns a new `GeomBivariateLegendCounts` — add it to a plot with the
+  new `GGPlot::bivariate_legend_counts`, instead of `bivariate_legend`.
+  A separate type rather than a field on `GeomBivariateLegend` itself:
+  that struct has no private fields and isn't `#[non_exhaustive]`, so a
+  new field there would be a breaking change (0.31.0's `GeomAttribution`
+  precedent, #250). Each count draws centred in its swatch, about 7px
+  (one below the caption's `text_size`), in light or dark text chosen by
+  a luma threshold against that cell's fill. `from_scale` stays
+  count-less; a plain `GeomBivariateLegend` draws exactly as before.
 - **`GGPlot::svg_title`/`svg_desc` — an accessible name/description for
   the rendered root `<svg>`** (#255; DataZooDE/anofox-visualization#420
   slice 5 lost its hand-written `<desc>{summary}</desc>` on the map SVG
