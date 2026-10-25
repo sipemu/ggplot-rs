@@ -5,6 +5,16 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Added
+- **`geom_text` honours an embedded `"\n"` as a forced line break**
+  (#249, the same behaviour `geom_label` got in #229; DataZooDE/
+  anofox-visualization#487: diagram edge labels like `"5.4K\norders"`).
+  `GeomText::draw` now splits a label on `"\n"` into forced lines
+  *before* any `.with_wrap(..)` word-wrapping, drawing one `<text>` per
+  line, vertically centred around the anchor per `vjust`, with the halo
+  (`bg_colour`/`bg_r`, #229) applied to every line. A plain (no `"\n"`)
+  label draws byte-identically to before this change.
+
 ## [0.30.3] — 2026-10-25
 
 `GeomAttribution` holds several stacked lines, each with its own runs
