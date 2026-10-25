@@ -5,6 +5,31 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.31.1] — 2026-10-25
+
+Accessible SVG root title/description (`GGPlot::svg_title` / `svg_desc`, #255); a continuous colourbar at Top/Bottom is drawn horizontally (#211, behaviour fix for those positions). No API breaks (cargo-semver-checks against v0.31.0: 202/202).
+
+### Fixed
+- **A continuous colourbar at `legend_position(Top)`/`Bottom` (or
+  `legend_direction(Horizontal)`) now draws horizontally** (#211,
+  DataZooDE/anofox-visualization#450: a right-hand colourbar squeezed a
+  narrow panel to a sliver, and `theme(legend.position = "bottom")`'s
+  usual fix — a horizontal `guide_colourbar` — didn't exist).
+  `draw_continuous_legend_at` drew the same tall × narrow bar regardless
+  of position; moved under the panel at `Bottom`, that bar's own height
+  (~150px) ran past the margin reserved for a one-row discrete legend
+  and got clipped. It now draws wide × short — slices left to right from
+  the scale's min to max (min on the left, like an x-axis), ticks and
+  one line of labels below the bar, title above/left — matching
+  ggplot2's `guide_colourbar(direction = "horizontal")`; `PlotLayout`
+  reserves the taller band this needs (title + bar + ticks + labels)
+  instead of the flat discrete-row height. **Behaviour change:** any
+  plot with a continuous color/fill scale already at `Top`/`Bottom`, or
+  under an explicit `legend_direction(Horizontal)`, now renders that
+  legend differently (previously-clipped output becomes visible and
+  correctly laid out); `Right`/`Left`/`Inside`/`None` and the default
+  vertical bar are unaffected and stay byte-identical.
+
 ### Added
 - **`GeomBivariateLegend::counts` — optional per-cell row counts** (#259;
   DataZooDE/anofox-visualization#506's bivariate choropleths, #149 M2d,
@@ -20,6 +45,16 @@ All notable changes to this project are documented here. The format follows
   (one below the caption's `text_size`), in light or dark text chosen by
   a luma threshold against that cell's fill. `from_scale` stays
   count-less; a plain `GeomBivariateLegend` draws exactly as before.
+- **`GeomAttribution::fit`/`fit_overflow` — keep attribution lines inside
+  a narrow panel** (#258; DataZooDE/anofox-visualization#505's Right
+  legend takes ~90px off a 390px page, overflowing BKG's source-note
+  line). Opt in with `.fit(min_size)`: once a line would overflow the
+  panel at `text_size`, it shrinks that line down toward `min_size`,
+  then — if shrinking alone still isn't enough — truncates it with a
+  trailing "…" (the default) or wraps it onto another physical line;
+  `.fit_overflow(AttributionOverflow::Wrap)` picks wrapping instead.
+  Default: `fit_min_text_size` is `None` (fitting off), so output stays
+  byte-identical unless `.fit(..)` is called.
 - **`GGPlot::svg_title`/`svg_desc` — an accessible name/description for
   the rendered root `<svg>`** (#255; DataZooDE/anofox-visualization#420
   slice 5 lost its hand-written `<desc>{summary}</desc>` on the map SVG

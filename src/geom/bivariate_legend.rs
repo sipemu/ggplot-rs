@@ -530,6 +530,7 @@ mod tests {
     /// each cell's count lands centred in that cell's own rect, with a
     /// contrasting color (#259).
     #[derive(Default)]
+    #[allow(clippy::type_complexity)] // test-only recorder of raw draw calls
     struct RecordingBackend {
         rects: Vec<((f64, f64), (f64, f64), Option<(u8, u8, u8)>)>,
         texts: Vec<(String, (f64, f64), f64, (u8, u8, u8))>,
