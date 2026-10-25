@@ -5,6 +5,27 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Fixed
+- **A continuous colourbar at `legend_position(Top)`/`Bottom` (or
+  `legend_direction(Horizontal)`) now draws horizontally** (#211,
+  DataZooDE/anofox-visualization#450: a right-hand colourbar squeezed a
+  narrow panel to a sliver, and `theme(legend.position = "bottom")`'s
+  usual fix — a horizontal `guide_colourbar` — didn't exist).
+  `draw_continuous_legend_at` drew the same tall × narrow bar regardless
+  of position; moved under the panel at `Bottom`, that bar's own height
+  (~150px) ran past the margin reserved for a one-row discrete legend
+  and got clipped. It now draws wide × short — slices left to right from
+  the scale's min to max (min on the left, like an x-axis), ticks and
+  one line of labels below the bar, title above/left — matching
+  ggplot2's `guide_colourbar(direction = "horizontal")`; `PlotLayout`
+  reserves the taller band this needs (title + bar + ticks + labels)
+  instead of the flat discrete-row height. **Behaviour change:** any
+  plot with a continuous color/fill scale already at `Top`/`Bottom`, or
+  under an explicit `legend_direction(Horizontal)`, now renders that
+  legend differently (previously-clipped output becomes visible and
+  correctly laid out); `Right`/`Left`/`Inside`/`None` and the default
+  vertical bar are unaffected and stay byte-identical.
+
 ### Added
 - **`GGPlot::svg_title`/`svg_desc` — an accessible name/description for
   the rendered root `<svg>`** (#255; DataZooDE/anofox-visualization#420

@@ -208,12 +208,21 @@ pub fn draw_legend(
         } else {
             // Continuous legend (colorbar) — only for color/fill
             if matches!(aes, Aesthetic::Color | Aesthetic::Fill) {
-                let height =
-                    draw_continuous_legend_at(scale, theme, offset_x, offset_y, backend, guide)?;
+                let height = draw_continuous_legend_at(
+                    scale,
+                    theme,
+                    offset_x,
+                    offset_y,
+                    backend,
+                    guide,
+                    is_horizontal,
+                )?;
                 if is_horizontal {
-                    offset_x += theme.legend_key_width
-                        + theme.legend_text.size * 6.0
-                        + theme.legend_spacing * 2.0;
+                    // #211: the bar is now drawn along x (wide, not
+                    // narrow) — step by its own length, not the old
+                    // vertical-bar width-plus-side-label estimate.
+                    let (bar_len, _) = continuous_bar_dims(theme, true);
+                    offset_x += bar_len + theme.legend_spacing * 2.0;
                 } else {
                     offset_y += height + theme.legend_spacing * 2.0;
                 }
@@ -668,7 +677,46 @@ fn draw_discrete_legend_at(
     }
 }
 
-/// Draw a continuous colorbar legend at a given position. Returns the height used.
+/// #211: the bar's own `(length, thickness)` in pixels for a continuous
+/// colorbar — vertical keeps the original tall-and-narrow dims
+/// (`legend_key_width` thick, `legend_key_height * 8.0` long); horizontal
+/// swaps them (ggplot2's `guide_colourbar(direction = "horizontal")`),
+/// so the bar is wide-and-short instead. Shared by
+/// [`draw_continuous_legend_at`] (the real draw) and
+/// [`continuous_horizontal_bar_height`] (the layout-time estimate), so
+/// the two can't disagree.
+fn continuous_bar_dims(theme: &Theme, is_horizontal: bool) -> (f64, f64) {
+    if is_horizontal {
+        (theme.legend_key_height * 8.0, theme.legend_key_width)
+    } else {
+        (theme.legend_key_width, theme.legend_key_height * 8.0)
+    }
+}
+
+/// #211: the total height a *horizontal* continuous colorbar consumes —
+/// title line (if `has_title`) + bar thickness + its tick marks + one
+/// line of labels below. Used by `plot.rs` to reserve the Top/Bottom
+/// legend band's height before layout runs; mirrors
+/// [`draw_continuous_legend_at`]'s own math exactly so the reserved band
+/// and the actual draw can't disagree.
+pub(crate) fn continuous_horizontal_bar_height(theme: &Theme, has_title: bool) -> f64 {
+    let title_offset = if has_title {
+        theme.legend_title.size + 4.0
+    } else {
+        0.0
+    };
+    let (_, bar_thickness) = continuous_bar_dims(theme, true);
+    let tick_len = 3.0;
+    let label_line = theme.legend_text.size + 4.0;
+    title_offset + bar_thickness + tick_len + theme.legend_spacing + label_line
+}
+
+/// Draw a continuous colorbar legend at a given position. `is_horizontal`
+/// (#211) draws it wide × short — bar slices left to right from the
+/// scale's min to max, ticks/labels below the bar, matching ggplot2's
+/// `guide_colourbar(direction = "horizontal")` — instead of the default
+/// tall × narrow bar with ticks/labels to its right. Returns the height
+/// used.
 fn draw_continuous_legend_at(
     scale: &dyn crate::scale::Scale,
     theme: &Theme,
@@ -676,14 +724,14 @@ fn draw_continuous_legend_at(
     legend_y: f64,
     backend: &mut dyn DrawBackend,
     guide: &GuideLegend,
+    is_horizontal: bool,
 ) -> Result<f64, RenderError> {
     let breaks = scale.breaks();
     if breaks.is_empty() {
         return Ok(0.0);
     }
 
-    let bar_width = theme.legend_key_width;
-    let bar_height = theme.legend_key_height * 8.0;
+    let (bar_width, bar_height) = continuous_bar_dims(theme, is_horizontal);
 
     // Draw legend title (guide title overrides scale name)
     let title = guide.title.as_deref().unwrap_or_else(|| scale.name());
@@ -716,11 +764,20 @@ fn draw_continuous_legend_at(
 
     // Draw legend background
     if theme.legend_background.visible {
-        let total_width = bar_width + theme.legend_spacing + theme.legend_text.size * 6.0;
+        let total_width = if is_horizontal {
+            bar_width
+        } else {
+            bar_width + theme.legend_spacing + theme.legend_text.size * 6.0
+        };
+        let total_height = if is_horizontal {
+            bar_height + theme.legend_spacing + theme.legend_text.size * 2.0
+        } else {
+            bar_height
+        };
         if let Some(fill) = theme.legend_background.fill {
             backend.draw_rect(
                 (legend_x - 2.0, bar_top - 2.0),
-                (legend_x + total_width + 2.0, bar_top + bar_height + 2.0),
+                (legend_x + total_width + 2.0, bar_top + total_height + 2.0),
                 &RectStyle {
                     fill: Some(fill),
                     stroke: theme.legend_background.color,
@@ -733,30 +790,56 @@ fn draw_continuous_legend_at(
         }
     }
 
-    // Draw gradient bar as N thin horizontal slices
+    // Draw gradient bar as N thin slices — stacked top to bottom (max at
+    // the top) when vertical, side by side left to right (min on the
+    // left, like an x-axis) when horizontal.
     // Use data-domain values to avoid double-normalization in map_to_color()
     let (data_min, data_max) = scale.domain().unwrap_or((0.0, 1.0));
     let n_slices = 50;
-    let slice_height = bar_height / n_slices as f64;
-    for i in 0..n_slices {
-        let t = 1.0 - i as f64 / n_slices as f64;
-        let data_val = data_min + t * (data_max - data_min);
-        let color = scale
-            .map_to_color(&Value::Float(data_val))
-            .unwrap_or((127, 127, 127));
-        let sy = bar_top + i as f64 * slice_height;
-        backend.draw_rect(
-            (legend_x, sy),
-            (legend_x + bar_width, sy + slice_height + 0.5),
-            &RectStyle {
-                fill: Some(color),
-                stroke: None,
-                stroke_width: 0.0,
-                alpha: 1.0,
-                clip: false,
-                corner_radius: 0.0,
-            },
-        )?;
+    if is_horizontal {
+        let slice_width = bar_width / n_slices as f64;
+        for i in 0..n_slices {
+            let t = i as f64 / n_slices as f64;
+            let data_val = data_min + t * (data_max - data_min);
+            let color = scale
+                .map_to_color(&Value::Float(data_val))
+                .unwrap_or((127, 127, 127));
+            let sx = legend_x + i as f64 * slice_width;
+            backend.draw_rect(
+                (sx, bar_top),
+                (sx + slice_width + 0.5, bar_top + bar_height),
+                &RectStyle {
+                    fill: Some(color),
+                    stroke: None,
+                    stroke_width: 0.0,
+                    alpha: 1.0,
+                    clip: false,
+                    corner_radius: 0.0,
+                },
+            )?;
+        }
+    } else {
+        let slice_height = bar_height / n_slices as f64;
+        for i in 0..n_slices {
+            let t = 1.0 - i as f64 / n_slices as f64;
+            let data_val = data_min + t * (data_max - data_min);
+            let color = scale
+                .map_to_color(&Value::Float(data_val))
+                .unwrap_or((127, 127, 127));
+            let sy = bar_top + i as f64 * slice_height;
+            backend.draw_rect(
+                (legend_x, sy),
+                (legend_x + bar_width, sy + slice_height + 0.5),
+                &RectStyle {
+                    fill: Some(color),
+                    stroke: None,
+                    stroke_width: 0.0,
+                    alpha: 1.0,
+                    clip: false,
+                    corner_radius: 0.0,
+                },
+            )?;
+        }
     }
 
     // Draw border
@@ -782,42 +865,76 @@ fn draw_continuous_legend_at(
         )?;
     }
 
-    // Draw tick marks and labels
+    // Draw tick marks and labels: to the bar's right (vertical, pos=1 at
+    // the top) or below it (horizontal, pos=0 on the left), matching the
+    // slice order drawn above.
     let tick_len = 3.0;
+    let tick_family = if theme.legend_text.family.is_empty() {
+        None
+    } else {
+        Some(theme.legend_text.family.clone())
+    };
     for (pos, label) in &breaks {
-        let tick_y = bar_top + bar_height * (1.0 - pos);
-        backend.draw_line(
-            &[
-                (legend_x + bar_width, tick_y),
-                (legend_x + bar_width + tick_len, tick_y),
-            ],
-            &border_style,
-        )?;
-        let tick_family = if theme.legend_text.family.is_empty() {
-            None
+        if is_horizontal {
+            let tick_x = legend_x + bar_width * pos;
+            backend.draw_line(
+                &[
+                    (tick_x, bar_top + bar_height),
+                    (tick_x, bar_top + bar_height + tick_len),
+                ],
+                &border_style,
+            )?;
+            backend.draw_text(
+                label,
+                (
+                    tick_x,
+                    bar_top + bar_height + tick_len + theme.legend_text.size,
+                ),
+                &TextStyle {
+                    color: theme.legend_text.color,
+                    size: theme.legend_text.size,
+                    anchor: TextAnchor::Middle,
+                    angle: 0.0,
+                    family: tick_family.clone(),
+                    face: theme.legend_text.face,
+                    bg_colour: None,
+                    bg_r: 0.0,
+                },
+            )?;
         } else {
-            Some(theme.legend_text.family.clone())
-        };
-        backend.draw_text(
-            label,
-            (
-                legend_x + bar_width + tick_len + theme.legend_spacing,
-                tick_y,
-            ),
-            &TextStyle {
-                color: theme.legend_text.color,
-                size: theme.legend_text.size,
-                anchor: TextAnchor::Start,
-                angle: 0.0,
-                family: tick_family,
-                face: theme.legend_text.face,
-                bg_colour: None,
-                bg_r: 0.0,
-            },
-        )?;
+            let tick_y = bar_top + bar_height * (1.0 - pos);
+            backend.draw_line(
+                &[
+                    (legend_x + bar_width, tick_y),
+                    (legend_x + bar_width + tick_len, tick_y),
+                ],
+                &border_style,
+            )?;
+            backend.draw_text(
+                label,
+                (
+                    legend_x + bar_width + tick_len + theme.legend_spacing,
+                    tick_y,
+                ),
+                &TextStyle {
+                    color: theme.legend_text.color,
+                    size: theme.legend_text.size,
+                    anchor: TextAnchor::Start,
+                    angle: 0.0,
+                    family: tick_family.clone(),
+                    face: theme.legend_text.face,
+                    bg_colour: None,
+                    bg_r: 0.0,
+                },
+            )?;
+        }
     }
 
-    Ok(title_offset + bar_height)
+    if is_horizontal {
+        Ok(continuous_horizontal_bar_height(theme, !title.is_empty()))
+    } else {
+        Ok(title_offset + bar_height)
+    }
 }
 
 /// Draw one legend key's swatch (not its label) for `aes`, at `(x, y)`
@@ -1190,7 +1307,12 @@ fn continuous_guide_count(scales: &ScaleSet, legend_scales: &[Aesthetic]) -> usi
 /// advances `offset_x` by once it has drawn one (see its two
 /// `is_horizontal` arms for a continuous scale).
 fn continuous_guide_width(theme: &Theme) -> f64 {
-    theme.legend_key_width + theme.legend_text.size * 6.0 + theme.legend_spacing * 2.0
+    // #211: only used where a continuous guide shares a *horizontal* row
+    // with a discrete one — its footprint there is the horizontal bar's
+    // own length (ticks/labels sit below it now, not to its side), the
+    // same width `draw_legend_planned` steps `offset_x` by.
+    let (bar_len, _) = continuous_bar_dims(theme, true);
+    bar_len + theme.legend_spacing * 2.0
 }
 
 /// Plan every discrete legend scale's B3-2 layout (explicit `nrow`/`ncol`
@@ -1378,12 +1500,20 @@ pub(crate) fn draw_legend_planned(
                 // so the other member(s) would draw the identical bar
                 // again.
                 let height = draw_continuous_legend_at(
-                    rep_scale, theme, offset_x, offset_y, backend, guide,
+                    rep_scale,
+                    theme,
+                    offset_x,
+                    offset_y,
+                    backend,
+                    guide,
+                    is_horizontal,
                 )?;
                 if is_horizontal {
-                    offset_x += theme.legend_key_width
-                        + theme.legend_text.size * 6.0
-                        + theme.legend_spacing * 2.0;
+                    // #211: the bar is now drawn along x (wide, not
+                    // narrow) — step by its own length, not the old
+                    // vertical-bar width-plus-side-label estimate.
+                    let (bar_len, _) = continuous_bar_dims(theme, true);
+                    offset_x += bar_len + theme.legend_spacing * 2.0;
                 } else {
                     offset_y += height + theme.legend_spacing * 2.0;
                 }
@@ -1641,5 +1771,48 @@ mod group_mergeable_legends_tests {
         let guide = GuideLegend::default();
         let groups = group_mergeable_legends(&scales, &legend_scales, &guide);
         assert_eq!(groups, vec![vec![Aesthetic::Color]]);
+    }
+}
+
+/// #211: direct unit coverage for the two private helpers
+/// `draw_continuous_legend_at`'s vertical/horizontal split relies on —
+/// exercised indirectly by every colourbar-drawing integration test
+/// already, but called here directly too so their own branches/math
+/// are pinned regardless of how the compiler happens to inline them.
+#[cfg(test)]
+mod continuous_bar_dims_tests {
+    use super::*;
+
+    #[test]
+    fn dims_swap_between_vertical_and_horizontal() {
+        let theme = Theme::default();
+        let (w, h) = continuous_bar_dims(&theme, false);
+        assert_eq!(w, theme.legend_key_width);
+        assert_eq!(h, theme.legend_key_height * 8.0);
+
+        let (w, h) = continuous_bar_dims(&theme, true);
+        assert_eq!(w, theme.legend_key_height * 8.0);
+        assert_eq!(h, theme.legend_key_width);
+    }
+
+    #[test]
+    fn horizontal_bar_height_adds_a_title_line_only_when_there_is_a_title() {
+        let theme = Theme::default();
+        let without_title = continuous_horizontal_bar_height(&theme, false);
+        let with_title = continuous_horizontal_bar_height(&theme, true);
+        assert!(with_title > without_title);
+        assert!(((with_title - without_title) - (theme.legend_title.size + 4.0)).abs() < 1e-9);
+
+        // Matches `continuous_bar_dims`'s own horizontal thickness plus
+        // the fixed tick/spacing/label overhead — not just a positive
+        // number, the exact formula `draw_continuous_legend_at` relies
+        // on to never disagree with what `plot.rs` reserves for it.
+        let (_, thickness) = continuous_bar_dims(&theme, true);
+        let tick_len = 3.0;
+        let label_line = theme.legend_text.size + 4.0;
+        assert!(
+            (without_title - (thickness + tick_len + theme.legend_spacing + label_line)).abs()
+                < 1e-9
+        );
     }
 }
