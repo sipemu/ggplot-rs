@@ -698,7 +698,7 @@ mod tests {
         // above the floor can satisfy.
         let max_width = full_width * 0.7;
         let (size, lines) = fit_row(&row, 8.0, 4.0, max_width, AttributionOverflow::Ellipsis);
-        assert!(size < 8.0 && size >= 4.0, "size = {size}");
+        assert!((4.0..8.0).contains(&size), "size = {size}");
         assert_eq!(lines, vec![row]); // unchanged text — only size shrank
         assert!(text_width(&lines[0][0].0, size) <= max_width + 1e-6);
     }
