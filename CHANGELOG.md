@@ -5,6 +5,10 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.31.2] — 2026-10-25
+
+Opt-in fit-to-panel for attributions (`GeomAttribution::fit` / `fit_overflow`, #258); per-cell counts on the bivariate legend (`GGPlot::bivariate_legend_counts`, #259). No API breaks (cargo-semver-checks against v0.31.1).
+
 ## [0.31.1] — 2026-10-25
 
 Accessible SVG root title/description (`GGPlot::svg_title` / `svg_desc`, #255); a continuous colourbar at Top/Bottom is drawn horizontally (#211, behaviour fix for those positions). No API breaks (cargo-semver-checks against v0.31.0: 202/202).
