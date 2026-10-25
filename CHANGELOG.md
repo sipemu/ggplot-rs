@@ -5,19 +5,31 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
-### Added
-- **`geom_text` honours an embedded `"\n"` as a forced line break**
-  (#249, the same behaviour `geom_label` got in #229; DataZooDE/
-  anofox-visualization#487: diagram edge labels like `"5.4K\norders"`).
-  `GeomText::draw` now splits a label on `"\n"` into forced lines
-  *before* any `.with_wrap(..)` word-wrapping, drawing one `<text>` per
-  line, vertically centred around the anchor per `vjust`, with the halo
-  (`bg_colour`/`bg_r`, #229) applied to every line. A plain (no `"\n"`)
-  label draws byte-identically to before this change.
+## [0.31.0] — 2026-10-25
 
-## [0.30.3] — 2026-10-25
+`GeomAttribution` holds several stacked lines, each with its own runs
+(`.line(runs)`, #250), for multi-line data licences such as BKG's;
+`geom_text` honours an embedded `"\n"` as a forced line break, like
+`geom_label` already does (#249). No rendered output changes unless
+`.line(..)` is used or a `geom_text` label contains `"\n"`, but
+`GeomAttribution` gains a new `pub` field and is now
+`#[non_exhaustive]` (see **Migration**) — `cargo semver-checks` rates
+this major (tried a private field and `#[non_exhaustive]` alone first —
+each trips its own major-rated lint, since `GeomAttribution` had zero
+non-public fields before #250 and was fully literal-constructible, so
+there's no additive way to add this field at all), hence the 0.x minor
+bump rather than a patch, same category of change as #176's
+(`b9211c6`).
 
-`GeomAttribution` holds several stacked lines, each with its own runs (`.line(runs)`, #250), for multi-line data licences such as BKG's. No API breaks.
+**Migration:** code that builds `GeomAttribution` with a struct
+literal (exhaustive field list, or relying on `..Default::default()`/
+functional-record-update from outside this crate, which
+`#[non_exhaustive]` now forbids) no longer compiles — use
+`GeomAttribution::new(..)` plus the `.corner(..)`/`.link(..)`/
+`.runs(..)`/`.line(..)` builders instead. `GeomText`/`GeomLabel` are
+*not* marked `#[non_exhaustive]` (downstream code builds those with
+`..Default::default()` literals, which `#[non_exhaustive]` would
+forbid) — this only affects `GeomAttribution`.
 
 ### Added
 - **`GeomAttribution` (`annotation_attribution`) can hold several stacked
@@ -32,7 +44,17 @@ All notable changes to this project are documented here. The format follows
   upward for the bottom corners, downward for the top corners — each
   `text_size * 1.3` px from the last, so a map adding more lines never
   needs to know any other line's position. A single line (no `.line(..)`
-  calls) draws byte-identically to before this change.
+  calls) draws byte-identically to before this change. `GeomAttribution`
+  is now `#[non_exhaustive]` so a future field stays additive (see
+  **Migration** above).
+- **`geom_text` honours an embedded `"\n"` as a forced line break**
+  (#249, the same behaviour `geom_label` got in #229; DataZooDE/
+  anofox-visualization#487: diagram edge labels like `"5.4K\norders"`).
+  `GeomText::draw` now splits a label on `"\n"` into forced lines
+  *before* any `.with_wrap(..)` word-wrapping, drawing one `<text>` per
+  line, vertically centred around the anchor per `vjust`, with the halo
+  (`bg_colour`/`bg_r`, #229) applied to every line. A plain (no `"\n"`)
+  label draws byte-identically to before this change.
 
 ## [0.30.2] — 2026-10-24
 
