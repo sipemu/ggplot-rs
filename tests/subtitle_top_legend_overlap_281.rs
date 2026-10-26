@@ -273,3 +273,66 @@ fn no_top_legend_subtitle_position_is_byte_identical() {
         "no-legend subtitle y must stay exactly on the pre-#281 floor value"
     );
 }
+
+/// The exact minimal repro posted on the issue: `theme_void()`,
+/// `legend_margin` reset to `Margin::default()`, a `scale_fill_binned`
+/// legend, a `.subtitle()`, `LegendPosition::Top`, at 1200x320.
+/// `theme_void`'s `subtitle` element is `ElementText::blank()`, whose
+/// `size` stays at the struct default of 12.0 (bigger than
+/// `theme_gray`'s 11.0) even though it's invisible, and the renderer
+/// draws the subtitle text regardless of `theme.subtitle.visible`.
+///
+/// Confirmed (not just hand-derived) against the actual pre-#281
+/// `renderer.rs`: this reproduces the issue's exact reported numbers,
+/// subtitle drawn at y=25.20 (span 19.2 to 31.2) against a legend swatch
+/// at y=28.0, a 3.2px overlap.
+#[test]
+fn theme_void_binned_legend_with_subtitle_matches_the_issues_exact_repro() {
+    let data: Vec<(String, Vec<Value>)> = vec![
+        ("x".into(), (0..5).map(|i| Value::Float(i as f64)).collect()),
+        ("y".into(), (0..5).map(|_| Value::Float(0.0)).collect()),
+        (
+            "v".into(),
+            [2.0, 15.0, 30.0, 55.0, 90.0]
+                .iter()
+                .map(|f| Value::Float(*f))
+                .collect(),
+        ),
+    ];
+    let mut theme = ggplot_rs::theme::presets::theme_void();
+    theme.legend_margin = ggplot_rs::theme::Margin::default();
+    let svg = GGPlot::new(data)
+        .aes(Aes::new().x("x").y("y").fill("v"))
+        .geom_tile()
+        .scale_fill_binned(
+            vec![0.0, 10.0, 50.0, 100.0],
+            RGBAColor {
+                r: 240,
+                g: 240,
+                b: 200,
+                a: 1.0,
+            },
+            RGBAColor {
+                r: 30,
+                g: 30,
+                b: 120,
+                a: 1.0,
+            },
+        )
+        .theme(theme)
+        .subtitle("week: 3")
+        .legend_position(LegendPosition::Top)
+        .render_svg_native_with_size(1200, 320)
+        .unwrap();
+    let subtitle = text_boxes(&svg, "week: 3");
+    assert_eq!(subtitle.len(), 1, "{svg}");
+    let subtitle_bottom = span(subtitle[0]).1;
+    let legend_top = legend_key_top_y(&svg);
+    let gap = legend_top - subtitle_bottom;
+    assert!(
+        gap >= LEGEND_SPACING - SLACK,
+        "issue's exact repro: subtitle {:?} must end at least legend_spacing above the \
+         legend's first key (y={legend_top}), got gap={gap}: {svg}",
+        span(subtitle[0])
+    );
+}
