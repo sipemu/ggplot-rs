@@ -5,6 +5,8 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.31.4] — 2026-10-26
+
 ### Fixed
 - **`AttributionOverflow::Wrap` now splits *inside* a run, not just between
   runs, and both `Wrap` and `Ellipsis` keep each kept/split piece's link**
