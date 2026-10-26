@@ -1364,8 +1364,14 @@ pub(crate) fn plan_all_legends(
         }
         let breaks = scale.breaks();
         let validated_guide = guide.validated(breaks.len(), warnings);
+        // #271: size against `breaks_for_layout()`, not `breaks` itself —
+        // identical for every scale except `ScaleFillBinned` under
+        // `count_reserve`, where it reserves width for the widest count
+        // digit width so the resulting row count doesn't depend on which
+        // frame's counts happen to be measured.
+        let layout_breaks = scale.breaks_for_layout();
         if let Some(plan) = plan_legend(
-            &breaks,
+            &layout_breaks,
             &validated_guide,
             theme,
             per_guide_width,

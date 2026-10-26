@@ -5,6 +5,22 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Added
+- **Three knobs for a `GGPlot` rendered once per animation frame with
+  scales shared across frames** (anofox-visualization's time maps,
+  #269/#270/#271): `ScaleFillBinned::na_key(NaKey)` keeps the "no data"
+  legend key present (and its count, down to `"no data (0)"`) across
+  every frame instead of only the ones with missing values (#269);
+  `ScaleSizeContinuous::with_limits(min, max)` fixes a size scale's
+  domain so it isn't widened per frame, mirroring
+  `ScaleLinewidth::with_limits` (#270); `ScaleFillBinned::count_reserve
+  (max_count)` reserves a binned legend's measured width for the widest
+  count digit width any frame can produce, so a horizontal legend's
+  auto-wrap row count — and so the panel — doesn't move just because one
+  frame's counts happen to have fewer digits than another's (#271).
+  None of the three change any existing render: all three are
+  opt-in, default off/`Auto`/unchanged.
+
 ## [0.31.3] — 2026-10-26
 
 ### Fixed

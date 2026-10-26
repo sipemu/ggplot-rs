@@ -10,6 +10,10 @@ pub struct ScaleSizeContinuous {
     min: f64,
     max: f64,
     trained: bool,
+    /// Set by [`with_limits`](Self::with_limits): the domain is fixed and
+    /// no longer widened by [`train`](Scale::train) — mirrors
+    /// `ScaleLinewidth::with_limits` (sipemu/ggplot-rs#270).
+    limits_fixed: bool,
     /// Output range in pixels: (min_radius, max_radius).
     range: (f64, f64),
     /// Locale for the default break labels (`None` = default marks).
@@ -28,6 +32,7 @@ impl ScaleSizeContinuous {
             min: f64::INFINITY,
             max: f64::NEG_INFINITY,
             trained: false,
+            limits_fixed: false,
             range: (1.0, 6.0),
             locale: None,
             area_max: None,
@@ -36,6 +41,20 @@ impl ScaleSizeContinuous {
 
     pub fn with_range(mut self, min: f64, max: f64) -> Self {
         self.range = (min, max);
+        self
+    }
+
+    /// Fix the input domain; unlike the default (which widens to whatever
+    /// `train` sees), values outside `[min, max]` are clamped to the
+    /// nearest bound and later `train` calls don't widen it further
+    /// (#270) — a size encoding shared across facets/frames/renders needs
+    /// one domain fixed in advance, the same way `ScaleLinewidth::
+    /// with_limits` already lets linewidth do.
+    pub fn with_limits(mut self, min: f64, max: f64) -> Self {
+        self.min = min;
+        self.max = max;
+        self.trained = true;
+        self.limits_fixed = true;
         self
     }
 
@@ -94,6 +113,10 @@ impl Scale for ScaleSizeContinuous {
     }
 
     fn train(&mut self, values: &[Value]) {
+        if self.limits_fixed {
+            self.trained = true;
+            return;
+        }
         for v in values {
             if let Some(f) = v.as_f64() {
                 if f.is_finite() {
@@ -114,10 +137,17 @@ impl Scale for ScaleSizeContinuous {
             Some(f) => f,
             None => return 0.0,
         };
+        if !f.is_finite() {
+            return 0.0;
+        }
         let range = self.max - self.min;
         if range.abs() < f64::EPSILON {
             0.5
         } else {
+            // #270: a `with_limits` domain can be narrower than the data
+            // (unlike the default, data-trained domain, which never is)
+            // — clamping to [0, 1] here squishes an out-of-domain value
+            // to the nearest end, the same as `ScaleLinewidth`.
             ((f - self.min) / range).clamp(0.0, 1.0)
         }
     }
@@ -213,9 +243,11 @@ impl Scale for ScaleSizeContinuous {
     }
 
     fn reset_training(&mut self) {
-        self.min = f64::INFINITY;
-        self.max = f64::NEG_INFINITY;
-        self.trained = false;
+        if !self.limits_fixed {
+            self.min = f64::INFINITY;
+            self.max = f64::NEG_INFINITY;
+            self.trained = false;
+        }
     }
 }
 
@@ -304,5 +336,71 @@ mod tests {
             Some(6.0),
             "falls back to max_size 6"
         );
+    }
+
+    // ─── #270: `with_limits` ───────────────────────────────────────────
+
+    /// Two renders of different data, sharing the same `with_limits`
+    /// domain, give identical radii for equal values and identical
+    /// legend breaks — the motivating case (a size shared across
+    /// frames/facets/renders).
+    #[test]
+    fn with_limits_gives_identical_radii_and_breaks_across_different_data() {
+        let mut a = ScaleSizeContinuous::new()
+            .with_range(2.0, 10.0)
+            .with_limits(0.0, 100.0);
+        let mut b = ScaleSizeContinuous::new()
+            .with_range(2.0, 10.0)
+            .with_limits(0.0, 100.0);
+        a.train(&[Value::Float(1.0), Value::Float(2.0)]);
+        b.train(&[Value::Float(50.0), Value::Float(99.0), Value::Float(0.0)]);
+
+        for v in [0.0, 25.0, 50.0, 75.0, 100.0] {
+            assert_eq!(
+                a.map_to_size(&Value::Float(v)),
+                b.map_to_size(&Value::Float(v)),
+                "value {v} should map to the same radius regardless of trained data"
+            );
+        }
+        assert_eq!(a.breaks(), b.breaks());
+    }
+
+    #[test]
+    fn with_limits_clamps_out_of_range_values() {
+        let s = ScaleSizeContinuous::new()
+            .with_range(2.0, 10.0)
+            .with_limits(0.0, 100.0);
+        assert_eq!(s.map_to_size(&Value::Float(-50.0)), Some(2.0));
+        assert_eq!(s.map_to_size(&Value::Float(500.0)), Some(10.0));
+    }
+
+    /// `area(max_size)` under `with_limits`: the denominator is
+    /// `max(|min|, |max|)` of the *fixed* limits, not whatever happens to
+    /// be trained — so two different data batches sharing limits give
+    /// the same area-proportional radius for the same value.
+    #[test]
+    fn with_limits_and_area_share_radii_across_different_data() {
+        let mut a = ScaleSizeContinuous::new().area(6.0).with_limits(0.0, 16.0);
+        let mut b = ScaleSizeContinuous::new().area(6.0).with_limits(0.0, 16.0);
+        a.train(&[Value::Float(1.0)]);
+        b.train(&[Value::Float(1.0), Value::Float(16.0), Value::Float(8.0)]);
+        for v in [0.0, 1.0, 4.0, 16.0] {
+            assert_eq!(
+                a.map_to_size(&Value::Float(v)),
+                b.map_to_size(&Value::Float(v))
+            );
+        }
+    }
+
+    #[test]
+    fn with_limits_training_does_not_change_map_to_size() {
+        let mut fixed = ScaleSizeContinuous::new()
+            .with_range(1.0, 6.0)
+            .with_limits(0.0, 10.0);
+        let before = fixed.map_to_size(&Value::Float(5.0));
+        fixed.train(&[Value::Float(-1000.0), Value::Float(1000.0)]);
+        let after = fixed.map_to_size(&Value::Float(5.0));
+        assert_eq!(before, after, "training must not widen a fixed domain");
+        assert_eq!(before, Some(3.5));
     }
 }
