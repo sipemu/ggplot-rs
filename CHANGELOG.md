@@ -21,15 +21,21 @@ All notable changes to this project are documented here. The format follows
 - Added a shared corner layout (`render::corner_layout`): `GeomAttribution`,
   `GeomAnnotationScale` and `GeomBivariateLegend` each measure their own
   box (after wrapping/fitting), stack clear of anything another one of
-  them already claimed in the same render pass via two new
-  `DrawBackend` methods (`corner_claims`/`claim_corner_box`, both default
-  no-ops — additive, opt-out by never calling them), and claim the
-  (possibly shifted) result in turn. An ordinary legend placed with
+  them already claimed in the same render pass — with a few px of real
+  clearance, not just zero-gap touching, since a box's height is only an
+  approximation of its real ink extent — via three new `DrawBackend`
+  methods (`corner_claims`/`claim_corner_box`/`clear_corner_claims`, all
+  default no-ops — additive, opt-out by never calling them), and claim
+  the (possibly shifted) result in turn. An ordinary legend placed with
   `legend_position_inside` draws *after* every geom, so `renderer.rs`
   pre-claims its box (`guide::legend::inside_legend_box`, measured the
   same way `draw_legend_planned` itself positions it) before any
   corner-furniture geom draws, so one drawn first still stacks clear of
-  where the legend will land.
+  where the legend will land. Stacking is bounded to the panel itself —
+  a claim tall enough that fully clearing it would push an item above
+  the panel's own top edge instead clamps there (a residual gap against
+  that one claim, rather than leaving the panel/map entirely), e.g. a
+  bivariate legend's very long rotated caption next to a short panel.
 - **`GeomBivariateLegend` now sizes its box from the rotated y-axis
   caption's full text extent, not just its thickness**: a caption longer
   than the grid's own height used to draw past the box's top/bottom edge

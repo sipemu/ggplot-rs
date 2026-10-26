@@ -133,7 +133,7 @@ impl Geom for GeomAnnotationScale {
             MapCorner::TopLeft | MapCorner::TopRight => 1.0,
         };
         let claims = backend.corner_claims();
-        let shifted_box = stack_clear(natural_box.clone(), away_sign, &claims);
+        let shifted_box = stack_clear(natural_box.clone(), away_sign, &claims, &plot_area);
         let y0 = y0 + (shifted_box.y - natural_box.y);
         // A staple/I-beam: two short end-ticks joining a horizontal run,
         // like ggspatial's own scale bar.
@@ -798,7 +798,7 @@ impl Geom for GeomAttribution {
                 height: (max_y - min_y) + ascent + descent,
             };
             let claims = backend.corner_claims();
-            let shifted_box = stack_clear(natural_box.clone(), away_sign, &claims);
+            let shifted_box = stack_clear(natural_box.clone(), away_sign, &claims, &plot_area);
             let dy = shifted_box.y - natural_box.y;
             if dy != 0.0 {
                 for (_, _, y) in physical_lines.iter_mut() {

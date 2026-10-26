@@ -238,7 +238,7 @@ impl GeomBivariateLegend {
             height: natural.total_h,
         };
         let claims = backend.corner_claims();
-        let shifted_box = stack_clear(natural_box.clone(), away_sign, &claims);
+        let shifted_box = stack_clear(natural_box.clone(), away_sign, &claims, plot_area);
         let dy = shifted_box.y - natural_box.y;
         backend.claim_corner_box(shifted_box);
         LegendLayout {
