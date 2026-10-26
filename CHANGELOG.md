@@ -5,6 +5,18 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Fixed
+- **A `Top`/`Bottom` legend for a continuous, non-colourbar guide
+  (`linewidth`/`size`/`alpha`) now wraps onto extra rows instead of
+  drawing its keys past the panel/canvas edge** (#277). Previously
+  `plan_all_legends` only planned a *discrete* scale's legend, so a
+  continuous guide's sampled breaks drew unconditionally with no width
+  check at all — and `plot.rs`'s row-reservation pass only ran when a
+  discrete guide was present, so even a wrapped continuous-only legend
+  had no extra band height reserved for it. Both are now in scope for
+  the same B3-2 wrap/grid planning a discrete guide already gets; only a
+  true colourbar (continuous `color`/`fill`) is still a fixed-width bar.
+
 ## [0.31.5] — 2026-10-26
 
 ### Added
