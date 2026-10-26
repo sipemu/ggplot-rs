@@ -1593,7 +1593,7 @@ dependencies = [
 
 [[package]]
 name = "ggplot-rs"
-version = "0.31.4"
+version = "0.31.5"
 dependencies = [
  "ab_glyph",
  "anofox-regression",
@@ -1616,7 +1616,7 @@ dependencies = [
 
 [[package]]
 name = "ggplot-rs-wasm"
-version = "0.31.4"
+version = "0.31.5"
 dependencies = [
  "ggplot-rs",
  "serde_json",
