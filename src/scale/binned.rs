@@ -18,6 +18,24 @@ use crate::render::backend::FillPattern;
 
 use super::Scale;
 
+/// `ScaleFillBinned::na_key` (sipemu/ggplot-rs#269): whether the legend's
+/// "no data" key is shown.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
+pub enum NaKey {
+    /// Today's behaviour (unchanged default): the key appears only when
+    /// at least one trained value was `Value::Na`.
+    #[default]
+    Auto,
+    /// Always show the key, with its count (`"no data (0)"` when nothing
+    /// is missing) — a plot rendered once per animation frame needs a
+    /// legend that doesn't grow or shrink as the missing count changes
+    /// from frame to frame.
+    Always,
+    /// Never show the key, even with `Value::Na` trained — the caller
+    /// draws its own "no data" explanation elsewhere.
+    Never,
+}
+
 /// A coarse, order-sensitive fingerprint of a `train()` batch (FNV-1a over
 /// each value's length/discriminant/bits). See [`ScaleFillBinned::seen`]'s
 /// doc for why this exists.
@@ -80,6 +98,13 @@ pub struct ScaleFillBinned {
     /// `None` (the default): `na_color` draws flat, as before.
     na_pattern: Option<FillPattern>,
     na_label: String,
+    /// `na_key` (#269). Default `Auto` — today's `na_count > 0` rule.
+    na_key: NaKey,
+    /// `count_reserve` (#271) — layout-only digit-width reservation for
+    /// the legend's auto-wrap sizing pass; the drawn label is unaffected.
+    /// `None` (the default): unchanged, `breaks_for_layout` falls back to
+    /// `breaks()`.
+    count_reserve: Option<usize>,
     name: String,
     corrected: bool,
 }
@@ -158,6 +183,8 @@ impl ScaleFillBinned {
             na_color: (127, 127, 127),
             na_pattern: None,
             na_label: "no data".to_string(),
+            na_key: NaKey::Auto,
+            count_reserve: None,
             name: String::new(),
             corrected: edges_corrected || colors_corrected,
         }
@@ -183,6 +210,8 @@ impl ScaleFillBinned {
             na_color: (127, 127, 127),
             na_pattern: None,
             na_label: "no data".to_string(),
+            na_key: NaKey::Auto,
+            count_reserve: None,
             name: String::new(),
             corrected,
         }
@@ -212,6 +241,54 @@ impl ScaleFillBinned {
     pub fn na_label(mut self, label: &str) -> Self {
         self.na_label = label.to_string();
         self
+    }
+
+    /// Whether the "no data" legend key is shown (#269). Default
+    /// [`NaKey::Auto`] (today's behaviour: shown only when at least one
+    /// trained value was `Value::Na`). `NaKey::Always` keeps the key
+    /// (with its count, down to `"no data (0)"`) even when nothing is
+    /// missing — a plot rendered once per animation frame needs a
+    /// legend whose key count doesn't change (and so doesn't resize)
+    /// just because one particular frame happens to have no missing
+    /// values. `NaKey::Never` hides it even with `Value::Na` trained.
+    pub fn na_key(mut self, show: NaKey) -> Self {
+        self.na_key = show;
+        self
+    }
+
+    /// Lay the legend out — for auto-wrap sizing only, never for what's
+    /// drawn — as if every class's trained count had `max_count`'s digit
+    /// width (#271). Binned legend labels carry a count
+    /// (`"10–50 (12)"`); across an animation's frames the same scale's
+    /// counts change digit width while its breaks/colours stay fixed,
+    /// which can change the legend's measured pitch enough to flip an
+    /// auto-wrapped (horizontal) legend's row count and move the panel.
+    /// `max_count` should be the largest count any frame can produce
+    /// (e.g. the full dataset's count per class). Default `None`: off,
+    /// byte-identical to before this existed.
+    pub fn count_reserve(mut self, max_count: usize) -> Self {
+        self.count_reserve = Some(max_count);
+        self
+    }
+
+    /// Pad `label`'s trailing `" (count)"` so its digit run is at least
+    /// `min_digits` wide (zero-padded), for [`breaks_for_layout`]'s
+    /// `count_reserve` sizing pass — never for what's drawn. A label that
+    /// doesn't end in `(<digits>)` (shouldn't happen for this scale's own
+    /// breaks, but keeps this generic) is returned unchanged.
+    ///
+    /// [`breaks_for_layout`]: Scale::breaks_for_layout
+    fn pad_trailing_count(label: &str, min_digits: usize) -> String {
+        if label.ends_with(')') {
+            if let Some(open) = label.rfind('(') {
+                let inner = &label[open + 1..label.len() - 1];
+                if !inner.is_empty() && inner.chars().all(|c| c.is_ascii_digit()) {
+                    let digits = min_digits.max(inner.len());
+                    return format!("{}({inner:0>digits$})", &label[..open]);
+                }
+            }
+        }
+        label.to_string()
     }
 
     /// The bin index for `v` (clamped into range first).
@@ -270,6 +347,15 @@ impl ScaleFillBinned {
     fn na_label_with_count(&self) -> String {
         format!("{} ({})", self.na_label, self.na_count)
     }
+
+    /// Whether `breaks()` includes the "no data" key, per `na_key` (#269).
+    fn na_key_shown(&self) -> bool {
+        match self.na_key {
+            NaKey::Auto => self.na_count > 0,
+            NaKey::Always => true,
+            NaKey::Never => false,
+        }
+    }
 }
 
 impl Scale for ScaleFillBinned {
@@ -315,10 +401,27 @@ impl Scale for ScaleFillBinned {
                 ((center - lo0) / span, self.class_label(i))
             })
             .collect();
-        if self.na_count > 0 {
+        if self.na_key_shown() {
             out.push((1.0, self.na_label_with_count()));
         }
         out
+    }
+
+    /// `count_reserve` (#271): pad every key's trailing `(count)` to at
+    /// least `count_reserve`'s digit width before measuring — the drawn
+    /// labels from [`breaks`](Scale::breaks) are untouched. `None` (the
+    /// default): identical to `breaks()`.
+    fn breaks_for_layout(&self) -> Vec<(f64, String)> {
+        match self.count_reserve {
+            None => self.breaks(),
+            Some(reserve) => {
+                let min_digits = reserve.to_string().len();
+                self.breaks()
+                    .into_iter()
+                    .map(|(pos, label)| (pos, Self::pad_trailing_count(&label, min_digits)))
+                    .collect()
+            }
+        }
     }
 
     fn name(&self) -> &str {
@@ -370,7 +473,7 @@ impl Scale for ScaleFillBinned {
     }
 
     fn is_na_break(&self, label: &str) -> bool {
-        self.na_count > 0 && label == self.na_label_with_count()
+        self.na_key_shown() && label == self.na_label_with_count()
     }
 
     fn validate(&self, warnings: &mut Vec<String>) {
@@ -696,5 +799,115 @@ mod tests {
         assert_eq!(s.bin_index(49.999), 1);
         assert_eq!(s.bin_index(50.0), 2);
         assert_eq!(s.bin_index(100.0), 2);
+    }
+
+    // ─── #269: `na_key` ──────────────────────────────────────────────
+
+    #[test]
+    fn na_key_always_lists_the_key_with_zero_count_when_nothing_is_missing() {
+        let mut s = scale().na_key(NaKey::Always);
+        s.train(&[Value::Float(1.0)]);
+        let breaks = s.breaks();
+        assert_eq!(breaks.len(), 4, "the no-data key is kept even at 0");
+        let (_, label) = breaks.last().unwrap();
+        assert_eq!(label, "no data (0)");
+        // And it still round-trips to the na colour via `map_to_color`.
+        assert_eq!(
+            s.map_to_color(&Value::Str(label.clone())),
+            Some((127, 127, 127))
+        );
+        assert!(s.is_na_break(label));
+    }
+
+    #[test]
+    fn na_key_never_hides_it_even_with_na_present() {
+        let mut s = scale().na_key(NaKey::Never);
+        s.train(&[Value::Float(1.0), Value::Na, Value::Na]);
+        let breaks = s.breaks();
+        assert_eq!(breaks.len(), 3, "no trailing no-data entry despite 2 NAs");
+        assert!(!s.is_na_break(&s.na_label_with_count()));
+    }
+
+    #[test]
+    fn na_key_auto_is_unchanged() {
+        // Default (no `.na_key(..)` call): identical to before #269.
+        let mut without_na = scale();
+        without_na.train(&[Value::Float(1.0)]);
+        assert_eq!(without_na.breaks().len(), 3);
+
+        let mut with_na = scale();
+        with_na.train(&[Value::Float(1.0), Value::Na]);
+        assert_eq!(with_na.breaks().len(), 4);
+    }
+
+    // ─── #271: `count_reserve` ───────────────────────────────────────
+
+    #[test]
+    fn count_reserve_pads_measured_labels_but_not_drawn_ones() {
+        let mut few = scale().count_reserve(9999);
+        few.train(&[Value::Float(1.0), Value::Float(20.0), Value::Float(75.0)]);
+        let drawn = few.breaks();
+        let labels: Vec<&str> = drawn.iter().map(|(_, l)| l.as_str()).collect();
+        assert_eq!(
+            labels,
+            vec!["0–10 (1)", "10–50 (1)", "50–100 (1)"],
+            "drawn labels unaffected"
+        );
+
+        let layout = few.breaks_for_layout();
+        let layout_labels: Vec<&str> = layout.iter().map(|(_, l)| l.as_str()).collect();
+        assert_eq!(
+            layout_labels,
+            vec!["0–10 (0001)", "10–50 (0001)", "50–100 (0001)"],
+            "layout labels reserve the 4-digit width"
+        );
+    }
+
+    /// The motivating case (#271): two scales sharing breaks/colours, one
+    /// trained with single-digit counts and the other with four-digit
+    /// counts, give *equal-length* `breaks_for_layout()` labels — the
+    /// same character count `legend_pitch`'s `text_width` measures —
+    /// once both reserve the wider digit width, even though the actual
+    /// digits (and so the drawn labels) differ.
+    #[test]
+    fn count_reserve_gives_equal_length_layout_labels_across_differing_counts() {
+        let mut few = scale().count_reserve(9999);
+        few.train(&[Value::Float(1.0), Value::Float(20.0), Value::Float(75.0)]);
+
+        let mut many = scale().count_reserve(9999);
+        let batch: Vec<Value> = (0..1234)
+            .flat_map(|_| [Value::Float(1.0), Value::Float(20.0), Value::Float(75.0)])
+            .collect();
+        many.train(&batch);
+
+        let few_layout = few.breaks_for_layout();
+        let many_layout = many.breaks_for_layout();
+        for (f, m) in few_layout.iter().zip(many_layout.iter()) {
+            assert_eq!(
+                f.1.len(),
+                m.1.len(),
+                "layout labels must measure the same width: {f:?} vs {m:?}"
+            );
+        }
+        // But the actually-drawn labels still differ, as they must.
+        assert_ne!(few.breaks(), many.breaks());
+    }
+
+    #[test]
+    fn count_reserve_is_none_by_default_and_layout_matches_breaks() {
+        let mut s = scale();
+        s.train(&[Value::Float(1.0), Value::Na]);
+        assert_eq!(s.breaks_for_layout(), s.breaks());
+    }
+
+    #[test]
+    fn count_reserve_never_shrinks_below_the_actual_count() {
+        // A reservation smaller than the count actually trained is a
+        // floor, not a cap — the real count's digit width still wins.
+        let mut s = scale().count_reserve(1);
+        let batch: Vec<Value> = (0..1234).map(|_| Value::Float(1.0)).collect();
+        s.train(&batch);
+        let layout = s.breaks_for_layout();
+        assert!(layout[0].1.contains("(1234)"), "{layout:?}");
     }
 }

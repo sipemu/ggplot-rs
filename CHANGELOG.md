@@ -5,6 +5,22 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Added
+- **Three knobs for a `GGPlot` rendered once per animation frame with
+  scales shared across frames** (anofox-visualization's time maps,
+  #269/#270/#271): `ScaleFillBinned::na_key(NaKey)` keeps the "no data"
+  legend key present (and its count, down to `"no data (0)"`) across
+  every frame instead of only the ones with missing values (#269);
+  `ScaleSizeContinuous::with_limits(min, max)` fixes a size scale's
+  domain so it isn't widened per frame, mirroring
+  `ScaleLinewidth::with_limits` (#270); `ScaleFillBinned::count_reserve
+  (max_count)` reserves a binned legend's measured width for the widest
+  count digit width any frame can produce, so a horizontal legend's
+  auto-wrap row count — and so the panel — doesn't move just because one
+  frame's counts happen to have fewer digits than another's (#271).
+  None of the three change any existing render: all three are
+  opt-in, default off/`Auto`/unchanged.
+
 ### Fixed
 - **A bottom-anchored attribution's wrapped row now reads top to bottom,
   and panel-corner furniture now stacks clear of a scale bar, bivariate
@@ -36,13 +52,25 @@ All notable changes to this project are documented here. The format follows
   the panel's own top edge instead clamps there (a residual gap against
   that one claim, rather than leaving the panel/map entirely), e.g. a
   bivariate legend's very long rotated caption next to a short panel.
-- **`GeomBivariateLegend` now sizes its box from the rotated y-axis
-  caption's full text extent, not just its thickness**: a caption longer
-  than the grid's own height used to draw past the box's top/bottom edge
-  — clipped — because only the caption's thickness (the font's height)
-  sized the box, never its length (its vertical span once rotated 90°).
-  Byte-identical for a caption no longer than the grid, the overwhelming
-  majority of cases.
+- **`GeomBivariateLegend`'s x/y captions now fit the grid's own
+  width/height instead of growing the box to fit themselves**: a caption
+  longer than the grid used to draw past the box's edge — clipped —
+  because only the caption's thickness (the font's height) sized the
+  box, never its length; sizing the box from the caption's full length
+  instead could itself grow large enough to crowd out every other
+  corner item regardless of how far up they'd stacked. Each caption is
+  now fit to the grid — wrap onto up to 2 lines, then shrink toward a
+  floor, then ellipsise with the full text kept in a tooltip — the same
+  three-tier fallback `GeomAttribution::fit` already uses. Byte-identical
+  for a caption no longer than the grid, the overwhelming majority of
+  cases.
+- **The rotated y caption now reads bottom to top, letter-tops to the
+  left** (the familiar axis-title convention) **instead of top to
+  bottom**, and a wrapped caption's physical lines now stack in the
+  matching order (the line nearest the grid is read last) — same family
+  as the attribution fix above, just along the rotated axis: getting
+  the per-column reading direction and the column stacking order out of
+  sync swapped a two-line caption's halves once read upright.
 
 ## [0.31.4] — 2026-10-26
 

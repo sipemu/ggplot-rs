@@ -139,6 +139,21 @@ pub trait Scale: Send + Sync {
         false
     }
 
+    /// Labels to *measure* when sizing a legend's auto-wrap layout
+    /// (`guide::legend::plan_legend`'s per-key pitch sums) — never what's
+    /// actually drawn, which stays [`breaks`](Self::breaks). Default:
+    /// identical to `breaks()`, so every scale but one is unaffected.
+    /// `ScaleFillBinned::count_reserve` (sipemu/ggplot-rs#271) overrides
+    /// this: a legend whose key labels carry a trained count
+    /// (`"10–50 (12)"`) measures as if every count had the widest
+    /// expected digit width, so the legend's row count — and so the
+    /// panel — stays stable across renders whose counts differ only in
+    /// digit width (an animated map's frames, sharing one `GGPlot` built
+    /// once per frame with the same breaks/colours).
+    fn breaks_for_layout(&self) -> Vec<(f64, String)> {
+        self.breaks()
+    }
+
     /// Map a data value to a point shape. Default returns None.
     fn map_to_shape(&self, _value: &Value) -> Option<PointShape> {
         None
