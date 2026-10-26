@@ -64,13 +64,6 @@ All notable changes to this project are documented here. The format follows
   three-tier fallback `GeomAttribution::fit` already uses. Byte-identical
   for a caption no longer than the grid, the overwhelming majority of
   cases.
-- **The rotated y caption now reads bottom to top, letter-tops to the
-  left** (the familiar axis-title convention) **instead of top to
-  bottom**, and a wrapped caption's physical lines now stack in the
-  matching order (the line nearest the grid is read last) — same family
-  as the attribution fix above, just along the rotated axis: getting
-  the per-column reading direction and the column stacking order out of
-  sync swapped a two-line caption's halves once read upright.
 
 ## [0.31.4] — 2026-10-26
 

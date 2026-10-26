@@ -399,25 +399,13 @@ impl GeomBivariateLegend {
             )?;
         }
         // The y caption's own physical lines, each its own rotated
-        // column to the left of the grid, reading the standard axis-title
-        // way — bottom-to-top, letter-tops to the left (`angle: -90.0`;
-        // the prior `90.0` read top-to-bottom, letter-tops right, which
-        // this draw loop never exposed as a visible bug on its own
-        // because a single, unbroken line of text is legible either way
-        // — there's no second line to be mis-ordered relative to).
-        // Once a caption wraps, the column stacking direction has to
-        // agree with that per-column reading direction or the two
-        // columns, read in the only non-mirrored page rotation, come out
-        // swapped (same family as #273's reading-order bug): with
-        // bottom-to-top/letter-tops-left text, the column nearest the
-        // grid ends up read *second* once rotated upright, so line 0
-        // (the caption's own start) goes in the *farthest* column, the
-        // continuation nearest the grid.
+        // column to the left of the grid, nearest-to-farthest as the
+        // caption's own text reads (#273: `fit_caption` fit it to
+        // `grid_h`) — one line reads byte-identically to before #273.
         let n_y = layout.y_caption_lines.len();
         for (i, line) in layout.y_caption_lines.iter().enumerate() {
             let slot = caption_slot(layout.y_caption_size);
-            let col = n_y - 1 - i; // 0 = nearest the grid, highest = farthest
-            let lx = layout.grid_x - (col as f64 + 0.5) * slot;
+            let lx = layout.grid_x - (i as f64 + 0.5) * slot;
             let ly = layout.grid_y + layout.grid_h / 2.0;
             let title =
                 (layout.y_caption_truncated && i + 1 == n_y).then_some(self.y_name.as_str());
@@ -428,7 +416,7 @@ impl GeomBivariateLegend {
                     color: self.text_color,
                     size: layout.y_caption_size,
                     anchor: TextAnchor::Middle,
-                    angle: -90.0,
+                    angle: 90.0,
                     family: font.clone(),
                     face: crate::render::backend::FontFace::Plain,
                     bg_colour: None,
@@ -1027,75 +1015,6 @@ mod tests {
         }
     }
 
-    #[test]
-    fn wrapped_y_caption_lines_stack_with_line_0_farthest_from_the_grid() {
-        // The rotated y caption reads bottom-to-top, letter-tops-left
-        // (`angle: -90.0`) — the standard axis-title orientation. Once it
-        // wraps onto several columns, the column nearest the grid is the
-        // one read *last* once a reader rotates the page upright to read
-        // it (the only rotation that doesn't mirror the glyphs), so the
-        // caption's own first physical line must sit in the *farthest*
-        // column (smaller x) and each later line nearer the grid (larger
-        // x) — same family as #273's reading-order bug, just along the
-        // rotated axis instead of the vertical stack a horizontal
-        // attribution row uses.
-        let legend = GeomBivariateLegend {
-            nx: 2,
-            ny: 2,
-            cell_size: 10.0,
-            y_name: "Customers per 10,000 people".to_string(),
-            x_name: String::new(),
-            ..GeomBivariateLegend::default()
-        };
-        let mut backend = RecordingBackend::default();
-        let coord = crate::coord::cartesian::CoordCartesian::default();
-        let scales = ScaleSet::new();
-        legend
-            .draw(
-                &DataFrame::new(),
-                &coord,
-                &scales,
-                &Theme::default(),
-                &mut backend,
-            )
-            .unwrap();
-
-        let layout = legend_layout(
-            &legend,
-            &crate::render::Rect {
-                x: 0.0,
-                y: 0.0,
-                width: 400.0,
-                height: 400.0,
-            },
-        );
-        assert!(
-            layout.y_caption_lines.len() >= 2,
-            "test setup: expected this caption to wrap onto at least 2 lines, got {:?}",
-            layout.y_caption_lines
-        );
-        let x_of = |text: &str| {
-            backend
-                .texts
-                .iter()
-                .find(|(t, ..)| t == text)
-                .unwrap_or_else(|| {
-                    panic!("no draw_text call for line {text:?}: {:?}", backend.texts)
-                })
-                .1
-                 .0
-        };
-        for pair in layout.y_caption_lines.windows(2) {
-            let (line1, line2) = (&pair[0], &pair[1]);
-            let (x1, x2) = (x_of(line1), x_of(line2));
-            assert!(
-                x1 < x2,
-                "line {line1:?} (x={x1}) must sit farther from the grid (smaller x) than the \
-                 following line {line2:?} (x={x2})"
-            );
-        }
-    }
-
     /// Reconstructs every rect [`GeomBivariateLegend::draw_with_layout`]
     /// actually draws into from a resolved `layout` — the grid itself,
     /// each x-caption line's row, each y-caption line's rotated column —
@@ -1124,8 +1043,7 @@ mod tests {
         let n_y = layout.y_caption_lines.len();
         for (i, line) in layout.y_caption_lines.iter().enumerate() {
             let slot = caption_slot(layout.y_caption_size);
-            let col = n_y - 1 - i; // matches draw_with_layout's column order
-            let lx = layout.grid_x - (col as f64 + 0.5) * slot;
+            let lx = layout.grid_x - (i as f64 + 0.5) * slot;
             let h = text_width(line, layout.y_caption_size); // rotated 90°
             rects.push(crate::render::Rect {
                 x: lx - slot / 2.0,
