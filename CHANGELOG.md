@@ -5,6 +5,22 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Fixed
+- **`GeomAttribution::fit` no longer lets a fitted line overflow the
+  panel, and `AttributionOverflow::Wrap` no longer char-slices a bare
+  URL into a long ladder of lines** (#258's follow-up, #264). The
+  `fit`/`fit_overflow` width estimate is tuned for layout decisions in
+  general, not pixel-perfect metrics for one particular font, and could
+  render a few percent wider than estimated for a URL/date/prose mix —
+  enough to clip a right-anchored line past the panel's left edge at its
+  floor size. The fit budget now applies a small safety margin below the
+  raw panel-minus-inset width. Separately, wrapping a run with no
+  whitespace at all (a bare URL) now prefers breaking after `/ . _ - ?
+  & =` rather than falling back to a blind character-count cut, and caps
+  at 3 physical lines (ellipsising the last) instead of laddering
+  indefinitely up into the map. `wrap_text`'s separator-aware hard break
+  also benefits `GeomText`/`GeomLabel`'s own `.wrap(..)`.
+
 ## [0.31.2] — 2026-10-25
 
 Opt-in fit-to-panel for attributions (`GeomAttribution::fit` / `fit_overflow`, #258); per-cell counts on the bivariate legend (`GGPlot::bivariate_legend_counts`, #259). No API breaks (cargo-semver-checks against v0.31.1).

@@ -318,7 +318,13 @@ fn fit_row(
             (min_size, vec![vec![(truncated, None)]])
         }
         AttributionOverflow::Wrap => {
-            let lines = wrap_text(&concat, max_width, min_size);
+            let mut lines = wrap_text(&concat, max_width, min_size);
+            if lines.len() > ATTRIBUTION_MAX_WRAPPED_LINES {
+                lines.truncate(ATTRIBUTION_MAX_WRAPPED_LINES);
+                if let Some(last) = lines.last_mut() {
+                    *last = force_ellipsis(last, max_width, min_size);
+                }
+            }
             (
                 min_size,
                 lines.into_iter().map(|l| vec![(l, None)]).collect(),
@@ -326,6 +332,43 @@ fn fit_row(
         }
     }
 }
+
+/// Like [`truncate_to_width`], but always appends "…" even when `text`
+/// already fits `max_width` on its own (#264: the last line kept after
+/// [`ATTRIBUTION_MAX_WRAPPED_LINES`] caps a wrap already fits — it came
+/// from [`wrap_text`] — so `truncate_to_width`'s "already fits, leave it
+/// alone" early-out would silently drop the remaining lines without any
+/// visible sign that the line was cut short).
+fn force_ellipsis(text: &str, max_width: f64, size: f64) -> String {
+    let chars: Vec<char> = text.chars().collect();
+    for keep in (0..=chars.len()).rev() {
+        let candidate: String = chars[..keep].iter().collect::<String>() + "…";
+        if text_width(&candidate, size) <= max_width {
+            return candidate;
+        }
+    }
+    "…".to_string()
+}
+
+/// Safety margin applied to [`GeomAttribution::fit`]'s width budget (#264):
+/// `text_width`'s per-character heuristic (`render::text`'s em table) is
+/// tuned for layout decisions generally, not pixel-perfect metrics for one
+/// particular font — a character mix heavy on digits, `/`/`.`/`_` and
+/// mixed-case prose (a URL plus a trailing note, e.g. #264's repro) can
+/// render a few percent wider in the actual font (Hanken Grotesk) than the
+/// estimate says. Shrinking the budget by this fraction before fitting
+/// keeps a line that "just" fits by the estimate from actually overflowing
+/// the panel once real glyphs are drawn, without needing the shared,
+/// crate-wide `text_width` table itself recalibrated per caller.
+const ATTRIBUTION_FIT_SAFETY_MARGIN: f64 = 0.92;
+
+/// Once [`AttributionOverflow::Wrap`] still doesn't fit a logical row at
+/// the fit floor, the most physical lines it may expand into (#264: an
+/// unbounded wrap on a bare URL — no whitespace to break the old
+/// char-by-char fallback — produced a 13-line ladder that ran up into the
+/// map). Any remainder beyond this count is dropped, with the last kept
+/// line ellipsised to show truncation happened.
+const ATTRIBUTION_MAX_WRAPPED_LINES: usize = 3;
 
 /// `url` is an absolute `http://`/`https://` URL (case-insensitive scheme),
 /// not `javascript:`, `data:`, a bare path or anything else a backend
@@ -405,7 +448,10 @@ impl Geom for GeomAttribution {
         let logical_rows = std::iter::once(row0).chain(extra_rows);
         let physical_lines: Vec<(f64, AttributionRow)> =
             if let Some(min_size) = self.fit_min_text_size {
-                let max_width = (plot_area.width - 8.0).max(0.0);
+                // Panel width minus the 4px corner inset on each side, then
+                // a safety margin against the width estimate's slack
+                // against real font metrics (#264).
+                let max_width = ((plot_area.width - 8.0) * ATTRIBUTION_FIT_SAFETY_MARGIN).max(0.0);
                 logical_rows
                     .flat_map(|row| {
                         let (size, lines) =
@@ -734,6 +780,47 @@ mod tests {
         }
     }
 
+    #[test]
+    fn fit_row_wrap_caps_the_line_count_and_ellipsises_the_last() {
+        // No whitespace at all (#264's repro shape): the old char-by-char
+        // fallback would otherwise ladder on indefinitely.
+        let row = vec![(
+            "https://sgx.geodatenzentrum.de/web_public/gdz/datenquellen/datenquellen_vg_nuts.pdf"
+                .to_string(),
+            None,
+        )];
+        let max_width = 15.0; // narrow enough to need far more than 3 lines uncapped
+        let (size, lines) = fit_row(&row, 8.0, 4.0, max_width, AttributionOverflow::Wrap);
+        assert_eq!(size, 4.0);
+        assert_eq!(lines.len(), ATTRIBUTION_MAX_WRAPPED_LINES);
+        for line in &lines {
+            assert_eq!(line.len(), 1);
+            assert!(
+                text_width(&line[0].0, size) <= max_width + 1e-6,
+                "line {:?} overflows",
+                line[0].0
+            );
+        }
+        assert!(
+            lines.last().unwrap()[0].0.ends_with('…'),
+            "last kept line should be ellipsised: {:?}",
+            lines.last().unwrap()[0].0
+        );
+    }
+
+    #[test]
+    fn fit_row_wrap_under_the_cap_is_untouched() {
+        // Fewer physical lines than the cap: no truncation, no ellipsis.
+        let row = vec![(
+            "https://example.com/sources geometry modified simplified".to_string(),
+            None,
+        )];
+        let max_width = 40.0;
+        let (_, lines) = fit_row(&row, 8.0, 4.0, max_width, AttributionOverflow::Wrap);
+        assert!(lines.len() <= ATTRIBUTION_MAX_WRAPPED_LINES);
+        assert!(!lines.last().unwrap()[0].0.ends_with('…'));
+    }
+
     /// Records every `draw_text`/`draw_text_runs` call's text, position and
     /// size, with a configurable `plot_area` — enough to check an
     /// attribution line's bbox against a narrow panel.
@@ -893,5 +980,98 @@ mod tests {
         )
         .unwrap();
         assert_eq!(backend.calls[0].2, g.text_size);
+    }
+
+    #[test]
+    fn fit_applies_a_safety_margin_below_the_raw_inset_budget() {
+        // #264's repro shape: a right-anchored line that just barely fits
+        // the estimate at the floor size should still have slack against
+        // the *raw* inset budget (panel width minus the 4px corner inset
+        // each side) — the whole point of the margin is that the estimate
+        // alone isn't trusted to be exact.
+        let area = crate::render::Rect {
+            x: 0.0,
+            y: 0.0,
+            width: 342.0,
+            height: 300.0,
+        };
+        let mut backend = RecordingBackend::new(area.clone());
+        let g = GeomAttribution::new(
+            "https://sgx.geodatenzentrum.de/web_public/gdz/datenquellen/datenquellen_vg_nuts.pdf · geometry modified",
+        )
+        .fit(7.0);
+        let scales = ScaleSet::new();
+        let coord = CoordCartesian::default();
+        g.draw(
+            &DataFrame::new(),
+            &coord,
+            &scales,
+            &Theme::default(),
+            &mut backend,
+        )
+        .unwrap();
+        assert_eq!(backend.calls.len(), 1);
+        let (text, _, size, _) = &backend.calls[0];
+        let raw_budget = area.width - 8.0;
+        let w = text_width(text, *size);
+        assert!(w <= raw_budget, "line {text:?} overflows raw budget");
+        assert!(
+            w <= raw_budget * ATTRIBUTION_FIT_SAFETY_MARGIN + 1e-6,
+            "line {text:?} (w={w}) leaves no safety margin below the raw budget ({raw_budget})"
+        );
+    }
+
+    #[test]
+    fn fit_keeps_every_line_inside_the_panel_across_widths_and_sizes() {
+        // Sweeps panel widths 100..=400px and several base/floor text
+        // sizes — every emitted line's estimated width must stay within
+        // the panel, with the safety margin's slack against the raw inset
+        // budget, for both the ellipsis and wrap overflow modes (#264).
+        let text = "https://sgx.geodatenzentrum.de/web_public/gdz/datenquellen/datenquellen_vg_nuts.pdf · geometry modified";
+        let coord = CoordCartesian::default();
+        let scales = ScaleSet::new();
+        for width in (100..=400).step_by(25) {
+            let area = crate::render::Rect {
+                x: 0.0,
+                y: 0.0,
+                width: width as f64,
+                height: 300.0,
+            };
+            let raw_budget = area.width - 8.0;
+            for &(base_size, min_size) in &[(7.0, 7.0), (7.0, 4.0), (10.0, 5.0), (8.0, 8.0)] {
+                for overflow in [AttributionOverflow::Ellipsis, AttributionOverflow::Wrap] {
+                    let mut backend = RecordingBackend::new(area.clone());
+                    let mut g = GeomAttribution::new(text).fit(min_size);
+                    g.text_size = base_size;
+                    g = g.fit_overflow(overflow);
+                    g.draw(
+                        &DataFrame::new(),
+                        &coord,
+                        &scales,
+                        &Theme::default(),
+                        &mut backend,
+                    )
+                    .unwrap();
+                    for (line_text, pos, size, anchor) in &backend.calls {
+                        let w = text_width(line_text, *size);
+                        let frac = anchor_fraction(anchor.clone());
+                        let x0 = pos.0 - w * frac;
+                        let x1 = x0 + w;
+                        assert!(
+                            x0 >= area.x - 1e-6 && x1 <= area.x + area.width + 1e-6,
+                            "width={width} base={base_size} min={min_size} overflow={overflow:?}: \
+                             line {line_text:?} overflowed [x0={x0}, x1={x1}] vs panel [{}, {}]",
+                            area.x,
+                            area.x + area.width
+                        );
+                        assert!(
+                            w <= raw_budget * ATTRIBUTION_FIT_SAFETY_MARGIN + 1e-6,
+                            "width={width} base={base_size} min={min_size} overflow={overflow:?}: \
+                             line {line_text:?} (w={w}) leaves no safety margin below raw budget {raw_budget}"
+                        );
+                    }
+                }
+            }
+        }
     }
 }
