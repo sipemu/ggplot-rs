@@ -18,7 +18,7 @@ use crate::data::{DataFrame, Value};
 use crate::position::identity::PositionIdentity;
 use crate::position::Position;
 use crate::render::backend::{DrawBackend, LineStyle, Linetype, TextAnchor, TextStyle};
-use crate::render::text::{text_width, truncate_to_width, wrap_text};
+use crate::render::text::{hard_break_cut, text_width};
 use crate::render::RenderError;
 use crate::scale::ScaleSet;
 use crate::stat::identity::StatIdentity;
@@ -190,6 +190,10 @@ pub struct GeomAttribution {
     /// [`Self::fit_overflow`]. Only consulted when `fit_min_text_size` is
     /// `Some`.
     pub fit_overflow: AttributionOverflow,
+    /// Multiplier on every width [`Self::fit`] estimates for this
+    /// attribution — see [`Self::fit_width_scale`]. Default `1.0`: no
+    /// effect, byte-identical to before this field existed (#267).
+    pub fit_width_scale: f64,
 }
 
 impl GeomAttribution {
@@ -203,6 +207,7 @@ impl GeomAttribution {
             lines: Vec::new(),
             fit_min_text_size: None,
             fit_overflow: AttributionOverflow::Ellipsis,
+            fit_width_scale: 1.0,
         }
     }
 
@@ -278,6 +283,30 @@ impl GeomAttribution {
         self.fit_overflow = overflow;
         self
     }
+
+    /// Calibrate [`Self::fit`]'s width estimate for a caller's own deployed
+    /// font (#267): `render::text::text_width`'s per-character heuristic is
+    /// tuned as a general-purpose layout estimate, not pixel-perfect
+    /// metrics for any one font, and this crate has no way to know what
+    /// font a downstream SVG consumer's browser actually renders the
+    /// attribution text in (weight, `letter-spacing`, a fallback font, …).
+    /// A value above `1.0` makes [`Self::fit`] treat every line as wider
+    /// than the heuristic says by that factor — shrinking, truncating or
+    /// wrapping earlier — which is the right knob to reach for once a
+    /// caller has *measured* their own rendering overflowing despite
+    /// [`Self::fit`], rather than this crate guessing a bigger built-in
+    /// margin that may still be wrong for that caller's font and either
+    /// over- or under-shoots everyone else's. Default `1.0` (no effect,
+    /// byte-identical to before this method existed). Clamped to a sane
+    /// positive minimum; has no effect unless `.fit(..)` was called.
+    pub fn fit_width_scale(mut self, scale: f64) -> Self {
+        self.fit_width_scale = if scale.is_finite() {
+            scale.max(0.01)
+        } else {
+            1.0
+        };
+        self
+    }
 }
 
 /// Shrinks `row`'s text size toward `min_size` (clamped to `base_size`) so
@@ -286,17 +315,34 @@ impl GeomAttribution {
 /// (#258). Returns the text size to draw at, and the physical lines to
 /// draw: almost always one line (`row` unchanged) — more than one only
 /// when `overflow` is [`AttributionOverflow::Wrap`] and the line still
-/// doesn't fit at `min_size`. Mangling a row into a truncated/wrapped
-/// plain line drops its per-run link structure (the href no longer
-/// matches a shortened substring), so that only happens as a last resort.
+/// doesn't fit at `min_size`. `width_scale` multiplies every width used in
+/// the fit decision (see [`GeomAttribution::fit_width_scale`]); `1.0`
+/// keeps this byte-identical to before that hook existed (#267).
+///
+/// Truncating/wrapping a row that still overflows at `min_size` used to
+/// flatten it to plain text, dropping its per-run link structure entirely
+/// — a row that's one bare linked URL became unclickable the moment it
+/// needed to shrink *and* still didn't fit (#267). [`wrap_row`] and
+/// [`truncate_row_to_width`] instead keep whichever run's href covers
+/// each kept (or split) piece of text.
 fn fit_row(
     row: &[AttributionRun],
     base_size: f64,
     min_size: f64,
     max_width: f64,
     overflow: AttributionOverflow,
+    width_scale: f64,
 ) -> (f64, Vec<AttributionRow>) {
     let min_size = min_size.min(base_size).max(0.1);
+    // Scaling every estimated width up by `width_scale` before comparing
+    // against `max_width` is equivalent to — and cheaper than — scaling
+    // every `text_width` call site down by it, so apply it once here as an
+    // effective (smaller) budget instead.
+    let max_width = if width_scale.is_finite() && width_scale > 0.0 {
+        max_width / width_scale
+    } else {
+        max_width
+    };
     if !(max_width.is_finite()) || max_width <= 0.0 {
         return (base_size, vec![row.to_vec()]);
     }
@@ -313,41 +359,215 @@ fn fit_row(
         return (shrunk_size, vec![row.to_vec()]);
     }
     match overflow {
-        AttributionOverflow::Ellipsis => {
-            let truncated = truncate_to_width(&concat, max_width, min_size).unwrap_or(concat);
-            (min_size, vec![vec![(truncated, None)]])
-        }
+        AttributionOverflow::Ellipsis => (
+            min_size,
+            vec![truncate_row_to_width(row, max_width, min_size)],
+        ),
         AttributionOverflow::Wrap => {
-            let mut lines = wrap_text(&concat, max_width, min_size);
+            let mut lines = wrap_row(row, max_width, min_size);
             if lines.len() > ATTRIBUTION_MAX_WRAPPED_LINES {
                 lines.truncate(ATTRIBUTION_MAX_WRAPPED_LINES);
                 if let Some(last) = lines.last_mut() {
-                    *last = force_ellipsis(last, max_width, min_size);
+                    *last = force_ellipsis_row(last, max_width, min_size);
                 }
             }
-            (
-                min_size,
-                lines.into_iter().map(|l| vec![(l, None)]).collect(),
-            )
+            (min_size, lines)
         }
     }
 }
 
-/// Like [`truncate_to_width`], but always appends "…" even when `text`
-/// already fits `max_width` on its own (#264: the last line kept after
-/// [`ATTRIBUTION_MAX_WRAPPED_LINES`] caps a wrap already fits — it came
-/// from [`wrap_text`] — so `truncate_to_width`'s "already fits, leave it
-/// alone" early-out would silently drop the remaining lines without any
-/// visible sign that the line was cut short).
-fn force_ellipsis(text: &str, max_width: f64, size: f64) -> String {
-    let chars: Vec<char> = text.chars().collect();
+/// Merges adjacent runs that share the same href (`None` href included) in
+/// place, dropping empty-text runs — the common tail of every helper below
+/// that reassembles an [`AttributionRow`] out of pieces that may have come
+/// from the same original run (so should read, and link, as one run again)
+/// or from two different runs that merely happen to carry the same href.
+fn merge_adjacent_same_href(runs: Vec<AttributionRun>) -> AttributionRow {
+    let mut out: AttributionRow = Vec::new();
+    for (text, href) in runs {
+        if text.is_empty() {
+            continue;
+        }
+        if let Some(last) = out.last_mut() {
+            if last.1 == href {
+                last.0.push_str(&text);
+                continue;
+            }
+        }
+        out.push((text, href));
+    }
+    out
+}
+
+/// Splits `chars` (with `owners[i]` naming which run in `row` each
+/// `chars[i]` came from) into maximal same-owner runs, resolving each to
+/// that run's href.
+fn owner_runs(chars: &[char], owners: &[usize], row: &[AttributionRun]) -> Vec<AttributionRun> {
+    let mut out = Vec::new();
+    let mut i = 0;
+    while i < chars.len() {
+        let owner = owners[i];
+        let mut j = i + 1;
+        while j < chars.len() && owners[j] == owner {
+            j += 1;
+        }
+        out.push((chars[i..j].iter().collect(), row[owner].1.clone()));
+        i = j;
+    }
+    out
+}
+
+/// Like [`crate::render::text::truncate_to_width`], but run-aware (#267): keeps whichever run's
+/// href covers the kept prefix instead of flattening `row` to a plain
+/// string, so a shortened-but-still-pointing-to-the-right-place link stays
+/// clickable. Returns `row` itself (byte-identical, including its run
+/// structure) when it already fits — same "leave it alone" early-out as
+/// [`crate::render::text::truncate_to_width`].
+fn truncate_row_to_width(row: &[AttributionRun], max_width: f64, size: f64) -> AttributionRow {
+    let concat: String = row.iter().map(|(t, _)| t.as_str()).collect();
+    if text_width(&concat, size) <= max_width {
+        return row.to_vec();
+    }
+    force_ellipsis_row(row, max_width, size)
+}
+
+/// Like [`truncate_row_to_width`], but always appends "…" even when `row`
+/// already fits `max_width` on its own (#264/#267: the last line kept
+/// after [`ATTRIBUTION_MAX_WRAPPED_LINES`] caps a wrap already fits — it
+/// came from [`wrap_row`] — so `truncate_row_to_width`'s "already fits,
+/// leave it alone" early-out would silently drop the remaining lines
+/// without any visible sign that the line was cut short). The href that
+/// ends up covering the trailing "…" is whichever run the last kept
+/// character belongs to (or none, if nothing at all fits).
+fn force_ellipsis_row(row: &[AttributionRun], max_width: f64, size: f64) -> AttributionRow {
+    let mut chars: Vec<char> = Vec::new();
+    let mut owners: Vec<usize> = Vec::new();
+    for (i, (text, _)) in row.iter().enumerate() {
+        for c in text.chars() {
+            chars.push(c);
+            owners.push(i);
+        }
+    }
     for keep in (0..=chars.len()).rev() {
         let candidate: String = chars[..keep].iter().collect::<String>() + "…";
         if text_width(&candidate, size) <= max_width {
-            return candidate;
+            let mut merged =
+                merge_adjacent_same_href(owner_runs(&chars[..keep], &owners[..keep], row));
+            match merged.last_mut() {
+                Some(last) => last.0.push('…'),
+                None => merged.push(("…".to_string(), None)),
+            }
+            return merged;
         }
     }
-    "…".to_string()
+    vec![("…".to_string(), None)]
+}
+
+/// [`AttributionOverflow::Wrap`]'s run-aware line-breaking (#267): the same
+/// word-wrap and hard-break rules as [`crate::render::text::wrap_text`] (break at whitespace;
+/// hard-split an overlong word, preferring a `/ . _ - ? & =` separator),
+/// but applied across `row`'s runs instead of one flattened string, so
+/// each emitted word — including a hard-split piece of an overlong run,
+/// such as a bare URL — keeps the href of the run it came from. A word
+/// that itself straddles two runs (not a shape the `.runs()`/`.line()`
+/// builders are meant to produce, but the API doesn't forbid it) is cut at
+/// the run boundary as well as any width-driven boundary, so a href is
+/// never applied to text that wasn't actually part of that run.
+fn wrap_row(row: &[AttributionRun], max_width: f64, size: f64) -> Vec<AttributionRow> {
+    let mut chars: Vec<char> = Vec::new();
+    let mut owners: Vec<usize> = Vec::new();
+    for (i, (text, _)) in row.iter().enumerate() {
+        for c in text.chars() {
+            chars.push(c);
+            owners.push(i);
+        }
+    }
+    // Tokenize into (chars, owners) "words" at whitespace boundaries, same
+    // granularity as `str::split_whitespace`.
+    struct Token {
+        chars: Vec<char>,
+        owners: Vec<usize>,
+    }
+    let mut tokens: Vec<Token> = Vec::new();
+    let mut cur_chars: Vec<char> = Vec::new();
+    let mut cur_owners: Vec<usize> = Vec::new();
+    for (c, o) in chars.into_iter().zip(owners) {
+        if c.is_whitespace() {
+            if !cur_chars.is_empty() {
+                tokens.push(Token {
+                    chars: std::mem::take(&mut cur_chars),
+                    owners: std::mem::take(&mut cur_owners),
+                });
+            }
+        } else {
+            cur_chars.push(c);
+            cur_owners.push(o);
+        }
+    }
+    if !cur_chars.is_empty() {
+        tokens.push(Token {
+            chars: cur_chars,
+            owners: cur_owners,
+        });
+    }
+
+    let mut lines: Vec<AttributionRow> = Vec::new();
+    // The physical line currently being built, as text (for width checks,
+    // mirroring `wrap_text`'s `cur: String`) and as pieces (to reassemble
+    // into runs once the line is complete).
+    let mut cur_text = String::new();
+    let mut cur_pieces: Vec<AttributionRun> = Vec::new();
+
+    fn flush_cur(
+        cur_text: &mut String,
+        cur_pieces: &mut Vec<AttributionRun>,
+        lines: &mut Vec<AttributionRow>,
+    ) {
+        if !cur_pieces.is_empty() {
+            lines.push(merge_adjacent_same_href(std::mem::take(cur_pieces)));
+        }
+        cur_text.clear();
+    }
+
+    for token in tokens {
+        let mut word_chars = token.chars;
+        let mut word_owners = token.owners;
+        // A single word that alone overflows max_width: hard-break it,
+        // same as `wrap_text`, each forced piece becoming its own
+        // complete physical line.
+        while text_width(&word_chars.iter().collect::<String>(), size) > max_width
+            && word_chars.len() > 1
+        {
+            let cut = hard_break_cut(&word_chars, max_width, size);
+            flush_cur(&mut cur_text, &mut cur_pieces, &mut lines);
+            lines.push(merge_adjacent_same_href(owner_runs(
+                &word_chars[..cut],
+                &word_owners[..cut],
+                row,
+            )));
+            word_chars = word_chars[cut..].to_vec();
+            word_owners = word_owners[cut..].to_vec();
+        }
+        let word_str: String = word_chars.iter().collect();
+        if cur_text.is_empty() {
+            cur_text = word_str;
+            cur_pieces = owner_runs(&word_chars, &word_owners, row);
+        } else {
+            let candidate = format!("{cur_text} {word_str}");
+            if text_width(&candidate, size) <= max_width {
+                cur_pieces.push((" ".to_string(), None));
+                cur_pieces.extend(owner_runs(&word_chars, &word_owners, row));
+                cur_text = candidate;
+            } else {
+                flush_cur(&mut cur_text, &mut cur_pieces, &mut lines);
+                cur_text = word_str;
+                cur_pieces = owner_runs(&word_chars, &word_owners, row);
+            }
+        }
+    }
+    if !cur_pieces.is_empty() || lines.is_empty() {
+        flush_cur(&mut cur_text, &mut cur_pieces, &mut lines);
+    }
+    lines
 }
 
 /// Safety margin applied to [`GeomAttribution::fit`]'s width budget (#264):
@@ -355,11 +575,24 @@ fn force_ellipsis(text: &str, max_width: f64, size: f64) -> String {
 /// tuned for layout decisions generally, not pixel-perfect metrics for one
 /// particular font — a character mix heavy on digits, `/`/`.`/`_` and
 /// mixed-case prose (a URL plus a trailing note, e.g. #264's repro) can
-/// render a few percent wider in the actual font (Hanken Grotesk) than the
-/// estimate says. Shrinking the budget by this fraction before fitting
-/// keeps a line that "just" fits by the estimate from actually overflowing
-/// the panel once real glyphs are drawn, without needing the shared,
-/// crate-wide `text_width` table itself recalibrated per caller.
+/// render a few percent wider in the actual font than the estimate says.
+/// Shrinking the budget by this fraction before fitting keeps a line that
+/// "just" fits by the estimate from actually overflowing the panel once
+/// real glyphs are drawn, without needing the shared, crate-wide
+/// `text_width` table itself recalibrated per caller.
+///
+/// This is deliberately *not* raised further for #267: measuring the exact
+/// repro string against both of this crate's own real, non-synthetic fonts
+/// — the bundled DejaVu Sans (`render::pixel_backend`'s canvas backend) and
+/// a fetched Hanken Grotesk (anofox-visualization's own UI font; see the
+/// `fit_against_a_real_font_*` tests) — finds the real glyph-advance sum
+/// consistently *narrower* than this heuristic's estimate for that text,
+/// in both fonts, not wider; this margin already has headroom to spare
+/// against either. A caller whose own deployed rendering (a heavier
+/// font-weight, extra `letter-spacing`, a fallback font, …) measurably
+/// needs more should reach for [`GeomAttribution::fit_width_scale`]
+/// instead of this crate guessing a bigger margin for a case it can't
+/// reproduce.
 const ATTRIBUTION_FIT_SAFETY_MARGIN: f64 = 0.92;
 
 /// Once [`AttributionOverflow::Wrap`] still doesn't fit a logical row at
@@ -454,8 +687,14 @@ impl Geom for GeomAttribution {
                 let max_width = ((plot_area.width - 8.0) * ATTRIBUTION_FIT_SAFETY_MARGIN).max(0.0);
                 logical_rows
                     .flat_map(|row| {
-                        let (size, lines) =
-                            fit_row(&row, self.text_size, min_size, max_width, self.fit_overflow);
+                        let (size, lines) = fit_row(
+                            &row,
+                            self.text_size,
+                            min_size,
+                            max_width,
+                            self.fit_overflow,
+                            self.fit_width_scale,
+                        );
                         lines
                             .into_iter()
                             .map(move |l| (size, l))
@@ -603,6 +842,17 @@ mod tests {
     use crate::scale::continuous::ScaleContinuous;
     use crate::scale::Scale;
 
+    /// `text` with every whitespace character removed — for comparing a
+    /// [`wrap_row`]/[`wrap_text`]-wrapped block back against its
+    /// unwrapped source: a line break at a word boundary legitimately
+    /// consumes the space it broke on (same reasoning as `wrap_text`'s own
+    /// tests comparing against `lines.join(" ")`, not `lines.concat()`),
+    /// so a byte-for-byte reconstruction isn't the right invariant once
+    /// more than one physical line is involved (#267).
+    fn strip_ws(text: &str) -> String {
+        text.chars().filter(|c| !c.is_whitespace()).collect()
+    }
+
     fn trained_scales(d0: f64, d1: f64) -> ScaleSet {
         let mut scales = ScaleSet::new();
         let mut x = ScaleContinuous::new().for_aesthetic(Aesthetic::X);
@@ -731,7 +981,7 @@ mod tests {
     #[test]
     fn fit_row_leaves_a_fitting_row_untouched_at_full_size() {
         let row = vec![("short".to_string(), None)];
-        let (size, lines) = fit_row(&row, 8.0, 4.0, 1000.0, AttributionOverflow::Ellipsis);
+        let (size, lines) = fit_row(&row, 8.0, 4.0, 1000.0, AttributionOverflow::Ellipsis, 1.0);
         assert_eq!(size, 8.0);
         assert_eq!(lines, vec![row]);
     }
@@ -743,7 +993,14 @@ mod tests {
         // A width the full-size line overflows, but that a size still
         // above the floor can satisfy.
         let max_width = full_width * 0.7;
-        let (size, lines) = fit_row(&row, 8.0, 4.0, max_width, AttributionOverflow::Ellipsis);
+        let (size, lines) = fit_row(
+            &row,
+            8.0,
+            4.0,
+            max_width,
+            AttributionOverflow::Ellipsis,
+            1.0,
+        );
         assert!((4.0..8.0).contains(&size), "size = {size}");
         assert_eq!(lines, vec![row]); // unchanged text — only size shrank
         assert!(text_width(&lines[0][0].0, size) <= max_width + 1e-6);
@@ -756,7 +1013,14 @@ mod tests {
             None,
         )];
         let max_width = 40.0; // too narrow even at the 4px floor
-        let (size, lines) = fit_row(&row, 8.0, 4.0, max_width, AttributionOverflow::Ellipsis);
+        let (size, lines) = fit_row(
+            &row,
+            8.0,
+            4.0,
+            max_width,
+            AttributionOverflow::Ellipsis,
+            1.0,
+        );
         assert_eq!(size, 4.0);
         assert_eq!(lines.len(), 1);
         assert_eq!(lines[0].len(), 1);
@@ -771,7 +1035,7 @@ mod tests {
             None,
         )];
         let max_width = 40.0;
-        let (size, lines) = fit_row(&row, 8.0, 4.0, max_width, AttributionOverflow::Wrap);
+        let (size, lines) = fit_row(&row, 8.0, 4.0, max_width, AttributionOverflow::Wrap, 1.0);
         assert_eq!(size, 4.0);
         assert!(lines.len() > 1, "expected multiple wrapped lines");
         for line in &lines {
@@ -790,7 +1054,7 @@ mod tests {
             None,
         )];
         let max_width = 15.0; // narrow enough to need far more than 3 lines uncapped
-        let (size, lines) = fit_row(&row, 8.0, 4.0, max_width, AttributionOverflow::Wrap);
+        let (size, lines) = fit_row(&row, 8.0, 4.0, max_width, AttributionOverflow::Wrap, 1.0);
         assert_eq!(size, 4.0);
         assert_eq!(lines.len(), ATTRIBUTION_MAX_WRAPPED_LINES);
         for line in &lines {
@@ -816,9 +1080,317 @@ mod tests {
             None,
         )];
         let max_width = 40.0;
-        let (_, lines) = fit_row(&row, 8.0, 4.0, max_width, AttributionOverflow::Wrap);
+        let (_, lines) = fit_row(&row, 8.0, 4.0, max_width, AttributionOverflow::Wrap, 1.0);
         assert!(lines.len() <= ATTRIBUTION_MAX_WRAPPED_LINES);
         assert!(!lines.last().unwrap()[0].0.ends_with('…'));
+    }
+
+    // --- #267: Wrap splits *within* a run, and both Wrap and Ellipsis keep
+    // each kept/split piece's href instead of flattening the whole row to
+    // plain text the moment shrinking alone isn't enough. ---
+
+    #[test]
+    fn wrap_row_splits_a_linked_run_keeping_its_href_on_every_resulting_line() {
+        // The bare-URL half of #267's BKG repro, alone: narrow enough that
+        // even just this one linked run needs several physical lines once
+        // hard-split.
+        let href =
+            "https://sgx.geodatenzentrum.de/web_public/gdz/datenquellen/datenquellen_vg_nuts.pdf";
+        let row = vec![(href.to_string(), Some(href.to_string()))];
+        let lines = wrap_row(&row, 60.0, 6.0);
+        assert!(
+            lines.len() > 1,
+            "expected the URL to split across lines, got {lines:?}"
+        );
+        let mut rebuilt = String::new();
+        for line in &lines {
+            assert_eq!(
+                line.len(),
+                1,
+                "single-run input should stay a single run per line: {line:?}"
+            );
+            assert_eq!(
+                line[0].1.as_deref(),
+                Some(href),
+                "a split piece lost its href: {line:?}"
+            );
+            rebuilt.push_str(&line[0].0);
+        }
+        assert_eq!(rebuilt, href, "splitting must not lose or duplicate text");
+    }
+
+    #[test]
+    fn wrap_row_keeps_a_too_wide_linked_run_separate_from_a_later_plain_run() {
+        // #267's full BKG repro shape: a bare linked URL run, then a plain
+        // (unlinked) note run.
+        let href =
+            "https://sgx.geodatenzentrum.de/web_public/gdz/datenquellen/datenquellen_vg_nuts.pdf";
+        let note = " · geometry modified (simplified)";
+        let row = vec![
+            (href.to_string(), Some(href.to_string())),
+            (note.to_string(), None),
+        ];
+        let lines = wrap_row(&row, 60.0, 6.0);
+        assert!(lines.len() > 1, "expected wrapping, got {lines:?}");
+        let rebuilt: String = lines.iter().flatten().map(|(t, _)| t.as_str()).collect();
+        // A line break at a word boundary consumes the space it broke on
+        // (same as `wrap_text`'s own `lines.join(" ")`, not
+        // `lines.concat()`, in its tests) — compare with whitespace
+        // stripped out of both sides rather than demanding the exact
+        // separator back.
+        assert_eq!(strip_ws(&rebuilt), strip_ws(&format!("{href}{note}")));
+        // Every linked piece, concatenated in order, is a prefix of the
+        // URL run alone — the note's text never ends up carrying the
+        // URL's href, and the URL's href is never dropped partway through.
+        let linked: String = lines
+            .iter()
+            .flatten()
+            .filter(|(_, h)| h.is_some())
+            .map(|(t, _)| t.as_str())
+            .collect();
+        assert!(!linked.is_empty());
+        assert!(
+            href.starts_with(&linked),
+            "linked text {linked:?} is not a prefix of the url run {href:?}"
+        );
+        // And the note itself did make it into an unlinked run somewhere.
+        assert!(lines.iter().flatten().any(|(_, h)| h.is_none()));
+    }
+
+    #[test]
+    fn fit_row_wrap_preserves_run_boundaries_across_widths_and_floors() {
+        // Property check (not just the one hand-picked width above): for
+        // a grid of panel widths and floor sizes, Wrap must never degrade
+        // to #267's old behaviour of dropping every run's href the moment
+        // shrinking alone isn't enough.
+        let url =
+            "https://sgx.geodatenzentrum.de/web_public/gdz/datenquellen/datenquellen_vg_nuts.pdf";
+        let href = url;
+        let note = " · geometry modified (simplified)";
+        let row = vec![
+            (url.to_string(), Some(href.to_string())),
+            (note.to_string(), None),
+        ];
+        let concat = format!("{url}{note}");
+        for max_width in [15.0, 40.0, 80.0, 150.0, 200.0, 307.0, 1000.0] {
+            for &(base, floor) in &[(7.0, 4.0), (7.0, 7.0), (8.0, 6.0)] {
+                for overflow in [AttributionOverflow::Ellipsis, AttributionOverflow::Wrap] {
+                    let (_, lines) = fit_row(&row, base, floor, max_width, overflow, 1.0);
+                    let out: String = lines.iter().flatten().map(|(t, _)| t.as_str()).collect();
+                    // Whitespace-insensitive, same reasoning as
+                    // `wrap_row_keeps_a_too_wide_linked_run_separate_from_a_later_plain_run`:
+                    // a Wrap line break at a word boundary legitimately
+                    // consumes the space it broke on.
+                    if let Some(prefix) = out.strip_suffix('…') {
+                        assert!(
+                            strip_ws(&concat).starts_with(&strip_ws(prefix)),
+                            "max_width={max_width} base={base} floor={floor} overflow={overflow:?}: \
+                             {prefix:?} is not a prefix of {concat:?}"
+                        );
+                    } else {
+                        assert_eq!(
+                            strip_ws(&out), strip_ws(&concat),
+                            "max_width={max_width} base={base} floor={floor} overflow={overflow:?}: \
+                             lost or changed text without an ellipsis"
+                        );
+                    }
+                    let linked: String = lines
+                        .iter()
+                        .flatten()
+                        .filter(|(_, h)| h.is_some())
+                        .map(|(t, _)| t.as_str())
+                        .collect();
+                    if out != "…" && !out.is_empty() {
+                        assert!(
+                            !linked.is_empty(),
+                            "max_width={max_width} base={base} floor={floor} overflow={overflow:?}: \
+                             output {out:?} kept none of the url run's href at all"
+                        );
+                    }
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn truncate_row_to_width_keeps_a_fitting_row_byte_identical() {
+        let row = vec![
+            ("short".to_string(), Some("https://x.example".to_string())),
+            (" note".to_string(), None),
+        ];
+        assert_eq!(truncate_row_to_width(&row, 1000.0, 10.0), row);
+    }
+
+    #[test]
+    fn force_ellipsis_row_keeps_the_href_on_the_ellipsised_tail() {
+        let href = "https://example.com/a/very/long/path/that/needs/truncating";
+        let row = vec![(href.to_string(), Some(href.to_string()))];
+        let out = force_ellipsis_row(&row, 40.0, 7.0);
+        assert_eq!(out.len(), 1);
+        assert!(out[0].0.ends_with('…'));
+        assert_eq!(out[0].1.as_deref(), Some(href));
+        assert!(text_width(&out[0].0, 7.0) <= 40.0 + 1e-6);
+    }
+
+    #[test]
+    fn fit_row_ellipsis_preserves_the_href_on_the_truncated_prefix() {
+        let href = "https://example.com/a/very/long/path/that/needs/truncating/at/the/floor/size";
+        let row = vec![(href.to_string(), Some(href.to_string()))];
+        let (size, lines) = fit_row(&row, 8.0, 4.0, 40.0, AttributionOverflow::Ellipsis, 1.0);
+        assert_eq!(size, 4.0);
+        assert_eq!(lines.len(), 1);
+        assert_eq!(lines[0].len(), 1);
+        assert!(lines[0][0].0.ends_with('…'));
+        assert_eq!(
+            lines[0][0].1.as_deref(),
+            Some(href),
+            "the truncated prefix should still link to the full, untruncated href"
+        );
+    }
+
+    // --- #267: `fit_width_scale` — an opt-in calibration hook for a
+    // caller's own deployed font/rendering, since this crate can't measure
+    // it itself. ---
+
+    #[test]
+    fn fit_width_scale_default_is_one() {
+        assert_eq!(GeomAttribution::new("x").fit_width_scale, 1.0);
+    }
+
+    #[test]
+    fn fit_width_scale_builder_clamps_non_positive_and_non_finite() {
+        assert_eq!(
+            GeomAttribution::new("x")
+                .fit_width_scale(0.0)
+                .fit_width_scale,
+            0.01
+        );
+        assert_eq!(
+            GeomAttribution::new("x")
+                .fit_width_scale(-5.0)
+                .fit_width_scale,
+            0.01
+        );
+        assert_eq!(
+            GeomAttribution::new("x")
+                .fit_width_scale(f64::NAN)
+                .fit_width_scale,
+            1.0
+        );
+        assert_eq!(
+            GeomAttribution::new("x")
+                .fit_width_scale(2.5)
+                .fit_width_scale,
+            2.5
+        );
+    }
+
+    #[test]
+    fn fit_row_width_scale_one_matches_the_no_scale_behaviour() {
+        let row = vec![("a moderately long attribution line".to_string(), None)];
+        let full_width = text_width(&row[0].0, 8.0);
+        let max_width = full_width * 0.7;
+        let a = fit_row(
+            &row,
+            8.0,
+            4.0,
+            max_width,
+            AttributionOverflow::Ellipsis,
+            1.0,
+        );
+        let b = fit_row(
+            &row,
+            8.0,
+            4.0,
+            max_width,
+            AttributionOverflow::Ellipsis,
+            1.000_000_1, // "no effective scaling" should also cover ~1.0
+        );
+        assert!(
+            (a.0 - b.0).abs() < 1e-6,
+            "a negligible scale delta shouldn't visibly change the fitted size: {} vs {}",
+            a.0,
+            b.0
+        );
+    }
+
+    #[test]
+    fn fit_row_width_scale_above_one_shrinks_the_effective_budget() {
+        // A row that fits untouched at the base size with no scaling...
+        let row = vec![("a moderately long attribution line".to_string(), None)];
+        let full_width = text_width(&row[0].0, 8.0);
+        let max_width = full_width * 1.05;
+        let (size1, lines1) = fit_row(
+            &row,
+            8.0,
+            4.0,
+            max_width,
+            AttributionOverflow::Ellipsis,
+            1.0,
+        );
+        assert_eq!(size1, 8.0);
+        assert_eq!(lines1, vec![row.clone()]);
+        // ...but needs to shrink once a caller says their real font
+        // renders meaningfully wider than the heuristic assumes.
+        let (size2, lines2) = fit_row(
+            &row,
+            8.0,
+            4.0,
+            max_width,
+            AttributionOverflow::Ellipsis,
+            1.2,
+        );
+        assert!(size2 < 8.0, "size2 = {size2}");
+        assert_eq!(lines2, vec![row]);
+        assert!(text_width(&lines2[0][0].0, size2) <= max_width / 1.2 + 1e-6);
+    }
+
+    #[test]
+    fn fit_width_scale_wires_through_the_full_draw_pipeline() {
+        let area = crate::render::Rect {
+            x: 0.0,
+            y: 0.0,
+            width: 200.0,
+            height: 100.0,
+        };
+        let text = "a moderately long attribution line of text";
+        let coord = CoordCartesian::default();
+        let scales = ScaleSet::new();
+
+        let mut backend1 = RecordingBackend::new(area.clone());
+        GeomAttribution::new(text)
+            .fit(4.0)
+            .draw(
+                &DataFrame::new(),
+                &coord,
+                &scales,
+                &Theme::default(),
+                &mut backend1,
+            )
+            .unwrap();
+
+        let mut backend2 = RecordingBackend::new(area.clone());
+        GeomAttribution::new(text)
+            .fit(4.0)
+            .fit_width_scale(3.0)
+            .draw(
+                &DataFrame::new(),
+                &coord,
+                &scales,
+                &Theme::default(),
+                &mut backend2,
+            )
+            .unwrap();
+
+        assert_eq!(backend1.calls.len(), 1);
+        assert_eq!(backend2.calls.len(), 1);
+        assert!(
+            backend2.calls[0].2 <= backend1.calls[0].2,
+            "a larger fit_width_scale should never draw at a *bigger* size \
+             ({} vs {})",
+            backend2.calls[0].2,
+            backend1.calls[0].2
+        );
     }
 
     /// Records every `draw_text`/`draw_text_runs` call's text, position and
@@ -1072,6 +1644,92 @@ mod tests {
                     }
                 }
             }
+        }
+    }
+
+    // #267: the panel-width/text-size sweep above only checks
+    // `text_width`'s own heuristic estimate against itself — it can't
+    // catch the estimate being wrong relative to an actual font. These
+    // repeat it measuring with real glyph advances from two genuine,
+    // non-synthetic fonts instead: the DejaVu Sans this crate already
+    // bundles for its own canvas/plotters text rendering, and a fetched
+    // Hanken Grotesk — anofox-visualization's own UI/chart font, and the
+    // font #267's real production overflow was observed in. `ab_glyph` is
+    // a plain dev-dependency here (not the optional `canvas`-feature one),
+    // so this runs under plain `--features sf` same as every other
+    // `GeomAttribution` test, without needing `canvas` too.
+    mod real_font_267 {
+        use super::*;
+        use ab_glyph::{Font, FontRef, PxScale, ScaleFont};
+
+        const DEJAVU: &[u8] = include_bytes!("../../assets/fonts/DejaVuSans.ttf");
+        const HANKEN: &[u8] = include_bytes!("../../assets/fonts/test/HankenGrotesk-wght.ttf");
+
+        /// Sums each character's real glyph advance (ab_glyph `h_advance`
+        /// — the same metric `render::pixel_backend`'s canvas backend
+        /// actually draws with). No kerning, same simplification
+        /// `text_width`'s heuristic makes — but read from the font's own
+        /// tables instead of a per-character average.
+        fn real_width(font_bytes: &[u8], text: &str, size: f64) -> f64 {
+            let font = FontRef::try_from_slice(font_bytes).expect("bundled test font parses");
+            let scaled = font.as_scaled(PxScale::from(size as f32));
+            text.chars()
+                .map(|c| scaled.h_advance(font.glyph_id(c)) as f64)
+                .sum()
+        }
+
+        fn real_font_sweep(font_bytes: &[u8]) {
+            let text = "https://sgx.geodatenzentrum.de/web_public/gdz/datenquellen/datenquellen_vg_nuts.pdf · geometry modified";
+            let coord = CoordCartesian::default();
+            let scales = ScaleSet::new();
+            for width in (100..=400).step_by(25) {
+                let area = crate::render::Rect {
+                    x: 0.0,
+                    y: 0.0,
+                    width: width as f64,
+                    height: 300.0,
+                };
+                // Floors 6-8px, as #267's acceptance criteria asks.
+                for &(base_size, min_size) in &[(7.0, 6.0), (7.0, 7.0), (8.0, 7.0), (8.0, 8.0)] {
+                    for overflow in [AttributionOverflow::Ellipsis, AttributionOverflow::Wrap] {
+                        let mut backend = RecordingBackend::new(area.clone());
+                        let mut g = GeomAttribution::new(text).fit(min_size);
+                        g.text_size = base_size;
+                        g = g.fit_overflow(overflow);
+                        g.draw(
+                            &DataFrame::new(),
+                            &coord,
+                            &scales,
+                            &Theme::default(),
+                            &mut backend,
+                        )
+                        .unwrap();
+                        for (line_text, pos, size, anchor) in &backend.calls {
+                            let w = real_width(font_bytes, line_text, *size);
+                            let frac = anchor_fraction(anchor.clone());
+                            let x0 = pos.0 - w * frac;
+                            let x1 = x0 + w;
+                            assert!(
+                                x0 >= area.x - 1e-6 && x1 <= area.x + area.width + 1e-6,
+                                "width={width} base={base_size} min={min_size} overflow={overflow:?}: \
+                                 real-glyph line {line_text:?} overflowed [x0={x0}, x1={x1}] vs panel [{}, {}]",
+                                area.x,
+                                area.x + area.width
+                            );
+                        }
+                    }
+                }
+            }
+        }
+
+        #[test]
+        fn fit_against_real_dejavu_glyph_metrics_never_overflows_the_panel() {
+            real_font_sweep(DEJAVU);
+        }
+
+        #[test]
+        fn fit_against_real_hanken_grotesk_glyph_metrics_never_overflows_the_panel() {
+            real_font_sweep(HANKEN);
         }
     }
 }

@@ -120,6 +120,12 @@ criterion = "0.5"
 # the library itself has its own tiny seeded PRNG.
 rand = "0.8"
 proptest = "1"
+# Real glyph-advance measurement in `GeomAttribution::fit`'s tests (sipemu/
+# ggplot-rs#267): a dev-dependency so it's available under plain `--features
+# sf` (no `canvas`) — the optional `dep:ab_glyph` under `[dependencies]` is
+# gated behind the `canvas` feature for the raster backend and isn't pulled
+# in by `sf` alone.
+ab_glyph = "0.2"
 
 # Criterion benchmarks for the build/stat/render hot paths.
 [[bench]]

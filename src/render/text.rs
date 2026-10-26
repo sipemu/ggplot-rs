@@ -58,6 +58,36 @@ pub fn truncate_to_width(label: &str, max_width: f64, size: f64) -> Option<Strin
 /// this it fell back to slicing mid-word, e.g. `"eodatenzentr"` / `"um.de"`).
 const WRAP_HARD_BREAK_AFTER: [char; 7] = ['/', '.', '_', '-', '?', '&', '='];
 
+/// How many of `chars` (from the start) [`wrap_text`]'s hard-break should
+/// keep on the first of the two pieces it's about to split an overlong
+/// word into — width-based reduction from the end, then nudged back to
+/// just after the last `/ . _ - ? & =` separator that still leaves a
+/// non-trivial chunk (see [`wrap_text`]'s own doc comment). Pulled out so
+/// [`crate::geom::annotation_scale`]'s run-aware wrap (sipemu/ggplot-rs#267)
+/// can reuse the exact same decision instead of a second copy that could
+/// silently drift from this one. `chars` must be non-empty; a single char
+/// always keeps that one char (`chars.len()`), same as `wrap_text`'s own
+/// `chars.len() <= 1` bail-out.
+pub(crate) fn hard_break_cut(chars: &[char], max_width: f64, size: f64) -> usize {
+    if chars.len() <= 1 {
+        return chars.len();
+    }
+    let mut cut = chars.len() - 1;
+    while cut > 1 && text_width(&chars[..cut].iter().collect::<String>(), size) > max_width {
+        cut -= 1;
+    }
+    if let Some(break_at) = chars[..cut]
+        .iter()
+        .rposition(|c| WRAP_HARD_BREAK_AFTER.contains(c))
+    {
+        let candidate = break_at + 1;
+        if candidate > 0 && (candidate as f64) >= (cut as f64) / 3.0 {
+            cut = candidate;
+        }
+    }
+    cut
+}
+
 /// Word-wraps `text` to lines no wider than `max_width` px at font `size`,
 /// measured with [`text_width`] (ggtext / `str_wrap` behaviour: break at
 /// whitespace; a single word wider than `max_width` on its own is hard-split
@@ -87,26 +117,7 @@ pub fn wrap_text(text: &str, max_width: f64, size: f64) -> Vec<String> {
             if chars.len() <= 1 {
                 break;
             }
-            let mut cut = chars.len() - 1;
-            while cut > 1 && text_width(&chars[..cut].iter().collect::<String>(), size) > max_width
-            {
-                cut -= 1;
-            }
-            // Prefer breaking right after the last `/ . _ - ? & =` that
-            // still fits, rather than wherever the width-based cut above
-            // landed — but only when that leaves a non-trivial chunk (at
-            // least a third of what fits), so a separator near the very
-            // start of the fitting prefix doesn't produce a near-empty
-            // line (#264).
-            if let Some(break_at) = chars[..cut]
-                .iter()
-                .rposition(|c| WRAP_HARD_BREAK_AFTER.contains(c))
-            {
-                let candidate = break_at + 1;
-                if candidate > 0 && (candidate as f64) >= (cut as f64) / 3.0 {
-                    cut = candidate;
-                }
-            }
+            let cut = hard_break_cut(&chars, max_width, size);
             if !cur.is_empty() {
                 lines.push(std::mem::take(&mut cur));
             }
