@@ -1387,6 +1387,46 @@ pub(crate) fn plan_all_legends(
 /// keeps this byte-identical to 0.21/0.22 for every plot nothing in
 /// `legend_plans` touches. Used by `renderer.rs` (single and faceted) and
 /// `compose::capture_legend` (PlotGrid-collected legends).
+/// An inside legend's own bounding box ([`LegendPosition::Inside`] only —
+/// every other position reserves a dedicated band outside `plot_area`, so
+/// it can never overlap panel-corner furniture living inside it), without
+/// drawing anything (#273). `renderer.rs` calls this *before* any geom
+/// draws, so a corner-furniture geom drawn first (`annotation_scale`/
+/// `annotation_attribution`/`bivariate_legend`) can still stack clear of
+/// where the legend — drawn last, see `draw_legend_planned` — will land.
+/// Mirrors that function's own prefix (`legend_scales_for` →
+/// `group_mergeable_legends` → `estimate_legend_box` → `legend_position`,
+/// with `legend_extra_rows` fixed at `0` since `Inside` never reads it)
+/// so this never disagrees with where the legend is actually drawn.
+pub(crate) fn inside_legend_box(
+    scales: &ScaleSet,
+    theme: &Theme,
+    plot_area: &Rect,
+    canvas: &Rect,
+    guide: &GuideLegend,
+    suppressed: &std::collections::HashSet<Aesthetic>,
+    legend_plans: &std::collections::HashMap<Aesthetic, LegendPlan>,
+) -> Option<Rect> {
+    if !matches!(theme.legend_position, LegendPosition::Inside(..)) {
+        return None;
+    }
+    let legend_scales = legend_scales_for(scales, suppressed);
+    if legend_scales.is_empty() {
+        return None;
+    }
+    let groups = group_mergeable_legends(scales, &legend_scales, guide);
+    let representatives: Vec<Aesthetic> = groups.iter().map(|g| g[0].clone()).collect();
+    let legend_size_hint =
+        estimate_legend_box(scales, &representatives, theme, guide, legend_plans);
+    let (legend_x, legend_y, _) = legend_position(theme, plot_area, 0, legend_size_hint, canvas);
+    Some(Rect {
+        x: legend_x,
+        y: legend_y,
+        width: legend_size_hint.0,
+        height: legend_size_hint.1,
+    })
+}
+
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn draw_legend_planned(
     scales: &ScaleSet,
@@ -1813,6 +1853,165 @@ mod continuous_bar_dims_tests {
         assert!(
             (without_title - (thickness + tick_len + theme.legend_spacing + label_line)).abs()
                 < 1e-9
+        );
+    }
+}
+
+/// #273: `inside_legend_box` — the pre-draw measurement `renderer.rs` uses
+/// to claim an inside legend's box before any corner-furniture geom draws.
+#[cfg(test)]
+mod inside_legend_box_tests {
+    use super::*;
+    use crate::scale::color::RGBAColor;
+    use crate::scale::manual::ScaleManual;
+
+    fn scales_with_a_legend() -> ScaleSet {
+        let mut scales = ScaleSet::new();
+        scales.add(Box::new(ScaleManual::new(
+            Aesthetic::Color,
+            vec![
+                ("a", RGBAColor::new(200, 0, 0)),
+                ("b", RGBAColor::new(0, 0, 200)),
+            ],
+        )));
+        scales
+    }
+
+    fn areas() -> (Rect, Rect) {
+        let plot_area = Rect {
+            x: 10.0,
+            y: 10.0,
+            width: 200.0,
+            height: 150.0,
+        };
+        let canvas = Rect {
+            x: 0.0,
+            y: 0.0,
+            width: 220.0,
+            height: 170.0,
+        };
+        (plot_area, canvas)
+    }
+
+    #[test]
+    fn non_inside_positions_claim_nothing() {
+        let scales = scales_with_a_legend();
+        let (plot_area, canvas) = areas();
+        let guide = GuideLegend::default();
+        let suppressed = std::collections::HashSet::new();
+        let legend_plans = std::collections::HashMap::new();
+        for pos in [
+            LegendPosition::Right,
+            LegendPosition::Left,
+            LegendPosition::Top,
+            LegendPosition::Bottom,
+            LegendPosition::None,
+        ] {
+            let theme = Theme {
+                legend_position: pos,
+                ..Theme::default()
+            };
+            assert!(inside_legend_box(
+                &scales,
+                &theme,
+                &plot_area,
+                &canvas,
+                &guide,
+                &suppressed,
+                &legend_plans
+            )
+            .is_none());
+        }
+    }
+
+    #[test]
+    fn no_legend_scales_claims_nothing_even_when_inside() {
+        let scales = ScaleSet::new(); // nothing mapped to a legend aesthetic
+        let (plot_area, canvas) = areas();
+        let theme = Theme {
+            legend_position: LegendPosition::Inside(0.85, 0.85),
+            ..Theme::default()
+        };
+        let guide = GuideLegend::default();
+        let suppressed = std::collections::HashSet::new();
+        let legend_plans = std::collections::HashMap::new();
+        assert!(inside_legend_box(
+            &scales,
+            &theme,
+            &plot_area,
+            &canvas,
+            &guide,
+            &suppressed,
+            &legend_plans
+        )
+        .is_none());
+    }
+
+    #[test]
+    fn inside_position_with_a_legend_claims_a_box_within_the_panel() {
+        let scales = scales_with_a_legend();
+        let (plot_area, canvas) = areas();
+        let theme = Theme {
+            legend_position: LegendPosition::Inside(0.85, 0.85),
+            ..Theme::default()
+        };
+        let guide = GuideLegend::default();
+        let suppressed = std::collections::HashSet::new();
+        let legend_plans = std::collections::HashMap::new();
+        let rect = inside_legend_box(
+            &scales,
+            &theme,
+            &plot_area,
+            &canvas,
+            &guide,
+            &suppressed,
+            &legend_plans,
+        )
+        .expect("an Inside legend with a mapped scale claims a box");
+        assert!(rect.width > 0.0 && rect.height > 0.0);
+        assert!(rect.x >= canvas.x - 1e-6 && rect.x + rect.width <= canvas.x + canvas.width + 1e-6);
+        assert!(
+            rect.y >= canvas.y - 1e-6 && rect.y + rect.height <= canvas.y + canvas.height + 1e-6
+        );
+    }
+
+    #[test]
+    fn matches_the_position_draw_legend_planned_itself_uses() {
+        // Mirrors `draw_legend_planned`'s own prefix (`legend_scales_for`
+        // → `group_mergeable_legends` → `estimate_legend_box` →
+        // `legend_position`) — this must agree with it, or a geom drawn
+        // before the legend could stack clear of the wrong spot.
+        let scales = scales_with_a_legend();
+        let (plot_area, canvas) = areas();
+        let theme = Theme {
+            legend_position: LegendPosition::Inside(0.85, 0.85),
+            ..Theme::default()
+        };
+        let guide = GuideLegend::default();
+        let suppressed = std::collections::HashSet::new();
+        let legend_plans = std::collections::HashMap::new();
+
+        let rect = inside_legend_box(
+            &scales,
+            &theme,
+            &plot_area,
+            &canvas,
+            &guide,
+            &suppressed,
+            &legend_plans,
+        )
+        .unwrap();
+
+        let legend_scales = legend_scales_for(&scales, &suppressed);
+        let groups = group_mergeable_legends(&scales, &legend_scales, &guide);
+        let representatives: Vec<Aesthetic> = groups.iter().map(|g| g[0].clone()).collect();
+        let size_hint =
+            estimate_legend_box(&scales, &representatives, &theme, &guide, &legend_plans);
+        let (x, y, _) = legend_position(&theme, &plot_area, 0, size_hint, &canvas);
+
+        assert_eq!(
+            (rect.x, rect.y, rect.width, rect.height),
+            (x, y, size_hint.0, size_hint.1)
         );
     }
 }

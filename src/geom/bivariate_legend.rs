@@ -13,7 +13,9 @@ use crate::data::DataFrame;
 use crate::position::identity::PositionIdentity;
 use crate::position::Position;
 use crate::render::backend::{DrawBackend, RectStyle, TextAnchor, TextStyle};
-use crate::render::RenderError;
+use crate::render::corner_layout::stack_clear;
+use crate::render::text::text_width;
+use crate::render::{Rect, RenderError};
 use crate::scale::bivariate::bivariate_cell_color;
 use crate::scale::ScaleSet;
 use crate::stat::identity::StatIdentity;
@@ -119,6 +121,7 @@ impl Default for GeomBivariateLegend {
 /// [`GeomBivariateLegendCounts`]'s per-cell count overlay (#259) —
 /// factored out so the two stay in lockstep rather than each recomputing
 /// the swatch grid's position independently.
+#[derive(Clone, Copy)]
 struct LegendLayout {
     box_x: f64,
     box_y: f64,
@@ -130,6 +133,10 @@ struct LegendLayout {
     grid_h: f64,
     y_caption_w: f64,
     x_caption_h: f64,
+    /// Extra vertical gap between the grid's bottom edge and the x
+    /// caption's own position, beyond the usual `x_caption_h/2` half-step
+    /// — see [`fn@legend_layout`]'s `y_caption_overflow` (#273).
+    x_caption_gap: f64,
 }
 
 fn legend_layout(legend: &GeomBivariateLegend, plot_area: &crate::render::Rect) -> LegendLayout {
@@ -148,9 +155,27 @@ fn legend_layout(legend: &GeomBivariateLegend, plot_area: &crate::render::Rect) 
     } else {
         legend.text_size + 4.0
     };
+    // #273: the rotated y caption's own text extent (its *length*, which
+    // becomes its vertical span once rotated 90°) — previously only its
+    // *thickness* (`y_caption_w`, the font's height) sized the box, so a
+    // caption longer than the grid's own height (`grid_h`) drew past the
+    // box's top/bottom edge, uncentred and clipped (e.g. placed
+    // `TopRight`, clipped off the top). The caption is always drawn
+    // centred on the grid's vertical centre (`grid_y + grid_h / 2.0`), so
+    // fitting it needs `y_caption_overflow` of extra room split evenly
+    // above the grid (`grid_y` shifts down by half of it) and below the
+    // grid (`x_caption_gap`, consumed before the x caption's own
+    // position) — zero, and this is byte-identical to before #273, for a
+    // caption no longer than `grid_h`, the overwhelmingly common case.
+    let y_caption_len = if legend.y_name.is_empty() {
+        0.0
+    } else {
+        text_width(&legend.y_name, legend.text_size)
+    };
+    let y_caption_overflow = (y_caption_len - grid_h).max(0.0);
     let pad = 6.0;
     let total_w = y_caption_w + grid_w + pad * 2.0;
-    let total_h = grid_h + x_caption_h + pad * 2.0;
+    let total_h = grid_h + y_caption_overflow + x_caption_h + pad * 2.0;
 
     let (box_x, box_y) = match legend.corner {
         LegendCorner::BottomLeft => (
@@ -167,32 +192,72 @@ fn legend_layout(legend: &GeomBivariateLegend, plot_area: &crate::render::Rect) 
             plot_area.y + pad,
         ),
     };
+    let x_caption_gap = y_caption_overflow / 2.0;
     LegendLayout {
         box_x,
         box_y,
         total_w,
         total_h,
         grid_x: box_x + y_caption_w,
-        grid_y: box_y,
+        grid_y: box_y + x_caption_gap,
         grid_w,
         grid_h,
         y_caption_w,
         x_caption_h,
+        x_caption_gap,
     }
 }
 
-impl Geom for GeomBivariateLegend {
-    fn draw(
+impl GeomBivariateLegend {
+    /// This legend's box, shifted clear of anything already claimed in
+    /// its corner so far this render pass (a scale bar/attribution drawn
+    /// first, or an inside legend pre-claimed by `renderer.rs`), and
+    /// registered via [`DrawBackend::claim_corner_box`] so a later corner
+    /// geom sees it too (#273's shared corner layout).
+    ///
+    /// Shared by [`Geom::draw`] below and by
+    /// [`GeomBivariateLegendCounts::draw`], which needs the *exact same*
+    /// shifted layout for its count overlay to land inside the (possibly
+    /// moved) swatches rather than recomputing — and re-claiming — its
+    /// own: a second call here, after the first has already claimed this
+    /// box, would see that claim as something to avoid and shift again.
+    fn resolve_layout(
         &self,
-        _data: &DataFrame,
-        _coord: &dyn Coord,
-        _scales: &ScaleSet,
+        plot_area: &crate::render::Rect,
+        backend: &mut dyn DrawBackend,
+    ) -> LegendLayout {
+        let natural = legend_layout(self, plot_area);
+        let away_sign = match self.corner {
+            LegendCorner::BottomLeft | LegendCorner::BottomRight => -1.0,
+            LegendCorner::TopLeft | LegendCorner::TopRight => 1.0,
+        };
+        let natural_box = Rect {
+            x: natural.box_x,
+            y: natural.box_y,
+            width: natural.total_w,
+            height: natural.total_h,
+        };
+        let claims = backend.corner_claims();
+        let shifted_box = stack_clear(natural_box.clone(), away_sign, &claims);
+        let dy = shifted_box.y - natural_box.y;
+        backend.claim_corner_box(shifted_box);
+        LegendLayout {
+            box_y: natural.box_y + dy,
+            grid_y: natural.grid_y + dy,
+            ..natural
+        }
+    }
+
+    /// Draws the grid and captions at an already-resolved `layout` — see
+    /// [`Self::resolve_layout`].
+    fn draw_with_layout(
+        &self,
         theme: &Theme,
         backend: &mut dyn DrawBackend,
+        layout: &LegendLayout,
     ) -> Result<(), RenderError> {
-        let plot_area = backend.plot_area();
         let (nx, ny) = (self.nx.max(1), self.ny.max(1));
-        let layout = legend_layout(self, &plot_area);
+        let layout = *layout;
 
         if theme.legend_background.visible {
             if let Some(fill) = theme.legend_background.fill {
@@ -240,7 +305,7 @@ impl Geom for GeomBivariateLegend {
                 &self.x_name,
                 (
                     layout.grid_x + layout.grid_w / 2.0,
-                    layout.grid_y + layout.grid_h + layout.x_caption_h / 2.0,
+                    layout.grid_y + layout.grid_h + layout.x_caption_gap + layout.x_caption_h / 2.0,
                 ),
                 &TextStyle {
                     color: self.text_color,
@@ -274,6 +339,21 @@ impl Geom for GeomBivariateLegend {
             )?;
         }
         Ok(())
+    }
+}
+
+impl Geom for GeomBivariateLegend {
+    fn draw(
+        &self,
+        _data: &DataFrame,
+        _coord: &dyn Coord,
+        _scales: &ScaleSet,
+        theme: &Theme,
+        backend: &mut dyn DrawBackend,
+    ) -> Result<(), RenderError> {
+        let plot_area = backend.plot_area();
+        let layout = self.resolve_layout(&plot_area, backend);
+        self.draw_with_layout(theme, backend, &layout)
     }
 
     fn required_aes(&self) -> Vec<crate::aes::Aesthetic> {
@@ -336,18 +416,24 @@ pub struct GeomBivariateLegendCounts {
 impl Geom for GeomBivariateLegendCounts {
     fn draw(
         &self,
-        data: &DataFrame,
-        coord: &dyn Coord,
-        scales: &ScaleSet,
+        _data: &DataFrame,
+        _coord: &dyn Coord,
+        _scales: &ScaleSet,
         theme: &Theme,
         backend: &mut dyn DrawBackend,
     ) -> Result<(), RenderError> {
-        self.legend.draw(data, coord, scales, theme, backend)?;
-
         let plot_area = backend.plot_area();
         let legend = &self.legend;
+        // #273: resolve (and claim) the corner layout exactly once, then
+        // draw the grid/captions and the count overlay from that same
+        // layout — not `legend.draw(..)` followed by a second, unshifted
+        // `legend_layout(..)` call here, which would draw the counts
+        // against the *un*-stacked position while the swatches
+        // themselves (drawn via the shifted layout) had moved.
+        let layout = legend.resolve_layout(&plot_area, backend);
+        legend.draw_with_layout(theme, backend, &layout)?;
+
         let (nx, ny) = (legend.nx.max(1), legend.ny.max(1));
-        let layout = legend_layout(legend, &plot_area);
         let font = super::resolve_font_family("", theme);
         // "About 7px, below the caption's text_size" (#259's default
         // text_size is 8.0) — always one px under whatever `text_size`
@@ -534,6 +620,8 @@ mod tests {
     struct RecordingBackend {
         rects: Vec<((f64, f64), (f64, f64), Option<(u8, u8, u8)>)>,
         texts: Vec<(String, (f64, f64), f64, (u8, u8, u8))>,
+        /// #273: real corner-claim tracking, for the stacking tests below.
+        corner_claims: Vec<crate::render::Rect>,
     }
 
     impl DrawBackend for RecordingBackend {
@@ -584,6 +672,15 @@ mod tests {
         }
         fn total_area(&self) -> crate::render::Rect {
             self.plot_area()
+        }
+        fn corner_claims(&self) -> Vec<crate::render::Rect> {
+            self.corner_claims.clone()
+        }
+        fn claim_corner_box(&mut self, rect: crate::render::Rect) {
+            self.corner_claims.push(rect);
+        }
+        fn clear_corner_claims(&mut self) {
+            self.corner_claims.clear();
         }
     }
 
@@ -707,5 +804,154 @@ mod tests {
         assert!(svg.contains("data-geom=\"bivariate_legend\""), "{svg}");
         assert!(svg.contains(">3<"), "count 3 missing: {svg}");
         assert!(svg.contains(">5<"), "count 5 missing: {svg}");
+    }
+
+    // --- #273: the rotated y caption is sized by its full extent, and
+    // the legend stacks clear of anything already claimed in its corner.
+
+    #[test]
+    fn short_y_caption_leaves_the_box_byte_identical_to_before_273() {
+        // A caption no longer than the grid itself never triggers the
+        // overflow path — same total_h/grid_y/x_caption_gap as before.
+        let legend = GeomBivariateLegend {
+            y_name: "y".to_string(),
+            ..GeomBivariateLegend::default()
+        };
+        let plot_area = crate::render::Rect {
+            x: 0.0,
+            y: 0.0,
+            width: 400.0,
+            height: 400.0,
+        };
+        let layout = legend_layout(&legend, &plot_area);
+        assert_eq!(layout.x_caption_gap, 0.0);
+        assert_eq!(layout.grid_y, layout.box_y);
+        assert_eq!(layout.total_h, layout.grid_h + 6.0 * 2.0); // no x_name here
+    }
+
+    #[test]
+    fn y_caption_longer_than_the_grid_grows_the_box_to_fit_it() {
+        // #273's repro: a rotated y caption longer than the grid's own
+        // height used to draw past the box's top/bottom edge — clipped —
+        // because only the caption's *thickness* sized the box. The box
+        // must now be tall enough that the caption (always centred on
+        // the grid's vertical centre) fits entirely inside it.
+        let legend = GeomBivariateLegend {
+            nx: 2,
+            ny: 2,
+            cell_size: 10.0, // a small grid (20px tall) next to a long caption
+            y_name: "Customers per 10,000 inhabitants".to_string(),
+            x_name: String::new(),
+            ..GeomBivariateLegend::default()
+        };
+        let plot_area = crate::render::Rect {
+            x: 0.0,
+            y: 0.0,
+            width: 400.0,
+            height: 400.0,
+        };
+        let layout = legend_layout(&legend, &plot_area);
+        let caption_len = text_width(&legend.y_name, legend.text_size);
+        assert!(
+            caption_len > layout.grid_h,
+            "test setup: caption ({caption_len}) should exceed the grid height ({})",
+            layout.grid_h
+        );
+        let caption_centre = layout.grid_y + layout.grid_h / 2.0;
+        let caption_top = caption_centre - caption_len / 2.0;
+        let caption_bottom = caption_centre + caption_len / 2.0;
+        assert!(
+            caption_top >= layout.box_y - 1e-6,
+            "caption_top={caption_top} box_y={}",
+            layout.box_y
+        );
+        assert!(
+            caption_bottom <= layout.box_y + layout.total_h + 1e-6,
+            "caption_bottom={caption_bottom} box bottom={}",
+            layout.box_y + layout.total_h
+        );
+    }
+
+    #[test]
+    fn bivariate_legend_stacks_clear_of_an_already_claimed_box_in_its_corner() {
+        let mut backend = RecordingBackend::default();
+        let plot_area = backend.plot_area();
+        let claim = crate::render::Rect {
+            x: plot_area.width - 80.0,
+            y: plot_area.height - 60.0,
+            width: 80.0,
+            height: 40.0,
+        };
+        backend.claim_corner_box(claim.clone());
+
+        let legend = GeomBivariateLegend::default(); // BottomRight, same as `claim`
+        let coord = crate::coord::cartesian::CoordCartesian::default();
+        let scales = ScaleSet::new();
+        legend
+            .draw(
+                &DataFrame::new(),
+                &coord,
+                &scales,
+                &Theme::default(),
+                &mut backend,
+            )
+            .unwrap();
+
+        assert_eq!(backend.corner_claims.len(), 2);
+        assert!(!crate::render::corner_layout::rects_intersect(
+            &backend.corner_claims[0],
+            &backend.corner_claims[1]
+        ));
+    }
+
+    #[test]
+    fn counts_overlay_lands_on_the_same_stacked_layout_as_the_swatches() {
+        // #273: `GeomBivariateLegendCounts` must position its count labels
+        // against the *same* (possibly stacked/shifted) layout the
+        // swatches themselves drew at — not recompute an unstacked one.
+        let mut backend = RecordingBackend::default();
+        let plot_area = backend.plot_area();
+        let claim = crate::render::Rect {
+            x: plot_area.width - 80.0,
+            y: plot_area.height - 60.0,
+            width: 80.0,
+            height: 40.0,
+        };
+        backend.claim_corner_box(claim.clone());
+
+        let g = GeomBivariateLegend {
+            color_x: (217, 95, 2),
+            color_y: (117, 112, 179),
+            ..GeomBivariateLegend::default()
+        }
+        .counts(vec![vec![1, 2, 3], vec![4, 5, 6], vec![7, 8, 9]]);
+        let coord = crate::coord::cartesian::CoordCartesian::default();
+        let scales = ScaleSet::new();
+        let mut theme = Theme::default();
+        theme.legend_background = crate::theme::elements::ElementRect::blank();
+        g.draw(&DataFrame::new(), &coord, &scales, &theme, &mut backend)
+            .unwrap();
+
+        assert_eq!(backend.rects.len(), 9);
+        assert_eq!(backend.texts.len(), 9);
+        for (text, pos, ..) in &backend.texts {
+            let n: usize = text.parse().unwrap();
+            let j = (n - 1) / 3;
+            let i = (n - 1) % 3;
+            let (tl, br, _) = backend.rects[j * 3 + i];
+            let cx = (tl.0 + br.0) / 2.0;
+            let cy = (tl.1 + br.1) / 2.0;
+            assert!(
+                (pos.0 - cx).abs() < 1e-6 && (pos.1 - cy).abs() < 1e-6,
+                "count {n} at {pos:?}, expected the (stacked) cell centre ({cx}, {cy})"
+            );
+        }
+        // And the legend's own box (claimed second, after the
+        // pre-existing `claim`) really did move clear of it.
+        assert_eq!(backend.corner_claims.len(), 2);
+        assert!(!crate::render::corner_layout::rects_intersect(
+            &backend.corner_claims[0],
+            &backend.corner_claims[1]
+        ));
     }
 }

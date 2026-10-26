@@ -1,4 +1,5 @@
 pub mod backend;
+pub mod corner_layout;
 pub mod layout;
 // Self-contained RGBA raster backend for large-N (feature `canvas`); wasm-ok.
 #[cfg(feature = "canvas")]

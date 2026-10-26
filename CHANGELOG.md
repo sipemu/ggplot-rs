@@ -5,6 +5,39 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Fixed
+- **A bottom-anchored attribution's wrapped row now reads top to bottom,
+  and panel-corner furniture now stacks clear of a scale bar, bivariate
+  legend or inside legend sharing its corner instead of drawing on top of
+  it** (#273). Previously `GeomAttribution`'s physical lines — one
+  logical row's own wrapped continuation lines *and* separate `.line(..)`
+  rows alike — stacked purely by their position in one flattened list,
+  growing away from the corner's edge; for a bottom corner that's
+  *upward*, the opposite of reading order, so a long wrapped row (e.g. a
+  bare URL) drew its last physical line closest to the edge and its first
+  line farthest — upside down. A logical row's own physical lines now
+  always read top to bottom; only whole rows still stack away from the
+  corner, in document order, unchanged from before.
+- Added a shared corner layout (`render::corner_layout`): `GeomAttribution`,
+  `GeomAnnotationScale` and `GeomBivariateLegend` each measure their own
+  box (after wrapping/fitting), stack clear of anything another one of
+  them already claimed in the same render pass via two new
+  `DrawBackend` methods (`corner_claims`/`claim_corner_box`, both default
+  no-ops — additive, opt-out by never calling them), and claim the
+  (possibly shifted) result in turn. An ordinary legend placed with
+  `legend_position_inside` draws *after* every geom, so `renderer.rs`
+  pre-claims its box (`guide::legend::inside_legend_box`, measured the
+  same way `draw_legend_planned` itself positions it) before any
+  corner-furniture geom draws, so one drawn first still stacks clear of
+  where the legend will land.
+- **`GeomBivariateLegend` now sizes its box from the rotated y-axis
+  caption's full text extent, not just its thickness**: a caption longer
+  than the grid's own height used to draw past the box's top/bottom edge
+  — clipped — because only the caption's thickness (the font's height)
+  sized the box, never its length (its vertical span once rotated 90°).
+  Byte-identical for a caption no longer than the grid, the overwhelming
+  majority of cases.
+
 ## [0.31.4] — 2026-10-26
 
 ### Fixed

@@ -645,6 +645,28 @@ pub trait DrawBackend {
     fn plot_area(&self) -> Rect;
     fn total_area(&self) -> Rect;
 
+    /// Every box already claimed in a panel corner via
+    /// [`Self::claim_corner_box`] so far this render pass — the scale
+    /// bar, attribution text, bivariate legend, or an inside ordinary
+    /// legend already placed (`render::corner_layout`, #273). Default:
+    /// always empty — a backend that never overrides this (anything that
+    /// pre-dates #273, including a third-party `impl DrawBackend`) keeps
+    /// every corner item positioned exactly as before, byte-identical.
+    fn corner_claims(&self) -> Vec<Rect> {
+        Vec::new()
+    }
+
+    /// Register `rect` as claimed in a panel corner, for a later corner
+    /// geom in the same render pass to see via [`Self::corner_claims`]
+    /// (#273). Default: no-op, paired with that method's empty default.
+    fn claim_corner_box(&mut self, _rect: Rect) {}
+
+    /// Clear every box claimed via [`Self::claim_corner_box`] — called
+    /// once per panel (`renderer.rs`), so a facet's second panel doesn't
+    /// see the first panel's claims (#273). Default: no-op, paired with
+    /// the above.
+    fn clear_corner_claims(&mut self) {}
+
     /// Attach a tooltip to subsequently-drawn marks until cleared with `None`.
     /// Backends that produce interactive output (SVG) emit it as a `<title>`
     /// for a native hover tooltip; others ignore it. Default: no-op.

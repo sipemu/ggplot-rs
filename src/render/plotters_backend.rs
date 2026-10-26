@@ -78,6 +78,9 @@ pub struct PlottersAdapter<'a, DB: DrawingBackend> {
     area: &'a DrawingArea<DB, plotters::coord::Shift>,
     plot_area: Rect,
     total_area: Rect,
+    /// #273: panel-corner boxes claimed so far this render pass — see
+    /// [`DrawBackend::corner_claims`]/[`DrawBackend::claim_corner_box`].
+    corner_claims: Vec<Rect>,
 }
 
 impl<'a, DB: DrawingBackend> PlottersAdapter<'a, DB> {
@@ -92,6 +95,7 @@ impl<'a, DB: DrawingBackend> PlottersAdapter<'a, DB> {
                 width: w as f64,
                 height: h as f64,
             },
+            corner_claims: Vec::new(),
         }
     }
 }
@@ -706,6 +710,16 @@ impl<'a, DB: DrawingBackend> DrawBackend for PlottersAdapter<'a, DB> {
 
     fn total_area(&self) -> Rect {
         self.total_area.clone()
+    }
+
+    fn corner_claims(&self) -> Vec<Rect> {
+        self.corner_claims.clone()
+    }
+    fn claim_corner_box(&mut self, rect: Rect) {
+        self.corner_claims.push(rect);
+    }
+    fn clear_corner_claims(&mut self) {
+        self.corner_claims.clear();
     }
 }
 

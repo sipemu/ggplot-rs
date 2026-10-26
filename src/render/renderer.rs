@@ -22,6 +22,23 @@ impl PlotRenderer {
         let theme = &built.theme;
         let plot_area = backend.plot_area();
         let total_area = backend.total_area();
+        // #273: fresh panel-corner claim registry for this panel — see
+        // `render::corner_layout`. An inside legend draws *after* every
+        // layer (step 9 below), so its box is pre-claimed here, before
+        // any corner-furniture geom (annotation_scale/attribution/
+        // bivariate_legend) in the layer loop gets a chance to draw.
+        backend.clear_corner_claims();
+        if let Some(rect) = legend::inside_legend_box(
+            &built.scales,
+            theme,
+            &plot_area,
+            &total_area,
+            &built.guide_legend,
+            &built.suppressed_aes,
+            &built.legend_plans,
+        ) {
+            backend.claim_corner_box(rect);
+        }
 
         // 1. Draw plot background
         if theme.plot_background.visible {
@@ -477,6 +494,14 @@ impl PlotRenderer {
                 width: panel_width,
                 height: panel_height,
             };
+            // #273: fresh panel-corner claim registry per facet panel —
+            // see `render_single`'s identical reset. A faceted plot's
+            // inside legend (if any) is drawn once globally, not per
+            // panel, so it isn't pre-claimed here the way `render_single`
+            // pre-claims it — map furniture geoms under faceting still
+            // stack clear of each other within one panel, just not of a
+            // faceted inside legend.
+            backend.clear_corner_claims();
 
             // Strip label background
             if theme.strip_background.visible {
@@ -978,6 +1003,15 @@ impl<'a> DrawBackend for PanelBackendAdapter<'a> {
     }
     fn total_area(&self) -> crate::render::Rect {
         self.inner.total_area()
+    }
+    fn corner_claims(&self) -> Vec<crate::render::Rect> {
+        self.inner.corner_claims()
+    }
+    fn claim_corner_box(&mut self, rect: crate::render::Rect) {
+        self.inner.claim_corner_box(rect)
+    }
+    fn clear_corner_claims(&mut self) {
+        self.inner.clear_corner_claims()
     }
 }
 
