@@ -5,6 +5,8 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.31.5] — 2026-10-26
+
 ### Added
 - **Three knobs for a `GGPlot` rendered once per animation frame with
   scales shared across frames** (anofox-visualization's time maps,
