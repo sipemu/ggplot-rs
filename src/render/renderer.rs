@@ -188,6 +188,7 @@ impl PlotRenderer {
             &built.scales,
             &built.suppressed_aes,
             &built.legend_plans,
+            &built.guide_legend,
         );
         if let Some(ref title) = built.labels.title {
             let (tx, anchor) = Self::hjust_pos(&theme.title, &title_ref);
@@ -657,6 +658,7 @@ impl PlotRenderer {
             &built.scales,
             &built.suppressed_aes,
             &built.legend_plans,
+            &built.guide_legend,
         );
         if let Some(ref title) = built.labels.title {
             let (tx, anchor) = Self::hjust_pos(&theme.title, &title_ref);

@@ -293,23 +293,55 @@ pub(crate) fn legend_band_height(theme: &Theme, legend_extra_rows: usize) -> f64
 /// reserves space above the panel). Zero when there's no legend to draw,
 /// or its position isn't `Top`: byte-identical to before in every other
 /// case.
+///
+/// #577: `legend_band_height` alone only covers the flat discrete-row
+/// case — a continuous, horizontally-drawn Color/Fill colourbar *with its
+/// own title* needs the same extra height `plot.rs` already reserves in
+/// `plot_area.y` via `continuous_horizontal_legend_extra_height` (#211).
+/// Without adding that extra here too, this lift undershot by exactly
+/// that amount, so the plot's own title/subtitle landed on top of the
+/// legend's title instead of above it. `guide` is the same
+/// [`GuideLegend`] `draw_legend_planned` draws with, so "does this guide
+/// have a title" can't disagree between the two.
 pub(crate) fn top_legend_lift(
     theme: &Theme,
     scales: &ScaleSet,
     suppressed: &std::collections::HashSet<Aesthetic>,
     legend_plans: &std::collections::HashMap<Aesthetic, LegendPlan>,
+    guide: &GuideLegend,
 ) -> f64 {
     if !matches!(theme.legend_position, LegendPosition::Top) {
         return 0.0;
     }
-    if legend_scales_for(scales, suppressed).is_empty() {
+    let legend_scales = legend_scales_for(scales, suppressed);
+    if legend_scales.is_empty() {
         return 0.0;
     }
     let is_horizontal = match theme.legend_direction {
         Some(dir) => matches!(dir, crate::theme::LegendDirection::Horizontal),
         None => true, // Top is always the horizontal auto-position.
     };
-    legend_band_height(theme, legend_rows_beyond_first(is_horizontal, legend_plans))
+    let base = legend_band_height(theme, legend_rows_beyond_first(is_horizontal, legend_plans));
+    let colorbar_extra = if is_horizontal {
+        legend_scales
+            .iter()
+            .find_map(|aes| {
+                if !matches!(aes, Aesthetic::Color | Aesthetic::Fill) {
+                    return None;
+                }
+                let scale = scales.get(aes)?;
+                if scale.is_discrete() {
+                    return None;
+                }
+                let title = guide.title.as_deref().unwrap_or_else(|| scale.name());
+                let bar_height = continuous_horizontal_bar_height(theme, !title.is_empty());
+                Some((bar_height - theme.legend_key_height).max(0.0))
+            })
+            .unwrap_or(0.0)
+    } else {
+        0.0
+    };
+    base + colorbar_extra
 }
 
 /// Estimate the on-canvas footprint `(width, height)` of every legend
