@@ -14,7 +14,7 @@ use crate::position::identity::PositionIdentity;
 use crate::position::Position;
 use crate::render::backend::{DrawBackend, RectStyle, TextAnchor, TextStyle};
 use crate::render::corner_layout::stack_clear;
-use crate::render::text::text_width;
+use crate::render::text::{text_width, wrap_text};
 use crate::render::{Rect, RenderError};
 use crate::scale::bivariate::bivariate_cell_color;
 use crate::scale::ScaleSet;
@@ -117,11 +117,75 @@ impl Default for GeomBivariateLegend {
     }
 }
 
+/// A caption no longer than this many physical lines (#273): shrink
+/// toward a floor if that alone fits, else wrap, else truncate — same
+/// three-tier fallback `GeomAttribution::fit` uses, capped here rather
+/// than left to grow the box, so neither caption's rendered footprint
+/// ever forces the box bigger than roughly twice the grid itself.
+const CAPTION_MAX_LINES: usize = 2;
+
+/// Fits `text` within `budget` px at `base_size`: unchanged if it
+/// already fits; shrunk toward a floor (`(base_size * 0.7).max(5.0)`,
+/// clamped to `base_size`) if that alone fits; wrapped onto up to
+/// [`CAPTION_MAX_LINES`] physical lines at the floor size; truncated
+/// with a trailing "…" on the last line as a last resort (#273: a
+/// `GeomBivariateLegend` caption must fit the grid's own width/height,
+/// not grow the box to fit itself — see [`fn@legend_layout`]). Returns
+/// `(size, lines, truncated)`; `lines` is empty for empty `text`.
+/// `truncated` is only ever true when content was actually dropped (a
+/// wrap alone keeps every character, just across more lines) — the
+/// caller uses it to decide whether a `<title>` fallback with the full
+/// text is worth adding.
+fn fit_caption(text: &str, budget: f64, base_size: f64) -> (f64, Vec<String>, bool) {
+    if text.is_empty() {
+        return (base_size, Vec::new(), false);
+    }
+    if budget.is_nan() || budget <= 0.0 {
+        return (base_size, vec![text.to_string()], false);
+    }
+    let full_w = text_width(text, base_size);
+    if full_w <= budget {
+        return (base_size, vec![text.to_string()], false);
+    }
+    let min_size = (base_size * 0.7).max(5.0).min(base_size);
+    let shrunk = (base_size * budget / full_w).max(min_size);
+    if text_width(text, shrunk) <= budget {
+        return (shrunk, vec![text.to_string()], false);
+    }
+    let mut lines = wrap_text(text, budget, min_size);
+    if lines.len() > CAPTION_MAX_LINES {
+        lines.truncate(CAPTION_MAX_LINES);
+        if let Some(last) = lines.last_mut() {
+            *last = force_ellipsis(last, budget, min_size);
+        }
+        return (min_size, lines, true);
+    }
+    (min_size, lines, false)
+}
+
+/// Like [`crate::render::text::truncate_to_width`], but always appends
+/// "…" even when `text` already fits `max_width` on its own — the last
+/// of [`CAPTION_MAX_LINES`] wrapped lines came from [`wrap_text`], so it
+/// already fits; `truncate_to_width`'s "already fits, leave it alone"
+/// early-out would otherwise drop the remaining lines with no visible
+/// sign of truncation (same reasoning as `geom::annotation_scale`'s own
+/// `force_ellipsis_row`, #264/#273).
+fn force_ellipsis(text: &str, max_width: f64, size: f64) -> String {
+    let chars: Vec<char> = text.chars().collect();
+    for keep in (0..=chars.len()).rev() {
+        let candidate: String = chars[..keep].iter().collect::<String>() + "…";
+        if text_width(&candidate, size) <= max_width {
+            return candidate;
+        }
+    }
+    "…".to_string()
+}
+
 /// The geometry shared by [`GeomBivariateLegend`]'s own `draw` and
 /// [`GeomBivariateLegendCounts`]'s per-cell count overlay (#259) —
 /// factored out so the two stay in lockstep rather than each recomputing
 /// the swatch grid's position independently.
-#[derive(Clone, Copy)]
+#[derive(Clone)]
 struct LegendLayout {
     box_x: f64,
     box_y: f64,
@@ -131,51 +195,57 @@ struct LegendLayout {
     grid_y: f64,
     grid_w: f64,
     grid_h: f64,
-    y_caption_w: f64,
-    x_caption_h: f64,
-    /// Extra vertical gap between the grid's bottom edge and the x
-    /// caption's own position, beyond the usual `x_caption_h/2` half-step
-    /// — see [`fn@legend_layout`]'s `y_caption_overflow` (#273).
-    x_caption_gap: f64,
+    /// The x caption's own physical lines (#273: fit to `grid_w`, see
+    /// [`fit_caption`]) — empty when `x_name` is empty.
+    x_caption_lines: Vec<String>,
+    x_caption_size: f64,
+    /// Whether `x_caption_lines` dropped content (ellipsised) rather
+    /// than just wrapping it — see [`fit_caption`]'s own docs.
+    x_caption_truncated: bool,
+    /// The y caption's own physical lines, each drawn as its own
+    /// rotated column (#273: fit to `grid_h`) — empty when `y_name` is
+    /// empty.
+    y_caption_lines: Vec<String>,
+    y_caption_size: f64,
+    y_caption_truncated: bool,
+}
+
+/// One caption "slot" — the thickness a single physical line of a
+/// caption (at `size`) reserves, matching the pre-#273 single-line
+/// `text_size + 4.0` formula exactly, so a caption that still fits on
+/// one line at its nominal size draws byte-identically to before.
+fn caption_slot(size: f64) -> f64 {
+    size + 4.0
 }
 
 fn legend_layout(legend: &GeomBivariateLegend, plot_area: &crate::render::Rect) -> LegendLayout {
     let (nx, ny) = (legend.nx.max(1), legend.ny.max(1));
     let grid_w = nx as f64 * legend.cell_size;
     let grid_h = ny as f64 * legend.cell_size;
-    // Room for the y caption (rotated, to the left) and the x caption
-    // (below), plus a little padding all round.
-    let y_caption_w = if legend.y_name.is_empty() {
+    // #273: each caption fits *inside* the grid's own width/height — a
+    // caption longer than that used to size the box from its thickness
+    // only, drawing past the box's own edge (clipped), or (an earlier
+    // version of this fix) grew the box to fit it, which could itself
+    // grow tall/wide enough to crowd out every other corner item
+    // regardless of how far they stacked. Fitting the caption instead
+    // keeps the box tied to the grid, same as before #273.
+    let (x_caption_size, x_caption_lines, x_caption_truncated) =
+        fit_caption(&legend.x_name, grid_w, legend.text_size);
+    let (y_caption_size, y_caption_lines, y_caption_truncated) =
+        fit_caption(&legend.y_name, grid_h, legend.text_size);
+    let x_caption_h = if x_caption_lines.is_empty() {
         0.0
     } else {
-        legend.text_size + 4.0
+        x_caption_lines.len() as f64 * caption_slot(x_caption_size)
     };
-    let x_caption_h = if legend.x_name.is_empty() {
+    let y_caption_w = if y_caption_lines.is_empty() {
         0.0
     } else {
-        legend.text_size + 4.0
+        y_caption_lines.len() as f64 * caption_slot(y_caption_size)
     };
-    // #273: the rotated y caption's own text extent (its *length*, which
-    // becomes its vertical span once rotated 90°) — previously only its
-    // *thickness* (`y_caption_w`, the font's height) sized the box, so a
-    // caption longer than the grid's own height (`grid_h`) drew past the
-    // box's top/bottom edge, uncentred and clipped (e.g. placed
-    // `TopRight`, clipped off the top). The caption is always drawn
-    // centred on the grid's vertical centre (`grid_y + grid_h / 2.0`), so
-    // fitting it needs `y_caption_overflow` of extra room split evenly
-    // above the grid (`grid_y` shifts down by half of it) and below the
-    // grid (`x_caption_gap`, consumed before the x caption's own
-    // position) — zero, and this is byte-identical to before #273, for a
-    // caption no longer than `grid_h`, the overwhelmingly common case.
-    let y_caption_len = if legend.y_name.is_empty() {
-        0.0
-    } else {
-        text_width(&legend.y_name, legend.text_size)
-    };
-    let y_caption_overflow = (y_caption_len - grid_h).max(0.0);
     let pad = 6.0;
     let total_w = y_caption_w + grid_w + pad * 2.0;
-    let total_h = grid_h + y_caption_overflow + x_caption_h + pad * 2.0;
+    let total_h = grid_h + x_caption_h + pad * 2.0;
 
     let (box_x, box_y) = match legend.corner {
         LegendCorner::BottomLeft => (
@@ -192,19 +262,21 @@ fn legend_layout(legend: &GeomBivariateLegend, plot_area: &crate::render::Rect) 
             plot_area.y + pad,
         ),
     };
-    let x_caption_gap = y_caption_overflow / 2.0;
     LegendLayout {
         box_x,
         box_y,
         total_w,
         total_h,
         grid_x: box_x + y_caption_w,
-        grid_y: box_y + x_caption_gap,
+        grid_y: box_y,
         grid_w,
         grid_h,
-        y_caption_w,
-        x_caption_h,
-        x_caption_gap,
+        x_caption_lines,
+        x_caption_size,
+        x_caption_truncated,
+        y_caption_lines,
+        y_caption_size,
+        y_caption_truncated,
     }
 }
 
@@ -257,7 +329,7 @@ impl GeomBivariateLegend {
         layout: &LegendLayout,
     ) -> Result<(), RenderError> {
         let (nx, ny) = (self.nx.max(1), self.ny.max(1));
-        let layout = *layout;
+        let layout = layout.clone();
 
         if theme.legend_background.visible {
             if let Some(fill) = theme.legend_background.fill {
@@ -300,16 +372,22 @@ impl GeomBivariateLegend {
         }
 
         let font = super::resolve_font_family("", theme);
-        if !self.x_name.is_empty() {
-            backend.draw_text(
-                &self.x_name,
-                (
-                    layout.grid_x + layout.grid_w / 2.0,
-                    layout.grid_y + layout.grid_h + layout.x_caption_gap + layout.x_caption_h / 2.0,
-                ),
+        // The x caption's own physical lines (#273: `fit_caption` already
+        // wrapped/shrunk/truncated it to fit `grid_w`), stacked top to
+        // bottom below the grid — one line reads byte-identically to
+        // before #273 (same position, same size).
+        let n_x = layout.x_caption_lines.len();
+        for (i, line) in layout.x_caption_lines.iter().enumerate() {
+            let slot = caption_slot(layout.x_caption_size);
+            let ly = layout.grid_y + layout.grid_h + (i as f64 + 0.5) * slot;
+            let title =
+                (layout.x_caption_truncated && i + 1 == n_x).then_some(self.x_name.as_str());
+            backend.draw_text_with_title(
+                line,
+                (layout.grid_x + layout.grid_w / 2.0, ly),
                 &TextStyle {
                     color: self.text_color,
-                    size: self.text_size,
+                    size: layout.x_caption_size,
                     anchor: TextAnchor::Middle,
                     angle: 0.0,
                     family: font.clone(),
@@ -317,25 +395,34 @@ impl GeomBivariateLegend {
                     bg_colour: None,
                     bg_r: 0.0,
                 },
+                title,
             )?;
         }
-        if !self.y_name.is_empty() {
-            backend.draw_text(
-                &self.y_name,
-                (
-                    layout.box_x + layout.y_caption_w / 2.0,
-                    layout.grid_y + layout.grid_h / 2.0,
-                ),
+        // The y caption's own physical lines, each its own rotated
+        // column to the left of the grid, nearest-to-farthest as the
+        // caption's own text reads (#273: `fit_caption` fit it to
+        // `grid_h`) — one line reads byte-identically to before #273.
+        let n_y = layout.y_caption_lines.len();
+        for (i, line) in layout.y_caption_lines.iter().enumerate() {
+            let slot = caption_slot(layout.y_caption_size);
+            let lx = layout.grid_x - (i as f64 + 0.5) * slot;
+            let ly = layout.grid_y + layout.grid_h / 2.0;
+            let title =
+                (layout.y_caption_truncated && i + 1 == n_y).then_some(self.y_name.as_str());
+            backend.draw_text_with_title(
+                line,
+                (lx, ly),
                 &TextStyle {
                     color: self.text_color,
-                    size: self.text_size,
+                    size: layout.y_caption_size,
                     anchor: TextAnchor::Middle,
                     angle: 90.0,
-                    family: font,
+                    family: font.clone(),
                     face: crate::render::backend::FontFace::Plain,
                     bg_colour: None,
                     bg_r: 0.0,
                 },
+                title,
             )?;
         }
         Ok(())
@@ -812,7 +899,8 @@ mod tests {
     #[test]
     fn short_y_caption_leaves_the_box_byte_identical_to_before_273() {
         // A caption no longer than the grid itself never triggers the
-        // overflow path — same total_h/grid_y/x_caption_gap as before.
+        // fit path (one line, at the full `text_size`) — same
+        // total_h/grid_y as before #273.
         let legend = GeomBivariateLegend {
             y_name: "y".to_string(),
             ..GeomBivariateLegend::default()
@@ -824,18 +912,25 @@ mod tests {
             height: 400.0,
         };
         let layout = legend_layout(&legend, &plot_area);
-        assert_eq!(layout.x_caption_gap, 0.0);
+        assert_eq!(layout.y_caption_lines, vec!["y".to_string()]);
+        assert_eq!(layout.y_caption_size, legend.text_size);
+        assert!(!layout.y_caption_truncated);
         assert_eq!(layout.grid_y, layout.box_y);
         assert_eq!(layout.total_h, layout.grid_h + 6.0 * 2.0); // no x_name here
     }
 
     #[test]
-    fn y_caption_longer_than_the_grid_grows_the_box_to_fit_it() {
+    fn y_caption_longer_than_the_grid_is_fit_to_the_grid_height_not_the_box() {
         // #273's repro: a rotated y caption longer than the grid's own
-        // height used to draw past the box's top/bottom edge — clipped —
-        // because only the caption's *thickness* sized the box. The box
-        // must now be tall enough that the caption (always centred on
-        // the grid's vertical centre) fits entirely inside it.
+        // height used to draw past the box's top/bottom edge (sized by
+        // the caption's *thickness* only), then — an earlier fix pass —
+        // grew the box tall enough to fit the caption's full extent,
+        // which could itself grow large enough to crowd out every other
+        // corner item regardless of how far up they'd stacked
+        // (DataZooDE/anofox-visualization#549). The caption must instead
+        // *fit* the grid's own height — wrap, then shrink to a floor,
+        // then ellipsis — so the box stays tied to the grid, same as a
+        // short caption.
         let legend = GeomBivariateLegend {
             nx: 2,
             ny: 2,
@@ -857,20 +952,206 @@ mod tests {
             "test setup: caption ({caption_len}) should exceed the grid height ({})",
             layout.grid_h
         );
-        let caption_centre = layout.grid_y + layout.grid_h / 2.0;
-        let caption_top = caption_centre - caption_len / 2.0;
-        let caption_bottom = caption_centre + caption_len / 2.0;
-        assert!(
-            caption_top >= layout.box_y - 1e-6,
-            "caption_top={caption_top} box_y={}",
-            layout.box_y
+        // The box is sized from the grid plus at most CAPTION_MAX_LINES
+        // caption slots — never from the caption's own raw length.
+        assert!(layout.y_caption_lines.len() <= CAPTION_MAX_LINES);
+        assert_eq!(
+            layout.total_h,
+            layout.grid_h + 6.0 * 2.0,
+            "the y caption must never grow total_h — only total_w"
         );
-        assert!(
-            caption_bottom <= layout.box_y + layout.total_h + 1e-6,
-            "caption_bottom={caption_bottom} box bottom={}",
-            layout.box_y + layout.total_h
-        );
+        // Every emitted line actually fits inside the grid's own height.
+        for line in &layout.y_caption_lines {
+            let w = text_width(line, layout.y_caption_size);
+            assert!(
+                w <= layout.grid_h + 1e-6,
+                "y caption line {line:?} (w={w}) overflows the grid height ({})",
+                layout.grid_h
+            );
+        }
+        // A caption this much longer than a 20px-tall grid can't survive
+        // wrap+shrink alone — some content had to be dropped.
+        assert!(layout.y_caption_truncated);
     }
+
+    #[test]
+    fn x_caption_longer_than_the_grid_is_fit_to_the_grid_width_not_the_box() {
+        // Same fix, the other axis: a long x caption fits `grid_w`
+        // rather than growing `total_w`.
+        let legend = GeomBivariateLegend {
+            nx: 2,
+            ny: 2,
+            cell_size: 10.0,
+            x_name: "Road km to the nearest regional hospital".to_string(),
+            y_name: String::new(),
+            ..GeomBivariateLegend::default()
+        };
+        let plot_area = crate::render::Rect {
+            x: 0.0,
+            y: 0.0,
+            width: 400.0,
+            height: 400.0,
+        };
+        let layout = legend_layout(&legend, &plot_area);
+        let caption_len = text_width(&legend.x_name, legend.text_size);
+        assert!(
+            caption_len > layout.grid_w,
+            "test setup: caption ({caption_len}) should exceed the grid width ({})",
+            layout.grid_w
+        );
+        assert!(layout.x_caption_lines.len() <= CAPTION_MAX_LINES);
+        assert_eq!(
+            layout.total_w,
+            layout.grid_w + 6.0 * 2.0,
+            "the x caption must never grow total_w — only total_h"
+        );
+        for line in &layout.x_caption_lines {
+            let w = text_width(line, layout.x_caption_size);
+            assert!(
+                w <= layout.grid_w + 1e-6,
+                "x caption line {line:?} (w={w}) overflows the grid width ({})",
+                layout.grid_w
+            );
+        }
+    }
+
+    /// Reconstructs every rect [`GeomBivariateLegend::draw_with_layout`]
+    /// actually draws into from a resolved `layout` — the grid itself,
+    /// each x-caption line's row, each y-caption line's rotated column —
+    /// so self-intersection can be checked geometrically rather than
+    /// trusting the layout numbers alone.
+    fn legend_part_rects(layout: &LegendLayout) -> Vec<crate::render::Rect> {
+        let mut rects = vec![crate::render::Rect {
+            x: layout.grid_x,
+            y: layout.grid_y,
+            width: layout.grid_w,
+            height: layout.grid_h,
+        }];
+        let n_x = layout.x_caption_lines.len();
+        for (i, line) in layout.x_caption_lines.iter().enumerate() {
+            let slot = caption_slot(layout.x_caption_size);
+            let ly = layout.grid_y + layout.grid_h + (i as f64 + 0.5) * slot;
+            let w = text_width(line, layout.x_caption_size);
+            rects.push(crate::render::Rect {
+                x: layout.grid_x + layout.grid_w / 2.0 - w / 2.0,
+                y: ly - slot / 2.0,
+                width: w,
+                height: slot,
+            });
+            let _ = n_x;
+        }
+        let n_y = layout.y_caption_lines.len();
+        for (i, line) in layout.y_caption_lines.iter().enumerate() {
+            let slot = caption_slot(layout.y_caption_size);
+            let lx = layout.grid_x - (i as f64 + 0.5) * slot;
+            let h = text_width(line, layout.y_caption_size); // rotated 90°
+            rects.push(crate::render::Rect {
+                x: lx - slot / 2.0,
+                y: layout.grid_y + layout.grid_h / 2.0 - h / 2.0,
+                width: slot,
+                height: h,
+            });
+            let _ = n_y;
+        }
+        rects
+    }
+
+    /// Like [`crate::render::corner_layout::rects_intersect`], but
+    /// tolerant of exact, by-design zero-gap touching between two parts
+    /// (e.g. two stacked lines of the same wrapped caption) — deflating
+    /// each rect by a tiny epsilon first absorbs floating-point noise at
+    /// a shared boundary (the two halves of the same `lx ± slot/2`
+    /// computed via different arithmetic can land a `f64` ULP apart)
+    /// without hiding a real overlap, which in this bug's repro is on
+    /// the order of several pixels, not `1e-9`.
+    fn really_intersects(a: &crate::render::Rect, b: &crate::render::Rect) -> bool {
+        const EPS: f64 = 1e-6;
+        let deflate = |r: &crate::render::Rect| crate::render::Rect {
+            x: r.x + EPS,
+            y: r.y + EPS,
+            width: (r.width - 2.0 * EPS).max(0.0),
+            height: (r.height - 2.0 * EPS).max(0.0),
+        };
+        crate::render::corner_layout::rects_intersect(&deflate(a), &deflate(b))
+    }
+
+    #[test]
+    fn legend_is_self_intersection_free_over_caption_lengths_and_grid_sizes() {
+        // #273: the bug was exactly two of these parts overlapping (the
+        // rotated y caption running down across the x caption) — sweep
+        // grid shapes and caption lengths and check every pair of drawn
+        // parts stays disjoint (beyond the by-design zero-gap touch
+        // between stacked lines of the same caption, see
+        // `really_intersects`), and the whole thing stays inside the box
+        // `legend_layout` claims for it.
+        let captions = [
+            "",
+            "y",
+            "Income",
+            "Customers per 10,000 people",
+            "Road km to the nearest regional hospital or clinic",
+        ];
+        let plot_area = crate::render::Rect {
+            x: 0.0,
+            y: 0.0,
+            width: 400.0,
+            height: 400.0,
+        };
+        for &(nx, ny, cell_size) in &[
+            (2usize, 2usize, 8.0),
+            (3, 3, 20.0),
+            (4, 2, 14.0),
+            (2, 5, 6.0),
+        ] {
+            for &x_name in &captions {
+                for &y_name in &captions {
+                    let legend = GeomBivariateLegend {
+                        nx,
+                        ny,
+                        cell_size,
+                        x_name: x_name.to_string(),
+                        y_name: y_name.to_string(),
+                        ..GeomBivariateLegend::default()
+                    };
+                    let layout = legend_layout(&legend, &plot_area);
+                    let parts = legend_part_rects(&layout);
+                    for (i, a) in parts.iter().enumerate() {
+                        for b in &parts[i + 1..] {
+                            assert!(
+                                !really_intersects(a, b),
+                                "nx={nx} ny={ny} cell_size={cell_size} x_name={x_name:?} \
+                                 y_name={y_name:?}: parts intersect: {a:?} vs {b:?}"
+                            );
+                        }
+                        let box_rect = crate::render::Rect {
+                            x: layout.box_x,
+                            y: layout.box_y,
+                            width: layout.total_w,
+                            height: layout.total_h,
+                        };
+                        assert!(
+                            a.x >= box_rect.x - 1e-6
+                                && a.y >= box_rect.y - 1e-6
+                                && a.x + a.width <= box_rect.x + box_rect.width + 1e-6
+                                && a.y + a.height <= box_rect.y + box_rect.height + 1e-6,
+                            "nx={nx} ny={ny} cell_size={cell_size} x_name={x_name:?} \
+                             y_name={y_name:?}: part {a:?} escapes claimed box {box_rect:?}"
+                        );
+                    }
+                }
+            }
+        }
+    }
+
+    // Note: the full attribution + scale bar + bivariate legend corner
+    // sweep (100..=400px, no intersections, every claim inside the panel)
+    // is already covered by
+    // `annotation_scale::tests::corner_sweep_attribution_scale_bar_and_bivariate_legend_never_overlap`
+    // — extended below (see that test) to use the long, real-world
+    // captions from DataZooDE/anofox-visualization#549's repro rather
+    // than short placeholders, so it actually exercises this fix's
+    // caption-fit path rather than only the pre-existing box-vs-box
+    // stacking.
 
     #[test]
     fn bivariate_legend_stacks_clear_of_an_already_claimed_box_in_its_corner() {

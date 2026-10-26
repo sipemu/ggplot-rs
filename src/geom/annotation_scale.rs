@@ -2120,10 +2120,14 @@ mod tests {
                 .unwrap();
 
             // 3. Bivariate legend, BottomRight (default, same corner as
-            // the attribution) — drawn last.
+            // the attribution) — drawn last. Long captions (the real
+            // DataZooDE/anofox-visualization#549 repro's own
+            // delivery-coverage.sql axis names, not short placeholders)
+            // so this sweep also exercises the caption-fit path, not
+            // just box-vs-box stacking.
             let legend = GeomBivariateLegend {
-                x_name: "Income".to_string(),
-                y_name: "Education".to_string(),
+                x_name: "Road km to the nearest regional hospital".to_string(),
+                y_name: "Customers per 10,000 people".to_string(),
                 ..GeomBivariateLegend::default()
             };
             legend
