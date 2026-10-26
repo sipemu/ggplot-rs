@@ -5,6 +5,8 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.31.7] — 2026-10-26
+
 ### Fixed
 - **A `Top` discrete/binned-fill legend with a `.subtitle()` and no
   `.title()` no longer overlaps the subtitle** (#281). `renderer.rs`'s
