@@ -5,6 +5,8 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.31.6] — 2026-10-26
+
 ### Fixed
 - **A `Top`/`Bottom` legend for a continuous, non-colourbar guide
   (`linewidth`/`size`/`alpha`) now wraps onto extra rows instead of
