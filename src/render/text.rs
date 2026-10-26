@@ -52,6 +52,12 @@ pub fn truncate_to_width(label: &str, max_width: f64, size: f64) -> Option<Strin
     Some("…".to_string())
 }
 
+/// Characters after which a hard break in [`wrap_text`] is preferred over a
+/// blind character-count cut — the separators a URL or path is built from
+/// (sipemu/ggplot-rs#264: a bare URL has no whitespace at all, so without
+/// this it fell back to slicing mid-word, e.g. `"eodatenzentr"` / `"um.de"`).
+const WRAP_HARD_BREAK_AFTER: [char; 7] = ['/', '.', '_', '-', '?', '&', '='];
+
 /// Word-wraps `text` to lines no wider than `max_width` px at font `size`,
 /// measured with [`text_width`] (ggtext / `str_wrap` behaviour: break at
 /// whitespace; a single word wider than `max_width` on its own is hard-split
@@ -85,6 +91,21 @@ pub fn wrap_text(text: &str, max_width: f64, size: f64) -> Vec<String> {
             while cut > 1 && text_width(&chars[..cut].iter().collect::<String>(), size) > max_width
             {
                 cut -= 1;
+            }
+            // Prefer breaking right after the last `/ . _ - ? & =` that
+            // still fits, rather than wherever the width-based cut above
+            // landed — but only when that leaves a non-trivial chunk (at
+            // least a third of what fits), so a separator near the very
+            // start of the fitting prefix doesn't produce a near-empty
+            // line (#264).
+            if let Some(break_at) = chars[..cut]
+                .iter()
+                .rposition(|c| WRAP_HARD_BREAK_AFTER.contains(c))
+            {
+                let candidate = break_at + 1;
+                if candidate > 0 && (candidate as f64) >= (cut as f64) / 3.0 {
+                    cut = candidate;
+                }
             }
             if !cur.is_empty() {
                 lines.push(std::mem::take(&mut cur));
@@ -343,6 +364,51 @@ mod tests {
         for l in &lines {
             assert!(text_width(l, 10.0) <= 40.0 + 1e-6);
         }
+    }
+
+    #[test]
+    fn wrap_text_prefers_url_separators_over_a_blind_char_cut() {
+        // A bare URL (no whitespace at all, #264's repro) should break
+        // after `/ . _ - ? & =`, not wherever a raw character-count cut
+        // happens to land.
+        let url =
+            "https://sgx.geodatenzentrum.de/web_public/gdz/datenquellen/datenquellen_vg_nuts.pdf";
+        let lines = wrap_text(url, 80.0, 7.0);
+        assert!(lines.len() > 1, "expected wrapping, got {lines:?}");
+        assert_eq!(lines.concat(), url);
+        for l in &lines {
+            assert!(
+                text_width(l, 7.0) <= 80.0 + 1e-6,
+                "line {l:?} overflows width"
+            );
+        }
+        // Every line but the last should end right after one of the
+        // preferred separators, not mid-token.
+        for l in &lines[..lines.len() - 1] {
+            let last = l.chars().last().unwrap();
+            assert!(
+                WRAP_HARD_BREAK_AFTER.contains(&last),
+                "line {l:?} did not break after a preferred separator"
+            );
+        }
+    }
+
+    #[test]
+    fn wrap_text_still_hard_breaks_when_no_separator_exists() {
+        // No `/ . _ - ? & =` anywhere: falls back to the plain
+        // character-count cut, same as before #264.
+        let lines = wrap_text("supercalifragilisticexpialidocious", 40.0, 10.0);
+        assert!(lines.len() > 1);
+        assert_eq!(lines.concat(), "supercalifragilisticexpialidocious");
+    }
+
+    #[test]
+    fn wrap_text_ignores_a_separator_too_close_to_the_start() {
+        // A single `-` right after the first character shouldn't force a
+        // one-character line; the width-based cut should stand instead.
+        let lines = wrap_text("a-supercalifragilisticexpialidocious", 40.0, 10.0);
+        assert_ne!(lines[0], "a-", "separator too close to start was used");
+        assert_eq!(lines.concat(), "a-supercalifragilisticexpialidocious");
     }
 
     #[test]
