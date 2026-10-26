@@ -293,23 +293,55 @@ pub(crate) fn legend_band_height(theme: &Theme, legend_extra_rows: usize) -> f64
 /// reserves space above the panel). Zero when there's no legend to draw,
 /// or its position isn't `Top`: byte-identical to before in every other
 /// case.
+///
+/// #577: `legend_band_height` alone only covers the flat discrete-row
+/// case — a continuous, horizontally-drawn Color/Fill colourbar *with its
+/// own title* needs the same extra height `plot.rs` already reserves in
+/// `plot_area.y` via `continuous_horizontal_legend_extra_height` (#211).
+/// Without adding that extra here too, this lift undershot by exactly
+/// that amount, so the plot's own title/subtitle landed on top of the
+/// legend's title instead of above it. `guide` is the same
+/// [`GuideLegend`] `draw_legend_planned` draws with, so "does this guide
+/// have a title" can't disagree between the two.
 pub(crate) fn top_legend_lift(
     theme: &Theme,
     scales: &ScaleSet,
     suppressed: &std::collections::HashSet<Aesthetic>,
     legend_plans: &std::collections::HashMap<Aesthetic, LegendPlan>,
+    guide: &GuideLegend,
 ) -> f64 {
     if !matches!(theme.legend_position, LegendPosition::Top) {
         return 0.0;
     }
-    if legend_scales_for(scales, suppressed).is_empty() {
+    let legend_scales = legend_scales_for(scales, suppressed);
+    if legend_scales.is_empty() {
         return 0.0;
     }
     let is_horizontal = match theme.legend_direction {
         Some(dir) => matches!(dir, crate::theme::LegendDirection::Horizontal),
         None => true, // Top is always the horizontal auto-position.
     };
-    legend_band_height(theme, legend_rows_beyond_first(is_horizontal, legend_plans))
+    let base = legend_band_height(theme, legend_rows_beyond_first(is_horizontal, legend_plans));
+    let colorbar_extra = if is_horizontal {
+        legend_scales
+            .iter()
+            .find_map(|aes| {
+                if !matches!(aes, Aesthetic::Color | Aesthetic::Fill) {
+                    return None;
+                }
+                let scale = scales.get(aes)?;
+                if scale.is_discrete() {
+                    return None;
+                }
+                let title = guide.title.as_deref().unwrap_or_else(|| scale.name());
+                let bar_height = continuous_horizontal_bar_height(theme, !title.is_empty());
+                Some((bar_height - theme.legend_key_height).max(0.0))
+            })
+            .unwrap_or(0.0)
+    } else {
+        0.0
+    };
+    base + colorbar_extra
 }
 
 /// Estimate the on-canvas footprint `(width, height)` of every legend
@@ -1278,56 +1310,81 @@ pub(crate) fn plan_legend(
     }
 }
 
-/// How many of a plot's legend scales are discrete (the ones B3-2's
-/// wrap/grid applies to) — used to split the available horizontal room
-/// among them when several sit side by side (sipemu/ggplot-rs#155).
-fn discrete_guide_count(scales: &ScaleSet, legend_scales: &[Aesthetic]) -> usize {
+/// `Color`/`Fill` are the only aesthetics whose *continuous* legend draws
+/// as an actual colourbar (`draw_continuous_legend_at`, fixed width). Every
+/// other continuous legend (`Size`, `Linewidth`, `Alpha`, …) draws sampled
+/// breaks the same way a discrete guide's keys do
+/// (`draw_discrete_legend_at` / `draw_discrete_legend_grid`), so it needs
+/// the same B3-2 wrap/grid planning a discrete guide gets rather than a
+/// fixed-width reservation — sipemu/ggplot-rs#545: previously this wasn't
+/// planned *at all*, so a `Size`/`Linewidth` legend with enough keys to
+/// overflow a narrow `Top`/`Bottom` row just drew past the panel/canvas
+/// edge with no wrap, shrink, or "+N more" to catch it.
+pub(crate) fn is_colorbar_aesthetic(aes: &Aesthetic) -> bool {
+    matches!(aes, Aesthetic::Color | Aesthetic::Fill)
+}
+
+/// How many of a plot's legend scales get B3-2's wrap/grid planning — every
+/// discrete guide, plus a continuous guide that isn't a colourbar (#545:
+/// its sampled breaks wrap/shrink exactly like a discrete guide's keys do)
+/// — used to split the available horizontal room among them when several
+/// sit side by side (sipemu/ggplot-rs#155).
+fn wrap_guide_count(scales: &ScaleSet, legend_scales: &[Aesthetic]) -> usize {
     legend_scales
         .iter()
-        .filter(|aes| scales.get(aes).map(|s| s.is_discrete()).unwrap_or(false))
+        .filter(|aes| {
+            let is_discrete = scales.get(aes).map(|s| s.is_discrete()).unwrap_or(false);
+            is_discrete || !is_colorbar_aesthetic(aes)
+        })
         .count()
         .max(1)
 }
 
-/// How many of a plot's legend scales are continuous (a colourbar, or a
-/// sampled continuous size/alpha legend) — each reserves its own fixed
-/// width share of a horizontal row (#170 / review #167 finding 7: a
-/// bottom legend mixing a colourbar with a discrete guide ignored the
-/// colourbar's share, so the discrete guide's auto-wrap/grid was planned
-/// against the *whole* row and could still run off the right edge).
-fn continuous_guide_count(scales: &ScaleSet, legend_scales: &[Aesthetic]) -> usize {
+/// How many of a plot's legend scales are a true colourbar (a continuous
+/// `Color`/`Fill` scale) — each reserves its own fixed width share of a
+/// horizontal row (#170 / review #167 finding 7: a bottom legend mixing a
+/// colourbar with a discrete guide ignored the colourbar's share, so the
+/// discrete guide's auto-wrap/grid was planned against the *whole* row and
+/// could still run off the right edge).
+fn colorbar_guide_count(scales: &ScaleSet, legend_scales: &[Aesthetic]) -> usize {
     legend_scales
         .iter()
-        .filter(|aes| !scales.get(aes).map(|s| s.is_discrete()).unwrap_or(false))
+        .filter(|aes| {
+            is_colorbar_aesthetic(aes) && !scales.get(aes).map(|s| s.is_discrete()).unwrap_or(false)
+        })
         .count()
 }
 
-/// The fixed horizontal width one continuous guide reserves in a
+/// The fixed horizontal width one colourbar guide reserves in a
 /// horizontal row — the same per-guide step `draw_legend_planned` already
-/// advances `offset_x` by once it has drawn one (see its two
-/// `is_horizontal` arms for a continuous scale).
-fn continuous_guide_width(theme: &Theme) -> f64 {
-    // #211: only used where a continuous guide shares a *horizontal* row
-    // with a discrete one — its footprint there is the horizontal bar's
+/// advances `offset_x` by once it has drawn one (see its `is_horizontal`
+/// arm for a colourbar).
+fn colorbar_guide_width(theme: &Theme) -> f64 {
+    // #211: only used where a colourbar guide shares a *horizontal* row
+    // with another one — its footprint there is the horizontal bar's
     // own length (ticks/labels sit below it now, not to its side), the
     // same width `draw_legend_planned` steps `offset_x` by.
     let (bar_len, _) = continuous_bar_dims(theme, true);
     bar_len + theme.legend_spacing * 2.0
 }
 
-/// Plan every discrete legend scale's B3-2 layout (explicit `nrow`/`ncol`
-/// grid, or auto-wrap) independently (sipemu/ggplot-rs#155): previously
-/// this only ran for the plot's single discrete guide, leaving a second
-/// simultaneous discrete guide (e.g. both `colour` and `shape` mapped to
-/// discrete variables) always on the unwrapped 0.21 path. When several
-/// discrete guides sit side by side (`is_horizontal`), the available
-/// width is split evenly among them first, so each one wraps against its
-/// own share rather than the whole row (which would let it claim more
-/// room than its neighbours leave). Guides that stack vertically instead
-/// each get the full `avail_width`, since they don't compete for it.
-/// Returns one entry per discrete guide that needs anything beyond the
-/// single-row/single-column path — a guide absent from the map is
-/// byte-identical to 0.21/0.22.
+/// Plan every wrap-eligible legend scale's B3-2 layout (explicit
+/// `nrow`/`ncol` grid, or auto-wrap) independently (sipemu/ggplot-rs#155):
+/// previously this only ran for the plot's single discrete guide, leaving
+/// a second simultaneous discrete guide (e.g. both `colour` and `shape`
+/// mapped to discrete variables) always on the unwrapped 0.21 path. A
+/// guide is wrap-eligible when it's discrete, or continuous but not a
+/// colourbar (#545: `Size`/`Linewidth`/… sampled breaks wrap/shrink the
+/// same way a discrete guide's keys do — only a true continuous
+/// `Color`/`Fill` colourbar is exempt). When several wrap-eligible guides
+/// sit side by side (`is_horizontal`), the available width is split evenly
+/// among them first, so each one wraps against its own share rather than
+/// the whole row (which would let it claim more room than its neighbours
+/// leave). Guides that stack vertically instead each get the full
+/// `avail_width`, since they don't compete for it. Returns one entry per
+/// wrap-eligible guide that needs anything beyond the single-row/single-
+/// column path — a guide absent from the map is byte-identical to
+/// 0.21/0.22.
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn plan_all_legends(
     scales: &ScaleSet,
@@ -1340,16 +1397,19 @@ pub(crate) fn plan_all_legends(
     warnings: &mut Vec<String>,
 ) -> std::collections::HashMap<Aesthetic, LegendPlan> {
     let legend_scales = legend_scales_for(scales, suppressed);
-    let n_discrete = discrete_guide_count(scales, &legend_scales);
+    let n_wrap = wrap_guide_count(scales, &legend_scales);
     let per_guide_width = if is_horizontal {
-        // #170: leave the discrete guides only the width left over after
-        // every continuous guide's own fixed share (a colourbar sitting
-        // in the same row) — previously `avail_width` was split among
-        // the discrete guides alone, so a colourbar plus a discrete
-        // guide could together still overflow the row.
-        let n_continuous = continuous_guide_count(scales, &legend_scales);
-        let continuous_width = n_continuous as f64 * continuous_guide_width(theme);
-        ((avail_width - continuous_width) / n_discrete as f64).max(0.0)
+        // #170: leave the wrap-planned guides only the width left over
+        // after every colourbar guide's own fixed share (a continuous
+        // Color/Fill legend sitting in the same row) — previously
+        // `avail_width` was split among the discrete guides alone, so a
+        // colourbar plus a discrete guide could together still overflow
+        // the row. #545: a continuous, non-colourbar guide (e.g. `Size`/
+        // `Linewidth`) is now one of the guides this width is split among
+        // too, rather than drawing unconstrained.
+        let n_colorbar = colorbar_guide_count(scales, &legend_scales);
+        let colorbar_width = n_colorbar as f64 * colorbar_guide_width(theme);
+        ((avail_width - colorbar_width) / n_wrap as f64).max(0.0)
     } else {
         avail_width
     };
@@ -1359,7 +1419,11 @@ pub(crate) fn plan_all_legends(
         let Some(scale) = scales.get(aes) else {
             continue;
         };
-        if !scale.is_discrete() {
+        // #545: plan a continuous, non-colourbar guide (`Size`/
+        // `Linewidth`/… sampled breaks) exactly like a discrete one —
+        // only a true colourbar (continuous `Color`/`Fill`) is exempt
+        // from B3-2's wrap/grid planning.
+        if !scale.is_discrete() && is_colorbar_aesthetic(aes) {
             continue;
         }
         let breaks = scale.breaks();
@@ -1516,14 +1580,17 @@ pub(crate) fn draw_legend_planned(
     if let Some(dir) = theme.legend_direction {
         is_horizontal = matches!(dir, crate::theme::LegendDirection::Horizontal);
     }
-    let n_discrete = discrete_guide_count(scales, &representatives);
-    // #170: match `plan_all_legends`'s share — a continuous guide (e.g. a
-    // colourbar) sharing this row has already claimed its own fixed
-    // width, so step the discrete guides by what's left, not the whole
-    // `legend_avail_width`.
-    let n_continuous = continuous_guide_count(scales, &representatives);
-    let continuous_width = n_continuous as f64 * continuous_guide_width(theme);
-    let per_guide_width = ((legend_avail_width - continuous_width) / n_discrete as f64).max(0.0);
+    let n_wrap = wrap_guide_count(scales, &representatives);
+    // #170: match `plan_all_legends`'s share — a colourbar guide (a
+    // continuous Color/Fill legend) sharing this row has already claimed
+    // its own fixed width, so step the wrap-planned guides by what's
+    // left, not the whole `legend_avail_width`. #545: a continuous,
+    // non-colourbar guide (`Size`/`Linewidth`/…) is one of the
+    // wrap-planned guides this is split among now, not an unconstrained
+    // extra.
+    let n_colorbar = colorbar_guide_count(scales, &representatives);
+    let colorbar_width = n_colorbar as f64 * colorbar_guide_width(theme);
+    let per_guide_width = ((legend_avail_width - colorbar_width) / n_wrap as f64).max(0.0);
 
     let mut offset_y = legend_y;
     let mut offset_x = legend_x;
@@ -1536,55 +1603,43 @@ pub(crate) fn draw_legend_planned(
             .map(|a| (a.clone(), scales.get(a).unwrap()))
             .collect();
 
-        if !rep_scale.is_discrete() {
-            // Continuous legends (colorbar, or size/alpha/linewidth
-            // sampled breaks) aren't in scope for B3-2 — unchanged.
-            if matches!(representative, Aesthetic::Color | Aesthetic::Fill) {
-                // #239: a merged continuous fill+colour pair draws one
-                // bar — `group_mergeable_legends` only merges scales
-                // whose breaks (so, in practice, colours) already match,
-                // so the other member(s) would draw the identical bar
-                // again.
-                let height = draw_continuous_legend_at(
-                    rep_scale,
-                    theme,
-                    offset_x,
-                    offset_y,
-                    backend,
-                    guide,
-                    is_horizontal,
-                )?;
-                if is_horizontal {
-                    // #211: the bar is now drawn along x (wide, not
-                    // narrow) — step by its own length, not the old
-                    // vertical-bar width-plus-side-label estimate.
-                    let (bar_len, _) = continuous_bar_dims(theme, true);
-                    offset_x += bar_len + theme.legend_spacing * 2.0;
-                } else {
-                    offset_y += height + theme.legend_spacing * 2.0;
-                }
+        if !rep_scale.is_discrete() && is_colorbar_aesthetic(representative) {
+            // A true colourbar (continuous Color/Fill) draws as a fixed-
+            // width bar — not in scope for B3-2's wrap/grid planning.
+            // Every other continuous legend (Size/Linewidth/… sampled
+            // breaks, #545) falls through to the same wrap/grid-aware
+            // path a discrete guide uses, below.
+            //
+            // #239: a merged continuous fill+colour pair draws one
+            // bar — `group_mergeable_legends` only merges scales
+            // whose breaks (so, in practice, colours) already match,
+            // so the other member(s) would draw the identical bar
+            // again.
+            let height = draw_continuous_legend_at(
+                rep_scale,
+                theme,
+                offset_x,
+                offset_y,
+                backend,
+                guide,
+                is_horizontal,
+            )?;
+            if is_horizontal {
+                // #211: the bar is now drawn along x (wide, not
+                // narrow) — step by its own length, not the old
+                // vertical-bar width-plus-side-label estimate.
+                let (bar_len, _) = continuous_bar_dims(theme, true);
+                offset_x += bar_len + theme.legend_spacing * 2.0;
             } else {
-                let height = draw_discrete_legend_at(
-                    scales,
-                    &scale_group,
-                    theme,
-                    offset_x,
-                    offset_y,
-                    backend,
-                    guide,
-                    is_horizontal,
-                )?;
-                if is_horizontal {
-                    offset_x += theme.legend_key_width
-                        + theme.legend_text.size * 6.0
-                        + theme.legend_spacing * 2.0;
-                } else {
-                    offset_y += height + theme.legend_spacing * 2.0;
-                }
+                offset_y += height + theme.legend_spacing * 2.0;
             }
             continue;
         }
 
+        // A discrete guide, or a continuous non-colourbar guide (#545:
+        // `Size`/`Linewidth`/… sampled breaks draw the same way a
+        // discrete guide's keys do) — both get the same B3-2 wrap/grid
+        // plan when `plan_all_legends` gave them one.
         match legend_plans.get(representative) {
             None => {
                 if is_horizontal {

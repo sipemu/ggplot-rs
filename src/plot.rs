@@ -3016,14 +3016,25 @@ impl GGPlot {
                     ))
                 })
                 .fold(0.0_f64, f64::max);
-            let has_discrete_guide = legend_aes.iter().any(|a| {
-                built
+            // #545: a continuous, non-colourbar guide (`Size`/
+            // `Linewidth`/… sampled breaks) needs the same B3-2 wrap/grid
+            // reservation pass a discrete guide gets — only a true
+            // colourbar (continuous `Color`/`Fill`) is exempt, since it
+            // draws as a fixed-width bar instead of sampled keys.
+            // Previously this gate only fired for a discrete guide, so a
+            // plot mapping *only* a continuous `Size`/`Linewidth` (no
+            // discrete guide alongside it) skipped the whole reservation
+            // pass and its legend could run straight off the panel/canvas
+            // with no wrap, shrink, or "+N more" to catch it.
+            let has_wrap_guide = legend_aes.iter().any(|a| {
+                let is_discrete = built
                     .scales
                     .get(a)
                     .map(|s| s.is_discrete())
-                    .unwrap_or(false)
+                    .unwrap_or(false);
+                is_discrete || !crate::guide::legend::is_colorbar_aesthetic(a)
             });
-            if has_discrete_guide {
+            if has_wrap_guide {
                 let layout0 = PlotLayout::compute_with_extras(
                     w as f64,
                     h as f64,
@@ -3389,8 +3400,8 @@ impl GGPlot {
         // with its tick labels below rather than beside it — reserve the
         // extra band height that needs beyond the flat discrete-row
         // height `legend_band` already assumes. Independent of the
-        // `has_discrete_guide` block above (a plot can have a continuous
-        // colourbar with no discrete guide at all), so computed
+        // `has_wrap_guide` block above (a plot can have a continuous
+        // colourbar with no other guide at all), so computed
         // unconditionally here, right before the layout that actually
         // matters reads `extras`.
         if has_legend
