@@ -229,7 +229,16 @@ impl PlotRenderer {
         // 8. Draw subtitle
         if let Some(ref subtitle) = built.labels.subtitle {
             let (sx, anchor) = Self::hjust_pos(&theme.subtitle, &title_ref);
-            let subtitle_y = plot_area.y - 2.0 - legend_lift;
+            // #281: apply the Top-legend lift *after* the no-title floor,
+            // not before. `theme.title.size + theme.subtitle.size` is a
+            // generic "don't draw above the top margin" minimum for the
+            // legend-less case; subtracting `legend_lift` first let that
+            // floor win over the correctly-lifted value whenever it was
+            // bigger (always true once `title_height` drops to zero with
+            // no title), silently cancelling the lift and landing the
+            // subtitle back in the legend's own band instead of above it.
+            let subtitle_y =
+                (plot_area.y - 2.0).max(theme.title.size + theme.subtitle.size) - legend_lift;
             let family = if theme.subtitle.family.is_empty() {
                 None
             } else {
@@ -237,7 +246,7 @@ impl PlotRenderer {
             };
             backend.draw_text(
                 subtitle,
-                (sx, subtitle_y.max(theme.title.size + theme.subtitle.size)),
+                (sx, subtitle_y),
                 &TextStyle {
                     color: theme.subtitle.color,
                     size: theme.subtitle.size,
@@ -687,7 +696,10 @@ impl PlotRenderer {
         // Draw subtitle
         if let Some(ref subtitle) = built.labels.subtitle {
             let (sx, anchor) = Self::hjust_pos(&theme.subtitle, &title_ref);
-            let subtitle_y = plot_area.y - 2.0 - legend_lift;
+            // #281: see render_single's identical fix — apply legend_lift
+            // after the no-title floor, not before.
+            let subtitle_y =
+                (plot_area.y - 2.0).max(theme.title.size + theme.subtitle.size) - legend_lift;
             let family = if theme.subtitle.family.is_empty() {
                 None
             } else {
@@ -695,7 +707,7 @@ impl PlotRenderer {
             };
             backend.draw_text(
                 subtitle,
-                (sx, subtitle_y.max(theme.title.size + theme.subtitle.size)),
+                (sx, subtitle_y),
                 &TextStyle {
                     color: theme.subtitle.color,
                     size: theme.subtitle.size,

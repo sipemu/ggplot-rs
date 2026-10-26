@@ -5,6 +5,19 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Fixed
+- **A `Top` discrete/binned-fill legend with a `.subtitle()` and no
+  `.title()` no longer overlaps the subtitle** (#281). `renderer.rs`'s
+  subtitle placement computed `(plot_area.y - 2.0 -
+  legend_lift).max(theme.title.size + theme.subtitle.size)` — the
+  no-title floor was applied *before* subtracting the `Top` legend's lift
+  (#233/#577), so whenever the floor exceeded the correctly-lifted value
+  (always true once `title_height` drops to zero with no title) it
+  silently cancelled the lift, landing the subtitle back where it would
+  sit with no `Top` legend at all. The fix moves `- legend_lift` to after
+  the `.max()`, which is a no-op whenever there's no `Top` legend
+  (`legend_lift == 0.0`).
+
 ## [0.31.6] — 2026-10-26
 
 ### Fixed
