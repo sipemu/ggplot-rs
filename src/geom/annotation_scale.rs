@@ -18,8 +18,9 @@ use crate::data::{DataFrame, Value};
 use crate::position::identity::PositionIdentity;
 use crate::position::Position;
 use crate::render::backend::{DrawBackend, LineStyle, Linetype, TextAnchor, TextStyle};
+use crate::render::corner_layout::stack_clear;
 use crate::render::text::{hard_break_cut, text_width};
-use crate::render::RenderError;
+use crate::render::{Rect, RenderError};
 use crate::scale::ScaleSet;
 use crate::stat::identity::StatIdentity;
 use crate::stat::Stat;
@@ -110,6 +111,30 @@ impl Geom for GeomAnnotationScale {
             return Ok(());
         };
         let (x0, y0) = corner_origin(self.corner, &plot_area, px, self.text_size);
+        // #273: shared corner layout — stack clear of anything already
+        // claimed in this corner (an attribution drawn first, or an
+        // inside legend pre-claimed by `renderer.rs`) rather than drawing
+        // directly on top of it. The bar's own box: the staple's x-range
+        // (or the label's, if it's the wider of the two — `max_width_px`
+        // doesn't bound the label text itself), from the label's rough
+        // ascent above its baseline down to the staple's own baseline.
+        let label_w = text_width(&label, self.text_size);
+        let ascent = self.text_size * 0.85;
+        let box_x0 = x0.min(x0 + px / 2.0 - label_w / 2.0);
+        let box_x1 = (x0 + px).max(x0 + px / 2.0 + label_w / 2.0);
+        let natural_box = Rect {
+            x: box_x0,
+            y: y0 - 5.0 - ascent,
+            width: box_x1 - box_x0,
+            height: (y0 + 3.0) - (y0 - 5.0 - ascent),
+        };
+        let away_sign = match self.corner {
+            MapCorner::BottomLeft | MapCorner::BottomRight => -1.0,
+            MapCorner::TopLeft | MapCorner::TopRight => 1.0,
+        };
+        let claims = backend.corner_claims();
+        let shifted_box = stack_clear(natural_box.clone(), away_sign, &claims, &plot_area);
+        let y0 = y0 + (shifted_box.y - natural_box.y);
         // A staple/I-beam: two short end-ticks joining a horizontal run,
         // like ggspatial's own scale bar.
         backend.draw_line(
@@ -136,6 +161,7 @@ impl Geom for GeomAnnotationScale {
                 bg_r: 0.0,
             },
         )?;
+        backend.claim_corner_box(shifted_box);
         Ok(())
     }
 
@@ -678,40 +704,113 @@ impl Geom for GeomAttribution {
         // `.line(..)`) may expand into more than one physical line when
         // wrapped, so collect the physical lines up front rather than
         // enumerate the logical rows directly.
-        let logical_rows = std::iter::once(row0).chain(extra_rows);
-        let physical_lines: Vec<(f64, AttributionRow)> =
-            if let Some(min_size) = self.fit_min_text_size {
-                // Panel width minus the 4px corner inset on each side, then
-                // a safety margin against the width estimate's slack
-                // against real font metrics (#264).
-                let max_width = ((plot_area.width - 8.0) * ATTRIBUTION_FIT_SAFETY_MARGIN).max(0.0);
-                logical_rows
-                    .flat_map(|row| {
-                        let (size, lines) = fit_row(
-                            &row,
-                            self.text_size,
-                            min_size,
-                            max_width,
-                            self.fit_overflow,
-                            self.fit_width_scale,
-                        );
-                        lines
-                            .into_iter()
-                            .map(move |l| (size, l))
-                            .collect::<Vec<_>>()
-                    })
-                    .collect()
-            } else {
-                logical_rows.map(|r| (self.text_size, r)).collect()
+        let logical_rows: Vec<AttributionRow> = std::iter::once(row0).chain(extra_rows).collect();
+        // Each logical row's own physical lines (from `.fit(..)`'s
+        // `AttributionOverflow::Wrap`), grouped by row rather than
+        // flattened — see the loop below (#273).
+        let rows: Vec<(f64, Vec<AttributionRow>)> = if let Some(min_size) = self.fit_min_text_size {
+            // Panel width minus the 4px corner inset on each side, then
+            // a safety margin against the width estimate's slack
+            // against real font metrics (#264).
+            let max_width = ((plot_area.width - 8.0) * ATTRIBUTION_FIT_SAFETY_MARGIN).max(0.0);
+            logical_rows
+                .into_iter()
+                .map(|row| {
+                    fit_row(
+                        &row,
+                        self.text_size,
+                        min_size,
+                        max_width,
+                        self.fit_overflow,
+                        self.fit_width_scale,
+                    )
+                })
+                .collect()
+        } else {
+            logical_rows
+                .into_iter()
+                .map(|r| (self.text_size, vec![r]))
+                .collect()
+        };
+        let away_sign = match self.corner {
+            MapCorner::BottomLeft | MapCorner::BottomRight => -1.0,
+            MapCorner::TopLeft | MapCorner::TopRight => 1.0,
+        };
+        // Flatten to (size, row, y) triples: a logical row's own physical
+        // lines always read top to bottom among themselves, regardless of
+        // anchor; only whole rows stack away from the corner's edge, in
+        // document order (#273 — previously every physical line, across
+        // every row, stacked purely by its position in one flat list,
+        // which reversed a wrapped row's own reading order at a
+        // bottom-anchored corner: its *last* physical line — closest to
+        // the corner edge — is the one nearest the panel edge, so with
+        // `i` counting across the whole flattened list, the row's
+        // *first* physical line ended up drawn closest to the edge and
+        // its last line farthest, i.e. upside down).
+        let mut physical_lines: Vec<(f64, AttributionRow, f64)> = Vec::new();
+        let mut edge_offset = 0.0_f64;
+        for (size, lines) in rows {
+            let n = lines.len();
+            for (li, row) in lines.into_iter().enumerate() {
+                let y = if away_sign < 0.0 {
+                    base_y - edge_offset - ((n - 1 - li) as f64) * line_height
+                } else {
+                    base_y + edge_offset + (li as f64) * line_height
+                };
+                physical_lines.push((size, row, y));
+            }
+            edge_offset += n as f64 * line_height;
+        }
+        // #273: shared corner layout — stack the whole block clear of
+        // anything already claimed in this corner (a scale bar drawn
+        // first, or an inside legend pre-claimed by `renderer.rs`),
+        // using the block's own measured box (after wrapping/fitting)
+        // rather than drawing directly on top of it.
+        if !physical_lines.is_empty() {
+            let max_line_w = physical_lines
+                .iter()
+                .map(|(size, row, _)| {
+                    let concat: String = row.iter().map(|(t, _)| t.as_str()).collect();
+                    text_width(&concat, *size)
+                })
+                .fold(0.0_f64, f64::max);
+            let box_x0 = match self.corner {
+                MapCorner::BottomLeft | MapCorner::TopLeft => x,
+                MapCorner::BottomRight | MapCorner::TopRight => x - max_line_w,
             };
-        for (i, (size, row)) in physical_lines.into_iter().enumerate() {
+            let min_y = physical_lines
+                .iter()
+                .map(|(_, _, y)| *y)
+                .fold(f64::INFINITY, f64::min);
+            let max_y = physical_lines
+                .iter()
+                .map(|(_, _, y)| *y)
+                .fold(f64::NEG_INFINITY, f64::max);
+            // Rough ascent/descent around each line's baseline — the same
+            // budget `line_height` (`text_size * 1.3`) already assumes
+            // between lines, split as ascent-above/descent-below.
+            let ascent = self.text_size * 0.85;
+            let descent = self.text_size * 0.35;
+            let natural_box = Rect {
+                x: box_x0,
+                y: min_y - ascent,
+                width: max_line_w,
+                height: (max_y - min_y) + ascent + descent,
+            };
+            let claims = backend.corner_claims();
+            let shifted_box = stack_clear(natural_box.clone(), away_sign, &claims, &plot_area);
+            let dy = shifted_box.y - natural_box.y;
+            if dy != 0.0 {
+                for (_, _, y) in physical_lines.iter_mut() {
+                    *y += dy;
+                }
+            }
+            backend.claim_corner_box(shifted_box);
+        }
+        for (size, row, y) in physical_lines {
             if row.iter().all(|(t, _)| t.is_empty()) {
                 continue;
             }
-            let y = match self.corner {
-                MapCorner::BottomLeft | MapCorner::BottomRight => base_y - (i as f64) * line_height,
-                MapCorner::TopLeft | MapCorner::TopRight => base_y + (i as f64) * line_height,
-            };
             let run_refs: Vec<(&str, Option<&str>)> = row
                 .iter()
                 .map(|(t, u)| (t.as_str(), u.as_deref()))
@@ -1399,6 +1498,12 @@ mod tests {
     struct RecordingBackend {
         area: crate::render::Rect,
         calls: Vec<(String, (f64, f64), f64, TextAnchor)>,
+        /// Real corner-claim tracking (#273), so a test can exercise two
+        /// draws sharing one backend and see the second avoid the first.
+        /// A single-draw test never queries this before anything has
+        /// claimed, so it's always empty at that point — byte-identical
+        /// to the trait's own no-op default for every pre-#273 test here.
+        corner_claims: Vec<crate::render::Rect>,
     }
 
     impl RecordingBackend {
@@ -1406,6 +1511,7 @@ mod tests {
             RecordingBackend {
                 area,
                 calls: Vec::new(),
+                corner_claims: Vec::new(),
             }
         }
     }
@@ -1452,6 +1558,15 @@ mod tests {
         }
         fn total_area(&self) -> crate::render::Rect {
             self.area.clone()
+        }
+        fn corner_claims(&self) -> Vec<crate::render::Rect> {
+            self.corner_claims.clone()
+        }
+        fn claim_corner_box(&mut self, rect: crate::render::Rect) {
+            self.corner_claims.push(rect);
+        }
+        fn clear_corner_claims(&mut self) {
+            self.corner_claims.clear();
         }
     }
 
@@ -1731,5 +1846,367 @@ mod tests {
         fn fit_against_real_hanken_grotesk_glyph_metrics_never_overflows_the_panel() {
             real_font_sweep(HANKEN);
         }
+    }
+
+    // --- #273: reading order and the shared corner layout. ---
+
+    #[test]
+    fn wrapped_row_reads_top_to_bottom_even_at_a_bottom_anchored_corner() {
+        // Previously a bottom-anchored row's physical lines (from
+        // `.fit(..).fit_overflow(Wrap)`) stacked purely by their position
+        // in one flattened list, growing *upward* away from the corner —
+        // the same direction a bottom corner stacks whole rows in. That
+        // put a wrapped row's *last* physical line (the end of its text)
+        // closest to the edge and its first line farthest, i.e. upside
+        // down: "...nuts.pdf · geometry" drawn above "https://.../gdz/".
+        let area = crate::render::Rect {
+            x: 0.0,
+            y: 0.0,
+            width: 60.0,
+            height: 300.0,
+        };
+        let mut backend = RecordingBackend::new(area.clone());
+        let text = "https://sgx.geodatenzentrum.de/web_public/gdz/datenquellen/datenquellen_vg_nuts.pdf · geometry modified";
+        let g = GeomAttribution::new(text)
+            .corner(MapCorner::BottomRight)
+            .fit(4.0)
+            .fit_overflow(AttributionOverflow::Wrap);
+        let scales = ScaleSet::new();
+        let coord = CoordCartesian::default();
+        g.draw(
+            &DataFrame::new(),
+            &coord,
+            &scales,
+            &Theme::default(),
+            &mut backend,
+        )
+        .unwrap();
+        assert!(
+            backend.calls.len() > 1,
+            "expected the row to wrap onto several physical lines"
+        );
+        // Each physical line draws strictly lower (larger y) than the one
+        // before it: top-to-bottom reading order, call order matching
+        // document order, regardless of the corner's own anchor edge.
+        for w in backend.calls.windows(2) {
+            let y0 = (w[0].1).1;
+            let y1 = (w[1].1).1;
+            assert!(
+                y0 < y1,
+                "lines out of reading order: {:?} drawn at y={y0} then {:?} at y={y1}",
+                w[0].0,
+                w[1].0
+            );
+        }
+        // The call texts, concatenated in draw order, are a prefix of the
+        // original text in its original order (trailing "…" aside) — not
+        // some reordering of the row's own physical lines.
+        let joined: String = backend
+            .calls
+            .iter()
+            .map(|(t, _, _, _)| t.as_str())
+            .collect();
+        let joined = joined.strip_suffix('…').unwrap_or(&joined);
+        assert!(
+            text.starts_with(joined),
+            "physical lines are out of order: {joined:?}"
+        );
+    }
+
+    #[test]
+    fn wrapped_row_also_reads_top_to_bottom_at_a_top_anchored_corner() {
+        // Same invariant as the bottom-corner test above, for symmetry —
+        // a top corner's "away from the edge" direction already matched
+        // reading order before #273, so this is a regression guard, not
+        // a bug repro.
+        let area = crate::render::Rect {
+            x: 0.0,
+            y: 0.0,
+            width: 60.0,
+            height: 300.0,
+        };
+        let mut backend = RecordingBackend::new(area.clone());
+        let text = "https://sgx.geodatenzentrum.de/web_public/gdz/datenquellen/datenquellen_vg_nuts.pdf · geometry modified";
+        let g = GeomAttribution::new(text)
+            .corner(MapCorner::TopRight)
+            .fit(4.0)
+            .fit_overflow(AttributionOverflow::Wrap);
+        let scales = ScaleSet::new();
+        let coord = CoordCartesian::default();
+        g.draw(
+            &DataFrame::new(),
+            &coord,
+            &scales,
+            &Theme::default(),
+            &mut backend,
+        )
+        .unwrap();
+        assert!(backend.calls.len() > 1);
+        for w in backend.calls.windows(2) {
+            assert!((w[0].1).1 < (w[1].1).1);
+        }
+    }
+
+    #[test]
+    fn multiple_lines_still_stack_away_from_the_corner_in_document_order() {
+        // Regression guard for the un-wrapped, multi-`.line(..)` case
+        // (#250/#196): row 0 stays closest to the corner edge, each
+        // later `.line(..)` call stacks farther away — unaffected by
+        // #273's reading-order fix, which only changes ordering *within*
+        // one wrapped row.
+        let area = crate::render::Rect {
+            x: 0.0,
+            y: 0.0,
+            width: 400.0,
+            height: 300.0,
+        };
+        let mut backend = RecordingBackend::new(area.clone());
+        let g = GeomAttribution::new("row 0")
+            .corner(MapCorner::BottomLeft)
+            .line(vec![("row 1", None)])
+            .line(vec![("row 2", None)]);
+        let scales = ScaleSet::new();
+        let coord = CoordCartesian::default();
+        g.draw(
+            &DataFrame::new(),
+            &coord,
+            &scales,
+            &Theme::default(),
+            &mut backend,
+        )
+        .unwrap();
+        assert_eq!(backend.calls.len(), 3);
+        assert_eq!(backend.calls[0].0, "row 0");
+        assert_eq!(backend.calls[1].0, "row 1");
+        assert_eq!(backend.calls[2].0, "row 2");
+        // Bottom corner: later rows stack *upward* (smaller y).
+        assert!((backend.calls[1].1).1 < (backend.calls[0].1).1);
+        assert!((backend.calls[2].1).1 < (backend.calls[1].1).1);
+    }
+
+    #[test]
+    fn attribution_stacks_clear_of_an_already_claimed_box_in_its_corner() {
+        let area = crate::render::Rect {
+            x: 0.0,
+            y: 0.0,
+            width: 200.0,
+            height: 300.0,
+        };
+        let mut backend = RecordingBackend::new(area.clone());
+        // Pre-claim a box right where a BottomRight attribution would
+        // otherwise draw — standing in for a scale bar/legend already
+        // placed there, or an inside legend `renderer.rs` pre-claims.
+        let claim = crate::render::Rect {
+            x: 0.0,
+            y: area.height - 30.0,
+            width: area.width,
+            height: 20.0,
+        };
+        backend.claim_corner_box(claim.clone());
+
+        let g = GeomAttribution::new("a short note").corner(MapCorner::BottomRight);
+        let scales = ScaleSet::new();
+        let coord = CoordCartesian::default();
+        g.draw(
+            &DataFrame::new(),
+            &coord,
+            &scales,
+            &Theme::default(),
+            &mut backend,
+        )
+        .unwrap();
+
+        assert_eq!(backend.calls.len(), 1);
+        // The attribution's own newly-registered claim is the second one.
+        assert_eq!(backend.corner_claims.len(), 2);
+        assert!(!crate::render::corner_layout::rects_intersect(
+            &backend.corner_claims[0],
+            &backend.corner_claims[1]
+        ));
+        // And it actually moved up, away from the pre-claimed box, rather
+        // than drawing at its untouched default position.
+        assert!((backend.calls[0].1).1 < claim.y);
+    }
+
+    #[test]
+    fn scale_bar_stacks_clear_of_an_already_claimed_box_in_its_corner() {
+        let area = crate::render::Rect {
+            x: 0.0,
+            y: 0.0,
+            width: 400.0,
+            height: 300.0,
+        };
+        let mut backend = RecordingBackend::new(area.clone());
+        let claim = crate::render::Rect {
+            x: 0.0,
+            y: area.height - 40.0,
+            width: 120.0,
+            height: 30.0,
+        };
+        backend.claim_corner_box(claim.clone());
+
+        let scales = trained_scales(0.0, 400_000.0);
+        let coord = CoordCartesian::default();
+        let g = GeomAnnotationScale::default().corner(MapCorner::BottomLeft);
+        g.draw(
+            &DataFrame::new(),
+            &coord,
+            &scales,
+            &Theme::default(),
+            &mut backend,
+        )
+        .unwrap();
+
+        assert_eq!(backend.corner_claims.len(), 2);
+        assert!(!crate::render::corner_layout::rects_intersect(
+            &backend.corner_claims[0],
+            &backend.corner_claims[1]
+        ));
+    }
+
+    #[test]
+    fn corner_sweep_attribution_scale_bar_and_bivariate_legend_never_overlap() {
+        // #273's acceptance test: a 100-400px width sweep with an
+        // attribution (the BKG 3-row example, including the long
+        // no-whitespace URL row that forces wrapping), a scale bar, and
+        // an inside bivariate legend — by default, the attribution and
+        // the bivariate legend share the *same* corner (BottomRight), so
+        // without the shared corner layout this collides at every width
+        // narrow enough for the attribution's lines to reach it.
+        use crate::geom::bivariate_legend::GeomBivariateLegend;
+        use crate::render::corner_layout::rects_intersect;
+
+        let url =
+            "https://sgx.geodatenzentrum.de/web_public/gdz/datenquellen/datenquellen_vg_nuts.pdf";
+        let coord = CoordCartesian::default();
+        let scales = ScaleSet::new();
+
+        for width in (100..=400).step_by(25) {
+            let area = crate::render::Rect {
+                x: 0.0,
+                y: 0.0,
+                width: width as f64,
+                height: 300.0,
+            };
+            let mut backend = RecordingBackend::new(area.clone());
+
+            // 1. Scale bar, BottomLeft (default) — drawn first.
+            let scale_scales = trained_scales(0.0, 400_000.0);
+            GeomAnnotationScale::default()
+                .draw(
+                    &DataFrame::new(),
+                    &coord,
+                    &scale_scales,
+                    &Theme::default(),
+                    &mut backend,
+                )
+                .unwrap();
+
+            // 2. Attribution, BottomRight (default) — the BKG 3-row
+            // example, drawn second.
+            let attribution = GeomAttribution::new(url)
+                .line(vec![("© BKG (2026) dl-de/by-2-0, Datenquellen:", None)])
+                .line(vec![("geometry modified (simplified)", None)])
+                .fit(4.0)
+                .fit_overflow(AttributionOverflow::Wrap);
+            attribution
+                .draw(
+                    &DataFrame::new(),
+                    &coord,
+                    &scales,
+                    &Theme::default(),
+                    &mut backend,
+                )
+                .unwrap();
+
+            // 3. Bivariate legend, BottomRight (default, same corner as
+            // the attribution) — drawn last. Long captions (the real
+            // DataZooDE/anofox-visualization#549 repro's own
+            // delivery-coverage.sql axis names, not short placeholders)
+            // so this sweep also exercises the caption-fit path, not
+            // just box-vs-box stacking.
+            let legend = GeomBivariateLegend {
+                x_name: "Road km to the nearest regional hospital".to_string(),
+                y_name: "Customers per 10,000 people".to_string(),
+                ..GeomBivariateLegend::default()
+            };
+            legend
+                .draw(
+                    &DataFrame::new(),
+                    &coord,
+                    &scales,
+                    &Theme::default(),
+                    &mut backend,
+                )
+                .unwrap();
+
+            let claims = backend.corner_claims();
+            for i in 0..claims.len() {
+                for j in (i + 1)..claims.len() {
+                    assert!(
+                        !rects_intersect(&claims[i], &claims[j]),
+                        "width={width}: claim {i} {:?} intersects claim {j} {:?}",
+                        claims[i],
+                        claims[j]
+                    );
+                }
+                assert!(
+                    claims[i].x >= area.x - 1e-6
+                        && claims[i].x + claims[i].width <= area.x + area.width + 1e-6,
+                    "width={width}: claim {i} {:?} runs outside the panel [{}, {}]",
+                    claims[i],
+                    area.x,
+                    area.x + area.width
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn inside_legend_and_attribution_do_not_overlap_in_the_rendered_svg() {
+        // #273 end-to-end smoke test, through the full `GGPlot` pipeline
+        // (not a direct `Geom::draw` call): an ordinary discrete-colour
+        // legend placed `legend_position_inside` near the bottom-right,
+        // alongside a bottom-right attribution long enough to reach it —
+        // `renderer.rs` pre-claims the legend's box (via
+        // `legend::inside_legend_box`) before the attribution geom
+        // draws, so it stacks clear instead of drawing on top of it.
+        use crate::aes::Aes;
+        use crate::data::Value;
+        use crate::plot::GGPlot;
+
+        let df = vec![
+            (
+                "x".to_string(),
+                vec![Value::Float(0.0), Value::Float(1.0), Value::Float(2.0)],
+            ),
+            (
+                "y".to_string(),
+                vec![Value::Float(0.0), Value::Float(1.0), Value::Float(2.0)],
+            ),
+            (
+                "c".to_string(),
+                vec![
+                    Value::Str("alpha".to_string()),
+                    Value::Str("beta".to_string()),
+                    Value::Str("gamma".to_string()),
+                ],
+            ),
+        ];
+        let svg = GGPlot::new(df)
+            .aes(Aes::new().x("x").y("y").color("c"))
+            .geom_point()
+            .legend_position_inside(0.85, 0.85)
+            .annotation_attribution_with(
+                GeomAttribution::new(
+                    "https://sgx.geodatenzentrum.de/web_public/gdz/datenquellen/datenquellen_vg_nuts.pdf · geometry modified",
+                )
+                .corner(MapCorner::BottomRight)
+                .fit(4.0)
+                .fit_overflow(AttributionOverflow::Wrap),
+            )
+            .render_svg_native()
+            .expect("renders with an inside legend and a stacking attribution");
+        assert!(svg.contains("data-geom=\"attribution\""), "{svg}");
     }
 }

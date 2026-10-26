@@ -27,6 +27,9 @@ pub struct PixelBackend {
     plot_area: Rect,
     total_area: Rect,
     font: FontRef<'static>,
+    /// #273: panel-corner boxes claimed so far this render pass — see
+    /// [`DrawBackend::corner_claims`]/[`DrawBackend::claim_corner_box`].
+    corner_claims: Vec<Rect>,
 }
 
 impl PixelBackend {
@@ -44,6 +47,7 @@ impl PixelBackend {
                 height: height as f64,
             },
             font: FontRef::try_from_slice(FONT).expect("bundled font parses"),
+            corner_claims: Vec::new(),
         }
     }
 
@@ -226,6 +230,16 @@ impl DrawBackend for PixelBackend {
     }
     fn total_area(&self) -> Rect {
         self.total_area.clone()
+    }
+
+    fn corner_claims(&self) -> Vec<Rect> {
+        self.corner_claims.clone()
+    }
+    fn claim_corner_box(&mut self, rect: Rect) {
+        self.corner_claims.push(rect);
+    }
+    fn clear_corner_claims(&mut self) {
+        self.corner_claims.clear();
     }
 
     fn draw_circle(

@@ -21,6 +21,57 @@ All notable changes to this project are documented here. The format follows
   None of the three change any existing render: all three are
   opt-in, default off/`Auto`/unchanged.
 
+### Fixed
+- **A bottom-anchored attribution's wrapped row now reads top to bottom,
+  and panel-corner furniture now stacks clear of a scale bar, bivariate
+  legend or inside legend sharing its corner instead of drawing on top of
+  it** (#273). Previously `GeomAttribution`'s physical lines — one
+  logical row's own wrapped continuation lines *and* separate `.line(..)`
+  rows alike — stacked purely by their position in one flattened list,
+  growing away from the corner's edge; for a bottom corner that's
+  *upward*, the opposite of reading order, so a long wrapped row (e.g. a
+  bare URL) drew its last physical line closest to the edge and its first
+  line farthest — upside down. A logical row's own physical lines now
+  always read top to bottom; only whole rows still stack away from the
+  corner, in document order, unchanged from before.
+- Added a shared corner layout (`render::corner_layout`): `GeomAttribution`,
+  `GeomAnnotationScale` and `GeomBivariateLegend` each measure their own
+  box (after wrapping/fitting), stack clear of anything another one of
+  them already claimed in the same render pass — with a few px of real
+  clearance, not just zero-gap touching, since a box's height is only an
+  approximation of its real ink extent — via three new `DrawBackend`
+  methods (`corner_claims`/`claim_corner_box`/`clear_corner_claims`, all
+  default no-ops — additive, opt-out by never calling them), and claim
+  the (possibly shifted) result in turn. An ordinary legend placed with
+  `legend_position_inside` draws *after* every geom, so `renderer.rs`
+  pre-claims its box (`guide::legend::inside_legend_box`, measured the
+  same way `draw_legend_planned` itself positions it) before any
+  corner-furniture geom draws, so one drawn first still stacks clear of
+  where the legend will land. Stacking is bounded to the panel itself —
+  a claim tall enough that fully clearing it would push an item above
+  the panel's own top edge instead clamps there (a residual gap against
+  that one claim, rather than leaving the panel/map entirely), e.g. a
+  bivariate legend's very long rotated caption next to a short panel.
+- **`GeomBivariateLegend`'s x/y captions now fit the grid's own
+  width/height instead of growing the box to fit themselves**: a caption
+  longer than the grid used to draw past the box's edge — clipped —
+  because only the caption's thickness (the font's height) sized the
+  box, never its length; sizing the box from the caption's full length
+  instead could itself grow large enough to crowd out every other
+  corner item regardless of how far up they'd stacked. Each caption is
+  now fit to the grid — wrap onto up to 2 lines, then shrink toward a
+  floor, then ellipsise with the full text kept in a tooltip — the same
+  three-tier fallback `GeomAttribution::fit` already uses. Byte-identical
+  for a caption no longer than the grid, the overwhelming majority of
+  cases.
+- **The rotated y caption now reads bottom to top, letter-tops to the
+  left** (the familiar axis-title convention) **instead of top to
+  bottom**, and a wrapped caption's physical lines now stack in the
+  matching order (the line nearest the grid is read last) — same family
+  as the attribution fix above, just along the rotated axis: getting
+  the per-column reading direction and the column stacking order out of
+  sync swapped a two-line caption's halves once read upright.
+
 ## [0.31.4] — 2026-10-26
 
 ### Fixed
