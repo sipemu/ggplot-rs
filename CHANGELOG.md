@@ -5,6 +5,8 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.31.3] — 2026-10-26
+
 ### Fixed
 - **`GeomAttribution::fit` no longer lets a fitted line overflow the
   panel, and `AttributionOverflow::Wrap` no longer char-slices a bare
