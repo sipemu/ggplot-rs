@@ -5,6 +5,32 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Fixed
+- **`AttributionOverflow::Wrap` now splits *inside* a run, not just between
+  runs, and both `Wrap` and `Ellipsis` keep each kept/split piece's link**
+  (#264's follow-up, #267). A logical attribution row that's a bare linked
+  URL followed by a plain note used to only ever break at the space
+  between the two runs — a URL run still too wide on its own stayed
+  unsplit on one physical line and overflowed the panel. And whenever
+  shrinking alone wasn't enough and `fit` had to truncate or wrap, the
+  result was flattened to plain text, losing every run's `href` — a bare
+  linked URL became entirely unclickable the moment it needed ellipsising
+  or wrapping. `GeomAttribution::fit` now wraps/truncates per run, so a
+  split or truncated link keeps pointing at its original, full `href` on
+  every resulting line.
+
+### Added
+- **`GeomAttribution::fit_width_scale`**: an opt-in multiplier on
+  `fit`'s width estimate, for a caller whose own deployed rendering
+  (font weight, `letter-spacing`, a fallback font, …) measurably renders
+  wider than `render::text::text_width`'s heuristic assumes. Default
+  `1.0` — no effect, byte-identical to before this method existed.
+  Measuring the #267 repro text against two real, non-synthetic fonts —
+  the bundled DejaVu Sans and a fetched Hanken Grotesk — found the
+  existing fit safety margin already has headroom against both, so it's
+  left unchanged rather than guessed bigger for a case this crate can't
+  reproduce; this hook is the hatch for a caller who can.
+
 ## [0.31.3] — 2026-10-26
 
 ### Fixed
