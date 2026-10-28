@@ -1239,6 +1239,53 @@ impl GGPlot {
         plot
     }
 
+    /// Sunburst over the hierarchy columns `levels` (outermost first),
+    /// sized by `weight` (1 per row when unmapped): concentric rings, one per
+    /// level, each node's angle ∝ its value and nested in its parent's.
+    /// Sets `coord_polar`, colours each branch by its top-level ancestor
+    /// (lighter further out; no legend — sectors are labelled), drops scale
+    /// expansion and hides the position guides.
+    pub fn geom_sunburst<S: Into<String>>(self, levels: impl IntoIterator<Item = S>) -> Self {
+        let geom = crate::geom::partition::GeomPartition::sunburst(levels);
+        // The hole is `hole` level-widths of the `levels.len() + hole` radius.
+        let depth = geom.levels.len().max(1) as f64;
+        let inner = geom.hole / (geom.hole + depth);
+        let mut plot = self.geom_partition_with(geom);
+        plot.coord = Box::new(CoordPolar::new().inner_radius(inner));
+        plot
+    }
+
+    /// Icicle chart over `levels`: the partition of
+    /// [`geom_sunburst`](Self::geom_sunburst) in Cartesian coordinates, root
+    /// level on top.
+    pub fn geom_icicle<S: Into<String>>(self, levels: impl IntoIterator<Item = S>) -> Self {
+        self.geom_partition_with(crate::geom::partition::GeomPartition::icicle(levels))
+    }
+
+    /// A partition layer with explicit settings (sunburst under
+    /// `coord_polar`, icicle otherwise); same defaults as the shortcuts
+    /// except the coordinate system, which is left as is.
+    pub fn geom_partition_with(self, geom: crate::geom::partition::GeomPartition) -> Self {
+        use crate::aes::Aesthetic;
+        let has = |plot: &Self, aes: Aesthetic| plot.scales.iter().any(|s| s.aesthetic() == aes);
+        let (has_x, has_y) = (has(&self, Aesthetic::X), has(&self, Aesthetic::Y));
+        let fill_mapped = self.mapping.get_mapping(&Aesthetic::Fill).is_some();
+        let mut plot = self.add_geom_with(geom);
+        plot.hide_position_guides = true;
+        if !fill_mapped {
+            plot = plot
+                .layer_aes(Aes::new().after_stat_fill("root"))
+                .show_legend(false);
+        }
+        if !has_x {
+            plot = plot.scale_x_continuous(ScaleContinuous::new().with_expand(0.0, 0.0));
+        }
+        if !has_y {
+            plot = plot.scale_y_continuous(ScaleContinuous::new().with_expand(0.0, 0.0));
+        }
+        plot
+    }
+
     /// Candlestick chart: map `x` and `open`/`high`/`low`/`close`
     /// (`Aes::new().x("date").open("o").high("h").low("l").close("c")`).
     pub fn geom_candlestick(self) -> Self {

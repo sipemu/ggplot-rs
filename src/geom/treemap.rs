@@ -58,7 +58,7 @@ impl Default for GeomTreemap {
 }
 
 /// Black or white, whichever reads better on `bg` (WCAG relative luminance).
-fn contrast_text(bg: (u8, u8, u8)) -> (u8, u8, u8) {
+pub(crate) fn contrast_text(bg: (u8, u8, u8)) -> (u8, u8, u8) {
     let lin = |c: u8| {
         let c = c as f64 / 255.0;
         if c <= 0.03928 {
@@ -77,7 +77,7 @@ fn contrast_text(bg: (u8, u8, u8)) -> (u8, u8, u8) {
 
 /// Largest font size ≤ `max` at which `text` fits a `w × h` pixel box
 /// (approximate glyph width 0.68 em, erring wide), or `None` below `min`.
-fn fit_size(text: &str, w: f64, h: f64, max: f64, min: f64) -> Option<f64> {
+pub(crate) fn fit_size(text: &str, w: f64, h: f64, max: f64, min: f64) -> Option<f64> {
     let chars = text.chars().count().max(1) as f64;
     let size = max.min((w - 6.0) / (chars * 0.68)).min(h - 4.0);
     (size >= min).then_some(size)
