@@ -18,6 +18,9 @@ use crate::scale::ScaleSet;
 
 use super::Stat;
 
+/// A Renko brick: `(low, high, up)`.
+type Brick = (f64, f64, bool);
+
 /// Renko bricks `(low, high, up)` for `prices` with box size `b`.
 pub fn renko_bricks(prices: &[f64], b: f64) -> Vec<(f64, f64, bool)> {
     let mut out: Vec<(f64, f64, bool)> = Vec::new();
@@ -124,7 +127,7 @@ pub struct StatRenko {
 impl Stat for StatRenko {
     fn compute_group(&self, data: &DataFrame, _scales: &ScaleSet) -> DataFrame {
         let bricks = renko_bricks(&prices(data), self.box_size);
-        let f = |g: &dyn Fn(usize, &(f64, f64, bool)) -> f64| {
+        let f = |g: &dyn Fn(usize, &Brick) -> f64| {
             bricks
                 .iter()
                 .enumerate()
