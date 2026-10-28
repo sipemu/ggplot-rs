@@ -71,6 +71,7 @@ pub mod venn;
 pub mod violin;
 pub mod waffle;
 pub mod waterfall;
+pub mod windbarb;
 pub mod wordcloud;
 pub mod xrange;
 
