@@ -98,7 +98,17 @@ impl ScaleSet {
         ) {
             return;
         }
-        let values = data.column(aes.col_name());
+        // A position scale created from extent columns alone (`xmin`/`xmax`
+        // with no `x`, e.g. a Gantt bar) detects its type from them, so a
+        // date range still gets a date scale.
+        let fallback: &[&str] = match aes {
+            Aesthetic::X => &["xmin", "xmax", "xend"],
+            Aesthetic::Y => &["ymin", "ymax", "yend"],
+            _ => &[],
+        };
+        let values = data
+            .column(aes.col_name())
+            .or_else(|| fallback.iter().find_map(|c| data.column(c)));
 
         let is_discrete = match values {
             Some(vals) => vals

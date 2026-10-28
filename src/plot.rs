@@ -1583,6 +1583,49 @@ impl GGPlot {
         plot
     }
 
+    /// X-range / Gantt chart: map `y` (task), `xmin` (start) and `xmax`
+    /// (end), optionally `fill`. Zero-length tasks are milestones
+    /// (diamonds). Unless a y scale is set, tasks read top to bottom in data
+    /// order (from the plot data). See
+    /// [`GeomXrange`](crate::geom::xrange::GeomXrange) for progress and
+    /// dependency arrows.
+    pub fn geom_xrange(self) -> Self {
+        self.add_xrange(crate::geom::xrange::GeomXrange::default(), false)
+    }
+
+    /// [`geom_xrange`](Self::geom_xrange) with progress / dependency columns.
+    pub fn geom_xrange_with(self, geom: crate::geom::xrange::GeomXrange) -> Self {
+        self.add_xrange(geom, true)
+    }
+
+    fn add_xrange(self, geom: crate::geom::xrange::GeomXrange, explicit: bool) -> Self {
+        use crate::aes::Aesthetic;
+        let has_y = self.scales.iter().any(|s| s.aesthetic() == Aesthetic::Y);
+        // First task on top: reverse the data order for the discrete axis.
+        let levels: Option<Vec<String>> = self
+            .mapping
+            .get_mapping(&Aesthetic::Y)
+            .and_then(|c| self.data.column(c))
+            .map(|col| {
+                let mut seen: indexmap::IndexSet<String> = indexmap::IndexSet::new();
+                for v in col.iter().filter(|v| !v.is_na()) {
+                    seen.insert(v.key_str().into_owned());
+                }
+                seen.into_iter().rev().collect()
+            });
+        let mut plot = if explicit {
+            self.add_geom_with(geom)
+        } else {
+            self.add_geom(geom)
+        };
+        if let (false, Some(levels)) = (has_y, levels) {
+            let refs: Vec<&str> = levels.iter().map(String::as_str).collect();
+            plot = plot
+                .scale_y_discrete(crate::scale::discrete::ScaleDiscrete::new().with_limits(refs));
+        }
+        plot
+    }
+
     /// Candlestick chart: map `x` and `open`/`high`/`low`/`close`
     /// (`Aes::new().x("date").open("o").high("h").low("l").close("c")`).
     pub fn geom_candlestick(self) -> Self {

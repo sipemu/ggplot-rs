@@ -100,6 +100,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     wordcloud()?;
     marimekko()?;
     timeline()?;
+    gantt()?;
     radar()?;
     gauge()?;
     calendar()?;
@@ -1316,6 +1317,71 @@ fn timeline() -> Result<(), Box<dyn std::error::Error>> {
         .xlab("")
         .theme_minimal()
         .save_with_size(&out("timeline"), W, 300)?;
+    Ok(())
+}
+
+/// A project plan as a Gantt chart (`geom_xrange`).
+fn gantt() -> Result<(), Box<dyn std::error::Error>> {
+    use ggplot_rs::stat::calendar::days_from_civil;
+    let day = |m: u32, d: u32| Value::DateTime(days_from_civil(2024, m, d) * 86_400);
+    let tasks = [
+        ("Research", (3, 4), (3, 22), "Plan", 1.0, ""),
+        ("Requirements", (3, 18), (4, 5), "Plan", 1.0, "Research"),
+        ("Design", (4, 8), (5, 3), "Build", 0.9, "Requirements"),
+        ("Backend", (4, 29), (6, 21), "Build", 0.6, "Design"),
+        ("Frontend", (5, 13), (6, 28), "Build", 0.4, "Design"),
+        ("QA", (6, 17), (7, 12), "Ship", 0.1, "Backend"),
+        ("Launch", (7, 15), (7, 15), "Ship", 0.0, "QA"),
+    ];
+    let data = vec![
+        (
+            "task".to_string(),
+            tasks.iter().map(|t| Value::Str(t.0.into())).collect(),
+        ),
+        (
+            "start".to_string(),
+            tasks.iter().map(|t| day(t.1 .0, t.1 .1)).collect(),
+        ),
+        (
+            "end".to_string(),
+            tasks.iter().map(|t| day(t.2 .0, t.2 .1)).collect(),
+        ),
+        (
+            "phase".to_string(),
+            tasks.iter().map(|t| Value::Str(t.3.into())).collect(),
+        ),
+        (
+            "done".to_string(),
+            tasks.iter().map(|t| Value::Float(t.4)).collect(),
+        ),
+        (
+            "after".to_string(),
+            tasks
+                .iter()
+                .map(|t| {
+                    if t.5.is_empty() {
+                        Value::Na
+                    } else {
+                        Value::Str(t.5.into())
+                    }
+                })
+                .collect(),
+        ),
+    ];
+    GGPlot::new(data)
+        .aes(Aes::new().y("task").xmin("start").xmax("end").fill("phase"))
+        .geom_xrange_with(
+            GeomXrange::default()
+                .with_progress("done")
+                .with_dependencies("after"),
+        )
+        .scale_fill_brewer(PaletteName::Set2)
+        .title("Gantt chart")
+        .subtitle("Tasks with progress (dark inset), dependencies and a launch milestone")
+        .xlab("")
+        .ylab("")
+        .theme_minimal()
+        .save_with_size(&out("gantt"), W, H)?;
     Ok(())
 }
 
