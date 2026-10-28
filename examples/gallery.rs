@@ -104,6 +104,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     tilemap()?;
     windbarb()?;
     variable_pie()?;
+    heikin_ashi()?;
     radar()?;
     gauge()?;
     calendar()?;
@@ -1478,6 +1479,48 @@ fn variable_pie() -> Result<(), Box<dyn std::error::Error>> {
         .theme_void()
         .legend_position(LegendPosition::None)
         .save_with_size(&out("variable_pie"), W, H)?;
+    Ok(())
+}
+
+/// The candlestick prices as Heikin-Ashi candles (`geom_heikin_ashi`).
+fn heikin_ashi() -> Result<(), Box<dyn std::error::Error>> {
+    use ggplot_rs::stat::calendar::days_from_civil;
+    let start = days_from_civil(2024, 3, 1);
+    let (mut date, mut o, mut h, mut l, mut c) = (vec![], vec![], vec![], vec![], vec![]);
+    let mut price: f64 = 100.0;
+    for i in 0..40i64 {
+        let open = price;
+        let close = open + 1.6 * (i as f64 * 0.9).sin() + 0.7 * (i as f64 * 2.3).cos() + 0.15;
+        let spread = 0.6 + 0.5 * (i as f64 * 1.7).sin().abs();
+        date.push(Value::DateTime((start + i) * 86_400));
+        o.push(Value::Float(round2(open)));
+        c.push(Value::Float(round2(close)));
+        h.push(Value::Float(round2(open.max(close) + spread)));
+        l.push(Value::Float(round2(open.min(close) - spread * 0.8)));
+        price = close;
+    }
+    let data = vec![
+        ("date".to_string(), date),
+        ("open".to_string(), o),
+        ("high".to_string(), h),
+        ("low".to_string(), l),
+        ("close".to_string(), c),
+    ];
+    GGPlot::new(data)
+        .aes(
+            Aes::new()
+                .x("date")
+                .open("open")
+                .high("high")
+                .low("low")
+                .close("close"),
+        )
+        .geom_heikin_ashi()
+        .title("Heikin-Ashi")
+        .subtitle("The candlestick series smoothed into Heikin-Ashi candles")
+        .ylab("Price")
+        .theme_minimal()
+        .save_with_size(&out("heikin_ashi"), W, H)?;
     Ok(())
 }
 

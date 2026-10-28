@@ -23,6 +23,7 @@ pub mod ellipse;
 pub mod function;
 pub mod funnel;
 pub(crate) mod gam;
+pub mod heikin_ashi;
 pub mod identity;
 pub mod loess;
 pub mod marching_squares;
