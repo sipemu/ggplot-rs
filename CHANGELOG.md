@@ -5,6 +5,8 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.32.0] — 2026-10-28
+
 ### Added
 - **`GeomPoint::visibility` and `GeomPoint::hidden_targets`** (#290):
   `PointVisibility::Hidden` draws no ink but keeps every point as a
