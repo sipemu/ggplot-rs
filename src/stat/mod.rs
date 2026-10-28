@@ -31,6 +31,7 @@ pub mod sum;
 pub mod summary;
 pub mod summary2d;
 pub mod summary_bin;
+pub mod waterfall;
 pub mod ydensity;
 
 use crate::aes::{Aes, Aesthetic};

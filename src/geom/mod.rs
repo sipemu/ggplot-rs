@@ -53,6 +53,7 @@ pub(crate) mod support;
 pub mod text;
 pub mod tile;
 pub mod violin;
+pub mod waterfall;
 
 use std::collections::HashMap;
 

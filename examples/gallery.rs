@@ -80,6 +80,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     ecdf()?;
     qq()?;
     candlestick()?;
+    waterfall()?;
     radar()?;
     gauge()?;
     calendar()?;
@@ -754,6 +755,28 @@ fn candlestick() -> Result<(), Box<dyn std::error::Error>> {
         .ylab("Price")
         .theme_minimal()
         .save_with_size(&out("candlestick"), W, H)?;
+    Ok(())
+}
+
+/// Profit bridge from revenue to net income (`geom_waterfall`).
+fn waterfall() -> Result<(), Box<dyn std::error::Error>> {
+    let df = df! {
+        "step" => ["Revenue", "Services", "COGS", "Gross profit", "Opex", "R&D", "Other", "Tax"],
+        "amount" => [420.0, 85.0, -190.0, 0.0, -120.0, -60.0, 18.0, -38.0],
+    }?;
+    GGPlot::new(df)
+        .aes(Aes::new().x("step").y("amount"))
+        .geom_waterfall_with(
+            GeomWaterfall::default()
+                .with_totals(["Gross profit"])
+                .with_final_total("Net income"),
+        )
+        .title("Waterfall")
+        .subtitle("From revenue to net income (EUR k)")
+        .xlab("")
+        .ylab("EUR k")
+        .theme_minimal()
+        .save_with_size(&out("waterfall"), W, H)?;
     Ok(())
 }
 

@@ -48,6 +48,7 @@ pub use crate::geom::step::{GeomStep, StepDirection};
 pub use crate::geom::text::{GeomLabel, GeomText};
 pub use crate::geom::tile::GeomTile;
 pub use crate::geom::violin::GeomViolin;
+pub use crate::geom::waterfall::GeomWaterfall;
 pub use crate::ggpubr::{
     ggarrange, ggarrange_save, ggboxplot, ggdensity, gghistogram, ggline, ggscatter, ggviolin,
 };
