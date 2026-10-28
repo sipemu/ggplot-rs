@@ -83,6 +83,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     waterfall()?;
     pareto()?;
     sankey()?;
+    chord()?;
     radar()?;
     gauge()?;
     calendar()?;
@@ -821,6 +822,24 @@ fn sankey() -> Result<(), Box<dyn std::error::Error>> {
         .subtitle("Energy flows, TWh (illustrative)")
         .theme_minimal()
         .save_with_size(&out("sankey"), W, H)?;
+    Ok(())
+}
+
+/// Trade flows between regions as a dependency wheel (`geom_chord`).
+fn chord() -> Result<(), Box<dyn std::error::Error>> {
+    let df = df! {
+        "from" => ["Europe", "Europe", "Europe", "Asia", "Asia", "Asia", "Americas", "Americas", "Africa", "Oceania", "Asia", "Americas"],
+        "to" => ["Asia", "Americas", "Africa", "Europe", "Americas", "Oceania", "Europe", "Asia", "Europe", "Asia", "Africa", "Africa"],
+        "bn" => [310.0, 220.0, 90.0, 480.0, 390.0, 120.0, 260.0, 280.0, 110.0, 140.0, 95.0, 40.0],
+    }?;
+    GGPlot::new(df)
+        .aes(Aes::new().from("from").to("to").weight("bn"))
+        .geom_chord()
+        .scale_fill_brewer(PaletteName::Dark2)
+        .title("Chord diagram")
+        .subtitle("Trade between regions, USD bn (illustrative)")
+        .theme_minimal()
+        .save_with_size(&out("chord"), W, H)?;
     Ok(())
 }
 

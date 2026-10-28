@@ -11,6 +11,7 @@ pub mod boxplot;
 pub mod bracket;
 pub mod candlestick;
 pub mod censor;
+pub mod chord;
 pub mod col;
 pub mod contour;
 pub mod cooks;

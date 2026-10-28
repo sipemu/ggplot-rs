@@ -5,6 +5,7 @@ pub mod bindot;
 pub mod binhex;
 pub mod boxplot;
 pub mod calendar;
+pub mod chord;
 #[cfg(feature = "ggpubr")]
 pub mod compare_means;
 pub mod contour;
