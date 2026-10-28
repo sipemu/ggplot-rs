@@ -15,6 +15,7 @@ pub use crate::geom::bin2d::GeomBin2d;
 pub use crate::geom::blank::GeomBlank;
 pub use crate::geom::boxplot::GeomBoxplot;
 pub use crate::geom::bracket::{BracketTable, GeomBracket, GeomBracketStyle};
+pub use crate::geom::bullet::GeomBullet;
 pub use crate::geom::candlestick::{GeomCandlestick, GeomOhlc};
 pub use crate::geom::chord::GeomChord;
 pub use crate::geom::col::GeomCol;

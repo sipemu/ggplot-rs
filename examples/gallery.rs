@@ -91,6 +91,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     stream()?;
     spline()?;
     dumbbell()?;
+    bullet()?;
     radar()?;
     gauge()?;
     calendar()?;
@@ -1007,6 +1008,32 @@ fn dumbbell() -> Result<(), Box<dyn std::error::Error>> {
         .ylab("Years")
         .theme_minimal()
         .save_with_size(&out("dumbbell"), W, H)?;
+    Ok(())
+}
+
+/// KPIs against targets and qualitative ranges (`geom_bullet`).
+fn bullet() -> Result<(), Box<dyn std::error::Error>> {
+    let df = df! {
+        "kpi" => ["Revenue (% plan)", "Margin (%)", "NPS", "On-time delivery (%)", "Retention (%)"],
+        "actual" => [92.0, 31.0, 48.0, 96.0, 81.0],
+        "target" => [100.0, 35.0, 50.0, 95.0, 88.0],
+        "poor" => [70.0, 20.0, 20.0, 85.0, 70.0],
+        "ok" => [90.0, 30.0, 40.0, 93.0, 85.0],
+        "good" => [120.0, 45.0, 70.0, 100.0, 100.0],
+    }?;
+    GGPlot::new(df)
+        .aes(Aes::new().x("kpi").y("actual"))
+        .geom_bullet(
+            GeomBullet::default()
+                .with_target("target")
+                .with_range_columns(["poor", "ok", "good"]),
+        )
+        .title("Bullet chart")
+        .subtitle("Actual (bar) vs target (red tick), poor / ok / good bands")
+        .xlab("")
+        .ylab("")
+        .theme_minimal()
+        .save_with_size(&out("bullet"), W, H)?;
     Ok(())
 }
 

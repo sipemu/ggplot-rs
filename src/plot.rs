@@ -1351,6 +1351,20 @@ impl GGPlot {
         self.add_geom_with(geom)
     }
 
+    /// Bullet chart (horizontal): map `x` (KPI) and `y` (actual); configure
+    /// the target column and range bands on the geom, e.g.
+    /// `GeomBullet::default().with_target("goal").with_ranges([60.0, 80.0, 100.0])`.
+    /// Sets `coord_flip`; use [`geom_bullet_vertical`](Self::geom_bullet_vertical)
+    /// for upright bullets.
+    pub fn geom_bullet(self, geom: crate::geom::bullet::GeomBullet) -> Self {
+        self.add_geom_with(geom).coord_flip()
+    }
+
+    /// [`geom_bullet`](Self::geom_bullet) without the flip (vertical bars).
+    pub fn geom_bullet_vertical(self, geom: crate::geom::bullet::GeomBullet) -> Self {
+        self.add_geom_with(geom)
+    }
+
     /// Candlestick chart: map `x` and `open`/`high`/`low`/`close`
     /// (`Aes::new().x("date").open("o").high("h").low("l").close("c")`).
     pub fn geom_candlestick(self) -> Self {

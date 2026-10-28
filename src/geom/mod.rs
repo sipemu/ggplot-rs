@@ -10,6 +10,7 @@ pub mod bivariate_legend;
 pub mod blank;
 pub mod boxplot;
 pub mod bracket;
+pub mod bullet;
 pub mod candlestick;
 pub mod censor;
 pub mod chord;
