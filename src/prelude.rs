@@ -27,6 +27,7 @@ pub use crate::geom::density2d::GeomDensity2d;
 pub use crate::geom::dotplot::GeomDotplot;
 pub use crate::geom::errorbar::GeomErrorbar;
 pub use crate::geom::freqpoly::GeomFreqpoly;
+pub use crate::geom::funnel::{FunnelPercent, GeomFunnel};
 pub use crate::geom::hex::GeomHex;
 pub use crate::geom::histogram::GeomHistogram;
 pub use crate::geom::jitter::GeomJitter;
@@ -112,6 +113,7 @@ pub use crate::stat::density2d::StatDensity2d;
 pub use crate::stat::ecdf::StatEcdf;
 pub use crate::stat::ellipse::StatEllipse;
 pub use crate::stat::function::StatFunction;
+pub use crate::stat::funnel::FunnelShape;
 pub use crate::stat::identity::StatIdentity;
 pub use crate::stat::loess::StatLoess;
 #[cfg(feature = "regression")]

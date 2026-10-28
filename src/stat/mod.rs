@@ -21,6 +21,7 @@ pub mod distribution;
 pub mod ecdf;
 pub mod ellipse;
 pub mod function;
+pub mod funnel;
 pub(crate) mod gam;
 pub mod identity;
 pub mod loess;

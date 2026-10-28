@@ -87,6 +87,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     arcdiagram()?;
     treemap()?;
     sunburst()?;
+    funnel()?;
     radar()?;
     gauge()?;
     calendar()?;
@@ -904,6 +905,23 @@ fn sunburst() -> Result<(), Box<dyn std::error::Error>> {
         .subtitle("Headcount by department, team and role")
         .theme_void()
         .save_with_size(&out("sunburst"), W, H)?;
+    Ok(())
+}
+
+/// A sales funnel with conversion from the first stage (`geom_funnel`).
+fn funnel() -> Result<(), Box<dyn std::error::Error>> {
+    let df = df! {
+        "stage" => ["Website visits", "Product views", "Added to cart", "Checkout", "Purchased"],
+        "n" => [12500.0, 7300.0, 2900.0, 1600.0, 1150.0],
+    }?;
+    GGPlot::new(df)
+        .aes(Aes::new().x("stage").y("n"))
+        .geom_funnel()
+        .scale_fill_brewer(PaletteName::Set2)
+        .title("Funnel")
+        .subtitle("Sessions per stage, % of visits")
+        .theme_void()
+        .save_with_size(&out("funnel"), W, H)?;
     Ok(())
 }
 
