@@ -42,6 +42,20 @@ pub fn draw_x_axis(
     canvas: &Rect,
     backend: &mut dyn DrawBackend,
 ) -> Result<(), RenderError> {
+    draw_x_axis_with(scale, coord, theme, plot_area, canvas, true, backend)
+}
+
+/// [`draw_x_axis`], optionally without its title — a faceted grid draws one
+/// title for all panels instead (#348).
+pub(crate) fn draw_x_axis_with(
+    scale: &dyn Scale,
+    coord: &dyn Coord,
+    theme: &Theme,
+    plot_area: &Rect,
+    canvas: &Rect,
+    with_title: bool,
+    backend: &mut dyn DrawBackend,
+) -> Result<(), RenderError> {
     let breaks = scale.breaks();
     let tick_len = theme.axis_ticks_length;
     let axis_line = theme.get_axis_line_x();
@@ -284,7 +298,30 @@ pub fn draw_x_axis(
         }
     }
 
-    // Axis title
+    if with_title {
+        draw_x_axis_title(scale, theme, plot_area, backend)?;
+    }
+
+    Ok(())
+}
+
+/// The x axis title, placed against `area`'s bottom (or top, for an
+/// opposite axis) edge and spanning its width.
+pub(crate) fn draw_x_axis_title(
+    scale: &dyn Scale,
+    theme: &Theme,
+    area: &Rect,
+    backend: &mut dyn DrawBackend,
+) -> Result<(), RenderError> {
+    let plot_area = area;
+    let tick_len = theme.axis_ticks_length;
+    let top = scale.axis_position_opposite();
+    let edge_y = if top {
+        plot_area.y
+    } else {
+        plot_area.y + plot_area.height
+    };
+    let dir = if top { -1.0 } else { 1.0 };
     let title = scale.name();
     if !title.is_empty() && theme.axis_title_x.visible {
         let hjust = theme.axis_title_x.hjust.clamp(0.0, 1.0);
@@ -328,6 +365,19 @@ pub fn draw_y_axis(
     coord: &dyn Coord,
     theme: &Theme,
     plot_area: &Rect,
+    backend: &mut dyn DrawBackend,
+) -> Result<(), RenderError> {
+    draw_y_axis_with(scale, coord, theme, plot_area, true, backend)
+}
+
+/// [`draw_y_axis`], optionally without its title — a faceted grid draws one
+/// title for all panels instead (#348).
+pub(crate) fn draw_y_axis_with(
+    scale: &dyn Scale,
+    coord: &dyn Coord,
+    theme: &Theme,
+    plot_area: &Rect,
+    with_title: bool,
     backend: &mut dyn DrawBackend,
 ) -> Result<(), RenderError> {
     let breaks = scale.breaks();
@@ -408,11 +458,50 @@ pub fn draw_y_axis(
         }
     }
 
-    // Axis title
+    if with_title {
+        let reserve = y_label_reserve(theme, &breaks);
+        draw_y_axis_title(scale, theme, plot_area, reserve, backend)?;
+    }
+
+    Ok(())
+}
+
+/// Gap between the y tick labels and the y axis title (#348).
+const Y_TITLE_GAP: f64 = 4.0;
+
+/// Width the layout reserves for the y tick labels with these `breaks`
+/// (estimated from their length; never below the theme default).
+pub(crate) fn y_label_reserve(theme: &Theme, breaks: &[(f64, String)]) -> f64 {
+    let max_ch = breaks
+        .iter()
+        .map(|(_, l)| l.chars().count())
+        .max()
+        .unwrap_or(0);
+    let measured = max_ch as f64 * theme.axis_text_y.size * 0.6 + 4.0;
+    let default = theme.axis_text_y.size * 3.5 + 4.0;
+    measured.max(default)
+}
+
+/// The y axis title, left of `area`'s tick labels (`label_reserve` wide)
+/// and centred on its height.
+pub(crate) fn draw_y_axis_title(
+    scale: &dyn Scale,
+    theme: &Theme,
+    area: &Rect,
+    label_reserve: f64,
+    backend: &mut dyn DrawBackend,
+) -> Result<(), RenderError> {
     let title = scale.name();
     if !title.is_empty() && theme.axis_title_y.visible {
-        let title_x = plot_area.x - tick_len - theme.axis_text_y.size * 3.5 - theme.legend_spacing;
-        let center_y = plot_area.y + plot_area.height / 2.0;
+        // The rotated (270°) title's glyphs span roughly [x − 0.75·size,
+        // x + 0.25·size]; keep its right edge a fixed gap (ggplot2's
+        // 2.75pt title margin) left of the tick-label column the layout
+        // reserved — never overlapping short labels — and on the canvas.
+        let size = theme.axis_title_y.size;
+        let right = area.x - theme.axis_ticks_length - label_reserve - Y_TITLE_GAP;
+        let min_x = backend.total_area().x + 0.75 * size;
+        let title_x = (right - 0.25 * size).max(min_x);
+        let center_y = area.y + area.height / 2.0;
         let family = if theme.axis_title_y.family.is_empty() {
             None
         } else {
