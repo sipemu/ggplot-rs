@@ -1167,6 +1167,31 @@ impl GGPlot {
             .show_legend(false)
     }
 
+    /// Arc diagram from an edge list: map `from`, `to` and optionally
+    /// `weight`. Nodes sit on a line (sized by total flow), links are arcs
+    /// whose width is their weight. Coloured by node name through the fill
+    /// scale (no legend — nodes are labelled); axes and grid are hidden.
+    pub fn geom_arcdiagram(self) -> Self {
+        self.add_arcdiagram(crate::geom::arcdiagram::GeomArcdiagram::default(), false)
+    }
+
+    /// [`geom_arcdiagram`](Self::geom_arcdiagram) with explicit ordering,
+    /// direction and styling.
+    pub fn geom_arcdiagram_with(self, geom: crate::geom::arcdiagram::GeomArcdiagram) -> Self {
+        self.add_arcdiagram(geom, true)
+    }
+
+    fn add_arcdiagram(self, geom: crate::geom::arcdiagram::GeomArcdiagram, explicit: bool) -> Self {
+        let mut plot = if explicit {
+            self.add_geom_with(geom)
+        } else {
+            self.add_geom(geom)
+        };
+        plot.hide_position_guides = true;
+        plot.layer_aes(Aes::new().after_stat_fill("node"))
+            .show_legend(false)
+    }
+
     /// Candlestick chart: map `x` and `open`/`high`/`low`/`close`
     /// (`Aes::new().x("date").open("o").high("h").low("l").close("c")`).
     pub fn geom_candlestick(self) -> Self {
