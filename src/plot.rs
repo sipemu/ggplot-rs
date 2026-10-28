@@ -116,6 +116,8 @@ pub struct GGPlot {
     /// Hide axes and grid whatever theme is set (layout-only charts such as
     /// `geom_sankey`, whose x/y carry no data meaning); survives presets.
     pub(crate) hide_position_guides: bool,
+    /// Hide only the y guides whatever theme is set (`geom_timeline`).
+    pub(crate) hide_y_guides: bool,
     /// Plot-wide default locale for axis / legend labels ([`GGPlot::locale`]).
     pub(crate) locale: Option<crate::locale::Locale>,
     /// Whether the rendered root `<svg>` carries `data-plot`/`data-domain`/…
@@ -173,6 +175,7 @@ impl GGPlot {
             legend_bottom_share: None,
             default_aspect_ratio: None,
             hide_position_guides: false,
+            hide_y_guides: false,
             locale: None,
             svg_root_data: true,
             root_attrs: Vec::new(),
@@ -1560,6 +1563,21 @@ impl GGPlot {
                     .with_label_formatter(|v| format!("{}%", (v * 100.0).round())),
             );
         }
+        plot
+    }
+
+    /// Timeline: map `x` (event time, e.g. a date), `label`, and optionally
+    /// `xend` (span end) and `color`. Events sit on a central baseline with
+    /// boxed labels stacked on alternating levels so they never overlap;
+    /// the y axis and horizontal grid are hidden.
+    pub fn geom_timeline(self) -> Self {
+        self.geom_timeline_with(crate::geom::timeline::GeomTimeline::default())
+    }
+
+    /// [`geom_timeline`](Self::geom_timeline) with explicit styling.
+    pub fn geom_timeline_with(self, geom: crate::geom::timeline::GeomTimeline) -> Self {
+        let mut plot = self.add_geom_with(geom);
+        plot.hide_y_guides = true;
         plot
     }
 

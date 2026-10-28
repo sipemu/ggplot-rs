@@ -59,6 +59,7 @@ pub use crate::geom::step::{GeomStep, StepDirection};
 pub use crate::geom::support::Interpolate;
 pub use crate::geom::text::{GeomLabel, GeomText};
 pub use crate::geom::tile::GeomTile;
+pub use crate::geom::timeline::GeomTimeline;
 pub use crate::geom::tree::{GeomTree, TreeLink, TreeNode};
 pub use crate::geom::treemap::GeomTreemap;
 pub use crate::geom::venn::GeomVenn;

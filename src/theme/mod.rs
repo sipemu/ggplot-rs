@@ -180,6 +180,32 @@ pub struct Theme {
 }
 
 impl Theme {
+    /// Hide only the y position guides (axis text, title, line, ticks and
+    /// the horizontal grid lines) — layout charts with a real x axis but a
+    /// meaningless y (`geom_timeline`).
+    pub fn hide_y_guides(&mut self) {
+        self.axis_text_y.visible = false;
+        self.axis_title_y.visible = false;
+        let hidden = |base: &ElementLine| ElementLine {
+            visible: false,
+            ..base.clone()
+        };
+        self.axis_line_y = Some(hidden(self.axis_line_y.as_ref().unwrap_or(&self.axis_line)));
+        self.axis_ticks_y = Some(hidden(
+            self.axis_ticks_y.as_ref().unwrap_or(&self.axis_ticks),
+        ));
+        self.panel_grid_major_y = Some(hidden(
+            self.panel_grid_major_y
+                .as_ref()
+                .unwrap_or(&self.panel_grid_major),
+        ));
+        self.panel_grid_minor_y = Some(hidden(
+            self.panel_grid_minor_y
+                .as_ref()
+                .unwrap_or(&self.panel_grid_minor),
+        ));
+    }
+
     /// Hide the position guides — axis text, titles, lines, ticks and panel
     /// grid — for layout-only charts whose x/y carry no data meaning
     /// (`geom_sankey`). Backgrounds, legend and titles are untouched.
