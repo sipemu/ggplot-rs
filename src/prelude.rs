@@ -58,6 +58,7 @@ pub use crate::geom::step::{GeomStep, StepDirection};
 pub use crate::geom::support::Interpolate;
 pub use crate::geom::text::{GeomLabel, GeomText};
 pub use crate::geom::tile::GeomTile;
+pub use crate::geom::tree::{GeomTree, TreeLink, TreeNode};
 pub use crate::geom::treemap::GeomTreemap;
 pub use crate::geom::violin::GeomViolin;
 pub use crate::geom::waffle::GeomWaffle;
@@ -132,6 +133,7 @@ pub use crate::stat::sum::StatSum;
 pub use crate::stat::summary::{StatSummary, SummaryData, SummaryFun};
 pub use crate::stat::summary2d::StatSummary2d;
 pub use crate::stat::summary_bin::StatSummaryBin;
+pub use crate::stat::tree::{dendrogram_links, TreeOrientation};
 pub use crate::stat::waffle::UnitLayout;
 pub use crate::theme::elements::{ElementGeom, ElementLine, ElementRect, ElementText};
 pub use crate::theme::presets::{

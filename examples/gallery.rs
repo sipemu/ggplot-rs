@@ -95,6 +95,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     waffle()?;
     packed_bubble()?;
     network()?;
+    trees()?;
     radar()?;
     gauge()?;
     calendar()?;
@@ -1121,6 +1122,52 @@ fn network() -> Result<(), Box<dyn std::error::Error>> {
         .subtitle("Co-authorship, edge width = joint papers (force-directed)")
         .theme_void()
         .save_with_size(&out("network"), W, H)?;
+    Ok(())
+}
+
+/// An org chart and a dendrogram (`geom_tree_with(GeomTree::org_chart())`, `geom_dendrogram`).
+fn trees() -> Result<(), Box<dyn std::error::Error>> {
+    let org = df! {
+        "manager" => ["CEO", "CEO", "CEO", "CTO", "CTO", "CTO", "CFO", "CFO", "COO", "COO", "Platform", "Platform"],
+        "report" => ["CTO", "CFO", "COO", "Platform", "Product", "Security", "Finance", "Legal", "Sales", "Support", "Infra", "Data"],
+    }?;
+    GGPlot::new(org)
+        .aes(Aes::new().from("manager").to("report"))
+        .geom_tree_with(GeomTree::org_chart())
+        .title("Org chart")
+        .subtitle("Tidy tree layout with elbow links")
+        .theme_void()
+        .save_with_size(&out("org_chart"), W, H)?;
+
+    // Single-linkage clustering of eight cities by distance (illustrative).
+    let merge = [
+        (-1, -2),
+        (-3, -4),
+        (-5, 1),
+        (-6, -7),
+        (2, 3),
+        (-8, 4),
+        (5, 6),
+    ];
+    let heights = [1.2, 1.9, 2.4, 2.8, 3.5, 4.1, 6.0];
+    let cities = [
+        "Berlin",
+        "Potsdam",
+        "Paris",
+        "Versailles",
+        "Leipzig",
+        "Rome",
+        "Naples",
+        "Milan",
+    ];
+    let links = dendrogram_links(&merge, &heights, &cities);
+    GGPlot::new(links)
+        .aes(Aes::new().from("from").to("to"))
+        .geom_dendrogram()
+        .title("Dendrogram")
+        .subtitle("Hierarchical clustering, merge height on the vertical")
+        .theme_void()
+        .save_with_size(&out("dendrogram"), W, H)?;
     Ok(())
 }
 

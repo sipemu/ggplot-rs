@@ -1444,6 +1444,34 @@ impl GGPlot {
         plot
     }
 
+    /// Tree diagram from parent → child links: map `from` (parent) and `to`
+    /// (child). Tidy layout (leaves evenly spaced, parents centred over
+    /// their children), top-down with curved links. See
+    /// [`GeomTree::org_chart`](crate::geom::tree::GeomTree::org_chart) and
+    /// other orientations via [`geom_tree_with`](Self::geom_tree_with).
+    /// Axes and grid are hidden.
+    pub fn geom_tree(self) -> Self {
+        self.geom_tree_with(crate::geom::tree::GeomTree::default())
+    }
+
+    /// Dendrogram from [`dendrogram_links`](crate::stat::tree::dendrogram_links)
+    /// output (`from`, `to`, `height`): step links at the merge heights,
+    /// leaves labelled.
+    pub fn geom_dendrogram(self) -> Self {
+        self.geom_tree_with(crate::geom::tree::GeomTree::dendrogram())
+    }
+
+    /// A tree layer with explicit layout and styling.
+    pub fn geom_tree_with(self, geom: crate::geom::tree::GeomTree) -> Self {
+        let radial = geom.orientation == crate::stat::tree::TreeOrientation::Radial;
+        let mut plot = self.add_geom_with(geom);
+        plot.hide_position_guides = true;
+        if radial {
+            plot.default_aspect_ratio = Some(1.0);
+        }
+        plot
+    }
+
     /// Candlestick chart: map `x` and `open`/`high`/`low`/`close`
     /// (`Aes::new().x("date").open("o").high("h").low("l").close("c")`).
     pub fn geom_candlestick(self) -> Self {
