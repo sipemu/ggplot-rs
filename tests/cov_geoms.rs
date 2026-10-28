@@ -146,6 +146,7 @@ fn point_variants() {
                 size: 6.0,
                 color: (200, 30, 30),
                 alpha: 0.5,
+                ..Default::default()
             }),
         "point_with",
     );

@@ -12,11 +12,47 @@ use crate::theme::Theme;
 
 use super::{Geom, GeomParams};
 
+/// Whether a point layer's marks are inked.
+///
+/// Points over a line often exist mainly as per-point hover and click
+/// targets (each mark carries its `<title>` and `data-*` attributes). On a
+/// dense series they swamp the line, so they can be drawn without ink: the
+/// mark stays in the SVG with `fill-opacity="0"`, which browsers still
+/// hit-test (`pointer-events: visiblePainted` counts a painted fill of any
+/// opacity), so hover and clicks keep working.
+#[derive(Debug, Clone, Copy, PartialEq, Default)]
+pub enum PointVisibility {
+    /// Every point is drawn (the default).
+    #[default]
+    Visible,
+    /// No point is inked.
+    Hidden,
+    /// Visible while the panel's distinct x positions are at least
+    /// `min_spacing_px` apart on average, hidden when denser. Decided per
+    /// panel, so a facet with a short series keeps its dots.
+    Auto { min_spacing_px: f64 },
+}
+
+impl PointVisibility {
+    /// `Auto` with a 3 px average spacing: a 7-day series at 15-minute
+    /// resolution (672 points) is hidden on any plot narrower than ~2000 px,
+    /// a 12-point monthly series stays visible down to ~36 px.
+    pub const AUTO: PointVisibility = PointVisibility::Auto {
+        min_spacing_px: 3.0,
+    };
+}
+
 /// Scatter plot points.
 pub struct GeomPoint {
     pub size: f64,
     pub color: (u8, u8, u8),
     pub alpha: f64,
+    /// Whether the marks are inked; see [`PointVisibility`].
+    pub visibility: PointVisibility,
+    /// When `visibility` hides the points: keep them as transparent hover
+    /// and click targets (`true`, the default), or omit them from the
+    /// output entirely (`false`, for static output where nothing hovers).
+    pub hidden_targets: bool,
 }
 
 impl Default for GeomPoint {
@@ -25,6 +61,8 @@ impl Default for GeomPoint {
             size: 3.0,
             color: (0, 0, 0),
             alpha: 1.0,
+            visibility: PointVisibility::Visible,
+            hidden_targets: true,
         }
     }
 }
@@ -48,6 +86,8 @@ impl Geom for GeomPoint {
                 color: self.color,
                 alpha: self.alpha,
                 shape: PointShape::Circle,
+                visibility: self.visibility,
+                hidden_targets: self.hidden_targets,
             },
         )
     }
@@ -93,6 +133,38 @@ pub(crate) struct PointDefaults {
     pub color: (u8, u8, u8),
     pub alpha: f64,
     pub shape: PointShape,
+    pub visibility: PointVisibility,
+    pub hidden_targets: bool,
+}
+
+/// `true` when the panel's distinct x positions sit closer than
+/// `min_spacing_px` on average. The span is measured between the
+/// transformed first and last x (so a flipped coord measures along y).
+fn too_dense(
+    data: &DataFrame,
+    x_col: &[crate::data::Value],
+    xm: &super::support::XMapper<'_>,
+    coord: &dyn Coord,
+    plot_area: &crate::render::Rect,
+    min_spacing_px: f64,
+) -> bool {
+    let mut xs: Vec<f64> = (0..data.nrows())
+        .filter(|&i| !matches!(x_col[i], crate::data::Value::Na))
+        .map(|i| xm.map(&x_col[i], i))
+        .filter(|v| v.is_finite())
+        .collect();
+    xs.sort_by(f64::total_cmp);
+    xs.dedup_by(|a, b| (*a - *b).abs() < 1e-12);
+    let (Some(&lo), Some(&hi)) = (xs.first(), xs.last()) else {
+        return false;
+    };
+    if xs.len() < 2 {
+        return false;
+    }
+    let (ax, ay) = coord.transform((lo, 0.5), plot_area);
+    let (bx, by) = coord.transform((hi, 0.5), plot_area);
+    let span = ((bx - ax).powi(2) + (by - ay).powi(2)).sqrt();
+    span / ((xs.len() - 1) as f64) < min_spacing_px
 }
 
 /// Draw one point per row (shared by `geom_point` and censor marks):
@@ -120,6 +192,17 @@ pub(crate) fn draw_points(
     let plot_area = backend.plot_area();
     let xm = super::support::XMapper::new(data, scales);
     let y_scale = scales.get(&Aesthetic::Y);
+
+    let hidden = match defaults.visibility {
+        PointVisibility::Visible => false,
+        PointVisibility::Hidden => true,
+        PointVisibility::Auto { min_spacing_px } => {
+            too_dense(data, x_col, &xm, coord, &plot_area, min_spacing_px)
+        }
+    };
+    if hidden && !defaults.hidden_targets {
+        return Ok(());
+    }
 
     for i in 0..data.nrows() {
         // Drop missing values (ggplot2 removes rows with NA x/y). Without this
@@ -182,6 +265,7 @@ pub(crate) fn draw_points(
             .and_then(|c| scales.map_alpha(&c[i]))
             .or_else(|| alpha_col.and_then(|c| c[i].as_f64()))
             .unwrap_or(defaults.alpha);
+        let alpha = if hidden { 0.0 } else { alpha };
 
         let size = size_col
             .and_then(|c| scales.map_size(&c[i]))
@@ -365,5 +449,105 @@ mod interactive_aes_tests {
         .unwrap();
         assert!(!svg.contains("data-spoof"));
         assert!(!svg.contains("evil"));
+    }
+}
+
+#[cfg(test)]
+mod visibility_tests {
+    use super::PointVisibility;
+    use crate::data::Value;
+    use crate::prelude::*;
+
+    fn series(n: usize) -> GGPlot {
+        GGPlot::new(vec![
+            ("x".into(), (0..n).map(|i| Value::Float(i as f64)).collect()),
+            (
+                "y".into(),
+                (0..n).map(|i| Value::Float((i % 7) as f64)).collect(),
+            ),
+        ])
+        .aes(Aes::new().x("x").y("y"))
+        .geom_line()
+    }
+
+    fn points(svg: &str) -> Vec<&str> {
+        svg.split("<circle").skip(1).collect()
+    }
+
+    fn render(n: usize, visibility: PointVisibility, hidden_targets: bool) -> String {
+        series(n)
+            .geom_point_with(GeomPoint {
+                visibility,
+                hidden_targets,
+                ..Default::default()
+            })
+            .render_svg_native_with_size(400, 300)
+            .unwrap()
+    }
+
+    #[test]
+    fn auto_hides_a_dense_series_but_keeps_hover_targets() {
+        let svg = render(672, PointVisibility::AUTO, true);
+        let pts = points(&svg);
+        assert_eq!(pts.len(), 672);
+        assert!(pts.iter().all(|c| c.contains("fill-opacity=\"0.000\"")));
+        // Each target still carries its tooltip.
+        assert_eq!(svg.matches("<title>").count(), 672);
+    }
+
+    #[test]
+    fn auto_keeps_a_sparse_series_visible() {
+        let svg = render(12, PointVisibility::AUTO, true);
+        let pts = points(&svg);
+        assert_eq!(pts.len(), 12);
+        assert!(pts.iter().all(|c| !c.contains("fill-opacity")));
+    }
+
+    #[test]
+    fn auto_counts_distinct_x_not_rows() {
+        // Two series sharing 40 x positions: ~8 px apart on a 400 px plot.
+        let n = 40;
+        let svg = GGPlot::new(vec![
+            (
+                "x".into(),
+                (0..2 * n).map(|i| Value::Float((i % n) as f64)).collect(),
+            ),
+            (
+                "y".into(),
+                (0..2 * n).map(|i| Value::Float(i as f64)).collect(),
+            ),
+            (
+                "g".into(),
+                (0..2 * n)
+                    .map(|i| Value::Str(if i < n { "a" } else { "b" }.into()))
+                    .collect(),
+            ),
+        ])
+        .aes(Aes::new().x("x").y("y").color("g"))
+        .geom_point_with(GeomPoint {
+            visibility: PointVisibility::AUTO,
+            ..Default::default()
+        })
+        .render_svg_native_with_size(400, 300)
+        .unwrap();
+        assert!(points(&svg).iter().all(|c| !c.contains("fill-opacity")));
+    }
+
+    #[test]
+    fn hidden_and_visible_override_the_rule_both_ways() {
+        let hidden = render(12, PointVisibility::Hidden, true);
+        assert!(points(&hidden)
+            .iter()
+            .all(|c| c.contains("fill-opacity=\"0.000\"")));
+        let visible = render(672, PointVisibility::Visible, true);
+        assert!(points(&visible).iter().all(|c| !c.contains("fill-opacity")));
+    }
+
+    #[test]
+    fn hidden_points_can_be_omitted_entirely() {
+        assert!(points(&render(672, PointVisibility::AUTO, false)).is_empty());
+        assert!(points(&render(12, PointVisibility::Hidden, false)).is_empty());
+        // A sparse series under Auto is still drawn.
+        assert_eq!(points(&render(12, PointVisibility::AUTO, false)).len(), 12);
     }
 }

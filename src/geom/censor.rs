@@ -55,6 +55,8 @@ impl Geom for GeomCensorMarks {
                 color: self.color,
                 alpha: self.alpha,
                 shape: self.shape,
+                visibility: super::point::PointVisibility::Visible,
+                hidden_targets: true,
             },
         )
     }

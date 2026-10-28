@@ -412,6 +412,7 @@ fn flows() -> Result<(), Box<dyn std::error::Error>> {
             size: 5.0,
             color: (40, 44, 52),
             alpha: 1.0,
+            ..Default::default()
         })
         .layer_data(cities)
         .layer_aes(Aes::new().x("x").y("y"))

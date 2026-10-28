@@ -31,7 +31,7 @@ pub use crate::geom::jitter::GeomJitter;
 pub use crate::geom::line::GeomLine;
 pub use crate::geom::linerange::GeomLinerange;
 pub use crate::geom::path::GeomPath;
-pub use crate::geom::point::GeomPoint;
+pub use crate::geom::point::{GeomPoint, PointVisibility};
 pub use crate::geom::pointrange::GeomPointrange;
 pub use crate::geom::polygon::GeomPolygon;
 pub use crate::geom::qq::{GeomQQ, GeomQQLine};
