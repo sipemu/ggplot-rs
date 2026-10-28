@@ -93,7 +93,7 @@ fn axis_flags_colour_primary_paper_and_empty_labels() {
         .unwrap();
     assert!(svg.contains("#C80064"), "primary colour");
     assert!(svg.contains("fill=\"#141414\""), "paper fill");
-    assert_eq!(svg.matches("data-geom=\"flags\"").count() >= 3, true);
+    assert!(svg.matches("data-geom=\"flags\"").count() >= 3);
     // Colour mapping.
     let svg = GGPlot::new(events)
         .aes(Aes::new().x("t").label("what").color("kind"))
