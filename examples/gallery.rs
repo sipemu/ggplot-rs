@@ -93,6 +93,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     dumbbell()?;
     bullet()?;
     waffle()?;
+    packed_bubble()?;
     radar()?;
     gauge()?;
     calendar()?;
@@ -1063,6 +1064,38 @@ fn waffle() -> Result<(), Box<dyn std::error::Error>> {
         .theme_minimal()
         .legend_position(LegendPosition::Bottom)
         .save_with_size(&out("parliament"), W, H)?;
+    Ok(())
+}
+
+/// CO₂ emissions by country clustered by continent (`geom_packed_bubble`).
+fn packed_bubble() -> Result<(), Box<dyn std::error::Error>> {
+    let df = df! {
+        "country" => ["China", "India", "Japan", "Indonesia", "Korea", "Iran", "Saudi Arabia",
+                      "USA", "Canada", "Mexico", "Brazil", "Argentina",
+                      "Russia", "Germany", "UK", "Poland", "Italy", "France", "Turkey",
+                      "South Africa", "Egypt", "Nigeria", "Australia"],
+        "continent" => ["Asia", "Asia", "Asia", "Asia", "Asia", "Asia", "Asia",
+                        "Americas", "Americas", "Americas", "Americas", "Americas",
+                        "Europe", "Europe", "Europe", "Europe", "Europe", "Europe", "Europe",
+                        "Africa", "Africa", "Africa", "Oceania"],
+        "mt" => [11400.0, 2830.0, 1050.0, 730.0, 600.0, 690.0, 680.0,
+                 5060.0, 550.0, 480.0, 480.0, 190.0,
+                 1750.0, 670.0, 330.0, 300.0, 320.0, 300.0, 440.0,
+                 420.0, 250.0, 130.0, 390.0],
+    }?;
+    GGPlot::new(df)
+        .aes(
+            Aes::new()
+                .weight("mt")
+                .subgroup("continent")
+                .label("country"),
+        )
+        .geom_packed_bubble()
+        .scale_fill_brewer(PaletteName::Set2)
+        .title("Packed bubbles")
+        .subtitle("CO₂ emissions by country, Mt (2022, rounded)")
+        .theme_void()
+        .save_with_size(&out("packed_bubble"), W, H)?;
     Ok(())
 }
 

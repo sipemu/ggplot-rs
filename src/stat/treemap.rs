@@ -9,7 +9,8 @@
 //! Output: one row per tile (`part = "tile"`, every input column carried
 //! through, `xmin`/`xmax`/`ymin`/`ymax`, `area` = weight) followed — when
 //! subgroups are mapped — by one row per group (`part = "group"`, its
-//! rectangle, `subgroup`, `area` = group total; other columns `Na`).
+//! rectangle, `subgroup`, `area` = group total, `fill` = its first
+//! member's; other columns `Na`).
 
 use crate::aes::Aesthetic;
 use crate::data::{DataFrame, Value};
@@ -116,7 +117,7 @@ impl Stat for StatTreemap {
         let w = |i: usize| weight[i].as_f64().unwrap_or(0.0);
         let full: Rect = (0.0, 0.0, self.aspect.max(1e-6), 1.0);
         let mut tile = vec![(0.0, 0.0, 0.0, 0.0); data.nrows()];
-        let mut groups: Vec<(Value, f64, Rect)> = Vec::new();
+        let mut groups: Vec<(Value, f64, Rect, usize)> = Vec::new();
 
         if let Some(sub) = data.column("subgroup") {
             let mut members: indexmap::IndexMap<String, (Value, Vec<usize>)> =
@@ -145,7 +146,7 @@ impl Stat for StatTreemap {
                 for (&i, t) in m.iter().zip(squarify(&vals, inner)) {
                     tile[i] = t;
                 }
-                groups.push((val, *total, r));
+                groups.push((val, *total, r, m[0]));
             }
         } else {
             let vals: Vec<f64> = rows.iter().map(|&i| w(i)).collect();
@@ -187,6 +188,10 @@ impl Stat for StatTreemap {
             let mut vals: Vec<Value> = rows.iter().map(|&i| col[i].clone()).collect();
             if name == "subgroup" {
                 vals.extend(groups.iter().map(|g| g.0.clone()));
+            } else if name == "fill" {
+                // A group row isn't filled, but its fill must not train the
+                // scale with an NA level: take its first member's.
+                vals.extend(groups.iter().map(|g| col[g.3].clone()));
             } else {
                 vals.extend(std::iter::repeat_n(Value::Na, groups.len()));
             }
