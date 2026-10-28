@@ -20,18 +20,40 @@ use super::{Position, PositionParams};
 #[derive(Clone, Debug, PartialEq)]
 pub struct PositionStack {
     pub vjust: f64,
+    /// Baseline of each x's stack ([`StackOffset`]); `Zero` by default.
+    pub offset: StackOffset,
+}
+
+/// Where each x's stack starts (d3-shape's stack offsets). Non-`Zero`
+/// offsets are meant for non-negative series (streamgraphs).
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
+pub enum StackOffset {
+    /// Stacks rise from 0 (ggplot2's `position_stack`).
+    #[default]
+    Zero,
+    /// Stacks are centred on 0 (ThemeRiver).
+    Silhouette,
+    /// Byron & Wattenberg's wiggle-minimising baseline (d3's
+    /// `stackOffsetWiggle`), re-centred on 0 — the classic streamgraph.
+    Wiggle,
 }
 
 impl Default for PositionStack {
     fn default() -> Self {
-        PositionStack { vjust: 1.0 }
+        PositionStack {
+            vjust: 1.0,
+            offset: StackOffset::Zero,
+        }
     }
 }
 
 /// The default stack (`vjust` 1): lets `.position(PositionStack)` keep
 /// compiling now that the type has fields.
 #[allow(non_upper_case_globals)]
-pub const PositionStack: PositionStack = PositionStack { vjust: 1.0 };
+pub const PositionStack: PositionStack = PositionStack {
+    vjust: 1.0,
+    offset: StackOffset::Zero,
+};
 
 impl PositionStack {
     /// Place `y` within each stacked segment (`0` = bottom, `0.5` =
@@ -40,6 +62,100 @@ impl PositionStack {
         self.vjust = vjust;
         self
     }
+
+    /// Shift each x's stack to the given baseline ([`StackOffset`]).
+    pub fn with_offset(mut self, offset: StackOffset) -> Self {
+        self.offset = offset;
+        self
+    }
+}
+
+/// Per-row baseline shift for a non-`Zero` [`StackOffset`]: every x's stack
+/// (rows in data order, the first row on top) moves by the same amount.
+fn baseline_shift(
+    offset: StackOffset,
+    data: &DataFrame,
+    x_col: &[Value],
+    y_col: &[Value],
+) -> Vec<f64> {
+    // Distinct x in increasing order (numeric x by value, otherwise by
+    // first appearance), and each row's x index.
+    let mut xs: Vec<(String, Option<f64>)> = Vec::new();
+    let mut x_index: HashMap<String, usize> = HashMap::new();
+    for x in x_col {
+        let k = x.key_str().into_owned();
+        if !x_index.contains_key(&k) {
+            x_index.insert(k.clone(), xs.len());
+            xs.push((k, x.as_f64()));
+        }
+    }
+    let mut order: Vec<usize> = (0..xs.len()).collect();
+    if xs.iter().all(|x| x.1.is_some()) {
+        order.sort_by(|&a, &b| xs[a].1.unwrap().total_cmp(&xs[b].1.unwrap()));
+    }
+    let mut slot = vec![0; xs.len()];
+    for (j, &k) in order.iter().enumerate() {
+        slot[k] = j;
+    }
+    let row_slot: Vec<usize> = x_col
+        .iter()
+        .map(|x| slot[x_index[x.key_str().as_ref()]])
+        .collect();
+    let m = xs.len();
+
+    // Series (bottom → top): the stack puts the first-seen series on top.
+    let series_col = ["group", "fill", "color"]
+        .iter()
+        .find_map(|c| data.column(c));
+    let mut series: Vec<String> = Vec::new();
+    let mut s_index: HashMap<String, usize> = HashMap::new();
+    let row_series: Vec<usize> = (0..x_col.len())
+        .map(|i| {
+            let k = series_col
+                .map(|c| c[i].key_str().into_owned())
+                .unwrap_or_default();
+            *s_index.entry(k.clone()).or_insert_with(|| {
+                series.push(k);
+                series.len() - 1
+            })
+        })
+        .collect();
+    let n = series.len();
+    let mut v = vec![vec![0.0; m]; n];
+    for i in 0..x_col.len() {
+        if let Some(y) = super::stack_row(&y_col[i]).value() {
+            v[n - 1 - row_series[i]][row_slot[i]] += y.max(0.0);
+        }
+    }
+    let totals: Vec<f64> = (0..m).map(|j| (0..n).map(|s| v[s][j]).sum()).collect();
+    let base: Vec<f64> = match offset {
+        StackOffset::Zero => vec![0.0; m],
+        StackOffset::Silhouette => totals.iter().map(|t| -t / 2.0).collect(),
+        StackOffset::Wiggle => {
+            let mut g = vec![0.0; m];
+            let mut y = 0.0;
+            for j in 1..m {
+                let (mut s1, mut s2) = (0.0, 0.0);
+                for i in 0..n {
+                    let mut s3 = (v[i][j] - v[i][j - 1]) / 2.0;
+                    for row in v.iter().take(i) {
+                        s3 += row[j] - row[j - 1];
+                    }
+                    s1 += v[i][j];
+                    s2 += s3 * v[i][j];
+                }
+                if s1 != 0.0 {
+                    y -= s2 / s1;
+                }
+                g[j] = y;
+            }
+            // Re-centre: the stream's mid-line averages 0.
+            let mid =
+                g.iter().zip(&totals).map(|(g, t)| g + t / 2.0).sum::<f64>() / m.max(1) as f64;
+            g.iter().map(|g| g - mid).collect()
+        }
+    };
+    row_slot.iter().map(|&j| base[j]).collect()
 }
 
 /// `position_stack()` / `position_stack().with_vjust(v)` — see
@@ -125,6 +241,14 @@ impl Position for PositionStack {
                 bottoms[i] = total - run - y_val;
 
                 *consumed.entry(x_key).or_insert(0.0) += y_val;
+            }
+        }
+
+        if self.offset != StackOffset::Zero {
+            let shift = baseline_shift(self.offset, data, &x_col, &y_col);
+            for i in 0..n {
+                tops[i] += shift[i];
+                bottoms[i] += shift[i];
             }
         }
 
@@ -321,5 +445,44 @@ mod tests {
             "a Value::Na row must not become a real point at the stack top: \
              y={y:?} ymin={ymin:?}"
         );
+    }
+
+    #[test]
+    fn silhouette_centres_each_stack_on_zero() {
+        let mut df = frame(
+            &[1.0, 1.0, 2.0, 2.0],
+            &["a", "b", "a", "b"],
+            &[2.0, 4.0, 1.0, 5.0],
+        );
+        position_stack()
+            .with_offset(StackOffset::Silhouette)
+            .compute(&mut df, &PositionParams::default());
+        // x=1: total 6 → [-3, 3]; "a" on top: [1, 3], "b" [-3, 1].
+        assert_eq!(col(&df, "ymin"), vec![1.0, -3.0, 2.0, -3.0]);
+        assert_eq!(col(&df, "y"), vec![3.0, 1.0, 3.0, 2.0]);
+    }
+
+    #[test]
+    fn wiggle_is_centred_and_keeps_thickness() {
+        let x = [1.0, 1.0, 2.0, 2.0, 3.0, 3.0];
+        let mut df = frame(
+            &x,
+            &["a", "b", "a", "b", "a", "b"],
+            &[1.0, 3.0, 4.0, 2.0, 2.0, 2.0],
+        );
+        position_stack()
+            .with_offset(StackOffset::Wiggle)
+            .compute(&mut df, &PositionParams::default());
+        let (lo, hi) = (col(&df, "ymin"), col(&df, "y"));
+        for i in 0..6 {
+            let want = [1.0, 3.0, 4.0, 2.0, 2.0, 2.0][i];
+            assert!((hi[i] - lo[i] - want).abs() < 1e-12, "row {i}");
+        }
+        // Mid-lines of the three stacks average 0.
+        let mid: f64 = [0usize, 2, 4]
+            .iter()
+            .map(|&i| (hi[i] + lo[i + 1]) / 2.0)
+            .sum::<f64>();
+        assert!(mid.abs() < 1e-9, "{mid}");
     }
 }

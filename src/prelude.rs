@@ -71,7 +71,7 @@ pub use crate::position::identity::PositionIdentity;
 pub use crate::position::jitter::PositionJitter;
 pub use crate::position::jitterdodge::PositionJitterDodge;
 pub use crate::position::nudge::PositionNudge;
-pub use crate::position::stack::PositionStack;
+pub use crate::position::stack::{PositionStack, StackOffset};
 pub use crate::render::backend::{FontFace, LineEnd, Linetype, PointShape};
 pub use crate::scale::alpha::ScaleAlphaContinuous;
 pub use crate::scale::binned::ScaleFillBinned;
