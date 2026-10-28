@@ -64,6 +64,7 @@ pub mod text;
 pub mod tile;
 pub mod tree;
 pub mod treemap;
+pub mod venn;
 pub mod violin;
 pub mod waffle;
 pub mod waterfall;

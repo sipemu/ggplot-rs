@@ -94,6 +94,7 @@ impl ScaleSet {
                 | Aesthetic::From
                 | Aesthetic::To
                 | Aesthetic::Subgroup
+                | Aesthetic::Sets
         ) {
             return;
         }
