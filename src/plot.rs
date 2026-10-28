@@ -3612,15 +3612,7 @@ impl GGPlot {
         // shrinks below the default; grows up to 35% of the width.
         let y_label_width = if built.theme.axis_text_y.visible {
             built.scales.get(&v_aes).map(|vs| {
-                let max_ch = vs
-                    .breaks()
-                    .iter()
-                    .map(|(_, l)| l.chars().count())
-                    .max()
-                    .unwrap_or(0);
-                let measured = max_ch as f64 * built.theme.axis_text_y.size * 0.6 + 4.0;
-                let default = built.theme.axis_text_y.size * 3.5 + 4.0;
-                measured.max(default).min(0.35 * w as f64)
+                crate::guide::axis::y_label_reserve(&built.theme, &vs.breaks()).min(0.35 * w as f64)
             })
         } else {
             None

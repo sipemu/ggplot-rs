@@ -573,6 +573,26 @@ impl PlotRenderer {
             }
         }
 
+        // #348: one x / y axis title for the whole grid (ggplot2), drawn
+        // after the panels over the union of the panels carrying that axis.
+        // The y title also needs the widest of those panels' tick labels.
+        let mut x_title_area: Option<super::Rect> = None;
+        let mut y_title_area: Option<(super::Rect, f64)> = None;
+        let union = |a: &Option<super::Rect>, b: &super::Rect| match a {
+            None => b.clone(),
+            Some(a) => {
+                let (x0, y0) = (a.x.min(b.x), a.y.min(b.y));
+                let x1 = (a.x + a.width).max(b.x + b.width);
+                let y1 = (a.y + a.height).max(b.y + b.height);
+                super::Rect {
+                    x: x0,
+                    y: y0,
+                    width: x1 - x0,
+                    height: y1 - y0,
+                }
+            }
+        };
+
         for (pi, panel) in built.panels.iter().enumerate() {
             let (prow, pcol) = cell[pi];
             let panel_width = col_widths[pcol];
@@ -700,19 +720,32 @@ impl PlotRenderer {
 
                 // Bottom row gets x axis
                 if prow == nrow - 1 || pi + ncol >= built.panels.len() {
-                    axis::draw_x_axis(
+                    axis::draw_x_axis_with(
                         xs,
                         built.coord.as_ref(),
                         theme,
                         &panel_rect,
                         &total_area,
+                        false,
                         backend,
                     )?;
+                    x_title_area = Some(union(&x_title_area, &panel_rect));
                 }
 
                 // Left column gets y axis
                 if pcol == 0 {
-                    axis::draw_y_axis(ys, built.coord.as_ref(), theme, &panel_rect, backend)?;
+                    axis::draw_y_axis_with(
+                        ys,
+                        built.coord.as_ref(),
+                        theme,
+                        &panel_rect,
+                        false,
+                        backend,
+                    )?;
+                    let reserve = axis::y_label_reserve(theme, &ys.breaks());
+                    let prev = y_title_area.as_ref().map(|(r, _)| r.clone());
+                    let widest = y_title_area.as_ref().map_or(0.0, |(_, w)| *w);
+                    y_title_area = Some((union(&prev, &panel_rect), widest.max(reserve)));
                 }
             }
 
@@ -750,6 +783,17 @@ impl PlotRenderer {
             if fixed_grid.is_some() {
                 backend.end_panel();
             }
+        }
+
+        // The grid's single axis titles (#348), against the first panel's
+        // scales (the titles are the same on every panel).
+        let title_scales = built.panel_scales.first().unwrap_or(&built.scales);
+        if let (Some(area), Some(xs)) = (&x_title_area, title_scales.get(&Aesthetic::X)) {
+            axis::draw_x_axis_title(xs, theme, area, backend)?;
+        }
+        if let (Some((area, reserve)), Some(ys)) = (&y_title_area, title_scales.get(&Aesthetic::Y))
+        {
+            axis::draw_y_axis_title(ys, theme, area, *reserve, backend)?;
         }
 
         // Figure-level layers, once, in the band under the grid.
