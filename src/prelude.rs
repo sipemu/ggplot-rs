@@ -28,6 +28,8 @@ pub use crate::geom::density2d::GeomDensity2d;
 pub use crate::geom::dotplot::GeomDotplot;
 pub use crate::geom::errorbar::GeomErrorbar;
 pub use crate::geom::flags::{FlagShape, GeomFlags};
+#[cfg(feature = "sf")]
+pub use crate::geom::flow::GeomFlow;
 pub use crate::geom::freqpoly::GeomFreqpoly;
 pub use crate::geom::funnel::{FunnelPercent, GeomFunnel};
 pub use crate::geom::hex::GeomHex;

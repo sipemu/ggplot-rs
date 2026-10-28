@@ -56,7 +56,7 @@ impl Default for GeomArcdiagram {
 
 /// Outline of a polyline stroked `width` pixels wide: the points offset by
 /// ±width/2 along each vertex's averaged normal, as one closed polygon.
-fn stroke_band(pts: &[(f64, f64)], width: f64) -> Vec<(f64, f64)> {
+pub(crate) fn stroke_band(pts: &[(f64, f64)], width: f64) -> Vec<(f64, f64)> {
     let n = pts.len();
     let h = width / 2.0;
     let normal = |i: usize| {
