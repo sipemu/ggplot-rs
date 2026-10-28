@@ -27,6 +27,8 @@ pub mod dotplot;
 pub mod errorbar;
 pub mod errorbarh;
 pub mod flags;
+#[cfg(feature = "sf")]
+pub mod flow;
 pub mod freqpoly;
 pub mod funnel;
 pub mod hex;

@@ -1715,6 +1715,15 @@ impl GGPlot {
         self.add_geom_with(geom)
     }
 
+    /// Flow map (feature `sf`): map `x`/`y` (origin lon/lat), `xend`/`yend`
+    /// (destination) and `weight`; curved bands with arrowheads, projected
+    /// with the geom's projection (match your `geom_sf` layers), e.g.
+    /// `geom_flow(GeomFlow::default().project(SfProjection::Mercator))`.
+    #[cfg(feature = "sf")]
+    pub fn geom_flow(self, geom: crate::geom::flow::GeomFlow) -> Self {
+        self.add_geom(geom)
+    }
+
     /// Candlestick chart: map `x` and `open`/`high`/`low`/`close`
     /// (`Aes::new().x("date").open("o").high("h").low("l").close("c")`).
     pub fn geom_candlestick(self) -> Self {
