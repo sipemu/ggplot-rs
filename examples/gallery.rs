@@ -81,6 +81,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     qq()?;
     candlestick()?;
     waterfall()?;
+    pareto()?;
     radar()?;
     gauge()?;
     calendar()?;
@@ -777,6 +778,24 @@ fn waterfall() -> Result<(), Box<dyn std::error::Error>> {
         .ylab("EUR k")
         .theme_minimal()
         .save_with_size(&out("waterfall"), W, H)?;
+    Ok(())
+}
+
+/// Defect causes ranked with their cumulative share (`geom_pareto`).
+fn pareto() -> Result<(), Box<dyn std::error::Error>> {
+    let df = df! {
+        "cause" => ["Paint run", "Scratch", "Dent", "Misalignment", "Seal gap", "Weld spatter", "Other"],
+        "count" => [142.0, 98.0, 61.0, 34.0, 22.0, 13.0, 9.0],
+    }?;
+    GGPlot::new(df)
+        .aes(Aes::new().x("cause").y("count"))
+        .geom_pareto_with(GeomPareto::default().with_threshold(0.8))
+        .title("Pareto")
+        .subtitle("Paint-shop defects by cause, dashed line at 80 %")
+        .xlab("")
+        .ylab("Defects")
+        .theme_minimal()
+        .save_with_size(&out("pareto"), W, H)?;
     Ok(())
 }
 
