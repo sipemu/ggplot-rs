@@ -102,6 +102,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     timeline()?;
     gantt()?;
     tilemap()?;
+    windbarb()?;
     radar()?;
     gauge()?;
     calendar()?;
@@ -1412,6 +1413,48 @@ fn tilemap() -> Result<(), Box<dyn std::error::Error>> {
         .subtitle("US states as equal-size hexagons (synthetic values)")
         .theme_void()
         .save_with_size(&out("tilemap"), W, H)?;
+    Ok(())
+}
+
+/// A day of wind observations: speed line with barbs along the top (`geom_windbarb`).
+fn windbarb() -> Result<(), Box<dyn std::error::Error>> {
+    let hours: Vec<f64> = (0..24).map(f64::from).collect();
+    let speed: Vec<f64> = hours
+        .iter()
+        .map(|h| {
+            (8.0 + 22.0 * ((h - 4.0) / 24.0 * std::f64::consts::PI).sin().max(0.0)
+                + 6.0 * (h * 0.9).sin())
+            .max(1.0)
+        })
+        .collect();
+    let dir: Vec<f64> = hours.iter().map(|h| (200.0 + h * 6.0) % 360.0).collect();
+    // Barbs every second hour on their own row above the line.
+    let even: Vec<usize> = (0..hours.len()).step_by(2).collect();
+    let barbs = df! {
+        "hour" => even.iter().map(|&i| hours[i]).collect::<Vec<_>>(),
+        "kt" => even.iter().map(|&i| speed[i]).collect::<Vec<_>>(),
+        "dir" => even.iter().map(|&i| dir[i]).collect::<Vec<_>>(),
+        "row" => vec![42.0; even.len()],
+    }?;
+    let df = df! { "hour" => hours, "kt" => speed }?;
+    GGPlot::new(df)
+        .aes(Aes::new().x("hour").y("kt"))
+        .geom_line_with(GeomLine {
+            color: (31, 119, 180),
+            width: 2.0,
+            interpolate: Interpolate::MonotoneCubic,
+            ..Default::default()
+        })
+        .geom_windbarb(GeomWindbarb::new("kt", "dir"))
+        .layer_data(barbs)
+        .layer_aes(Aes::new().x("hour").y("row"))
+        .ylim(0.0, 48.0)
+        .title("Wind barbs")
+        .subtitle("Hourly wind speed (kt) with direction barbs")
+        .xlab("Hour")
+        .ylab("Speed (kt)")
+        .theme_minimal()
+        .save_with_size(&out("windbarb"), W, H)?;
     Ok(())
 }
 

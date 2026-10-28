@@ -1644,6 +1644,14 @@ impl GGPlot {
         plot
     }
 
+    /// Wind barbs: map `x` (and optionally `y`), and name the speed (knots,
+    /// or m/s via `.meters_per_second()`) and direction (degrees the wind
+    /// comes from) columns:
+    /// `geom_windbarb(GeomWindbarb::new("speed", "dir"))`.
+    pub fn geom_windbarb(self, geom: crate::geom::windbarb::GeomWindbarb) -> Self {
+        self.add_geom(geom)
+    }
+
     /// Candlestick chart: map `x` and `open`/`high`/`low`/`close`
     /// (`Aes::new().x("date").open("o").high("h").low("l").close("c")`).
     pub fn geom_candlestick(self) -> Self {

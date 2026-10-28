@@ -67,6 +67,7 @@ pub use crate::geom::venn::GeomVenn;
 pub use crate::geom::violin::GeomViolin;
 pub use crate::geom::waffle::GeomWaffle;
 pub use crate::geom::waterfall::GeomWaterfall;
+pub use crate::geom::windbarb::{GeomWindbarb, WindUnit};
 pub use crate::geom::wordcloud::GeomWordcloud;
 pub use crate::geom::xrange::GeomXrange;
 pub use crate::ggpubr::{
