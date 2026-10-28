@@ -35,6 +35,7 @@ pub mod sum;
 pub mod summary;
 pub mod summary2d;
 pub mod summary_bin;
+pub mod treemap;
 pub mod waterfall;
 pub mod ydensity;
 

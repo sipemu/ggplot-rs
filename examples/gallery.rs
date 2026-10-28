@@ -85,6 +85,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     sankey()?;
     chord()?;
     arcdiagram()?;
+    treemap()?;
     radar()?;
     gauge()?;
     calendar()?;
@@ -859,6 +860,27 @@ fn arcdiagram() -> Result<(), Box<dyn std::error::Error>> {
         .subtitle("Shared scenes between characters")
         .theme_minimal()
         .save_with_size(&out("arcdiagram"), W, H)?;
+    Ok(())
+}
+
+/// GDP by country nested in regions (`geom_treemap`).
+fn treemap() -> Result<(), Box<dyn std::error::Error>> {
+    let df = df! {
+        "country" => ["USA", "Canada", "Mexico", "Brazil", "China", "Japan", "India", "Korea", "Indonesia",
+                      "Germany", "UK", "France", "Italy", "Spain", "Netherlands", "Australia", "Nigeria", "Egypt"],
+        "region" => ["Americas", "Americas", "Americas", "Americas", "Asia", "Asia", "Asia", "Asia", "Asia",
+                     "Europe", "Europe", "Europe", "Europe", "Europe", "Europe", "Oceania", "Africa", "Africa"],
+        "gdp" => [27.4, 2.1, 1.8, 2.2, 17.8, 4.2, 3.6, 1.7, 1.4, 4.5, 3.3, 3.0, 2.3, 1.6, 1.1, 1.7, 0.4, 0.4],
+    }?;
+    GGPlot::new(df)
+        .aes(Aes::new().weight("gdp").subgroup("region").label("country"))
+        .geom_treemap()
+        .scale_fill_brewer(PaletteName::Set2)
+        .title("Treemap")
+        .subtitle("GDP by country and region, USD tn (2023, rounded)")
+        .theme_minimal()
+        .legend_position(LegendPosition::None)
+        .save_with_size(&out("treemap"), W, H)?;
     Ok(())
 }
 

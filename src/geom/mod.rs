@@ -56,6 +56,7 @@ pub mod step;
 pub(crate) mod support;
 pub mod text;
 pub mod tile;
+pub mod treemap;
 pub mod violin;
 pub mod waterfall;
 
