@@ -5,6 +5,73 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.34.0] — 2026-10-28
+
+### Added
+Highcharts chart-type parity (#296–#326), each with a `geom_*` shortcut and a
+configurable `geom_*_with`:
+- **Business / KPI**: `geom_waterfall` (#296), `geom_pareto` (sorted bars +
+  cumulative-% line on a `SecAxis::percent_of_max` axis, #297),
+  `geom_funnel` / `geom_pyramid` (#303), `geom_bullet` (#307),
+  `geom_lollipop` / `geom_dumbbell` (#306), `geom_variwide` /
+  `geom_marimekko` (#314).
+- **Flows & networks**: `geom_sankey` (#298), `geom_chord` (#299),
+  `geom_arcdiagram` (#300), force-directed `geom_network` (#310),
+  `geom_flow` origin–destination flow maps (feature `sf`, #324).
+- **Hierarchies**: squarified `geom_treemap` (#301), `geom_sunburst` /
+  `geom_icicle` (#302), `geom_packed_bubble` (#309), `geom_tree` / org
+  charts / `geom_dendrogram` (#311).
+- **Sets & units**: `geom_waffle` / `geom_parliament` (#308), area-
+  proportional `geom_venn` (#312), `geom_wordcloud` (#313),
+  `geom_variable_pie` (#319).
+- **Time**: streamgraphs via `StackOffset` (silhouette, wiggle) +
+  `geom_stream` (#304); spline `Interpolate` (monotone cubic, Catmull-Rom)
+  on line / area / ribbon (#305); `geom_timeline` (#315); `geom_xrange`
+  Gantt charts (#316); `geom_flags` event flags (#323).
+- **Finance**: hollow candles, `geom_hlc`, `geom_heikin_ashi` (#320);
+  `geom_renko` / `geom_point_figure` (#321); `StatIndicator` — SMA, EMA,
+  WMA, Bollinger, MACD, RSI, ATR, VWAP, stochastic, ZigZag (#322).
+- **Maps & weather**: `geom_tilemap` tile-grid cartograms (+
+  `us_state_grid`, #317), `geom_windbarb` (#318).
+- **Tiled basemaps** (new feature `tiles`, #325):
+  `annotation_map_tile(TileSource::xyz(..), fetcher)` draws XYZ raster tiles
+  (OpenStreetMap and friends) under Web-Mercator `geom_sf` layers, with the
+  source's attribution. No networking in the crate: tiles come from a
+  caller-supplied `TileFetcher` (any `Fn(z, x, y) -> Option<Vec<u8>>`) and
+  are cached per layer. New `DrawBackend::draw_image` (default: no-op),
+  implemented by the native SVG, canvas and plotters backends.
+- **`GGPlot::legend_inside_auto()` / `legend_inside_auto_with(corners,
+  fallback)`** (#332): the legend goes inside the panel in the first corner
+  where its real box overlaps no drawn mark, else outside on the side
+  (`Top`/`Right`) that leaves the data area larger. The choice is the root
+  `data-legend-at` attribute.
+- **`GGPlot::facet_levels(&[..])`** (#329): explicit `facet_wrap` panel
+  order; levels without data keep an empty panel (ggplot2's `drop = FALSE`).
+- **`PlotGrid::legend_bottom_when_narrow(share)`** (#363): a grid's
+  collected legend column moves below the grid on narrow renders.
+- Examples: `inventory_twin` (quantile fan + `PlotGrid` alarm strip, #124)
+  and `map_tiles`; README gallery and chart-family overview (#326).
+
+### Fixed
+- `ScaleDateTime::with_date_labels` is honoured on automatic month and year
+  breaks (#352).
+- `position_jitter` / `geom_jitter` / `position_jitterdodge` now jitter on a
+  discrete x axis (points used to stay on the category's centre line).
+- A `Bottom` legend under an axis-less theme (`theme_void`) stays on the
+  canvas instead of being placed at its edge with zero height (#341).
+- The caption is drawn inside its reserved area, below a `Bottom` legend
+  (#286).
+- The y axis title keeps a gap to short tick labels; a faceted grid draws
+  one x and one y axis title instead of one per panel (#348).
+- Chart-type shortcuts (`geom_waterfall`, `geom_funnel`, `geom_waffle`, …)
+  honour theme ink/paper and `primary_color` (#362).
+
+### Changed
+- **Breaking** for struct literals without `..Default::default()`: new
+  fields `interpolate` on `GeomLine` / `GeomArea` / `GeomRibbon`, `style` /
+  `open_tick` on the candlestick geoms, `offset` on `PositionStack`,
+  `percent_of_max` on `SecAxis`, and `levels` on `Facet::Wrap`.
+
 ## [0.33.0] — 2026-10-28
 
 ### Added
