@@ -18,6 +18,46 @@ pub enum LegendPosition {
     Inside(f64, f64),
 }
 
+/// A panel corner for an inside legend
+/// ([`GGPlot::legend_inside_auto_with`](crate::GGPlot::legend_inside_auto_with)).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum LegendCorner {
+    TopLeft,
+    TopRight,
+    BottomLeft,
+    BottomRight,
+}
+
+impl LegendCorner {
+    /// Every corner, in the default preference order.
+    pub const ALL: [LegendCorner; 4] = [
+        LegendCorner::BottomRight,
+        LegendCorner::BottomLeft,
+        LegendCorner::TopRight,
+        LegendCorner::TopLeft,
+    ];
+
+    /// The matching [`LegendPosition::Inside`] fractions.
+    pub fn inside(self) -> LegendPosition {
+        match self {
+            LegendCorner::TopLeft => LegendPosition::Inside(0.0, 1.0),
+            LegendCorner::TopRight => LegendPosition::Inside(1.0, 1.0),
+            LegendCorner::BottomLeft => LegendPosition::Inside(0.0, 0.0),
+            LegendCorner::BottomRight => LegendPosition::Inside(1.0, 0.0),
+        }
+    }
+
+    /// `"top-left"` etc. (the `data-legend-at` value after `inside-`).
+    pub fn name(self) -> &'static str {
+        match self {
+            LegendCorner::TopLeft => "top-left",
+            LegendCorner::TopRight => "top-right",
+            LegendCorner::BottomLeft => "bottom-left",
+            LegendCorner::BottomRight => "bottom-right",
+        }
+    }
+}
+
 /// Whether title/subtitle/caption align to the panel or the whole plot width
 /// (R's `plot.title.position` / `plot.caption.position`).
 #[derive(Clone, Copy, Debug, Default, PartialEq)]
