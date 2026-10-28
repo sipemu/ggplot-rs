@@ -29,7 +29,9 @@ Every image below is produced by [`examples/gallery.rs`](examples/gallery.rs) �
 regenerate them all with `cargo run --features sf --example gallery` (the
 choropleth needs the `sf` feature; drop it for the rest). The
 `supplier_leadtime*.png` images come from
-[`examples/supplier_leadtime.rs`](examples/supplier_leadtime.rs).
+[`examples/supplier_leadtime.rs`](examples/supplier_leadtime.rs), and
+`inventory_twin.png` from [`examples/inventory_twin.rs`](examples/inventory_twin.rs)
+(its composed SVG, rasterised).
 
 <table>
   <tr>
@@ -306,6 +308,12 @@ Highcharts-style chart types, each one layer in the grammar (tracked under the
     <td align="center" width="33%">
       <img src="assets/gallery/flow_map.png" width="260" alt="Flow map"><br>
       <sub>Flow map · <code>geom_flow</code> (<code>sf</code>)</sub>
+    </td>
+  </tr>
+  <tr>
+    <td align="center" width="33%">
+      <img src="assets/gallery/inventory_twin.png" width="260" alt="Inventory twin"><br>
+      <sub>Inventory twin · quantile fan + <code>PlotGrid</code> alarm strip</sub>
     </td>
   </tr>
 </table>
@@ -847,6 +855,7 @@ cargo run --example log_scale
 cargo run --example color_palettes
 cargo run --example gallery            # regenerates the gallery above
 cargo run --example supplier_leadtime  # polars-free; runs with --no-default-features --features plotters
+cargo run --example inventory_twin     # polars-free; SVG with --no-default-features, + PNG with plotters
 ```
 
 ## Dependencies
