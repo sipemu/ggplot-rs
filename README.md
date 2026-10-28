@@ -303,6 +303,10 @@ Highcharts-style chart types, each one layer in the grammar (tracked under the
       <img src="assets/gallery/calendar.png" width="260" alt="Calendar heatmap"><br>
       <sub>Calendar heatmap · <code>geom_calendar</code></sub>
     </td>
+    <td align="center" width="33%">
+      <img src="assets/gallery/flow_map.png" width="260" alt="Flow map"><br>
+      <sub>Flow map · <code>geom_flow</code> (<code>sf</code>)</sub>
+    </td>
   </tr>
 </table>
 
