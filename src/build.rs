@@ -227,6 +227,7 @@ impl PlotBuilder {
             guide_legend,
             warnings: plot_warnings,
             default_aspect_ratio,
+            legend_bottom_share: _,
             locale,
             svg_root_data: _,
             root_attrs: _,

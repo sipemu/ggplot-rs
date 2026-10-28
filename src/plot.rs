@@ -108,6 +108,8 @@ pub struct GGPlot {
     /// Warnings raised while specifying the plot (e.g. a clipped calendar
     /// span); prepended to the build warnings.
     pub(crate) warnings: Vec<String>,
+    /// [`GGPlot::legend_bottom_when_narrow`]'s share, if set (#287).
+    pub(crate) legend_bottom_share: Option<f64>,
     /// Panel aspect ratio used when the theme sets none (helpers such as
     /// `geom_calendar` need square cells; survives theme presets).
     pub(crate) default_aspect_ratio: Option<f64>,
@@ -165,6 +167,7 @@ impl GGPlot {
             annotations: Vec::new(),
             guide_legend: crate::guide::config::GuideLegend::default(),
             warnings: Vec::new(),
+            legend_bottom_share: None,
             default_aspect_ratio: None,
             locale: None,
             svg_root_data: true,
@@ -2219,6 +2222,17 @@ impl GGPlot {
         self
     }
 
+    /// Move a [`Right`](crate::theme::LegendPosition::Right) legend to
+    /// `Bottom` (drawn horizontally) when it would take more than `share`
+    /// (0..1) of the panel's width — the width the panel has with no legend
+    /// at all (#287). The band is roughly fixed in size, so on a narrow
+    /// render it can take most of the panel; a render wide enough keeps
+    /// `Right`, unchanged. Off by default; no effect on any other position.
+    pub fn legend_bottom_when_narrow(mut self, share: f64) -> Self {
+        self.legend_bottom_share = Some(share);
+        self
+    }
+
     pub fn primary_color(mut self, color: (u8, u8, u8)) -> Self {
         self.theme.primary = Some(color);
         self
@@ -2691,6 +2705,7 @@ impl GGPlot {
         let has_subtitle = plot.labels.subtitle.is_some();
         let has_caption = plot.labels.caption.is_some();
         let has_legend = plot.has_legend_mapping();
+        let legend_bottom_share = plot.legend_bottom_share;
         let x_label = plot.labels.x.clone();
         let y_label = plot.labels.y.clone();
 
@@ -2718,6 +2733,7 @@ impl GGPlot {
                 has_subtitle,
                 has_caption,
                 has_legend,
+                legend_bottom_share,
             },
         ))
     }
@@ -2735,12 +2751,50 @@ impl GGPlot {
             has_subtitle,
             has_caption,
             has_legend,
+            legend_bottom_share,
         } = *meta;
         let x_axis_top = built
             .scales
             .get(&crate::aes::Aesthetic::X)
             .map(|s| s.axis_position_opposite())
             .unwrap_or(false);
+
+        // #287: decided first, so every legend pass below plans for the
+        // position actually drawn, on this render's own layout.
+        if let Some(share) = legend_bottom_share {
+            if has_legend
+                && matches!(
+                    built.theme.legend_position,
+                    crate::theme::LegendPosition::Right
+                )
+            {
+                let panel_width = |pos| {
+                    let mut theme = built.theme.clone();
+                    theme.legend_position = pos;
+                    PlotLayout::compute_with_extras(
+                        w as f64,
+                        h as f64,
+                        &theme,
+                        has_title,
+                        has_subtitle,
+                        has_caption,
+                        has_legend,
+                        x_axis_top,
+                        None,
+                        None,
+                        crate::render::layout::LayoutExtras::default(),
+                    )
+                    .plot_area
+                    .width
+                };
+                // Against the panel it would have with no legend at all
+                // (the clamped minimum panel width hides the real band).
+                let free = panel_width(crate::theme::LegendPosition::None);
+                if panel_width(crate::theme::LegendPosition::Right) < (1.0 - share) * free {
+                    built.theme.legend_position = crate::theme::LegendPosition::Bottom;
+                }
+            }
+        }
 
         // Auto-tune categorical axis labels so they stay legible. A flip swaps
         // which trained scale sits on each visual axis: the bottom (x) axis reads
@@ -3554,6 +3608,7 @@ pub(crate) struct RenderMeta {
     pub(crate) has_subtitle: bool,
     pub(crate) has_caption: bool,
     pub(crate) has_legend: bool,
+    pub(crate) legend_bottom_share: Option<f64>,
 }
 
 /// Top-level error type.
