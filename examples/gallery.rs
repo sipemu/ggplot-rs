@@ -113,6 +113,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     calendar()?;
     #[cfg(feature = "sf")]
     spatial()?;
+    #[cfg(feature = "sf")]
+    flow_map()?;
     legend_wrap()?;
     boxplot_identity()?;
     themes()?;
@@ -643,6 +645,103 @@ fn spatial() -> Result<(), Box<dyn std::error::Error>> {
         .title("Choropleth")
         .theme(theme)
         .save_with_size(&out("spatial"), W, H)?;
+    Ok(())
+}
+
+/// Origin–destination flow map (`geom_flow`) — weighted, curved bands
+/// between European cities, Mercator-projected under `coord_sf`.
+#[cfg(feature = "sf")]
+fn flow_map() -> Result<(), Box<dyn std::error::Error>> {
+    use ggplot_rs::geom::flow::GeomFlow;
+    use ggplot_rs::spatial::SfProjection;
+    let city = |name: &str| -> (f64, f64) {
+        match name {
+            "Berlin" => (13.40, 52.52),
+            "Paris" => (2.35, 48.86),
+            "London" => (-0.13, 51.51),
+            "Madrid" => (-3.70, 40.42),
+            "Rome" => (12.50, 41.90),
+            "Vienna" => (16.37, 48.21),
+            "Stockholm" => (18.07, 59.33),
+            _ => (4.90, 52.37), // Amsterdam
+        }
+    };
+    let routes = [
+        ("Berlin", "Paris", 420.0),
+        ("Paris", "London", 610.0),
+        ("London", "Amsterdam", 380.0),
+        ("Madrid", "Paris", 290.0),
+        ("Rome", "Vienna", 150.0),
+        ("Vienna", "Berlin", 240.0),
+        ("Stockholm", "Berlin", 130.0),
+        ("Amsterdam", "Berlin", 310.0),
+        ("Rome", "Madrid", 180.0),
+    ];
+    let (mut lon0, mut lat0, mut lon1, mut lat1, mut n, mut route) =
+        (vec![], vec![], vec![], vec![], vec![], vec![]);
+    for (a, b, w) in routes {
+        let (o, d) = (city(a), city(b));
+        lon0.push(o.0);
+        lat0.push(o.1);
+        lon1.push(d.0);
+        lat1.push(d.1);
+        n.push(w);
+        route.push(format!("{a} → {b}"));
+    }
+    let df = df! {
+        "lon0" => lon0, "lat0" => lat0, "lon1" => lon1, "lat1" => lat1,
+        "n" => n, "route" => route,
+    }?;
+    // City markers + names, projected like the flows.
+    let names = [
+        "Berlin",
+        "Paris",
+        "London",
+        "Madrid",
+        "Rome",
+        "Vienna",
+        "Stockholm",
+        "Amsterdam",
+    ];
+    let proj = SfProjection::Mercator;
+    let xy: Vec<[f64; 2]> = names
+        .iter()
+        .map(|c| {
+            let (lo, la) = city(c);
+            proj.project([lo, la])
+        })
+        .collect();
+    let cities = df! {
+        "cx" => xy.iter().map(|p| p[0]).collect::<Vec<_>>(),
+        "cy" => xy.iter().map(|p| p[1]).collect::<Vec<_>>(),
+        "city" => names.to_vec(),
+    }?;
+    let mut theme = theme_minimal();
+    theme.axis_text_x.visible = false;
+    theme.axis_text_y.visible = false;
+    GGPlot::new(df)
+        .geom_flow(GeomFlow::default().project(proj))
+        .layer_aes(
+            Aes::new()
+                .x("lon0")
+                .y("lat0")
+                .xend("lon1")
+                .yend("lat1")
+                .weight("n")
+                .label("route"),
+        )
+        .geom_point()
+        .layer_data(cities.clone())
+        .layer_aes(Aes::new().x("cx").y("cy"))
+        .geom_text()
+        .layer_data(cities)
+        .layer_aes(Aes::new().x("cx").y("cy").label("city"))
+        .position(ggplot_rs::position::nudge::PositionNudge::new(0.0, 0.012))
+        .coord_sf()
+        .primary_color((49, 130, 189))
+        .title("Flow map (geom_flow)")
+        .theme(theme)
+        .save_with_size(&out("flow_map"), W, H)?;
     Ok(())
 }
 
