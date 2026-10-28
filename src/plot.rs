@@ -2514,6 +2514,7 @@ impl GGPlot {
             ncol,
             scales: FacetScales::Fixed,
             labeller: FacetLabeller::default(),
+            levels: None,
         };
         self
     }
@@ -2524,6 +2525,7 @@ impl GGPlot {
             ncol,
             scales,
             labeller: FacetLabeller::default(),
+            levels: None,
         };
         self
     }
@@ -2539,7 +2541,27 @@ impl GGPlot {
             ncol,
             scales: FacetScales::Fixed,
             labeller,
+            levels: None,
         };
+        self
+    }
+
+    /// Fix a [`facet_wrap`](Self::facet_wrap)'s panel order and keep empty
+    /// panels (ggplot2's factor levels with `drop = FALSE`, #329): one panel
+    /// per entry of `levels`, in that order, whether or not any layer has
+    /// rows for it; rows whose facet value isn't listed are dropped. A value
+    /// matches a level by its displayed form (`1` for the integer 1). Call
+    /// after `facet_wrap*`; no effect on other facets.
+    pub fn facet_levels<S: AsRef<str>>(mut self, levels: &[S]) -> Self {
+        if let Facet::Wrap { levels: l, .. } = &mut self.facet {
+            let mut seen = Vec::<String>::new();
+            for s in levels {
+                if !seen.iter().any(|x| x == s.as_ref()) {
+                    seen.push(s.as_ref().to_string());
+                }
+            }
+            *l = Some(seen);
+        }
         self
     }
 

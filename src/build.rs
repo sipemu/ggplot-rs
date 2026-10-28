@@ -528,11 +528,13 @@ impl PlotBuilder {
                 var,
                 ncol,
                 labeller,
+                levels: fixed,
                 ..
             } => {
-                // Collect unique levels from all layers' data
-                let mut levels: Vec<String> = Vec::new();
-                for bl in built_layers {
+                // Explicit levels (#329), else unique values across all
+                // layers in first-appearance order.
+                let mut levels: Vec<String> = fixed.clone().unwrap_or_default();
+                for bl in built_layers.iter().filter(|_| fixed.is_none()) {
                     if let Some(col) = bl.data.column(var) {
                         for v in col {
                             let key = v.to_group_key();
