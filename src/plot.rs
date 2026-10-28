@@ -1043,7 +1043,9 @@ impl GGPlot {
     /// connectors join consecutive bars. See [`geom_waterfall_with`](Self::geom_waterfall_with)
     /// for subtotals and a closing total.
     pub fn geom_waterfall(self) -> Self {
-        self.geom_waterfall_with(crate::geom::waterfall::GeomWaterfall::default())
+        self.default_styled(|p| {
+            p.geom_waterfall_with(crate::geom::waterfall::GeomWaterfall::default())
+        })
     }
 
     /// [`geom_waterfall`](Self::geom_waterfall) with explicit colours,
@@ -1253,7 +1255,7 @@ impl GGPlot {
         // The hole is `hole` level-widths of the `levels.len() + hole` radius.
         let depth = geom.levels.len().max(1) as f64;
         let inner = geom.hole / (geom.hole + depth);
-        let mut plot = self.geom_partition_with(geom);
+        let mut plot = self.default_styled(|p| p.geom_partition_with(geom));
         plot.coord = Box::new(CoordPolar::new().inner_radius(inner));
         plot
     }
@@ -1262,7 +1264,9 @@ impl GGPlot {
     /// [`geom_sunburst`](Self::geom_sunburst) in Cartesian coordinates, root
     /// level on top.
     pub fn geom_icicle<S: Into<String>>(self, levels: impl IntoIterator<Item = S>) -> Self {
-        self.geom_partition_with(crate::geom::partition::GeomPartition::icicle(levels))
+        self.default_styled(|p| {
+            p.geom_partition_with(crate::geom::partition::GeomPartition::icicle(levels))
+        })
     }
 
     /// A partition layer with explicit settings (sunburst under
@@ -1297,12 +1301,12 @@ impl GGPlot {
     /// [`GeomFunnel::silhouette`](crate::geom::funnel::GeomFunnel::silhouette)
     /// for the Highcharts-style fixed shape.
     pub fn geom_funnel(self) -> Self {
-        self.geom_funnel_with(crate::geom::funnel::GeomFunnel::default())
+        self.default_styled(|p| p.geom_funnel_with(crate::geom::funnel::GeomFunnel::default()))
     }
 
     /// Pyramid chart: apex on top, stage heights proportional to the values.
     pub fn geom_pyramid(self) -> Self {
-        self.geom_funnel_with(crate::geom::funnel::GeomFunnel::pyramid())
+        self.default_styled(|p| p.geom_funnel_with(crate::geom::funnel::GeomFunnel::pyramid()))
     }
 
     /// [`geom_funnel`](Self::geom_funnel) with an explicit shape and styling.
@@ -1372,14 +1376,16 @@ impl GGPlot {
     /// units fill a grid `rows` high, one contiguous block per category.
     /// Axes and grid are hidden; units stay square at any panel aspect.
     pub fn geom_waffle(self, rows: usize) -> Self {
-        self.geom_waffle_with(crate::geom::waffle::GeomWaffle::waffle(rows))
+        self.default_styled(|p| p.geom_waffle_with(crate::geom::waffle::GeomWaffle::waffle(rows)))
     }
 
     /// Parliament (hemicycle) chart: map `fill` (party) and `weight`
     /// (seats); seats on concentric arcs, parties left to right in data
     /// order. `rows = 0` picks the number of arcs from the seat count.
     pub fn geom_parliament(self, rows: usize) -> Self {
-        self.geom_waffle_with(crate::geom::waffle::GeomWaffle::parliament(rows))
+        self.default_styled(|p| {
+            p.geom_waffle_with(crate::geom::waffle::GeomWaffle::parliament(rows))
+        })
     }
 
     /// A waffle / parliament layer with explicit settings.
@@ -1394,7 +1400,9 @@ impl GGPlot {
     /// subgroup when `subgroup` is mapped at plot level and `fill` is not.
     /// The panel is square and the axes and grid are hidden.
     pub fn geom_packed_bubble(self) -> Self {
-        self.geom_packed_bubble_with(crate::geom::pack::GeomPackedBubble::default())
+        self.default_styled(|p| {
+            p.geom_packed_bubble_with(crate::geom::pack::GeomPackedBubble::default())
+        })
     }
 
     /// [`geom_packed_bubble`](Self::geom_packed_bubble) with explicit styling.
@@ -1454,14 +1462,14 @@ impl GGPlot {
     /// other orientations via [`geom_tree_with`](Self::geom_tree_with).
     /// Axes and grid are hidden.
     pub fn geom_tree(self) -> Self {
-        self.geom_tree_with(crate::geom::tree::GeomTree::default())
+        self.default_styled(|p| p.geom_tree_with(crate::geom::tree::GeomTree::default()))
     }
 
     /// Dendrogram from [`dendrogram_links`](crate::stat::tree::dendrogram_links)
     /// output (`from`, `to`, `height`): step links at the merge heights,
     /// leaves labelled.
     pub fn geom_dendrogram(self) -> Self {
-        self.geom_tree_with(crate::geom::tree::GeomTree::dendrogram())
+        self.default_styled(|p| p.geom_tree_with(crate::geom::tree::GeomTree::dendrogram()))
     }
 
     /// A tree layer with explicit layout and styling.
@@ -1481,7 +1489,7 @@ impl GGPlot {
     /// Circles are filled by set name (no legend — regions are labelled);
     /// square panel, axes and grid hidden.
     pub fn geom_venn(self) -> Self {
-        self.geom_venn_with(crate::geom::venn::GeomVenn::default())
+        self.default_styled(|p| p.geom_venn_with(crate::geom::venn::GeomVenn::default()))
     }
 
     /// [`geom_venn`](Self::geom_venn) with explicit styling.
@@ -1498,7 +1506,9 @@ impl GGPlot {
     /// no overlaps, deterministic; words that don't fit are dropped. Axes
     /// and grid are hidden.
     pub fn geom_wordcloud(self) -> Self {
-        self.geom_wordcloud_with(crate::geom::wordcloud::GeomWordcloud::default())
+        self.default_styled(|p| {
+            p.geom_wordcloud_with(crate::geom::wordcloud::GeomWordcloud::default())
+        })
     }
 
     /// [`geom_wordcloud`](Self::geom_wordcloud) with explicit sizes,
@@ -1514,14 +1524,18 @@ impl GGPlot {
     /// column layout with each category named under its column (computed
     /// from the plot data, so map `x`/`weight` at plot level).
     pub fn geom_variwide(self) -> Self {
-        self.geom_marimekko_with(crate::geom::marimekko::GeomMarimekko::variwide())
+        self.default_styled(|p| {
+            p.geom_marimekko_with(crate::geom::marimekko::GeomMarimekko::variwide())
+        })
     }
 
     /// Marimekko (mosaic) chart: map `x` (column), `fill` (segment) and
     /// `weight` (value). Column widths are their totals' shares, segments
     /// their share of the column (y axis 0–100 %).
     pub fn geom_marimekko(self) -> Self {
-        self.geom_marimekko_with(crate::geom::marimekko::GeomMarimekko::marimekko())
+        self.default_styled(|p| {
+            p.geom_marimekko_with(crate::geom::marimekko::GeomMarimekko::marimekko())
+        })
     }
 
     /// A variwide / Marimekko layer with explicit settings.
@@ -1631,9 +1645,11 @@ impl GGPlot {
     /// [`us_state_grid`](crate::geom::tilemap::us_state_grid) for a ready
     /// US layout). Axes and grid are hidden.
     pub fn geom_tilemap(self, shape: crate::geom::tilemap::TileShape) -> Self {
-        self.geom_tilemap_with(crate::geom::tilemap::GeomTilemap {
-            shape,
-            ..Default::default()
+        self.default_styled(|p| {
+            p.geom_tilemap_with(crate::geom::tilemap::GeomTilemap {
+                shape,
+                ..Default::default()
+            })
         })
     }
 
@@ -1689,7 +1705,7 @@ impl GGPlot {
     /// `box_size` per full move, reversals after two boxes. The x axis
     /// counts bricks.
     pub fn geom_renko(self, box_size: f64) -> Self {
-        self.add_geom_with(crate::geom::renko::GeomRenko::renko(box_size))
+        self.add_geom(crate::geom::renko::GeomRenko::renko(box_size))
             .xlab("Brick")
     }
 
@@ -1697,7 +1713,7 @@ impl GGPlot {
     /// X columns rise, O columns fall, a column reverses after `reversal`
     /// boxes of `box_size`. The x axis counts columns.
     pub fn geom_point_figure(self, box_size: f64, reversal: usize) -> Self {
-        self.add_geom_with(crate::geom::renko::GeomRenko::point_figure(
+        self.add_geom(crate::geom::renko::GeomRenko::point_figure(
             box_size, reversal,
         ))
         .xlab("Column")
@@ -1844,6 +1860,19 @@ impl GGPlot {
 
     /// Add a geom configured explicitly by the caller: its colours win over
     /// the theme's `primary_color`.
+    /// Run a `geom_*_with` builder for a shortcut's *default* geom, then
+    /// clear the `explicit_style` mark it put on the layer, so the defaults
+    /// still take theme ink/paper and `primary_color` like `geom_line()`
+    /// does (#362).
+    fn default_styled(self, build: impl FnOnce(Self) -> Self) -> Self {
+        let i = self.layers.len();
+        let mut plot = build(self);
+        if let Some(layer) = plot.layers.get_mut(i) {
+            layer.explicit_style = false;
+        }
+        plot
+    }
+
     fn add_geom_with(self, geom: impl Geom + 'static) -> Self {
         let mut plot = self.add_geom(geom);
         if let Some(layer) = plot.layers.last_mut() {

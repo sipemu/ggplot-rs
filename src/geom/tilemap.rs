@@ -199,6 +199,11 @@ impl Geom for GeomTilemap {
     fn consumes_tooltips(&self) -> bool {
         true
     }
+
+    /// Tiles with no `fill` mapping take the brand colour (#362).
+    fn set_series_color(&mut self, color: (u8, u8, u8)) {
+        self.fill = color;
+    }
 }
 
 /// A common square tile layout of the 50 US states + DC: `(abbreviation,
