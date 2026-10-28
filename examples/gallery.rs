@@ -94,6 +94,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     bullet()?;
     waffle()?;
     packed_bubble()?;
+    network()?;
     radar()?;
     gauge()?;
     calendar()?;
@@ -1096,6 +1097,30 @@ fn packed_bubble() -> Result<(), Box<dyn std::error::Error>> {
         .subtitle("CO₂ emissions by country, Mt (2022, rounded)")
         .theme_void()
         .save_with_size(&out("packed_bubble"), W, H)?;
+    Ok(())
+}
+
+/// A small collaboration network, coloured by connected component (`geom_network`).
+fn network() -> Result<(), Box<dyn std::error::Error>> {
+    let df = df! {
+        "from" => ["Ada", "Ada", "Ada", "Ben", "Ben", "Cy", "Dee", "Dee", "Eve", "Fay", "Gus", "Hal",
+                   "Ivy", "Ivy", "Jo", "Kai", "Kai", "Lu"],
+        "to" => ["Ben", "Cy", "Dee", "Cy", "Eve", "Dee", "Eve", "Fay", "Fay", "Gus", "Hal", "Ada",
+                 "Jo", "Kai", "Kai", "Lu", "Mo", "Mo"],
+        "papers" => [5.0, 3.0, 2.0, 4.0, 1.0, 2.0, 3.0, 1.0, 2.0, 1.0, 2.0, 1.0,
+                     3.0, 2.0, 4.0, 1.0, 2.0, 1.0],
+    }?;
+    GGPlot::new(df)
+        .aes(Aes::new().from("from").to("to").weight("papers"))
+        .geom_network_with(GeomNetwork {
+            color_components: true,
+            ..Default::default()
+        })
+        .scale_fill_brewer(PaletteName::Set2)
+        .title("Network graph")
+        .subtitle("Co-authorship, edge width = joint papers (force-directed)")
+        .theme_void()
+        .save_with_size(&out("network"), W, H)?;
     Ok(())
 }
 
