@@ -446,7 +446,8 @@ pub fn draw_sec_y_axis(
     plot_area: &Rect,
     backend: &mut dyn DrawBackend,
 ) -> Result<(), RenderError> {
-    let breaks = primary_scale.breaks();
+    let own_ticks = sec_axis.own_ticks(primary_scale);
+    let breaks = own_ticks.clone().unwrap_or_else(|| primary_scale.breaks());
     let tick_len = theme.axis_ticks_length;
     let axis_line = theme.get_axis_line_y();
     let axis_ticks = theme.get_axis_ticks_y();
@@ -494,7 +495,9 @@ pub fn draw_sec_y_axis(
                 Some(l) => l.parse_number(label),
                 None => label.parse::<f64>().ok(),
             };
-            let sec_label = if let Some(v) = parsed {
+            let sec_label = if own_ticks.is_some() {
+                label.clone()
+            } else if let Some(v) = parsed {
                 let transformed = sec_axis.transform_value(v);
                 crate::scale::util::format_number_opt(transformed, locale)
             } else {
@@ -525,7 +528,15 @@ pub fn draw_sec_y_axis(
 
     // Secondary axis title
     if !sec_axis.name.is_empty() && theme.axis_title_y.visible {
-        let title_x = right_x + tick_len + theme.axis_text_y.size * 3.5 + theme.legend_spacing;
+        // Clear the widest tick label (own percent ticks can exceed the
+        // 3.5-character default).
+        let max_ch = own_ticks
+            .as_ref()
+            .and_then(|t| t.iter().map(|(_, l)| l.chars().count()).max())
+            .unwrap_or(0);
+        let text_w =
+            (max_ch as f64 * theme.axis_text_y.size * 0.6).max(theme.axis_text_y.size * 3.5);
+        let title_x = right_x + tick_len + text_w + theme.legend_spacing;
         let center_y = plot_area.y + plot_area.height / 2.0;
         let family = if theme.axis_title_y.family.is_empty() {
             None

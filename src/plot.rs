@@ -1074,6 +1074,41 @@ impl GGPlot {
         plot
     }
 
+    /// Pareto chart: map `x` (categories) and `y` (values, summed per
+    /// category). Bars are sorted descending and a cumulative line with
+    /// points rises to the grand total, read against a 0–100 % right axis.
+    pub fn geom_pareto(self) -> Self {
+        self.add_pareto(crate::geom::pareto::GeomPareto::default(), false)
+    }
+
+    /// [`geom_pareto`](Self::geom_pareto) with explicit styling, sorting or a
+    /// threshold line. Unless a y scale is already set, a continuous y scale
+    /// with a [`SecAxis::percent_of_max`](crate::scale::sec_axis::SecAxis::percent_of_max)
+    /// secondary axis ("Cumulative %") is added; a later `scale_y_continuous`
+    /// replaces it.
+    pub fn geom_pareto_with(self, geom: crate::geom::pareto::GeomPareto) -> Self {
+        self.add_pareto(geom, true)
+    }
+
+    fn add_pareto(self, geom: crate::geom::pareto::GeomPareto, explicit: bool) -> Self {
+        let has_y_scale = self
+            .scales
+            .iter()
+            .any(|s| s.aesthetic() == crate::aes::Aesthetic::Y);
+        let plot = if explicit {
+            self.add_geom_with(geom)
+        } else {
+            self.add_geom(geom)
+        };
+        if has_y_scale {
+            plot
+        } else {
+            plot.scale_y_continuous(ScaleContinuous::new().with_sec_axis(
+                crate::scale::sec_axis::SecAxis::percent_of_max().with_name("Cumulative %"),
+            ))
+        }
+    }
+
     /// Candlestick chart: map `x` and `open`/`high`/`low`/`close`
     /// (`Aes::new().x("date").open("o").high("h").low("l").close("c")`).
     pub fn geom_candlestick(self) -> Self {
@@ -2987,6 +3022,31 @@ impl GGPlot {
         // outer labels already fit never grows `extras`, so it stays
         // byte-identical.
         let mut extras = crate::render::layout::LayoutExtras::default();
+        // A secondary y axis draws its ticks, labels and title right of the
+        // panel: reserve that width so they stay on-canvas (and clear of a
+        // right-hand legend).
+        if let (Some(vs), Some(sec)) = (
+            built.scales.get(&crate::aes::Aesthetic::Y),
+            built.scales.sec_axis(&crate::aes::Aesthetic::Y),
+        ) {
+            let theme = &built.theme;
+            let max_ch = match sec.own_ticks(vs) {
+                Some(t) => t.iter().map(|(_, l)| l.chars().count()).max(),
+                None => vs.breaks().iter().map(|(_, l)| l.chars().count() + 2).max(),
+            }
+            .unwrap_or(0);
+            let text = if theme.axis_text_y.visible {
+                (max_ch as f64 * theme.axis_text_y.size * 0.6).max(theme.axis_text_y.size * 3.5)
+            } else {
+                0.0
+            };
+            let title = if !sec.name.is_empty() && theme.axis_title_y.visible {
+                theme.axis_title_y.size * 1.5
+            } else {
+                0.0
+            };
+            extras.right += theme.axis_ticks_length + theme.legend_spacing + text + title;
+        }
         let can_reserve = built.facet.is_none()
             && built.theme.axis_text_x.visible
             && built.theme.axis_text_x_fit == crate::theme::AxisLabelFit::Reserve

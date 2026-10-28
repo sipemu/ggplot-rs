@@ -23,6 +23,7 @@ pub(crate) mod gam;
 pub mod identity;
 pub mod loess;
 pub mod marching_squares;
+pub mod pareto;
 pub mod qq;
 #[cfg(feature = "regression")]
 pub mod quantile;
