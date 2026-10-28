@@ -117,7 +117,7 @@ impl Position for PositionJitter {
     fn compute(&self, data: &mut DataFrame, _params: &PositionParams) {
         let mut rng = SplitMix64::new(self.seed);
 
-        if data.column("x").is_some_and(|c| super::is_discrete_x(c)) {
+        if data.column("x").is_some_and(super::is_discrete_x) {
             // A category can't move: jitter its offset (one category = 1,
             // ggplot2's resolution of a mapped discrete axis).
             let w = self.width.unwrap_or(0.4);
