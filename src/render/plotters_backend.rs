@@ -704,6 +704,27 @@ impl<'a, DB: DrawingBackend> DrawBackend for PlottersAdapter<'a, DB> {
         }
     }
 
+    /// #325: the visible part, scaled, as one bitmap element (an `<image>`
+    /// in plotters' SVG output). Opaque: plotters bitmaps carry no alpha.
+    fn draw_image(
+        &mut self,
+        bytes: &[u8],
+        rect: &Rect,
+        clip: &Rect,
+        _alpha: f64,
+    ) -> Result<(), RenderError> {
+        let (w, h) = self.area.dim_in_pixel();
+        let Some((pos, img)) = crate::render::raster::decode_visible(bytes, rect, clip, w, h)
+        else {
+            return Ok(());
+        };
+        let rgb = image::DynamicImage::ImageRgba8(img).to_rgb8();
+        let element: plotters::element::BitMapElement<(i32, i32)> =
+            (pos, image::DynamicImage::ImageRgb8(rgb)).into();
+        self.area.draw(&element).map_err(map_err)?;
+        Ok(())
+    }
+
     fn plot_area(&self) -> Rect {
         self.plot_area.clone()
     }

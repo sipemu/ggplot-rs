@@ -31,7 +31,8 @@ choropleth needs the `sf` feature; drop it for the rest). The
 `supplier_leadtime*.png` images come from
 [`examples/supplier_leadtime.rs`](examples/supplier_leadtime.rs), and
 `inventory_twin.png` from [`examples/inventory_twin.rs`](examples/inventory_twin.rs)
-(its composed SVG, rasterised).
+(its composed SVG, rasterised), and `map_tiles.png` from
+[`examples/map_tiles.rs`](examples/map_tiles.rs) (`--features tiles,plotters`).
 
 <table>
   <tr>
@@ -315,6 +316,10 @@ Highcharts-style chart types, each one layer in the grammar (tracked under the
       <img src="assets/gallery/inventory_twin.png" width="260" alt="Inventory twin"><br>
       <sub>Inventory twin · quantile fan + <code>PlotGrid</code> alarm strip</sub>
     </td>
+    <td align="center" width="33%">
+      <img src="assets/gallery/map_tiles.png" width="260" alt="Map tiles"><br>
+      <sub>Tiled basemap · <code>annotation_map_tile</code> (<code>tiles</code>)</sub>
+    </td>
   </tr>
 </table>
 
@@ -326,7 +331,7 @@ Highcharts-style chart types, each one layer in the grammar (tracked under the
 | Hierarchies | `geom_treemap`, `geom_sunburst`, `geom_icicle`, `geom_tree` / org charts, `geom_dendrogram`, `geom_packed_bubble` |
 | Sets & units | `geom_venn`, `geom_waffle`, `geom_parliament`, `geom_wordcloud`, `geom_variable_pie` |
 | Finance | `geom_candlestick` (filled / hollow), `geom_ohlc`, `geom_hlc`, `geom_heikin_ashi`, `geom_renko`, `geom_point_figure`, `StatIndicator` (SMA, EMA, WMA, Bollinger, MACD, RSI, ATR, VWAP, stochastic, ZigZag) |
-| Maps & weather | `geom_sf`, `coord_sf`, `geom_tilemap` (+ `us_state_grid`), `geom_flow` (`sf`), `geom_windbarb` |
+| Maps & weather | `geom_sf`, `coord_sf`, `geom_tilemap` (+ `us_state_grid`), `geom_flow` (`sf`), `annotation_map_tile` (`tiles`), `geom_windbarb` |
 | Radial | `coord_polar`, `coord_radar`, gauges via `CoordPolar::with_span` |
 
 ### Publication-ready (ggpubr-style)

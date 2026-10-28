@@ -97,6 +97,10 @@ canvas = ["dep:ab_glyph", "png"]
 # Spatial layer: geom_sf over simple-features geometry (self-contained WKT
 # parser — no extra dependencies).
 sf = []
+# Raster basemaps from XYZ tile providers (`annotation_map_tile`) behind
+# Web-Mercator `geom_sf` layers. No networking: tiles come from a
+# caller-supplied fetcher.
+tiles = ["sf"]
 # Read GeoJSON into a plot-ready frame (geometry + properties). Adds serde_json.
 geojson = ["sf", "dep:serde_json"]
 # DEPRECATED alias, kept so existing `features = ["wasm"]` dependents keep
@@ -145,6 +149,10 @@ name = "spatial"
 required-features = ["sf", "polars", "plotters"]
 
 # Polars-free: builds and runs with --no-default-features --features plotters.
+[[example]]
+name = "map_tiles"
+required-features = ["tiles", "png"]
+
 [[example]]
 name = "supplier_leadtime"
 required-features = ["plotters"]

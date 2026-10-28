@@ -38,6 +38,8 @@ pub(crate) mod layer_attrs;
 pub mod line;
 pub mod linerange;
 pub mod lollipop;
+#[cfg(feature = "tiles")]
+pub mod map_tile;
 pub mod marimekko;
 pub mod network;
 pub mod pack;

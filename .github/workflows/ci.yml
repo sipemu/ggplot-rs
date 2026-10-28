@@ -70,6 +70,12 @@ jobs:
       - name: Tests (sf)
         run: cargo test --no-default-features --features sf --lib --test sf --test native_svg --test linewidth_arrow --test hexbin --test svg_root_attrs --test formatted_values --test tooltip_templates --test geom_text_font --test geom_ink_paper --test geom_ink_paper_sf --test gradient_limits --test default_output_022 --test default_output_023 --test axis_label_fit --test legend_wrap --test position_panels_r --test position_vjust_text_dodge --test scale_size_area --test errorbar_dodge_caps --test boxplot_identity --test decorative_layer
 
+      - name: Clippy (tiles)
+        run: cargo clippy --no-default-features --features tiles,canvas --lib --tests -- -D warnings
+
+      - name: Tests (tiles)
+        run: cargo test --no-default-features --features tiles,canvas --lib --test map_tile_325
+
       - name: Clippy (geojson)
         run: cargo clippy --no-default-features --features geojson --lib -- -D warnings
 
@@ -123,7 +129,7 @@ jobs:
       - name: Generate coverage
         # Explicit features (not --all-features) to skip the `cli` feature, whose
         # bundled DuckDB is a slow C++ build and is exercised outside CI.
-        run: cargo llvm-cov --features polars,arrow,regression,serde,sf,geojson,ggpubr --workspace --lcov --output-path lcov.info
+        run: cargo llvm-cov --features polars,arrow,regression,serde,sf,geojson,ggpubr,tiles,canvas --workspace --lcov --output-path lcov.info
 
       - name: Upload coverage to Codecov
         uses: codecov/codecov-action@v4

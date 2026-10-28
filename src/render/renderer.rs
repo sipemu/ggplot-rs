@@ -1080,6 +1080,15 @@ struct PanelBackendAdapter<'a> {
 }
 
 impl<'a> DrawBackend for PanelBackendAdapter<'a> {
+    fn draw_image(
+        &mut self,
+        bytes: &[u8],
+        rect: &crate::render::Rect,
+        clip: &crate::render::Rect,
+        alpha: f64,
+    ) -> Result<(), RenderError> {
+        self.inner.draw_image(bytes, rect, clip, alpha)
+    }
     fn draw_circle(
         &mut self,
         center: (f64, f64),
