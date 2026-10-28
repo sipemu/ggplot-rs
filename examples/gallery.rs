@@ -97,6 +97,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     network()?;
     trees()?;
     venn()?;
+    wordcloud()?;
     radar()?;
     gauge()?;
     calendar()?;
@@ -1186,6 +1187,64 @@ fn venn() -> Result<(), Box<dyn std::error::Error>> {
         .subtitle("Engineers by language, area-proportional (pairwise overlaps exact)")
         .theme_void()
         .save_with_size(&out("venn"), W, H)?;
+    Ok(())
+}
+
+/// The grammar's vocabulary as a word cloud (`geom_wordcloud`).
+fn wordcloud() -> Result<(), Box<dyn std::error::Error>> {
+    let words = [
+        ("ggplot", 100.0),
+        ("geom", 80.0),
+        ("aes", 72.0),
+        ("scale", 60.0),
+        ("stat", 55.0),
+        ("theme", 50.0),
+        ("facet", 44.0),
+        ("coord", 40.0),
+        ("layer", 36.0),
+        ("position", 30.0),
+        ("legend", 28.0),
+        ("guide", 24.0),
+        ("polar", 20.0),
+        ("smooth", 19.0),
+        ("density", 18.0),
+        ("histogram", 17.0),
+        ("boxplot", 16.0),
+        ("violin", 15.0),
+        ("ribbon", 14.0),
+        ("sankey", 13.0),
+        ("treemap", 12.0),
+        ("waterfall", 12.0),
+        ("pareto", 11.0),
+        ("chord", 10.0),
+        ("venn", 10.0),
+        ("funnel", 9.0),
+        ("bullet", 9.0),
+        ("waffle", 8.0),
+        ("network", 8.0),
+        ("sunburst", 8.0),
+        ("spline", 7.0),
+        ("stream", 7.0),
+        ("tooltip", 6.0),
+        ("svg", 6.0),
+        ("wasm", 6.0),
+        ("palette", 5.0),
+        ("breaks", 5.0),
+        ("labels", 5.0),
+        ("limits", 4.0),
+        ("expand", 4.0),
+    ];
+    let df = df! {
+        "word" => words.iter().map(|w| w.0).collect::<Vec<_>>(),
+        "n" => words.iter().map(|w| w.1).collect::<Vec<_>>(),
+    }?;
+    GGPlot::new(df)
+        .aes(Aes::new().label("word").weight("n"))
+        .geom_wordcloud()
+        .title("Word cloud")
+        .subtitle("Grammar-of-graphics vocabulary, sized by (made-up) frequency")
+        .theme_void()
+        .save_with_size(&out("wordcloud"), W, H)?;
     Ok(())
 }
 

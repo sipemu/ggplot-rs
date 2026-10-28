@@ -68,6 +68,7 @@ pub mod venn;
 pub mod violin;
 pub mod waffle;
 pub mod waterfall;
+pub mod wordcloud;
 
 use std::collections::HashMap;
 

@@ -1490,6 +1490,22 @@ impl GGPlot {
             .show_legend(false)
     }
 
+    /// Word cloud: map `label` (word) and `weight` (frequency); optionally
+    /// `color`. Largest words placed first along a spiral from the centre,
+    /// no overlaps, deterministic; words that don't fit are dropped. Axes
+    /// and grid are hidden.
+    pub fn geom_wordcloud(self) -> Self {
+        self.geom_wordcloud_with(crate::geom::wordcloud::GeomWordcloud::default())
+    }
+
+    /// [`geom_wordcloud`](Self::geom_wordcloud) with explicit sizes,
+    /// rotation share, seed and palette.
+    pub fn geom_wordcloud_with(self, geom: crate::geom::wordcloud::GeomWordcloud) -> Self {
+        let mut plot = self.add_geom_with(geom);
+        plot.hide_position_guides = true;
+        plot
+    }
+
     /// Candlestick chart: map `x` and `open`/`high`/`low`/`close`
     /// (`Aes::new().x("date").open("o").high("h").low("l").close("c")`).
     pub fn geom_candlestick(self) -> Self {
