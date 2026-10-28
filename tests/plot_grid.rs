@@ -205,6 +205,36 @@ fn legend_strip_at_bottom() {
 }
 
 #[test]
+fn legend_column_moves_below_when_narrow_363() {
+    let grid = || ((scatter() / scatter()) | line()).collect_legends(true);
+    // Phone width: the legend column would take > 15% of the page → a row
+    // below, and the right cell keeps (almost) its full half of the width.
+    let svg = grid()
+        .legend_bottom_when_narrow(0.15)
+        .render_svg_native_with_size(340, 450)
+        .unwrap();
+    well_formed(&svg);
+    assert_eq!(svg.matches("<g class=\"legend\"").count(), 1);
+    let c = cells(&svg);
+    let right = c.last().unwrap();
+    assert!(right.0 + right.2 > 330.0, "no legend column: {c:?}");
+    assert!(c.iter().all(|r| r.1 + r.3 < 440.0), "row below: {c:?}");
+
+    // Without the knob the column stays and squeezes the right cell.
+    let c = cells(&grid().render_svg_native_with_size(340, 450).unwrap());
+    assert!(c.last().unwrap().0 + c.last().unwrap().2 < 320.0, "{c:?}");
+
+    // A render wide enough keeps the column, byte-identical to no knob.
+    assert_eq!(
+        grid()
+            .legend_bottom_when_narrow(0.15)
+            .render_svg_native_with_size(1600, 450)
+            .unwrap(),
+        grid().render_svg_native_with_size(1600, 450).unwrap()
+    );
+}
+
+#[test]
 fn nested_grids_and_explicit_tags_round_trip() {
     let inner = PlotGrid::new()
         .add(plain())
