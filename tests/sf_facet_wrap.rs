@@ -41,23 +41,33 @@ fn map(n: usize, ncol: Option<usize>) -> GGPlot {
         .facet_wrap("f", ncol)
 }
 
-/// The root `data-panels` JSON, parsed into `(i, label, x, y, w, h)`.
+/// The root `data-panels` JSON, parsed into `(i, label, x, y, w, h)` (a
+/// small hand parser: `serde_json` is optional in this crate).
 fn panels(svg: &str) -> Vec<(usize, String, f64, f64, f64, f64)> {
     let start = svg.find("data-panels=\"").expect("data-panels") + "data-panels=\"".len();
     let raw = &svg[start..start + svg[start..].find('"').unwrap()];
     let json = raw.replace("&quot;", "\"");
-    let v: serde_json::Value = serde_json::from_str(&json).expect("valid JSON");
-    v.as_array()
-        .unwrap()
-        .iter()
-        .map(|p| {
+    let body = json.trim().trim_start_matches('[').trim_end_matches(']');
+    body.split("},{")
+        .map(|obj| {
+            let field = |k: &str| -> String {
+                let key = format!("\"{k}\":");
+                let at = obj.find(&key).unwrap_or_else(|| panic!("{k} in {obj}")) + key.len();
+                let rest = &obj[at..];
+                if let Some(r) = rest.strip_prefix('"') {
+                    r[..r.find('"').unwrap()].to_string()
+                } else {
+                    rest.split([',', '}']).next().unwrap().to_string()
+                }
+            };
+            let f = |k: &str| field(k).parse::<f64>().unwrap();
             (
-                p["i"].as_u64().unwrap() as usize,
-                p["label"].as_str().unwrap().to_string(),
-                p["x"].as_f64().unwrap(),
-                p["y"].as_f64().unwrap(),
-                p["w"].as_f64().unwrap(),
-                p["h"].as_f64().unwrap(),
+                field("i").parse().unwrap(),
+                field("label"),
+                f("x"),
+                f("y"),
+                f("w"),
+                f("h"),
             )
         })
         .collect()
@@ -359,4 +369,60 @@ fn north_arrow_rotates_and_stacks_clear_of_a_scale_bar() {
         .parse()
         .unwrap();
     assert!(bar_y > n_y + 18.0, "bar label at {bar_y}, N at {n_y}");
+}
+
+#[test]
+fn north_arrow_builders_and_corners() {
+    for corner in [
+        MapCorner::BottomLeft,
+        MapCorner::BottomRight,
+        MapCorner::TopLeft,
+        MapCorner::TopRight,
+    ] {
+        let svg = GGPlot::new(data(1))
+            .aes(Aes::new().x("x").y("y"))
+            .geom_point()
+            .coord_sf()
+            .annotation_north_arrow_with(
+                GeomNorthArrow::default()
+                    .corner(corner)
+                    .size_px(24.0)
+                    .color((10, 20, 30))
+                    .text_size(9.0)
+                    .rotation_deg(f64::NAN),
+            )
+            .render_svg_native_with_size(400, 300)
+            .unwrap();
+        assert!(svg.contains(">N</text>"), "{corner:?}");
+        assert!(svg.contains("#0A141E"), "{corner:?}");
+        assert!(svg.contains("font-size=\"9.00\""), "{corner:?}");
+    }
+    // a non-finite size falls back to the default
+    assert_eq!(
+        GeomNorthArrow::default().size_px(f64::INFINITY).size_px,
+        18.0
+    );
+    assert_eq!(GeomNorthArrow::default().size_px(1.0).size_px, 4.0);
+}
+
+#[test]
+fn figure_attribution_band_follows_fit_wrapping() {
+    use ggplot_rs::geom::annotation_scale::AttributionOverflow;
+    let long =
+        "© A very long attribution text that wraps onto more than one line in a narrow figure";
+    let svg = map(2, None)
+        .annotation_attribution_with(
+            GeomAttribution::new(long)
+                .fit(6.0)
+                .fit_overflow(AttributionOverflow::Wrap)
+                .line(vec![("second line", None)])
+                .figure(true),
+        )
+        .render_svg_native_with_size(300, 300)
+        .unwrap();
+    // wrapped into several lines, all drawn once (not per panel)
+    assert!(svg.matches("second line").count() == 1, "{svg}");
+    let ps = panels(&svg);
+    let bottom = ps.iter().map(|p| p.3 + p.5).fold(0.0, f64::max);
+    assert!(bottom < 300.0 - 20.0, "band reserved: grid bottom {bottom}");
 }
