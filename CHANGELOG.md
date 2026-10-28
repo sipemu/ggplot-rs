@@ -5,6 +5,18 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Added
+- **`GeomPoint::visibility` and `GeomPoint::hidden_targets`** (#290):
+  `PointVisibility::Hidden` draws no ink but keeps every point as a
+  transparent mark (`fill-opacity="0"`, still hit-tested by browsers), so
+  its `<title>` and `data-*` hover/click metadata keep working;
+  `PointVisibility::Auto { min_spacing_px }` (`PointVisibility::AUTO` =
+  3 px) hides the points only when the panel's distinct x positions sit
+  closer than that on average, so a dense line no longer turns into a chain
+  of dots while a short series keeps them. `hidden_targets: false` omits
+  hidden points entirely (static output). **Breaking** for `GeomPoint`
+  struct literals without `..Default::default()`.
+
 ## [0.31.8] — 2026-10-28
 
 ### Added
