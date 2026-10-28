@@ -35,6 +35,7 @@ pub use crate::geom::jitter::GeomJitter;
 pub use crate::geom::line::GeomLine;
 pub use crate::geom::linerange::GeomLinerange;
 pub use crate::geom::lollipop::{GeomDumbbell, GeomLollipop};
+pub use crate::geom::marimekko::GeomMarimekko;
 pub use crate::geom::network::GeomNetwork;
 pub use crate::geom::pack::GeomPackedBubble;
 pub use crate::geom::pareto::GeomPareto;
