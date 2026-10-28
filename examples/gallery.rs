@@ -106,6 +106,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     variable_pie()?;
     heikin_ashi()?;
     renko()?;
+    indicators()?;
     radar()?;
     gauge()?;
     calendar()?;
@@ -1543,6 +1544,43 @@ fn renko() -> Result<(), Box<dyn std::error::Error>> {
         .ylab("Price")
         .theme_minimal()
         .save_with_size(&out("renko"), W, H)?;
+    Ok(())
+}
+
+/// Closing prices with a 20-day SMA and Bollinger bands (`StatIndicator`).
+fn indicators() -> Result<(), Box<dyn std::error::Error>> {
+    let mut price = 100.0f64;
+    let close: Vec<f64> = (0..160)
+        .map(|i| {
+            price += 1.1 * (i as f64 * 0.21).sin() + 0.9 * (i as f64 * 1.3).cos() + 0.04;
+            price
+        })
+        .collect();
+    let df = df! { "day" => (0..160).map(f64::from).collect::<Vec<_>>(), "close" => close }?;
+    GGPlot::new(df)
+        .aes(Aes::new().x("day").y("close"))
+        .geom_ribbon_with(GeomRibbon {
+            alpha: 0.2,
+            ..Default::default()
+        })
+        .stat(StatIndicator::new(Indicator::Bollinger(20, 2.0)))
+        .geom_line_with(GeomLine {
+            color: (90, 90, 90),
+            width: 1.0,
+            ..Default::default()
+        })
+        .geom_line_with(GeomLine {
+            color: (214, 39, 40),
+            width: 1.8,
+            ..Default::default()
+        })
+        .stat(StatIndicator::new(Indicator::Sma(20)))
+        .title("Technical indicators")
+        .subtitle("Close (grey), SMA(20) (red), Bollinger bands (20, 2σ)")
+        .xlab("Day")
+        .ylab("Price")
+        .theme_minimal()
+        .save_with_size(&out("indicators"), W, H)?;
     Ok(())
 }
 

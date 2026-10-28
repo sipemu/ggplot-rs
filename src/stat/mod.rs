@@ -25,6 +25,7 @@ pub mod funnel;
 pub(crate) mod gam;
 pub mod heikin_ashi;
 pub mod identity;
+pub mod indicator;
 pub mod loess;
 pub mod marching_squares;
 pub mod marimekko;
