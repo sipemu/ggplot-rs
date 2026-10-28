@@ -17,7 +17,7 @@ use crate::coord::Coord;
 use crate::data::{DataFrame, Value};
 use crate::position::identity::PositionIdentity;
 use crate::position::Position;
-use crate::render::backend::{DrawBackend, LineStyle, Linetype, TextAnchor, TextStyle};
+use crate::render::backend::{DrawBackend, LineStyle, Linetype, RectStyle, TextAnchor, TextStyle};
 use crate::render::corner_layout::stack_clear;
 use crate::render::text::{hard_break_cut, text_width};
 use crate::render::{Rect, RenderError};
@@ -187,6 +187,168 @@ impl Geom for GeomAnnotationScale {
     }
 }
 
+/// A north arrow in a panel corner (ggspatial's `annotation_north_arrow()`):
+/// a filled triangle with an "N" above it. `rotation_deg` turns it
+/// clockwise from screen-up — under a conic or other non-north-up
+/// projection the caller passes the angle of true north at the map
+/// centre. Claims its corner box like the scale bar, so the two stack
+/// clear of each other in a shared corner.
+///
+/// `#[non_exhaustive]`: build via [`Default`] and the builders.
+#[non_exhaustive]
+#[derive(Debug, Clone)]
+pub struct GeomNorthArrow {
+    pub corner: MapCorner,
+    /// Triangle height in px. Default `18.0`.
+    pub size_px: f64,
+    /// Clockwise from screen-up, in degrees. Default `0.0`.
+    pub rotation_deg: f64,
+    pub color: (u8, u8, u8),
+    pub text_size: f64,
+}
+
+impl Default for GeomNorthArrow {
+    fn default() -> Self {
+        GeomNorthArrow {
+            corner: MapCorner::TopRight,
+            size_px: 18.0,
+            rotation_deg: 0.0,
+            color: (80, 80, 80),
+            text_size: 8.0,
+        }
+    }
+}
+
+impl GeomNorthArrow {
+    pub fn corner(mut self, corner: MapCorner) -> Self {
+        self.corner = corner;
+        self
+    }
+
+    pub fn size_px(mut self, px: f64) -> Self {
+        self.size_px = if px.is_finite() { px.max(4.0) } else { 18.0 };
+        self
+    }
+
+    /// Clockwise from screen-up, in degrees (true north's direction).
+    pub fn rotation_deg(mut self, deg: f64) -> Self {
+        self.rotation_deg = if deg.is_finite() { deg } else { 0.0 };
+        self
+    }
+
+    pub fn color(mut self, color: (u8, u8, u8)) -> Self {
+        self.color = color;
+        self
+    }
+
+    pub fn text_size(mut self, size: f64) -> Self {
+        self.text_size = size;
+        self
+    }
+}
+
+impl Geom for GeomNorthArrow {
+    fn draw(
+        &self,
+        _data: &DataFrame,
+        _coord: &dyn Coord,
+        _scales: &ScaleSet,
+        _theme: &Theme,
+        backend: &mut dyn DrawBackend,
+    ) -> Result<(), RenderError> {
+        let plot_area = backend.plot_area();
+        let s = self.size_px;
+        // The glyph's own box: the triangle's rotated circle plus the "N".
+        let side = s + 2.0;
+        let h = side + self.text_size + 2.0;
+        let pad = 6.0;
+        let x0 = match self.corner {
+            MapCorner::BottomLeft | MapCorner::TopLeft => plot_area.x + pad,
+            MapCorner::BottomRight | MapCorner::TopRight => {
+                plot_area.x + plot_area.width - pad - side
+            }
+        };
+        let y0 = match self.corner {
+            MapCorner::TopLeft | MapCorner::TopRight => plot_area.y + pad,
+            MapCorner::BottomLeft | MapCorner::BottomRight => {
+                plot_area.y + plot_area.height - pad - h
+            }
+        };
+        let natural_box = Rect {
+            x: x0,
+            y: y0,
+            width: side,
+            height: h,
+        };
+        let away_sign = match self.corner {
+            MapCorner::BottomLeft | MapCorner::BottomRight => -1.0,
+            MapCorner::TopLeft | MapCorner::TopRight => 1.0,
+        };
+        let claims = backend.corner_claims();
+        let b = stack_clear(natural_box, away_sign, &claims, &plot_area);
+        // Triangle centred under the "N", rotated about its centre.
+        let (cx, cy) = (b.x + side / 2.0, b.y + self.text_size + 2.0 + side / 2.0);
+        let (sin, cos) = self.rotation_deg.to_radians().sin_cos();
+        let rot = |dx: f64, dy: f64| (cx + dx * cos - dy * sin, cy + dx * sin + dy * cos);
+        let tri = [
+            rot(0.0, -s / 2.0),
+            rot(s * 0.32, s / 2.0),
+            rot(0.0, s * 0.28),
+            rot(-s * 0.32, s / 2.0),
+        ];
+        backend.draw_polygon(
+            &tri,
+            &RectStyle {
+                fill: Some(self.color),
+                stroke: None,
+                stroke_width: 0.0,
+                alpha: 1.0,
+                clip: false,
+                corner_radius: 0.0,
+            },
+        )?;
+        // The "N" sits beyond the tip, along the arrow's direction.
+        let (nx, ny) = rot(0.0, -s / 2.0 - self.text_size * 0.75);
+        backend.draw_text(
+            "N",
+            (nx, ny + self.text_size * 0.35),
+            &TextStyle {
+                color: self.color,
+                size: self.text_size,
+                anchor: TextAnchor::Middle,
+                angle: 0.0,
+                family: None,
+                face: crate::render::backend::FontFace::Bold,
+                bg_colour: None,
+                bg_r: 0.0,
+            },
+        )?;
+        backend.claim_corner_box(b);
+        Ok(())
+    }
+
+    fn required_aes(&self) -> Vec<Aesthetic> {
+        vec![]
+    }
+    fn default_stat(&self) -> Box<dyn Stat> {
+        Box::new(StatIdentity)
+    }
+    fn default_position(&self) -> Box<dyn Position> {
+        Box::new(PositionIdentity)
+    }
+    fn default_params(&self) -> GeomParams {
+        GeomParams::default()
+    }
+    fn name(&self) -> &str {
+        "annotation_north_arrow"
+    }
+    fn apply_element_geom(&mut self, el: &crate::theme::elements::ElementGeom) {
+        if let (true, Some(ink)) = (self.color == (80, 80, 80), el.ink) {
+            self.color = ink;
+        }
+    }
+}
+
 /// A small, muted attribution text (ggspatial's `annotation_scale()`
 /// sibling convention: `"© Natural Earth"` etc.) in a panel corner.
 ///
@@ -220,6 +382,10 @@ pub struct GeomAttribution {
     /// attribution — see [`Self::fit_width_scale`]. Default `1.0`: no
     /// effect, byte-identical to before this field existed (#267).
     pub fit_width_scale: f64,
+    /// On a faceted plot: draw once, in a band under the whole panel grid,
+    /// instead of in every panel — see [`Self::figure`]. Ignored without
+    /// facets. Default `false`.
+    pub figure: bool,
 }
 
 impl GeomAttribution {
@@ -234,6 +400,49 @@ impl GeomAttribution {
             fit_min_text_size: None,
             fit_overflow: AttributionOverflow::Ellipsis,
             fit_width_scale: 1.0,
+            figure: false,
+        }
+    }
+
+    /// On a faceted plot (small-multiple maps), draw the attribution once
+    /// in a band under the whole panel grid — the grid shrinks by the band's
+    /// height — instead of repeating it in every panel's corner. Ignored on
+    /// a single-panel plot (byte-identical).
+    pub fn figure(mut self, on: bool) -> Self {
+        self.figure = on;
+        self
+    }
+
+    /// Physical lines this attribution draws in a panel `width` px wide
+    /// (after `.fit(..)` wrapping), for [`Geom::figure_band_height`].
+    fn physical_line_count(&self, width: f64) -> usize {
+        let row0: AttributionRow = match &self.runs {
+            Some(r) => r.clone(),
+            None => vec![(self.text.clone(), None)],
+        };
+        let rows: Vec<AttributionRow> = std::iter::once(row0)
+            .chain(self.lines.iter().cloned())
+            .filter(|r| r.iter().any(|(t, _)| !t.is_empty()))
+            .collect();
+        match self.fit_min_text_size {
+            Some(min_size) => {
+                let max_width = ((width - 8.0) * ATTRIBUTION_FIT_SAFETY_MARGIN).max(0.0);
+                rows.iter()
+                    .map(|r| {
+                        fit_row(
+                            r,
+                            self.text_size,
+                            min_size,
+                            max_width,
+                            self.fit_overflow,
+                            self.fit_width_scale,
+                        )
+                        .1
+                        .len()
+                    })
+                    .sum()
+            }
+            None => rows.len(),
         }
     }
 
@@ -639,6 +848,20 @@ fn is_http_url(url: &str) -> bool {
 }
 
 impl Geom for GeomAttribution {
+    fn figure_band_height(&self, width: f64, _theme: &Theme) -> Option<f64> {
+        if !self.figure {
+            return None;
+        }
+        let n = self.physical_line_count(width);
+        // 4 px inset at the band's edge + one `text_size * 1.3` line each
+        // (the spacing `draw` uses) + the last line's descent.
+        Some(if n == 0 {
+            0.0
+        } else {
+            8.0 + n as f64 * self.text_size * 1.3
+        })
+    }
+
     fn draw(
         &self,
         _data: &DataFrame,

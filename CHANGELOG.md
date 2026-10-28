@@ -5,6 +5,30 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Added
+Small-multiple maps (#293, for DataZooDE/anofox-visualization#149 M3):
+- **`facet_wrap` under `coord_sf`** sizes every panel to the data's aspect
+  (`Coord::fixed_aspect`), in the column count that makes the panels
+  largest (or the given `ncol`), centred in the plot area — instead of
+  `sqrt(n)` equal cells that each letterbox their map. Cartesian facets are
+  unchanged.
+- **`facet::wrap::fit_grid` / `natural_height`**: the grid maths, public so
+  a host can size a faceted map before rendering it.
+- **Per-panel clip**: each such panel's marks sit in
+  `<g data-facet-panel="i" clip-path="url(#…)">` (`DrawBackend::begin_panel`
+  / `end_panel`); the root lists every panel's data rect as `data-panels`
+  (JSON).
+- **`data-viewport`**: the rect a single `coord_sf` plot maps its data
+  window onto (`Coord::data_rect`, `DrawBackend::set_viewport`), for
+  hosts mapping the pointer back to map units.
+- **`GeomAttribution::figure(true)`**: on a faceted plot, the attribution
+  draws once in a band under the grid (`Geom::figure_band_height`).
+- **`ScaleFillBinned::show_counts(false)`**: class legend labels without
+  their `" (n)"`.
+- **`GeomNorthArrow`** + `GGPlot::annotation_north_arrow_with`: a north
+  arrow in a panel corner, rotatable to true north, stacking clear of a
+  scale bar in the same corner.
+
 ## [0.32.0] — 2026-10-28
 
 ### Added

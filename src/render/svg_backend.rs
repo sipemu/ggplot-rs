@@ -82,6 +82,13 @@ pub struct SvgBackend {
     /// #273: panel-corner boxes claimed so far this render pass — see
     /// [`DrawBackend::corner_claims`]/[`DrawBackend::claim_corner_box`].
     corner_claims: Vec<Rect>,
+    /// The single-panel data rect ([`DrawBackend::set_viewport`]), written
+    /// as the root `data-viewport` (with `data-plot`).
+    viewport: Option<Rect>,
+    /// Fixed-aspect facet panels ([`DrawBackend::begin_panel`]): `(index,
+    /// label, clip rect, data rect)`. Each clip becomes a `<clipPath>` in
+    /// `<defs>`; the list is written as the root `data-panels`.
+    panels: Vec<(usize, String, Rect, Rect)>,
 }
 
 /// Source for [`SvgBackend::id_prefix`] — process-wide, so every backend
@@ -125,6 +132,8 @@ impl SvgBackend {
             svg_title: None,
             svg_desc: None,
             corner_claims: Vec::new(),
+            viewport: None,
+            panels: Vec::new(),
         }
     }
 
@@ -235,10 +244,20 @@ impl SvgBackend {
     /// stripe's own cycle, rotated by `patternTransform`, a `bg`-filled
     /// tile with a narrower `fg` stripe at its edge (#206).
     fn pattern_defs(&self) -> String {
-        if self.patterns.is_empty() {
+        if self.patterns.is_empty() && self.panels.is_empty() {
             return String::new();
         }
         let mut defs = String::from("<defs>");
+        for (i, _, clip, _) in &self.panels {
+            defs.push_str(&format!(
+                "<clipPath id=\"{}-panel-{i}\"><rect x=\"{}\" y=\"{}\" width=\"{}\" height=\"{}\"/></clipPath>",
+                self.id_prefix,
+                num(clip.x),
+                num(clip.y),
+                num(clip.width),
+                num(clip.height),
+            ));
+        }
         for (p, id) in &self.patterns {
             let FillPattern::Stripe {
                 fg,
@@ -570,7 +589,7 @@ impl SvgBackend {
         for (k, v) in &self.root_attrs {
             extra.push_str(&format!(" {k}=\"{}\"", escape_attr(v)));
         }
-        let plot = if self.plot_attr {
+        let mut plot = if self.plot_attr {
             format!(
                 " data-plot=\"{} {} {} {}\"",
                 num(p.x),
@@ -581,6 +600,37 @@ impl SvgBackend {
         } else {
             String::new()
         };
+        if self.plot_attr {
+            if let Some(v) = &self.viewport {
+                plot.push_str(&format!(
+                    " data-viewport=\"{} {} {} {}\"",
+                    num(v.x),
+                    num(v.y),
+                    num(v.width),
+                    num(v.height),
+                ));
+            }
+            if !self.panels.is_empty() {
+                let items: Vec<String> = self
+                    .panels
+                    .iter()
+                    .map(|(i, label, _, d)| {
+                        format!(
+                            "{{\"i\":{i},\"label\":{},\"x\":{},\"y\":{},\"w\":{},\"h\":{}}}",
+                            json_string(label),
+                            num(d.x),
+                            num(d.y),
+                            num(d.width),
+                            num(d.height),
+                        )
+                    })
+                    .collect();
+                plot.push_str(&format!(
+                    " data-panels=\"{}\"",
+                    escape_attr(&format!("[{}]", items.join(",")))
+                ));
+            }
+        }
         // #255: `role="img"` plus `aria-labelledby`/`aria-describedby`
         // pointing at the `<title>`/`<desc>` children `access_children`
         // writes as the root's first children — only when a title/desc
@@ -1119,6 +1169,26 @@ fn finite_runs(pts: &[(f64, f64)]) -> Vec<Vec<(f64, f64)>> {
 }
 
 impl DrawBackend for SvgBackend {
+    fn begin_panel(&mut self, index: usize, label: &str, clip: &Rect, data: &Rect) {
+        // A mark group (#221) must not span two clipped panels.
+        self.flush_groups();
+        self.body.push_str(&format!(
+            "<g data-facet-panel=\"{index}\" clip-path=\"url(#{}-panel-{index})\">",
+            self.id_prefix
+        ));
+        self.panels
+            .push((index, label.to_string(), clip.clone(), data.clone()));
+    }
+
+    fn end_panel(&mut self) {
+        self.flush_groups();
+        self.body.push_str("</g>");
+    }
+
+    fn set_viewport(&mut self, rect: &Rect) {
+        self.viewport = Some(rect.clone());
+    }
+
     fn plot_area(&self) -> Rect {
         self.plot_area.clone()
     }
