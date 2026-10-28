@@ -19,6 +19,8 @@ pub(crate) enum BandShape<'a> {
     Linear,
     /// A step function (`geom_stepribbon`), like `geom_step`'s direction.
     Step(&'a StepDirection),
+    /// A smooth curve through the points (`areasplinerange`).
+    Smooth(super::support::Interpolate),
 }
 
 /// Insert step corners into a run of normalized `(x, y)` points.
@@ -88,6 +90,10 @@ pub(crate) fn draw_bands(
         let (upper, mut lower) = match shape {
             BandShape::Linear => (upper, lower),
             BandShape::Step(dir) => (stepped(&upper, dir), stepped(&lower, dir)),
+            BandShape::Smooth(m) => (
+                super::support::interpolate(&upper, m).0,
+                super::support::interpolate(&lower, m).0,
+            ),
         };
         lower.reverse();
         let polygon: Vec<(f64, f64)> = upper
@@ -124,6 +130,9 @@ pub(crate) fn draw_bands(
 pub struct GeomRibbon {
     pub fill: (u8, u8, u8),
     pub alpha: f64,
+    /// How consecutive points are joined (straight by default; a smooth
+    /// `areasplinerange` with [`Interpolate::MonotoneCubic`](super::support::Interpolate::MonotoneCubic)).
+    pub interpolate: super::support::Interpolate,
 }
 
 impl Default for GeomRibbon {
@@ -131,6 +140,7 @@ impl Default for GeomRibbon {
         GeomRibbon {
             fill: (97, 156, 255),
             alpha: 0.3,
+            interpolate: super::support::Interpolate::Linear,
         }
     }
 }
@@ -151,7 +161,10 @@ impl Geom for GeomRibbon {
             backend,
             self.fill,
             self.alpha,
-            BandShape::Linear,
+            match self.interpolate {
+                super::support::Interpolate::Linear => BandShape::Linear,
+                m => BandShape::Smooth(m),
+            },
         )
     }
 

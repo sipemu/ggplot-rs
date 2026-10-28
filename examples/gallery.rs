@@ -89,6 +89,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     sunburst()?;
     funnel()?;
     stream()?;
+    spline()?;
     radar()?;
     gauge()?;
     calendar()?;
@@ -952,6 +953,39 @@ fn stream() -> Result<(), Box<dyn std::error::Error>> {
         .ylab("")
         .theme_minimal()
         .save_with_size(&out("stream"), W, H)?;
+    Ok(())
+}
+
+/// Monthly temperatures as spline line + range band (`Interpolate::MonotoneCubic`).
+fn spline() -> Result<(), Box<dyn std::error::Error>> {
+    let month: Vec<f64> = (1..=12).map(f64::from).collect();
+    let mean = [
+        1.2, 2.1, 5.8, 9.9, 14.2, 17.4, 19.5, 19.1, 15.2, 10.4, 5.5, 2.3,
+    ];
+    let lo: Vec<f64> = mean.iter().map(|m| m - 4.5).collect();
+    let hi: Vec<f64> = mean.iter().map(|m| m + 5.0).collect();
+    let df = df! { "month" => month, "mean" => mean.to_vec(), "lo" => lo, "hi" => hi }?;
+    GGPlot::new(df)
+        .aes(Aes::new().x("month").y("mean"))
+        .geom_ribbon_with(GeomRibbon {
+            interpolate: Interpolate::MonotoneCubic,
+            alpha: 0.25,
+            ..Default::default()
+        })
+        .layer_aes(Aes::new().x("month").ymin("lo").ymax("hi"))
+        .geom_line_with(GeomLine {
+            interpolate: Interpolate::MonotoneCubic,
+            color: (31, 119, 180),
+            width: 2.0,
+            ..Default::default()
+        })
+        .geom_point()
+        .title("Spline")
+        .subtitle("Mean daily temperature with typical range, °C (monotone cubic)")
+        .xlab("Month")
+        .ylab("°C")
+        .theme_minimal()
+        .save_with_size(&out("spline"), W, H)?;
     Ok(())
 }
 
