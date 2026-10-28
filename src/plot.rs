@@ -1571,7 +1571,9 @@ impl GGPlot {
     /// boxed labels stacked on alternating levels so they never overlap;
     /// the y axis and horizontal grid are hidden.
     pub fn geom_timeline(self) -> Self {
-        self.geom_timeline_with(crate::geom::timeline::GeomTimeline::default())
+        let mut plot = self.add_geom(crate::geom::timeline::GeomTimeline::default());
+        plot.hide_y_guides = true;
+        plot
     }
 
     /// [`geom_timeline`](Self::geom_timeline) with explicit styling.

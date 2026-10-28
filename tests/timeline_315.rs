@@ -60,3 +60,57 @@ fn labels_dates_spans_and_hidden_y_axis() {
     }
     assert!(svg.contains(">2024-02-01<"), "date axis kept");
 }
+
+#[test]
+fn colours_ink_paper_unlabelled_events_and_crowding() {
+    use ggplot_rs::theme::Theme;
+    let d = |m: u32, day: u32| Value::DateTime(days_from_civil(2024, m, day) * 86_400);
+    let many: Vec<Value> = (1..=20).map(|k| d(1, k)).collect();
+    let data = vec![
+        ("when".to_string(), many.clone()),
+        (
+            "what".to_string(),
+            (0..20)
+                .map(|k| {
+                    if k == 3 {
+                        Value::Str(String::new())
+                    } else {
+                        Value::Str(format!("Event number {k}"))
+                    }
+                })
+                .collect(),
+        ),
+        (
+            "kind".to_string(),
+            (0..20)
+                .map(|k| Value::Str(if k % 2 == 0 { "a" } else { "b" }.into()))
+                .collect(),
+        ),
+    ];
+    // Colour mapping + dark theme ink/paper + a cramped panel: labels that
+    // find no free level are skipped, the unlabelled event keeps its dot.
+    let svg = GGPlot::new(data.clone())
+        .aes(Aes::new().x("when").label("what").color("kind"))
+        .geom_timeline()
+        .theme(Theme::default().with_ink_paper((240, 240, 240), (20, 20, 20)))
+        .render_svg_native_with_size(400, 160)
+        .unwrap();
+    assert_eq!(
+        svg.matches("<circle").count(),
+        20,
+        "every event keeps its dot"
+    );
+    assert!(
+        svg.matches(">Event number").count() < 19,
+        "crowded labels are dropped"
+    );
+    assert!(svg.contains("fill=\"#141414\""), "paper label boxes");
+    // Brand primary colours unmapped events.
+    let svg = GGPlot::new(data)
+        .aes(Aes::new().x("when").label("what"))
+        .geom_timeline()
+        .primary_color((200, 0, 100))
+        .render_svg_native_with_size(600, 300)
+        .unwrap();
+    assert!(svg.contains("#C80064"));
+}
