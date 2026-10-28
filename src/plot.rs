@@ -1506,6 +1506,63 @@ impl GGPlot {
         plot
     }
 
+    /// Variwide chart: map `x` (category), `y` (height) and `weight` (bar
+    /// width). Unless an x scale is set, the x axis is continuous over the
+    /// column layout with each category named under its column (computed
+    /// from the plot data, so map `x`/`weight` at plot level).
+    pub fn geom_variwide(self) -> Self {
+        self.geom_marimekko_with(crate::geom::marimekko::GeomMarimekko::variwide())
+    }
+
+    /// Marimekko (mosaic) chart: map `x` (column), `fill` (segment) and
+    /// `weight` (value). Column widths are their totals' shares, segments
+    /// their share of the column (y axis 0–100 %).
+    pub fn geom_marimekko(self) -> Self {
+        self.geom_marimekko_with(crate::geom::marimekko::GeomMarimekko::marimekko())
+    }
+
+    /// A variwide / Marimekko layer with explicit settings.
+    pub fn geom_marimekko_with(self, geom: crate::geom::marimekko::GeomMarimekko) -> Self {
+        use crate::aes::Aesthetic;
+        let has = |plot: &Self, aes: Aesthetic| plot.scales.iter().any(|s| s.aesthetic() == aes);
+        let (has_x, has_y) = (has(&self, Aesthetic::X), has(&self, Aesthetic::Y));
+        // Column centres and names from the plot data (same layout as the stat).
+        let axis = self.mapping.get_mapping(&Aesthetic::X).and_then(|xc| {
+            let x = self.data.column(xc)?;
+            let w = self
+                .mapping
+                .get_mapping(&Aesthetic::Weight)
+                .and_then(|wc| self.data.column(wc));
+            let totals = crate::stat::marimekko::column_totals(x, w);
+            let widths: Vec<f64> = totals.iter().map(|t| t.1).collect();
+            let spans = crate::stat::marimekko::column_spans(&widths, geom.gap);
+            Some((
+                spans
+                    .iter()
+                    .map(|s| (s.0 + s.1) / 2.0)
+                    .collect::<Vec<f64>>(),
+                totals.into_iter().map(|t| t.0).collect::<Vec<String>>(),
+            ))
+        });
+        let mosaic = geom.mosaic;
+        let mut plot = self.add_geom_with(geom);
+        if !has_x {
+            let mut sx = ScaleContinuous::new().with_expand(0.0, 0.0);
+            if let Some((breaks, labels)) = axis {
+                sx = sx.with_breaks(breaks).with_labels(labels);
+            }
+            plot = plot.scale_x_continuous(sx);
+        }
+        if mosaic && !has_y {
+            plot = plot.scale_y_continuous(
+                ScaleContinuous::new()
+                    .with_expand(0.0, 0.0)
+                    .with_label_formatter(|v| format!("{}%", (v * 100.0).round())),
+            );
+        }
+        plot
+    }
+
     /// Candlestick chart: map `x` and `open`/`high`/`low`/`close`
     /// (`Aes::new().x("date").open("o").high("h").low("l").close("c")`).
     pub fn geom_candlestick(self) -> Self {

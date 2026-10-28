@@ -35,6 +35,7 @@ pub(crate) mod layer_attrs;
 pub mod line;
 pub mod linerange;
 pub mod lollipop;
+pub mod marimekko;
 pub mod network;
 pub mod pack;
 pub mod pareto;

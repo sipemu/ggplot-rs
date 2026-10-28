@@ -98,6 +98,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     trees()?;
     venn()?;
     wordcloud()?;
+    marimekko()?;
     radar()?;
     gauge()?;
     calendar()?;
@@ -1245,6 +1246,28 @@ fn wordcloud() -> Result<(), Box<dyn std::error::Error>> {
         .subtitle("Grammar-of-graphics vocabulary, sized by (made-up) frequency")
         .theme_void()
         .save_with_size(&out("wordcloud"), W, H)?;
+    Ok(())
+}
+
+/// Market share by region, regions sized by market volume (`geom_marimekko`).
+fn marimekko() -> Result<(), Box<dyn std::error::Error>> {
+    let df = df! {
+        "region" => ["N. America", "N. America", "N. America", "Europe", "Europe", "Europe",
+                     "Asia", "Asia", "Asia", "LatAm", "LatAm", "LatAm"],
+        "vendor" => ["Acme", "Globex", "Other", "Acme", "Globex", "Other",
+                     "Acme", "Globex", "Other", "Acme", "Globex", "Other"],
+        "sales" => [42.0, 30.0, 18.0, 25.0, 33.0, 22.0, 30.0, 45.0, 60.0, 8.0, 6.0, 9.0],
+    }?;
+    GGPlot::new(df)
+        .aes(Aes::new().x("region").fill("vendor").weight("sales"))
+        .geom_marimekko()
+        .scale_fill_brewer(PaletteName::Set2)
+        .title("Marimekko")
+        .subtitle("Vendor share within each region; column width = regional market size")
+        .xlab("")
+        .ylab("Share of region")
+        .theme_minimal()
+        .save_with_size(&out("marimekko"), W, H)?;
     Ok(())
 }
 
