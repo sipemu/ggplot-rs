@@ -75,6 +75,11 @@ pub enum Facet {
         ncol: Option<usize>,
         scales: FacetScales,
         labeller: FacetLabeller,
+        /// Explicit panel order (ggplot2's factor levels): every level gets
+        /// a panel, even with no data (`drop = FALSE`), and rows whose value
+        /// isn't listed are dropped. `None` = values in first-appearance
+        /// order. Set with [`GGPlot::facet_levels`](crate::GGPlot::facet_levels).
+        levels: Option<Vec<String>>,
     },
     Grid {
         row_var: Option<String>,
