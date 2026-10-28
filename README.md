@@ -27,7 +27,9 @@ so you can plot straight from plain Rust vectors, or from
 
 Every image below is produced by [`examples/gallery.rs`](examples/gallery.rs) —
 regenerate them all with `cargo run --features sf --example gallery` (the
-choropleth needs the `sf` feature; drop it for the rest).
+choropleth needs the `sf` feature; drop it for the rest). The
+`supplier_leadtime*.png` images come from
+[`examples/supplier_leadtime.rs`](examples/supplier_leadtime.rs).
 
 <table>
   <tr>
@@ -135,6 +137,185 @@ choropleth needs the `sf` feature; drop it for the rest).
     </td>
   </tr>
 </table>
+
+### More chart types
+
+Highcharts-style chart types, each one layer in the grammar (tracked under the
+[`highcharts-parity`](https://github.com/sipemu/ggplot-rs/labels/highcharts-parity) label).
+
+<table>
+  <tr>
+    <td align="center" width="33%">
+      <img src="assets/gallery/candlestick.png" width="260" alt="Candlestick"><br>
+      <sub>Candlestick · <code>geom_candlestick</code></sub>
+    </td>
+    <td align="center" width="33%">
+      <img src="assets/gallery/heikin_ashi.png" width="260" alt="Heikin-Ashi"><br>
+      <sub>Heikin-Ashi · <code>geom_heikin_ashi</code></sub>
+    </td>
+    <td align="center" width="33%">
+      <img src="assets/gallery/renko.png" width="260" alt="Renko bricks"><br>
+      <sub>Renko bricks · <code>geom_renko</code></sub>
+    </td>
+  </tr>
+  <tr>
+    <td align="center" width="33%">
+      <img src="assets/gallery/indicators.png" width="260" alt="SMA + Bollinger bands"><br>
+      <sub>SMA + Bollinger bands · <code>StatIndicator</code></sub>
+    </td>
+    <td align="center" width="33%">
+      <img src="assets/gallery/flags.png" width="260" alt="Event flags"><br>
+      <sub>Event flags · <code>geom_flags</code></sub>
+    </td>
+    <td align="center" width="33%">
+      <img src="assets/gallery/waterfall.png" width="260" alt="Waterfall / bridge"><br>
+      <sub>Waterfall / bridge · <code>geom_waterfall</code></sub>
+    </td>
+  </tr>
+  <tr>
+    <td align="center" width="33%">
+      <img src="assets/gallery/pareto.png" width="260" alt="Pareto"><br>
+      <sub>Pareto · <code>geom_pareto</code></sub>
+    </td>
+    <td align="center" width="33%">
+      <img src="assets/gallery/bullet.png" width="260" alt="Bullet chart"><br>
+      <sub>Bullet chart · <code>geom_bullet</code></sub>
+    </td>
+    <td align="center" width="33%">
+      <img src="assets/gallery/funnel.png" width="260" alt="Funnel"><br>
+      <sub>Funnel · <code>geom_funnel</code></sub>
+    </td>
+  </tr>
+  <tr>
+    <td align="center" width="33%">
+      <img src="assets/gallery/marimekko.png" width="260" alt="Marimekko"><br>
+      <sub>Marimekko · <code>geom_marimekko</code></sub>
+    </td>
+    <td align="center" width="33%">
+      <img src="assets/gallery/dumbbell.png" width="260" alt="Dumbbell"><br>
+      <sub>Dumbbell · <code>geom_dumbbell</code></sub>
+    </td>
+    <td align="center" width="33%">
+      <img src="assets/gallery/spline.png" width="260" alt="Spline line + band"><br>
+      <sub>Spline line + band · <code>Interpolate::MonotoneCubic</code></sub>
+    </td>
+  </tr>
+  <tr>
+    <td align="center" width="33%">
+      <img src="assets/gallery/stream.png" width="260" alt="Streamgraph"><br>
+      <sub>Streamgraph · <code>geom_stream</code></sub>
+    </td>
+    <td align="center" width="33%">
+      <img src="assets/gallery/gantt.png" width="260" alt="Gantt / X-range"><br>
+      <sub>Gantt / X-range · <code>geom_xrange</code></sub>
+    </td>
+    <td align="center" width="33%">
+      <img src="assets/gallery/timeline.png" width="260" alt="Timeline"><br>
+      <sub>Timeline · <code>geom_timeline</code></sub>
+    </td>
+  </tr>
+  <tr>
+    <td align="center" width="33%">
+      <img src="assets/gallery/sankey.png" width="260" alt="Sankey"><br>
+      <sub>Sankey · <code>geom_sankey</code></sub>
+    </td>
+    <td align="center" width="33%">
+      <img src="assets/gallery/chord.png" width="260" alt="Chord diagram"><br>
+      <sub>Chord diagram · <code>geom_chord</code></sub>
+    </td>
+    <td align="center" width="33%">
+      <img src="assets/gallery/arcdiagram.png" width="260" alt="Arc diagram"><br>
+      <sub>Arc diagram · <code>geom_arcdiagram</code></sub>
+    </td>
+  </tr>
+  <tr>
+    <td align="center" width="33%">
+      <img src="assets/gallery/network.png" width="260" alt="Network graph"><br>
+      <sub>Network graph · <code>geom_network</code></sub>
+    </td>
+    <td align="center" width="33%">
+      <img src="assets/gallery/org_chart.png" width="260" alt="Org chart"><br>
+      <sub>Org chart · <code>geom_tree_with</code></sub>
+    </td>
+    <td align="center" width="33%">
+      <img src="assets/gallery/dendrogram.png" width="260" alt="Dendrogram"><br>
+      <sub>Dendrogram · <code>geom_dendrogram</code></sub>
+    </td>
+  </tr>
+  <tr>
+    <td align="center" width="33%">
+      <img src="assets/gallery/treemap.png" width="260" alt="Treemap"><br>
+      <sub>Treemap · <code>geom_treemap</code></sub>
+    </td>
+    <td align="center" width="33%">
+      <img src="assets/gallery/sunburst.png" width="260" alt="Sunburst"><br>
+      <sub>Sunburst · <code>geom_sunburst</code></sub>
+    </td>
+    <td align="center" width="33%">
+      <img src="assets/gallery/packed_bubble.png" width="260" alt="Packed bubbles"><br>
+      <sub>Packed bubbles · <code>geom_packed_bubble</code></sub>
+    </td>
+  </tr>
+  <tr>
+    <td align="center" width="33%">
+      <img src="assets/gallery/venn.png" width="260" alt="Venn / Euler"><br>
+      <sub>Venn / Euler · <code>geom_venn</code></sub>
+    </td>
+    <td align="center" width="33%">
+      <img src="assets/gallery/waffle.png" width="260" alt="Waffle"><br>
+      <sub>Waffle · <code>geom_waffle</code></sub>
+    </td>
+    <td align="center" width="33%">
+      <img src="assets/gallery/parliament.png" width="260" alt="Parliament"><br>
+      <sub>Parliament · <code>geom_parliament</code></sub>
+    </td>
+  </tr>
+  <tr>
+    <td align="center" width="33%">
+      <img src="assets/gallery/wordcloud.png" width="260" alt="Word cloud"><br>
+      <sub>Word cloud · <code>geom_wordcloud</code></sub>
+    </td>
+    <td align="center" width="33%">
+      <img src="assets/gallery/variable_pie.png" width="260" alt="Variable-radius pie"><br>
+      <sub>Variable-radius pie · <code>geom_variable_pie</code></sub>
+    </td>
+    <td align="center" width="33%">
+      <img src="assets/gallery/tilemap.png" width="260" alt="Hex tile map"><br>
+      <sub>Hex tile map · <code>geom_tilemap</code></sub>
+    </td>
+  </tr>
+  <tr>
+    <td align="center" width="33%">
+      <img src="assets/gallery/windbarb.png" width="260" alt="Wind barbs"><br>
+      <sub>Wind barbs · <code>geom_windbarb</code></sub>
+    </td>
+    <td align="center" width="33%">
+      <img src="assets/gallery/radar.png" width="260" alt="Radar"><br>
+      <sub>Radar · <code>coord_radar</code></sub>
+    </td>
+    <td align="center" width="33%">
+      <img src="assets/gallery/gauge.png" width="260" alt="Gauge"><br>
+      <sub>Gauge · <code>CoordPolar::with_span</code></sub>
+    </td>
+  </tr>
+  <tr>
+    <td align="center" width="33%">
+      <img src="assets/gallery/calendar.png" width="260" alt="Calendar heatmap"><br>
+      <sub>Calendar heatmap · <code>geom_calendar</code></sub>
+    </td>
+  </tr>
+</table>
+
+| Family | Builders |
+|---|---|
+| Business / KPI | `geom_waterfall`, `geom_pareto`, `geom_bullet`, `geom_funnel`, `geom_pyramid`, `geom_variwide`, `geom_marimekko`, `geom_lollipop`, `geom_dumbbell` |
+| Time | `geom_stream` (stack offsets), `Interpolate` splines on line/area/ribbon, `geom_timeline`, `geom_xrange` (Gantt), `geom_flags` |
+| Flows & networks | `geom_sankey`, `geom_chord`, `geom_arcdiagram`, `geom_network`, `geom_flow` (`sf`) |
+| Hierarchies | `geom_treemap`, `geom_sunburst`, `geom_icicle`, `geom_tree` / org charts, `geom_dendrogram`, `geom_packed_bubble` |
+| Sets & units | `geom_venn`, `geom_waffle`, `geom_parliament`, `geom_wordcloud`, `geom_variable_pie` |
+| Finance | `geom_candlestick` (filled / hollow), `geom_ohlc`, `geom_hlc`, `geom_heikin_ashi`, `geom_renko`, `geom_point_figure`, `StatIndicator` (SMA, EMA, WMA, Bollinger, MACD, RSI, ATR, VWAP, stochastic, ZigZag) |
+| Maps & weather | `geom_sf`, `coord_sf`, `geom_tilemap` (+ `us_state_grid`), `geom_flow` (`sf`), `geom_windbarb` |
+| Radial | `coord_polar`, `coord_radar`, gauges via `CoordPolar::with_span` |
 
 ### Publication-ready (ggpubr-style)
 
