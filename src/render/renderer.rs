@@ -278,7 +278,11 @@ impl PlotRenderer {
         // 10. Draw caption
         if let Some(ref caption) = built.labels.caption {
             let (cx, anchor) = Self::hjust_pos(&theme.caption, &title_ref);
-            let caption_y = total_area.y + total_area.height - theme.caption.size * 0.5;
+            // Inside the layout's `caption_area`: the bottom of the
+            // canvas less `plot_margin.bottom` (#286).
+            let caption_y = total_area.y + total_area.height
+                - theme.plot_margin.bottom.max(0.0)
+                - theme.caption.size * 0.5;
             let family = if theme.caption.family.is_empty() {
                 None
             } else {
@@ -891,7 +895,11 @@ impl PlotRenderer {
         // Draw caption
         if let Some(ref caption) = built.labels.caption {
             let (cx, anchor) = Self::hjust_pos(&theme.caption, &title_ref);
-            let caption_y = total_area.y + total_area.height - theme.caption.size * 0.5;
+            // Inside the layout's `caption_area`: the bottom of the
+            // canvas less `plot_margin.bottom` (#286).
+            let caption_y = total_area.y + total_area.height
+                - theme.plot_margin.bottom.max(0.0)
+                - theme.caption.size * 0.5;
             let family = if theme.caption.family.is_empty() {
                 None
             } else {
