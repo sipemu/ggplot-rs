@@ -105,6 +105,9 @@ pub struct ScaleFillBinned {
     /// `None` (the default): unchanged, `breaks_for_layout` falls back to
     /// `breaks()`.
     count_reserve: Option<usize>,
+    /// `show_counts` — whether legend labels carry their `" (n)"`.
+    /// Default `true`.
+    show_counts: bool,
     name: String,
     corrected: bool,
 }
@@ -185,6 +188,7 @@ impl ScaleFillBinned {
             na_label: "no data".to_string(),
             na_key: NaKey::Auto,
             count_reserve: None,
+            show_counts: true,
             name: String::new(),
             corrected: edges_corrected || colors_corrected,
         }
@@ -212,6 +216,7 @@ impl ScaleFillBinned {
             na_label: "no data".to_string(),
             na_key: NaKey::Auto,
             count_reserve: None,
+            show_counts: true,
             name: String::new(),
             corrected,
         }
@@ -268,6 +273,15 @@ impl ScaleFillBinned {
     /// byte-identical to before this existed.
     pub fn count_reserve(mut self, max_count: usize) -> Self {
         self.count_reserve = Some(max_count);
+        self
+    }
+
+    /// Whether class (and "no data") legend labels carry their trained
+    /// count, `"10–50 (12)"`. `false` drops the `" (n)"` — e.g. on small
+    /// multiples, where one scale is trained over every panel and the
+    /// counts would sum features × panels. Default `true`.
+    pub fn show_counts(mut self, on: bool) -> Self {
+        self.show_counts = on;
         self
     }
 
@@ -331,6 +345,17 @@ impl ScaleFillBinned {
     /// the single value 150.
     fn class_label(&self, i: usize) -> String {
         let (lo, hi) = (self.breaks[i], self.breaks[i + 1]);
+        if !self.show_counts {
+            return if lo == hi {
+                format_value(&Value::Float(lo))
+            } else {
+                format!(
+                    "{}–{}",
+                    format_value(&Value::Float(lo)),
+                    format_value(&Value::Float(hi))
+                )
+            };
+        }
         if lo == hi {
             format!("{} ({})", format_value(&Value::Float(lo)), self.counts[i])
         } else {
@@ -345,6 +370,9 @@ impl ScaleFillBinned {
 
     /// `"{na_label} ({na_count})"`.
     fn na_label_with_count(&self) -> String {
+        if !self.show_counts {
+            return self.na_label.clone();
+        }
         format!("{} ({})", self.na_label, self.na_count)
     }
 
@@ -412,7 +440,7 @@ impl Scale for ScaleFillBinned {
     /// labels from [`breaks`](Scale::breaks) are untouched. `None` (the
     /// default): identical to `breaks()`.
     fn breaks_for_layout(&self) -> Vec<(f64, String)> {
-        match self.count_reserve {
+        match self.count_reserve.filter(|_| self.show_counts) {
             None => self.breaks(),
             Some(reserve) => {
                 let min_digits = reserve.to_string().len();

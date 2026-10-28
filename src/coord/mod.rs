@@ -26,6 +26,20 @@ pub trait Coord: Send + Sync {
     /// Transform normalized (0..1, 0..1) coordinates to pixel coordinates.
     fn transform(&self, point: (f64, f64), plot_area: &Rect) -> (f64, f64);
 
+    /// The panel aspect (height / width) this coord letterboxes to, if any.
+    /// `facet_wrap` sizes its panels to it (so every map panel is filled
+    /// instead of letterboxed in an equal, arbitrary cell). Default `None`.
+    fn fixed_aspect(&self) -> Option<f64> {
+        None
+    }
+
+    /// The rect inside `plot_area` the normalized data window maps onto,
+    /// for a coord that letterboxes (`coord_sf`); `None` when it is the
+    /// whole plot area or not a rectangle. Default `None`.
+    fn data_rect(&self, _plot_area: &Rect) -> Option<Rect> {
+        None
+    }
+
     /// Whether to draw grid lines.
     fn gridlines(&self) -> bool {
         true

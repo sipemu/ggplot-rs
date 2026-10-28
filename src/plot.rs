@@ -887,6 +887,16 @@ impl GGPlot {
         self.add_geom_with(geom)
     }
 
+    /// A north arrow in a panel corner (feature `sf`) — see
+    /// [`GeomNorthArrow`](crate::geom::annotation_scale::GeomNorthArrow).
+    #[cfg(feature = "sf")]
+    pub fn annotation_north_arrow_with(
+        self,
+        geom: crate::geom::annotation_scale::GeomNorthArrow,
+    ) -> Self {
+        self.add_geom_with(geom)
+    }
+
     /// A small, muted attribution text in a panel corner (feature `sf`) —
     /// e.g. `"© Natural Earth"`.
     #[cfg(feature = "sf")]
@@ -2564,7 +2574,11 @@ impl GGPlot {
             // `root_data_attrs`'s output, but it is written whenever
             // `svg_root_data` is on — reserve it too.
             let mut reserved = attrs;
-            reserved.push(("data-plot".to_string(), String::new()));
+            // `data-viewport`/`data-panels` likewise come from the backend
+            // (a letterboxing coord / fixed-aspect facets).
+            for name in ["data-plot", "data-viewport", "data-panels"] {
+                reserved.push((name.to_string(), String::new()));
+            }
             reserved
         } else {
             backend.without_plot_attr();

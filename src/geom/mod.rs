@@ -99,6 +99,14 @@ pub trait Geom: Send + Sync {
     /// Non-mapped visual defaults.
     fn default_params(&self) -> GeomParams;
 
+    /// A figure-level layer on a faceted plot: the height of the band it
+    /// needs under the whole panel grid at `width`, when it draws once
+    /// there instead of in every panel (e.g. `GeomAttribution::figure`).
+    /// Default `None` (drawn per panel).
+    fn figure_band_height(&self, _width: f64, _theme: &Theme) -> Option<f64> {
+        None
+    }
+
     /// Name for debug/display.
     fn name(&self) -> &str;
 

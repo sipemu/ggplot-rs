@@ -28,6 +28,9 @@ impl PlotRenderer {
         // any corner-furniture geom (annotation_scale/attribution/
         // bivariate_legend) in the layer loop gets a chance to draw.
         backend.clear_corner_claims();
+        if let Some(r) = built.coord.data_rect(&plot_area) {
+            backend.set_viewport(&r);
+        }
         if let Some(rect) = legend::inside_legend_box(
             &built.scales,
             theme,
@@ -414,11 +417,74 @@ impl PlotRenderer {
             Facet::Grid { .. } => built.panels.iter().map(|p| p.col).max().unwrap_or(0) + 1,
             Facet::None => 1,
         };
-        let nrow = built.panels.len().div_ceil(ncol);
+        let mut nrow = built.panels.len().div_ceil(ncol);
 
         let strip_height = theme.strip_text.size + 8.0;
         let gap_x = theme.get_panel_spacing_x();
         let gap_y = theme.get_panel_spacing_y();
+
+        // Figure-level layers (`GeomAttribution::figure`): one band under
+        // the whole grid, which shrinks by its height.
+        let is_figure = |li: usize| {
+            built.layers[li]
+                .geom
+                .figure_band_height(plot_area.width, theme)
+                .is_some()
+        };
+        let band_h: f64 = built
+            .layers
+            .iter()
+            .filter_map(|l| l.geom.figure_band_height(plot_area.width, theme))
+            .sum::<f64>()
+            .min(plot_area.height * 0.5);
+        let band_rect = crate::render::Rect {
+            x: plot_area.x,
+            y: plot_area.y + plot_area.height - band_h,
+            width: plot_area.width,
+            height: band_h,
+        };
+        let plot_area = crate::render::Rect {
+            height: plot_area.height - band_h,
+            ..plot_area
+        };
+
+        // `facet_wrap` under a fixed-aspect coord (`coord_sf` maps): equal
+        // panels shaped like the data, in the column count that makes them
+        // largest (or the given `ncol`), centred in the plot area — instead
+        // of `sqrt(n)` arbitrary cells each letterboxing its map.
+        let fixed_grid = match (&built.facet, built.coord.fixed_aspect()) {
+            (Facet::Wrap { ncol: want, .. }, Some(aspect)) => Some(crate::facet::wrap::fit_grid(
+                built.panels.len(),
+                *want,
+                aspect,
+                plot_area.width,
+                plot_area.height,
+                strip_height,
+                gap_x,
+                gap_y,
+            )),
+            _ => None,
+        };
+        let ncol = if let Some(g) = fixed_grid {
+            nrow = g.nrow;
+            g.ncol
+        } else {
+            ncol
+        };
+        // Each panel's (row, col): from its index under the fixed grid (the
+        // build-time row/col assumed the `sqrt(n)` default), else as built.
+        let cell: Vec<(usize, usize)> = built
+            .panels
+            .iter()
+            .enumerate()
+            .map(|(i, p)| {
+                if fixed_grid.is_some() {
+                    (i / ncol, i % ncol)
+                } else {
+                    (p.row, p.col)
+                }
+            })
+            .collect();
 
         // Proportional panel sizing (R's `space =`): free_x sizes columns to
         // their data x-range, free_y sizes rows to their y-range. Fixed = equal.
@@ -441,7 +507,9 @@ impl PlotRenderer {
             (lo <= hi).then_some(hi - lo)
         };
         let avail_w = plot_area.width - gap_x * (ncol as f64 - 1.0);
-        let col_widths: Vec<f64> = if space.free_x() && ncol > 0 {
+        let col_widths: Vec<f64> = if let Some(g) = fixed_grid {
+            vec![g.panel_w; ncol]
+        } else if space.free_x() && ncol > 0 {
             let mut ranges = vec![0.0f64; ncol];
             for (pi, panel) in built.panels.iter().enumerate() {
                 if let Some(r) = extent(pi, "x") {
@@ -459,7 +527,12 @@ impl PlotRenderer {
         };
         let mut col_x = vec![plot_area.x; ncol.max(1)];
         {
-            let mut acc = plot_area.x;
+            let used_w: f64 = col_widths.iter().sum::<f64>() + gap_x * (ncol as f64 - 1.0);
+            let mut acc = if fixed_grid.is_some() {
+                plot_area.x + ((plot_area.width - used_w) / 2.0).max(0.0)
+            } else {
+                plot_area.x
+            };
             for c in 0..ncol {
                 col_x[c] = acc;
                 acc += col_widths[c] + gap_x;
@@ -467,7 +540,9 @@ impl PlotRenderer {
         }
 
         let avail_h = plot_area.height - gap_y * (nrow as f64 - 1.0) - strip_height * nrow as f64;
-        let row_heights: Vec<f64> = if space.free_y() && nrow > 0 {
+        let row_heights: Vec<f64> = if let Some(g) = fixed_grid {
+            vec![g.panel_h; nrow]
+        } else if space.free_y() && nrow > 0 {
             let mut ranges = vec![0.0f64; nrow];
             for (pi, panel) in built.panels.iter().enumerate() {
                 if let Some(r) = extent(pi, "y") {
@@ -485,7 +560,13 @@ impl PlotRenderer {
         };
         let mut row_y = vec![plot_area.y; nrow.max(1)];
         {
-            let mut acc = plot_area.y;
+            let used_h: f64 =
+                row_heights.iter().sum::<f64>() + (strip_height + gap_y) * nrow as f64 - gap_y;
+            let mut acc = if fixed_grid.is_some() {
+                plot_area.y + ((plot_area.height - used_h) / 2.0).max(0.0)
+            } else {
+                plot_area.y
+            };
             for r in 0..nrow {
                 row_y[r] = acc;
                 acc += row_heights[r] + strip_height + gap_y;
@@ -493,10 +574,11 @@ impl PlotRenderer {
         }
 
         for (pi, panel) in built.panels.iter().enumerate() {
-            let panel_width = col_widths[panel.col];
-            let panel_height = row_heights[panel.row];
-            let px = col_x[panel.col];
-            let py = row_y[panel.row];
+            let (prow, pcol) = cell[pi];
+            let panel_width = col_widths[pcol];
+            let panel_height = row_heights[prow];
+            let px = col_x[pcol];
+            let py = row_y[prow];
 
             let panel_rect = crate::render::Rect {
                 x: px,
@@ -617,7 +699,7 @@ impl PlotRenderer {
                 }
 
                 // Bottom row gets x axis
-                if panel.row == nrow - 1 || pi + ncol >= built.panels.len() {
+                if prow == nrow - 1 || pi + ncol >= built.panels.len() {
                     axis::draw_x_axis(
                         xs,
                         built.coord.as_ref(),
@@ -629,15 +711,24 @@ impl PlotRenderer {
                 }
 
                 // Left column gets y axis
-                if panel.col == 0 {
+                if pcol == 0 {
                     axis::draw_y_axis(ys, built.coord.as_ref(), theme, &panel_rect, backend)?;
                 }
             }
 
-            // Draw layers for this panel
+            // Draw layers for this panel — under a fixed-aspect wrap (maps)
+            // in their own clipped group, so one panel's features never
+            // spill into the next.
+            if fixed_grid.is_some() {
+                let data = built
+                    .coord
+                    .data_rect(&panel_rect)
+                    .unwrap_or_else(|| panel_rect.clone());
+                backend.begin_panel(pi, &panel.label, &panel_rect, &data);
+            }
             if pi < built.panels_data.len() {
                 for (li, layer_data) in built.panels_data[pi].iter().enumerate() {
-                    if li < built.layers.len() && layer_data.nrows() > 0 {
+                    if li < built.layers.len() && layer_data.nrows() > 0 && !is_figure(li) {
                         let mut panel_backend = PanelBackendAdapter {
                             inner: backend,
                             panel_rect: panel_rect.clone(),
@@ -655,6 +746,38 @@ impl PlotRenderer {
                         drawn?;
                     }
                 }
+            }
+            if fixed_grid.is_some() {
+                backend.end_panel();
+            }
+        }
+
+        // Figure-level layers, once, in the band under the grid.
+        if band_h > 0.0 {
+            backend.clear_corner_claims();
+            for li in (0..built.layers.len()).filter(|&li| is_figure(li)) {
+                let empty = crate::data::DataFrame::new();
+                let data = built
+                    .panels_data
+                    .iter()
+                    .filter_map(|p| p.get(li))
+                    .find(|d| d.nrows() > 0)
+                    .unwrap_or(&empty);
+                let mut band_backend = PanelBackendAdapter {
+                    inner: backend,
+                    panel_rect: band_rect.clone(),
+                };
+                let geom = &built.layers[li].geom;
+                band_backend.set_mark_geom(Some(geom.name()));
+                let drawn = geom.draw(
+                    data,
+                    built.coord.as_ref(),
+                    &built.scales,
+                    theme,
+                    &mut band_backend,
+                );
+                band_backend.set_mark_geom(None);
+                drawn?;
             }
         }
 

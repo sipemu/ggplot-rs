@@ -667,6 +667,31 @@ pub trait DrawBackend {
     /// the above.
     fn clear_corner_claims(&mut self) {}
 
+    /// Start one panel of a fixed-aspect `facet_wrap` (e.g. `coord_sf` small
+    /// multiples): marks until [`end_panel`](Self::end_panel) belong to
+    /// panel `index` (strip label `label`), clipped to `clip`; `data` is the
+    /// rect the coord maps the data window onto. The SVG backend wraps them
+    /// in a clipped `<g data-facet-panel>` and lists every panel on the root
+    /// as `data-panels`. Default: no-op.
+    fn begin_panel(
+        &mut self,
+        _index: usize,
+        _label: &str,
+        _clip: &crate::render::Rect,
+        _data: &crate::render::Rect,
+    ) {
+    }
+
+    /// End the panel started by [`begin_panel`](Self::begin_panel).
+    /// Default: no-op.
+    fn end_panel(&mut self) {}
+
+    /// The rect a single-panel plot's coord maps the data window onto, when
+    /// it differs from the plot area (a letterboxing coord such as
+    /// `coord_sf`). The SVG backend writes it as the root `data-viewport`.
+    /// Default: no-op.
+    fn set_viewport(&mut self, _rect: &crate::render::Rect) {}
+
     /// Attach a tooltip to subsequently-drawn marks until cleared with `None`.
     /// Backends that produce interactive output (SVG) emit it as a `<title>`
     /// for a native hover tooltip; others ignore it. Default: no-op.
