@@ -71,6 +71,7 @@ pub mod violin;
 pub mod waffle;
 pub mod waterfall;
 pub mod wordcloud;
+pub mod xrange;
 
 use std::collections::HashMap;
 
