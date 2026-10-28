@@ -218,6 +218,8 @@ pub struct PlotGrid {
     tag_suffix: String,
     collect_legends: bool,
     legend_position: GridLegendPosition,
+    /// [`PlotGrid::legend_bottom_when_narrow`]'s share, if set (#363).
+    legend_bottom_share: Option<f64>,
     spacing: f64,
     theme: Theme,
     axis_collect: AxisCollect,
@@ -249,6 +251,7 @@ impl Default for PlotGrid {
             tag_suffix: String::new(),
             collect_legends: false,
             legend_position: GridLegendPosition::Right,
+            legend_bottom_share: None,
             spacing: 0.0,
             theme: Theme::default(),
             axis_collect: AxisCollect::Keep,
@@ -360,6 +363,18 @@ impl PlotGrid {
         self
     }
 
+    /// Move a [`Right`](GridLegendPosition::Right) collected-legend column
+    /// to a row below the grid when it would take more than `share` (0..1)
+    /// of the grid's width at render time — the grid counterpart of
+    /// [`GGPlot::legend_bottom_when_narrow`] (#363). The column is roughly
+    /// fixed in size, so on a phone-width render it squeezes the rightmost
+    /// cells; a render wide enough keeps `Right`, unchanged. Off by
+    /// default; no effect on [`Bottom`](GridLegendPosition::Bottom).
+    pub fn legend_bottom_when_narrow(mut self, share: f64) -> Self {
+        self.legend_bottom_share = Some(share);
+        self
+    }
+
     /// Align this grid's own direct cells' plot areas and/or x scale,
     /// one column at a time — see [`AxisCollect`] (sipemu/ggplot-rs#175).
     /// Default [`AxisCollect::Keep`] (no change, byte-identical output).
@@ -450,7 +465,13 @@ impl PlotGrid {
         let mut theme = self.theme.clone();
         theme.resolve_inheritance();
         let collect = self.collect_legends;
-        let legend_pos = self.legend_position;
+        let mut legend_pos = self.legend_position;
+        // #363: also capture each legend's Bottom layout, to switch to it
+        // once the page width is known.
+        let alt_pos = self
+            .legend_bottom_share
+            .filter(|_| legend_pos == GridLegendPosition::Right)
+            .map(|share| (share, GridLegendPosition::Bottom));
         let root_attrs = self.root_attrs.clone();
         let svg_warnings_attr = self.svg_warnings_attr;
 
@@ -464,13 +485,22 @@ impl PlotGrid {
             next_tag: 0,
             next_index: 0,
             collect: collect.then_some(legend_pos),
+            collect_alt: alt_pos.map(|(_, p)| p),
             legends: Vec::new(),
             page_w: w as f64,
             page_h: h as f64,
             legend_warnings: Vec::new(),
         };
         let prepared = prepare_grid(self, &mut ctx)?;
-        let legends = ctx.legends;
+        let (mut legends, alt_legends): (Vec<Legend>, Vec<Option<Legend>>) =
+            ctx.legends.into_iter().unzip();
+        if let Some((share, alt)) = alt_pos {
+            let strip_w = legends.iter().map(|l| l.w).fold(0.0, f64::max) + 2.0 * LEGEND_PAD;
+            if !legends.is_empty() && strip_w > share * w as f64 {
+                legend_pos = alt;
+                legends = alt_legends.into_iter().flatten().collect();
+            }
+        }
         let legend_warnings = ctx.legend_warnings;
 
         // Phase 2: page layout.
@@ -508,7 +538,7 @@ impl PlotGrid {
         let mut body = full;
         if !legends.is_empty() {
             let gap = theme.legend_spacing.max(0.0) * 2.0;
-            let pad = 8.0;
+            let pad = LEGEND_PAD;
             match legend_pos {
                 GridLegendPosition::Right => {
                     let strip_w = legends.iter().map(|l| l.w).fold(0.0, f64::max) + 2.0 * pad;
@@ -562,6 +592,9 @@ impl PlotGrid {
     }
 }
 
+/// Padding around the collected-legend strip.
+const LEGEND_PAD: f64 = 8.0;
+
 /// A collected legend: rendered markup (also its identity) and extent.
 struct Legend {
     body: String,
@@ -586,7 +619,11 @@ struct PrepCtx {
     next_tag: usize,
     next_index: usize,
     collect: Option<GridLegendPosition>,
-    legends: Vec<Legend>,
+    /// A second position to also capture each legend for (#363's
+    /// narrow-page fallback), chosen in `render_page`.
+    collect_alt: Option<GridLegendPosition>,
+    /// Collected legends, each with its `collect_alt` layout.
+    legends: Vec<(Legend, Option<Legend>)>,
     /// The grid's overall page size (sipemu/ggplot-rs#155): a collected
     /// legend's available width/height for its own B3-2 wrap/grid plan,
     /// since a `PlotGrid`'s legend strip has no other natural bound —
@@ -737,8 +774,15 @@ fn prepare_plot(mut plot: GGPlot, ctx: &mut PrepCtx) -> Result<PreparedPlot, GGE
         )
         .map_err(GGError::Render)?
         {
-            if !ctx.legends.iter().any(|o| o.body == l.body) {
-                ctx.legends.push(l);
+            if !ctx.legends.iter().any(|(o, _)| o.body == l.body) {
+                let alt = match ctx.collect_alt {
+                    Some(alt) => {
+                        capture_legend(&built, alt, ctx.page_w, ctx.page_h, &mut Vec::new())
+                            .map_err(GGError::Render)?
+                    }
+                    None => None,
+                };
+                ctx.legends.push((l, alt));
             }
         }
     }
@@ -1415,6 +1459,7 @@ impl PlotGrid {
             && self.caption.is_none()
             && self.tags.is_none()
             && !self.collect_legends
+            && self.legend_bottom_share.is_none()
             && self.axis_collect == AxisCollect::Keep
     }
 }
