@@ -33,6 +33,7 @@ pub use crate::geom::jitter::GeomJitter;
 pub use crate::geom::line::GeomLine;
 pub use crate::geom::linerange::GeomLinerange;
 pub use crate::geom::pareto::GeomPareto;
+pub use crate::geom::partition::GeomPartition;
 pub use crate::geom::path::GeomPath;
 pub use crate::geom::point::{GeomPoint, PointVisibility};
 pub use crate::geom::pointrange::GeomPointrange;

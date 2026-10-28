@@ -82,3 +82,22 @@ fn build_exposes_layout_columns() {
     assert_eq!(parts.iter().filter(|p| p.key_str() == "link").count(), 5);
     assert!(d.has_column("fill"));
 }
+
+#[test]
+fn default_fill_is_discrete_per_node() {
+    // after_stat(fill = node) must get a discrete scale (regression: the
+    // scale used to be chosen before the stat ran → continuous, one colour).
+    let svg = GGPlot::new(flows())
+        .aes(aes())
+        .geom_sankey()
+        .render_svg_native_with_size(600, 400)
+        .unwrap();
+    let fills: std::collections::BTreeSet<&str> = svg
+        .match_indices("<rect")
+        .filter_map(|(i, _)| {
+            let tag = &svg[i..i + svg[i..].find('>').unwrap()];
+            tag.find("fill=\"#").map(|f| &tag[f + 6..f + 13])
+        })
+        .collect();
+    assert!(fills.len() >= 6, "{fills:?}");
+}

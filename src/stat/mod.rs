@@ -26,6 +26,7 @@ pub mod identity;
 pub mod loess;
 pub mod marching_squares;
 pub mod pareto;
+pub mod partition;
 pub mod qq;
 #[cfg(feature = "regression")]
 pub mod quantile;

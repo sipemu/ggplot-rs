@@ -843,9 +843,14 @@ impl PlotBuilder {
             return Err(GGError::ValidationError(msg));
         }
 
-        // Step 4: Ensure scales exist for each mapped aesthetic
+        // Step 4: Ensure scales exist for each mapped aesthetic. An
+        // `after_stat` mapping's column only exists after the stat, so its
+        // scale is chosen from the stat output (Step 6a below) — choosing it
+        // here would see no values and default a discrete fill to continuous.
         for m in &merged_mapping.mappings {
-            scale_set.ensure_scale(&m.aesthetic, &working_data);
+            if m.stage != crate::aes::MappingStage::AfterStat {
+                scale_set.ensure_scale(&m.aesthetic, &working_data);
+            }
         }
 
         // Step 5: Scale transformation (e.g., log10 before stats). A position
@@ -961,7 +966,13 @@ impl PlotBuilder {
         };
 
         // Step 6a: Apply after_stat() mappings (rename stat-computed columns)
+        // and give each one a scale detected from the values it now holds.
         apply_after_stat(&mut working_data, &merged_mapping, warnings);
+        for m in &merged_mapping.mappings {
+            if m.stage == crate::aes::MappingStage::AfterStat {
+                scale_set.ensure_scale(&m.aesthetic, &working_data);
+            }
+        }
 
         // Stat output can contain NaN (e.g. a fit on degenerate input): drop
         // those rows too, so nothing non-finite reaches a geom. `raw_unmapped`

@@ -86,6 +86,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     chord()?;
     arcdiagram()?;
     treemap()?;
+    sunburst()?;
     radar()?;
     gauge()?;
     calendar()?;
@@ -881,6 +882,28 @@ fn treemap() -> Result<(), Box<dyn std::error::Error>> {
         .theme_minimal()
         .legend_position(LegendPosition::None)
         .save_with_size(&out("treemap"), W, H)?;
+    Ok(())
+}
+
+/// A three-level hierarchy as a sunburst (`geom_sunburst`).
+fn sunburst() -> Result<(), Box<dyn std::error::Error>> {
+    let df = df! {
+        "dept" => ["Engineering", "Engineering", "Engineering", "Engineering", "Engineering",
+                   "Sales", "Sales", "Sales", "Operations", "Operations", "Operations", "People"],
+        "team" => ["Platform", "Platform", "Product", "Product", "Data",
+                   "EMEA", "Americas", "APAC", "Logistics", "Facilities", "Logistics", "Recruiting"],
+        "role" => ["Backend", "SRE", "Frontend", "Mobile", "Analytics",
+                   "AE", "AE", "AE", "Planning", "Office", "Fleet", "Talent"],
+        "fte" => [42.0, 14.0, 30.0, 12.0, 18.0, 25.0, 31.0, 12.0, 16.0, 8.0, 10.0, 9.0],
+    }?;
+    GGPlot::new(df)
+        .aes(Aes::new().weight("fte"))
+        .geom_sunburst(["dept", "team", "role"])
+        .scale_fill_brewer(PaletteName::Dark2)
+        .title("Sunburst")
+        .subtitle("Headcount by department, team and role")
+        .theme_void()
+        .save_with_size(&out("sunburst"), W, H)?;
     Ok(())
 }
 
