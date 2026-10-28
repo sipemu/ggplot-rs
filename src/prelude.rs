@@ -35,6 +35,7 @@ pub use crate::geom::jitter::GeomJitter;
 pub use crate::geom::line::GeomLine;
 pub use crate::geom::linerange::GeomLinerange;
 pub use crate::geom::lollipop::{GeomDumbbell, GeomLollipop};
+pub use crate::geom::network::GeomNetwork;
 pub use crate::geom::pack::GeomPackedBubble;
 pub use crate::geom::pareto::GeomPareto;
 pub use crate::geom::partition::GeomPartition;
@@ -121,6 +122,7 @@ pub use crate::stat::function::StatFunction;
 pub use crate::stat::funnel::FunnelShape;
 pub use crate::stat::identity::StatIdentity;
 pub use crate::stat::loess::StatLoess;
+pub use crate::stat::network::NetworkLayout;
 #[cfg(feature = "regression")]
 pub use crate::stat::quantile::StatQuantile;
 pub use crate::stat::smooth::SmoothMethod;

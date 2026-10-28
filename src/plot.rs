@@ -1413,6 +1413,37 @@ impl GGPlot {
         plot
     }
 
+    /// Network graph from an edge list: map `from`, `to` and optionally
+    /// `weight`. Force-directed layout (seeded, deterministic), edges with
+    /// width ∝ weight, nodes sized by degree and labelled. Square panel,
+    /// axes and grid hidden. See [`GeomNetwork`](crate::geom::network::GeomNetwork)
+    /// for directed edges, other layouts and colouring by component.
+    pub fn geom_network(self) -> Self {
+        self.add_network(crate::geom::network::GeomNetwork::default(), false)
+    }
+
+    /// [`geom_network`](Self::geom_network) with explicit settings.
+    pub fn geom_network_with(self, geom: crate::geom::network::GeomNetwork) -> Self {
+        self.add_network(geom, true)
+    }
+
+    fn add_network(self, geom: crate::geom::network::GeomNetwork, explicit: bool) -> Self {
+        let by_component = geom.color_components;
+        let mut plot = if explicit {
+            self.add_geom_with(geom)
+        } else {
+            self.add_geom(geom)
+        };
+        plot.hide_position_guides = true;
+        plot.default_aspect_ratio = Some(1.0);
+        if by_component {
+            plot = plot
+                .layer_aes(Aes::new().after_stat_fill("component"))
+                .show_legend(false);
+        }
+        plot
+    }
+
     /// Candlestick chart: map `x` and `open`/`high`/`low`/`close`
     /// (`Aes::new().x("date").open("o").high("h").low("l").close("c")`).
     pub fn geom_candlestick(self) -> Self {
