@@ -63,6 +63,7 @@ pub use crate::geom::tilemap::{us_state_grid, GeomTilemap, TileShape};
 pub use crate::geom::timeline::GeomTimeline;
 pub use crate::geom::tree::{GeomTree, TreeLink, TreeNode};
 pub use crate::geom::treemap::GeomTreemap;
+pub use crate::geom::variablepie::GeomVariablePie;
 pub use crate::geom::venn::GeomVenn;
 pub use crate::geom::violin::GeomViolin;
 pub use crate::geom::waffle::GeomWaffle;

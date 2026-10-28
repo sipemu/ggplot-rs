@@ -67,6 +67,7 @@ pub mod tilemap;
 pub mod timeline;
 pub mod tree;
 pub mod treemap;
+pub mod variablepie;
 pub mod venn;
 pub mod violin;
 pub mod waffle;
