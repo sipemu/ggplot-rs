@@ -105,6 +105,59 @@ fn svg_tiles_line_up_with_the_projected_points() {
     assert!(found, "Berlin's tile drawn");
 }
 
+fn named(z: u32, x: u32, y: u32) -> Option<Vec<u8>> {
+    Some(format!("{z}/{x}/{y}").into_bytes())
+}
+
+#[test]
+fn facets_decorative_layers_and_options_draw_tiles() {
+    use ggplot_rs::geom::map_tile::GeomMapTile;
+    // Per facet panel (through the panel adapter).
+    let mut data = cities();
+    data.push((
+        "g".into(),
+        ["a", "b", "a"]
+            .iter()
+            .map(|s| Value::Str(s.to_string()))
+            .collect(),
+    ));
+    let svg = GGPlot::new(data)
+        .geom_sf_with(GeomSf::default().project(SfProjection::Mercator))
+        .annotation_map_tile(TileSource::xyz(""), named)
+        .facet_wrap("g", None)
+        .render_svg_native_with_size(600, 300)
+        .unwrap();
+    assert!(svg.matches("<image").count() >= 2, "tiles in both panels");
+
+    // A decorative tile layer (through `MuteMarks`), half transparent, with
+    // no attribution, and an earlier layer's `layer_svg_attr` kept on it.
+    let svg = GGPlot::new(cities())
+        .geom_sf_with(GeomSf::default().project(SfProjection::Mercator))
+        .layer_svg_attr("data-role", "cities")
+        .annotation_map_tile_with(GeomMapTile::new(TileSource::xyz(""), named).alpha(0.5))
+        .coord_sf()
+        .render_svg_native_with_size(400, 300)
+        .unwrap();
+    assert!(svg.contains("opacity=\"0.500\""));
+    assert!(
+        !svg.contains("<text") || !svg.contains("©"),
+        "no attribution"
+    );
+    let circle = &svg[svg.find("<circle").unwrap()..];
+    assert!(circle[..circle.find('>').unwrap()].contains("data-role=\"cities\""));
+    let image = &svg[svg.find("<image").unwrap()..];
+    assert!(!image[..image.find('>').unwrap()].contains("data-role"));
+
+    let svg = GGPlot::new(cities())
+        .annotation_map_tile(TileSource::xyz(""), named)
+        .decorative()
+        .geom_sf_with(GeomSf::default().project(SfProjection::Mercator))
+        .coord_sf()
+        .render_svg_native_with_size(400, 300)
+        .unwrap();
+    assert!(svg.contains("<image"));
+}
+
 #[test]
 fn missing_tiles_are_skipped() {
     let svg = map(|_, _, _| None)

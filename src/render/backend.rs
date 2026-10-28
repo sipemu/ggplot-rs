@@ -949,6 +949,14 @@ mod tests {
     }
 
     #[test]
+    fn default_draw_image_draws_nothing() {
+        let mut b = RecordingBackend::default();
+        let r = b.plot_area();
+        b.draw_image(b"png", &r, &r, 1.0).unwrap();
+        assert!(b.rects.borrow().is_empty() && b.polygons.borrow().is_empty());
+    }
+
+    #[test]
     fn default_draw_quadratic_drops_non_finite() {
         let mut b = RecordingBackend::default();
         b.draw_quadratic(

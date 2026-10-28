@@ -319,4 +319,41 @@ mod tests {
         assert!(geom.tile(1, 0, 0).is_some());
         assert_eq!(*calls.lock().unwrap(), 1);
     }
+
+    #[test]
+    fn builder_knobs_and_debug() {
+        let source = TileSource::xyz("t").attribution("© x").zoom_range(9, 3);
+        assert_eq!((source.min_zoom, source.max_zoom), (3, 3));
+        let geom = GeomMapTile::new(source, |_, _, _| None)
+            .detail(2.0)
+            .alpha(0.5);
+        assert_eq!((geom.detail, geom.alpha), (2.0, 0.5));
+        assert!(format!("{geom:?}").contains("GeomMapTile"));
+        assert_eq!(geom.name(), "map_tile");
+        assert!(!geom.inherit_aes());
+        assert!(geom.required_aes().is_empty());
+        // Zoom is clamped to the source's range.
+        assert_eq!(geom.pick_zoom((2.0 * PI, 2.0 * PI), (256.0, 256.0)), 3);
+    }
+
+    #[test]
+    fn nothing_is_drawn_without_trained_position_scales() {
+        let geom = GeomMapTile::new(TileSource::xyz(""), |_, _, _| Some(vec![1]));
+        let area = Rect {
+            x: 0.0,
+            y: 0.0,
+            width: 100.0,
+            height: 100.0,
+        };
+        let mut svg = crate::render::svg_backend::SvgBackend::new(100, 100, area);
+        geom.draw(
+            &DataFrame::new(),
+            &crate::coord::cartesian::CoordCartesian::default(),
+            &ScaleSet::new(),
+            &Theme::default(),
+            &mut svg,
+        )
+        .unwrap();
+        assert!(!svg.body().contains("<image"));
+    }
 }
