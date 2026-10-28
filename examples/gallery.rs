@@ -107,6 +107,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     heikin_ashi()?;
     renko()?;
     indicators()?;
+    flags()?;
     radar()?;
     gauge()?;
     calendar()?;
@@ -1581,6 +1582,54 @@ fn indicators() -> Result<(), Box<dyn std::error::Error>> {
         .ylab("Price")
         .theme_minimal()
         .save_with_size(&out("indicators"), W, H)?;
+    Ok(())
+}
+
+/// A price line with event flags pinned to it (`geom_flags`).
+fn flags() -> Result<(), Box<dyn std::error::Error>> {
+    let mut price = 50.0f64;
+    let day: Vec<Value> = (0..120).map(|d| Value::Float(d as f64)).collect();
+    let close: Vec<Value> = (0..120)
+        .map(|i| {
+            price += 0.6 * (i as f64 * 0.17).sin() + 0.4 * (i as f64 * 0.9).cos() + 0.03;
+            Value::Float(price)
+        })
+        .collect();
+    let events = vec![
+        (
+            "day".to_string(),
+            [14.0, 40.0, 40.0, 77.0, 103.0]
+                .iter()
+                .map(|&d| Value::Float(d))
+                .collect::<Vec<_>>(),
+        ),
+        (
+            "what".to_string(),
+            ["Q1 results", "Split", "Dividend", "New CEO", "Q2 results"]
+                .iter()
+                .map(|s| Value::Str(s.to_string()))
+                .collect(),
+        ),
+    ];
+    GGPlot::new(vec![
+        ("day".to_string(), day.clone()),
+        ("close".to_string(), close.clone()),
+    ])
+    .aes(Aes::new().x("day").y("close"))
+    .geom_line_with(GeomLine {
+        color: (31, 119, 180),
+        width: 1.6,
+        ..Default::default()
+    })
+    .geom_flags_with(GeomFlags::default().on_series(&day, &close))
+    .layer_data(events)
+    .layer_aes(Aes::new().x("day").label("what"))
+    .title("Event flags")
+    .subtitle("Corporate events pinned to the price line; same-day flags stack")
+    .xlab("Day")
+    .ylab("Price")
+    .theme_minimal()
+    .save_with_size(&out("flags"), W, H)?;
     Ok(())
 }
 

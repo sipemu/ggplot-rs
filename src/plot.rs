@@ -1703,6 +1703,18 @@ impl GGPlot {
         .xlab("Column")
     }
 
+    /// Event flags: map `x` and `label` (usually as a layer with its own
+    /// `layer_data`); flags stand on the x axis, or on a series with
+    /// [`GeomFlags::on_series`](crate::geom::flags::GeomFlags::on_series).
+    /// Flags at the same x stack.
+    pub fn geom_flags(self) -> Self {
+        self.add_geom(crate::geom::flags::GeomFlags::default())
+    }
+
+    pub fn geom_flags_with(self, geom: crate::geom::flags::GeomFlags) -> Self {
+        self.add_geom_with(geom)
+    }
+
     /// Candlestick chart: map `x` and `open`/`high`/`low`/`close`
     /// (`Aes::new().x("date").open("o").high("h").low("l").close("c")`).
     pub fn geom_candlestick(self) -> Self {

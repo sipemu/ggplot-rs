@@ -26,6 +26,7 @@ pub mod density2d;
 pub mod dotplot;
 pub mod errorbar;
 pub mod errorbarh;
+pub mod flags;
 pub mod freqpoly;
 pub mod funnel;
 pub mod hex;
