@@ -101,6 +101,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     marimekko()?;
     timeline()?;
     gantt()?;
+    tilemap()?;
     radar()?;
     gauge()?;
     calendar()?;
@@ -1382,6 +1383,35 @@ fn gantt() -> Result<(), Box<dyn std::error::Error>> {
         .ylab("")
         .theme_minimal()
         .save_with_size(&out("gantt"), W, H)?;
+    Ok(())
+}
+
+/// US states as a hex tile map, filled by a (synthetic) value (`geom_tilemap`).
+fn tilemap() -> Result<(), Box<dyn std::error::Error>> {
+    let grid = us_state_grid();
+    let value: Vec<f64> = grid
+        .iter()
+        .map(|(abbr, c, r)| {
+            let h = abbr
+                .bytes()
+                .fold(7u32, |a, b| a.wrapping_mul(31).wrapping_add(b as u32));
+            20.0 + (*c as f64) * 2.5 + (*r as f64) * 3.0 + (h % 17) as f64
+        })
+        .collect();
+    let df = df! {
+        "state" => grid.iter().map(|g| g.0).collect::<Vec<_>>(),
+        "col" => grid.iter().map(|g| g.1 as f64).collect::<Vec<_>>(),
+        "row" => grid.iter().map(|g| g.2 as f64).collect::<Vec<_>>(),
+        "value" => value,
+    }?;
+    GGPlot::new(df)
+        .aes(Aes::new().x("col").y("row").fill("value").label("state"))
+        .geom_tilemap(TileShape::Hexagon)
+        .scale_fill_viridis_c()
+        .title("Tile map")
+        .subtitle("US states as equal-size hexagons (synthetic values)")
+        .theme_void()
+        .save_with_size(&out("tilemap"), W, H)?;
     Ok(())
 }
 
