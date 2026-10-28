@@ -42,6 +42,7 @@ pub mod refline;
 pub mod repel;
 pub mod ribbon;
 pub mod rug;
+pub mod sankey;
 pub mod segment;
 #[cfg(feature = "sf")]
 pub mod sf;

@@ -87,6 +87,11 @@ pub enum Aesthetic {
     /// are skipped with one warning. Lives on the y scale, like `Lower`/
     /// `Middle`/`Upper`.
     Outliers,
+    /// Edge-list aesthetics for flow / network charts (`geom_sankey`): the
+    /// source and target node of each link. Node names, not positions — no
+    /// scale, no legend.
+    From,
+    To,
 }
 
 impl Aesthetic {
@@ -130,6 +135,8 @@ impl Aesthetic {
             Aesthetic::Middle => "middle",
             Aesthetic::Upper => "upper",
             Aesthetic::Outliers => "outliers",
+            Aesthetic::From => "from",
+            Aesthetic::To => "to",
         }
     }
 }
@@ -404,6 +411,14 @@ impl Aes {
             return self;
         }
         self.push(col, Aesthetic::GroupWrap(format!("data-{suffix}")))
+    }
+    /// Source node of a link (`geom_sankey`).
+    pub fn from(self, col: &str) -> Self {
+        self.push(col, Aesthetic::From)
+    }
+    /// Target node of a link (`geom_sankey`).
+    pub fn to(self, col: &str) -> Self {
+        self.push(col, Aesthetic::To)
     }
     /// Opening price (`geom_candlestick` / `geom_ohlc`).
     pub fn open(self, col: &str) -> Self {

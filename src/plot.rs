@@ -113,6 +113,9 @@ pub struct GGPlot {
     /// Panel aspect ratio used when the theme sets none (helpers such as
     /// `geom_calendar` need square cells; survives theme presets).
     pub(crate) default_aspect_ratio: Option<f64>,
+    /// Hide axes and grid whatever theme is set (layout-only charts such as
+    /// `geom_sankey`, whose x/y carry no data meaning); survives presets.
+    pub(crate) hide_position_guides: bool,
     /// Plot-wide default locale for axis / legend labels ([`GGPlot::locale`]).
     pub(crate) locale: Option<crate::locale::Locale>,
     /// Whether the rendered root `<svg>` carries `data-plot`/`data-domain`/…
@@ -169,6 +172,7 @@ impl GGPlot {
             warnings: Vec::new(),
             legend_bottom_share: None,
             default_aspect_ratio: None,
+            hide_position_guides: false,
             locale: None,
             svg_root_data: true,
             root_attrs: Vec::new(),
@@ -1107,6 +1111,32 @@ impl GGPlot {
                 crate::scale::sec_axis::SecAxis::percent_of_max().with_name("Cumulative %"),
             ))
         }
+    }
+
+    /// Sankey diagram from an edge list: map `from`, `to` and optionally
+    /// `weight` (`Aes::new().from("src").to("dst").weight("flow")`). Nodes
+    /// are placed in columns by their depth, sized by their flow and
+    /// coloured by name through the fill scale (no legend — nodes are
+    /// labelled); links take their source's colour. Axes and grid are
+    /// hidden, whatever the theme.
+    pub fn geom_sankey(self) -> Self {
+        self.add_sankey(crate::geom::sankey::GeomSankey::default(), false)
+    }
+
+    /// [`geom_sankey`](Self::geom_sankey) with explicit layout and styling.
+    pub fn geom_sankey_with(self, geom: crate::geom::sankey::GeomSankey) -> Self {
+        self.add_sankey(geom, true)
+    }
+
+    fn add_sankey(self, geom: crate::geom::sankey::GeomSankey, explicit: bool) -> Self {
+        let mut plot = if explicit {
+            self.add_geom_with(geom)
+        } else {
+            self.add_geom(geom)
+        };
+        plot.hide_position_guides = true;
+        plot.layer_aes(Aes::new().after_stat_fill("node"))
+            .show_legend(false)
     }
 
     /// Candlestick chart: map `x` and `open`/`high`/`low`/`close`

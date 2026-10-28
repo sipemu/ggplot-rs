@@ -180,6 +180,43 @@ pub struct Theme {
 }
 
 impl Theme {
+    /// Hide the position guides — axis text, titles, lines, ticks and panel
+    /// grid — for layout-only charts whose x/y carry no data meaning
+    /// (`geom_sankey`). Backgrounds, legend and titles are untouched.
+    pub fn hide_position_guides(&mut self) {
+        for t in [
+            &mut self.axis_text_x,
+            &mut self.axis_text_y,
+            &mut self.axis_title_x,
+            &mut self.axis_title_y,
+        ] {
+            t.visible = false;
+        }
+        for l in [
+            &mut self.axis_line,
+            &mut self.axis_ticks,
+            &mut self.panel_grid_major,
+            &mut self.panel_grid_minor,
+        ] {
+            l.visible = false;
+        }
+        for l in [
+            &mut self.axis_line_x,
+            &mut self.axis_line_y,
+            &mut self.axis_ticks_x,
+            &mut self.axis_ticks_y,
+            &mut self.panel_grid_major_x,
+            &mut self.panel_grid_major_y,
+            &mut self.panel_grid_minor_x,
+            &mut self.panel_grid_minor_y,
+        ]
+        .into_iter()
+        .flatten()
+        {
+            l.visible = false;
+        }
+    }
+
     /// Resolve the effective series color: the theme's brand color if set,
     /// otherwise the geom's own default.
     pub fn primary_or(&self, fallback: (u8, u8, u8)) -> (u8, u8, u8) {

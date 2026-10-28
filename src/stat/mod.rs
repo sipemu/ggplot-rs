@@ -27,6 +27,7 @@ pub mod pareto;
 pub mod qq;
 #[cfg(feature = "regression")]
 pub mod quantile;
+pub mod sankey;
 pub mod smooth;
 pub mod sum;
 pub mod summary;
