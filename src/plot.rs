@@ -1365,6 +1365,27 @@ impl GGPlot {
         self.add_geom_with(geom)
     }
 
+    /// Waffle chart: map `fill` (category) and `weight` (units per row);
+    /// units fill a grid `rows` high, one contiguous block per category.
+    /// Axes and grid are hidden; units stay square at any panel aspect.
+    pub fn geom_waffle(self, rows: usize) -> Self {
+        self.geom_waffle_with(crate::geom::waffle::GeomWaffle::waffle(rows))
+    }
+
+    /// Parliament (hemicycle) chart: map `fill` (party) and `weight`
+    /// (seats); seats on concentric arcs, parties left to right in data
+    /// order. `rows = 0` picks the number of arcs from the seat count.
+    pub fn geom_parliament(self, rows: usize) -> Self {
+        self.geom_waffle_with(crate::geom::waffle::GeomWaffle::parliament(rows))
+    }
+
+    /// A waffle / parliament layer with explicit settings.
+    pub fn geom_waffle_with(self, geom: crate::geom::waffle::GeomWaffle) -> Self {
+        let mut plot = self.add_geom_with(geom);
+        plot.hide_position_guides = true;
+        plot
+    }
+
     /// Candlestick chart: map `x` and `open`/`high`/`low`/`close`
     /// (`Aes::new().x("date").open("o").high("h").low("l").close("c")`).
     pub fn geom_candlestick(self) -> Self {

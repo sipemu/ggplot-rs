@@ -58,6 +58,7 @@ pub use crate::geom::text::{GeomLabel, GeomText};
 pub use crate::geom::tile::GeomTile;
 pub use crate::geom::treemap::GeomTreemap;
 pub use crate::geom::violin::GeomViolin;
+pub use crate::geom::waffle::GeomWaffle;
 pub use crate::geom::waterfall::GeomWaterfall;
 pub use crate::ggpubr::{
     ggarrange, ggarrange_save, ggboxplot, ggdensity, gghistogram, ggline, ggscatter, ggviolin,
@@ -128,6 +129,7 @@ pub use crate::stat::sum::StatSum;
 pub use crate::stat::summary::{StatSummary, SummaryData, SummaryFun};
 pub use crate::stat::summary2d::StatSummary2d;
 pub use crate::stat::summary_bin::StatSummaryBin;
+pub use crate::stat::waffle::UnitLayout;
 pub use crate::theme::elements::{ElementGeom, ElementLine, ElementRect, ElementText};
 pub use crate::theme::presets::{
     theme_bw, theme_bw_base, theme_classic, theme_classic_base, theme_dark, theme_dark_base,

@@ -92,6 +92,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     spline()?;
     dumbbell()?;
     bullet()?;
+    waffle()?;
     radar()?;
     gauge()?;
     calendar()?;
@@ -1034,6 +1035,34 @@ fn bullet() -> Result<(), Box<dyn std::error::Error>> {
         .ylab("")
         .theme_minimal()
         .save_with_size(&out("bullet"), W, H)?;
+    Ok(())
+}
+
+/// Seat shares as a waffle and a parliament (`geom_waffle`, `geom_parliament`).
+fn waffle() -> Result<(), Box<dyn std::error::Error>> {
+    let seats = || {
+        df! {
+            "party" => ["Greens", "Social Democrats", "Liberals", "Centre", "Conservatives", "Nationalists"],
+            "seats" => [46.0, 118.0, 37.0, 22.0, 152.0, 74.0],
+        }
+    };
+    GGPlot::new(seats()?)
+        .aes(Aes::new().fill("party").weight("seats"))
+        .geom_waffle(15)
+        .scale_fill_brewer(PaletteName::Set2)
+        .title("Waffle")
+        .subtitle("449 seats, one square each")
+        .theme_void()
+        .save_with_size(&out("waffle"), W, H)?;
+    GGPlot::new(seats()?)
+        .aes(Aes::new().fill("party").weight("seats"))
+        .geom_parliament(0)
+        .scale_fill_brewer(PaletteName::Set2)
+        .title("Parliament")
+        .subtitle("The same 449 seats as a hemicycle")
+        .theme_minimal()
+        .legend_position(LegendPosition::Bottom)
+        .save_with_size(&out("parliament"), W, H)?;
     Ok(())
 }
 
