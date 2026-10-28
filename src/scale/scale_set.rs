@@ -90,6 +90,9 @@ impl ScaleSet {
                 | Aesthetic::Middle
                 | Aesthetic::Upper
                 | Aesthetic::Outliers
+                // Edge-list node names (flow charts) — no scale.
+                | Aesthetic::From
+                | Aesthetic::To
         ) {
             return;
         }

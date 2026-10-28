@@ -227,6 +227,7 @@ impl PlotBuilder {
             guide_legend,
             warnings: plot_warnings,
             default_aspect_ratio,
+            hide_position_guides,
             legend_bottom_share: _,
             locale,
             svg_root_data: _,
@@ -240,6 +241,9 @@ impl PlotBuilder {
         let mut theme = theme;
         if theme.aspect_ratio.is_none() {
             theme.aspect_ratio = default_aspect_ratio;
+        }
+        if hide_position_guides {
+            theme.hide_position_guides();
         }
 
         // Malformed input (e.g. mismatched column lengths) is reported here as

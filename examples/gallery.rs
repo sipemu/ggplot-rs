@@ -82,6 +82,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     candlestick()?;
     waterfall()?;
     pareto()?;
+    sankey()?;
     radar()?;
     gauge()?;
     calendar()?;
@@ -796,6 +797,30 @@ fn pareto() -> Result<(), Box<dyn std::error::Error>> {
         .ylab("Defects")
         .theme_minimal()
         .save_with_size(&out("pareto"), W, H)?;
+    Ok(())
+}
+
+/// Energy flows from sources through conversion to end use (`geom_sankey`).
+fn sankey() -> Result<(), Box<dyn std::error::Error>> {
+    let df = df! {
+        "from" => ["Coal", "Gas", "Gas", "Nuclear", "Wind", "Solar", "Oil",
+                   "Electricity", "Electricity", "Electricity", "Heat", "Heat", "Oil", "Gas"],
+        "to" => ["Electricity", "Electricity", "Heat", "Electricity", "Electricity", "Electricity", "Transport",
+                 "Homes", "Industry", "Losses", "Homes", "Industry", "Industry", "Homes"],
+        "twh" => [62.0, 48.0, 30.0, 35.0, 41.0, 18.0, 70.0,
+                  70.0, 64.0, 70.0, 18.0, 12.0, 15.0, 26.0],
+    }?;
+    GGPlot::new(df)
+        .aes(Aes::new().from("from").to("to").weight("twh"))
+        .geom_sankey_with(GeomSankey {
+            label_values: true,
+            ..Default::default()
+        })
+        .scale_fill_brewer(PaletteName::Set3)
+        .title("Sankey")
+        .subtitle("Energy flows, TWh (illustrative)")
+        .theme_minimal()
+        .save_with_size(&out("sankey"), W, H)?;
     Ok(())
 }
 

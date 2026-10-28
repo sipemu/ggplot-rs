@@ -42,6 +42,7 @@ pub use crate::geom::refline::{GeomAbline, GeomHline, GeomVline};
 pub use crate::geom::repel::{GeomLabelRepel, GeomTextRepel, RepelDirection, RepelParams};
 pub use crate::geom::ribbon::GeomRibbon;
 pub use crate::geom::rug::GeomRug;
+pub use crate::geom::sankey::GeomSankey;
 pub use crate::geom::segment::GeomSegment;
 pub use crate::geom::smooth::GeomSmooth;
 pub use crate::geom::spoke::GeomSpoke;
