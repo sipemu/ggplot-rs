@@ -33,6 +33,7 @@ pub mod jitter;
 pub(crate) mod layer_attrs;
 pub mod line;
 pub mod linerange;
+pub mod lollipop;
 pub mod pareto;
 pub mod partition;
 pub mod path;
