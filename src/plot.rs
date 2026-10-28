@@ -1286,6 +1286,38 @@ impl GGPlot {
         plot
     }
 
+    /// Funnel chart: map `x` (stage, in data order; repeats are summed) and
+    /// `y` (value). Equal-height stages whose width is proportional to the
+    /// value, each tapering to the next; labels show the value and the
+    /// conversion from the first stage. Stages are filled by name (no
+    /// legend); axes and grid are hidden. See
+    /// [`GeomFunnel::silhouette`](crate::geom::funnel::GeomFunnel::silhouette)
+    /// for the Highcharts-style fixed shape.
+    pub fn geom_funnel(self) -> Self {
+        self.geom_funnel_with(crate::geom::funnel::GeomFunnel::default())
+    }
+
+    /// Pyramid chart: apex on top, stage heights proportional to the values.
+    pub fn geom_pyramid(self) -> Self {
+        self.geom_funnel_with(crate::geom::funnel::GeomFunnel::pyramid())
+    }
+
+    /// [`geom_funnel`](Self::geom_funnel) with an explicit shape and styling.
+    pub fn geom_funnel_with(self, geom: crate::geom::funnel::GeomFunnel) -> Self {
+        let fill_mapped = self
+            .mapping
+            .get_mapping(&crate::aes::Aesthetic::Fill)
+            .is_some();
+        let mut plot = self.add_geom_with(geom);
+        plot.hide_position_guides = true;
+        if !fill_mapped {
+            plot = plot
+                .layer_aes(Aes::new().after_stat_fill("stage"))
+                .show_legend(false);
+        }
+        plot
+    }
+
     /// Candlestick chart: map `x` and `open`/`high`/`low`/`close`
     /// (`Aes::new().x("date").open("o").high("h").low("l").close("c")`).
     pub fn geom_candlestick(self) -> Self {

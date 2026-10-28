@@ -26,6 +26,7 @@ pub mod dotplot;
 pub mod errorbar;
 pub mod errorbarh;
 pub mod freqpoly;
+pub mod funnel;
 pub mod hex;
 pub mod histogram;
 pub mod jitter;
