@@ -96,6 +96,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     packed_bubble()?;
     network()?;
     trees()?;
+    venn()?;
     radar()?;
     gauge()?;
     calendar()?;
@@ -1168,6 +1169,23 @@ fn trees() -> Result<(), Box<dyn std::error::Error>> {
         .subtitle("Hierarchical clustering, merge height on the vertical")
         .theme_void()
         .save_with_size(&out("dendrogram"), W, H)?;
+    Ok(())
+}
+
+/// Overlapping skill sets as an area-proportional Venn diagram (`geom_venn`).
+fn venn() -> Result<(), Box<dyn std::error::Error>> {
+    let df = df! {
+        "sets" => ["Python", "SQL", "Rust", "Python&SQL", "Python&Rust", "SQL&Rust"],
+        "people" => [120.0, 95.0, 40.0, 60.0, 18.0, 12.0],
+    }?;
+    GGPlot::new(df)
+        .aes(Aes::new().sets("sets").weight("people"))
+        .geom_venn()
+        .scale_fill_brewer(PaletteName::Set1)
+        .title("Venn diagram")
+        .subtitle("Engineers by language, area-proportional (pairwise overlaps exact)")
+        .theme_void()
+        .save_with_size(&out("venn"), W, H)?;
     Ok(())
 }
 

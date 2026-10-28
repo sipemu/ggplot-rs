@@ -96,6 +96,9 @@ pub enum Aesthetic {
     /// are tiled together inside one group rectangle. A label, not a
     /// position — no scale, no legend.
     Subgroup,
+    /// Set combination of a row (`geom_venn`): one set name (`"A"`) or
+    /// several joined by `&` (`"A&B"`). A label — no scale, no legend.
+    Sets,
 }
 
 impl Aesthetic {
@@ -142,6 +145,7 @@ impl Aesthetic {
             Aesthetic::From => "from",
             Aesthetic::To => "to",
             Aesthetic::Subgroup => "subgroup",
+            Aesthetic::Sets => "sets",
         }
     }
 }
@@ -424,6 +428,10 @@ impl Aes {
     /// Target node of a link (`geom_sankey`).
     pub fn to(self, col: &str) -> Self {
         self.push(col, Aesthetic::To)
+    }
+    /// Set combination of each row (`geom_venn`): `"A"`, `"A&B"`, …
+    pub fn sets(self, col: &str) -> Self {
+        self.push(col, Aesthetic::Sets)
     }
     /// Hierarchy parent of each row (`geom_treemap`).
     pub fn subgroup(self, col: &str) -> Self {

@@ -1472,6 +1472,24 @@ impl GGPlot {
         plot
     }
 
+    /// Area-proportional Venn / Euler diagram: map `sets` (`"A"`, `"B"`,
+    /// `"A&B"`, … — venn.js-style inclusive sizes) and `weight` (size).
+    /// Exact for two and three sets' pairwise overlaps, approximate beyond.
+    /// Circles are filled by set name (no legend — regions are labelled);
+    /// square panel, axes and grid hidden.
+    pub fn geom_venn(self) -> Self {
+        self.geom_venn_with(crate::geom::venn::GeomVenn::default())
+    }
+
+    /// [`geom_venn`](Self::geom_venn) with explicit styling.
+    pub fn geom_venn_with(self, geom: crate::geom::venn::GeomVenn) -> Self {
+        let mut plot = self.add_geom_with(geom);
+        plot.hide_position_guides = true;
+        plot.default_aspect_ratio = Some(1.0);
+        plot.layer_aes(Aes::new().after_stat_fill("set"))
+            .show_legend(false)
+    }
+
     /// Candlestick chart: map `x` and `open`/`high`/`low`/`close`
     /// (`Aes::new().x("date").open("o").high("h").low("l").close("c")`).
     pub fn geom_candlestick(self) -> Self {
