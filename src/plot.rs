@@ -1192,6 +1192,53 @@ impl GGPlot {
             .show_legend(false)
     }
 
+    /// Squarified treemap: map `weight` (tile area) and optionally
+    /// `subgroup` (tiles nest inside group rectangles), `fill` and `label`
+    /// (`Aes::new().weight("sales").subgroup("region").label("country")`).
+    /// When `subgroup` is mapped at plot level and `fill` is not, tiles are
+    /// filled by subgroup. The panel aspect matches the layout so tiles come
+    /// out square; the position scales get no expansion and the axes and
+    /// grid are hidden.
+    pub fn geom_treemap(self) -> Self {
+        self.add_treemap(crate::geom::treemap::GeomTreemap::default(), false)
+    }
+
+    /// [`geom_treemap`](Self::geom_treemap) with explicit layout and styling.
+    pub fn geom_treemap_with(self, geom: crate::geom::treemap::GeomTreemap) -> Self {
+        self.add_treemap(geom, true)
+    }
+
+    fn add_treemap(self, geom: crate::geom::treemap::GeomTreemap, explicit: bool) -> Self {
+        use crate::aes::Aesthetic;
+        let aspect = geom.aspect;
+        let has = |plot: &Self, aes: Aesthetic| plot.scales.iter().any(|s| s.aesthetic() == aes);
+        let (has_x, has_y) = (has(&self, Aesthetic::X), has(&self, Aesthetic::Y));
+        let fill_by = match (
+            self.mapping.get_mapping(&Aesthetic::Fill),
+            self.mapping.get_mapping(&Aesthetic::Subgroup),
+        ) {
+            (None, Some(sub)) => Some(sub.to_string()),
+            _ => None,
+        };
+        let mut plot = if explicit {
+            self.add_geom_with(geom)
+        } else {
+            self.add_geom(geom)
+        };
+        plot.hide_position_guides = true;
+        plot.default_aspect_ratio = Some(1.0 / aspect.max(1e-6));
+        if let Some(sub) = fill_by {
+            plot = plot.layer_aes(Aes::new().fill(&sub));
+        }
+        if !has_x {
+            plot = plot.scale_x_continuous(ScaleContinuous::new().with_expand(0.0, 0.0));
+        }
+        if !has_y {
+            plot = plot.scale_y_continuous(ScaleContinuous::new().with_expand(0.0, 0.0));
+        }
+        plot
+    }
+
     /// Candlestick chart: map `x` and `open`/`high`/`low`/`close`
     /// (`Aes::new().x("date").open("o").high("h").low("l").close("c")`).
     pub fn geom_candlestick(self) -> Self {

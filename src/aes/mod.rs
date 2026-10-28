@@ -92,6 +92,10 @@ pub enum Aesthetic {
     /// scale, no legend.
     From,
     To,
+    /// Hierarchy parent of a row (`geom_treemap`): rows sharing a subgroup
+    /// are tiled together inside one group rectangle. A label, not a
+    /// position — no scale, no legend.
+    Subgroup,
 }
 
 impl Aesthetic {
@@ -137,6 +141,7 @@ impl Aesthetic {
             Aesthetic::Outliers => "outliers",
             Aesthetic::From => "from",
             Aesthetic::To => "to",
+            Aesthetic::Subgroup => "subgroup",
         }
     }
 }
@@ -419,6 +424,10 @@ impl Aes {
     /// Target node of a link (`geom_sankey`).
     pub fn to(self, col: &str) -> Self {
         self.push(col, Aesthetic::To)
+    }
+    /// Hierarchy parent of each row (`geom_treemap`).
+    pub fn subgroup(self, col: &str) -> Self {
+        self.push(col, Aesthetic::Subgroup)
     }
     /// Opening price (`geom_candlestick` / `geom_ohlc`).
     pub fn open(self, col: &str) -> Self {

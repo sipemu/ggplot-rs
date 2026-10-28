@@ -93,6 +93,7 @@ impl ScaleSet {
                 // Edge-list node names (flow charts) — no scale.
                 | Aesthetic::From
                 | Aesthetic::To
+                | Aesthetic::Subgroup
         ) {
             return;
         }
