@@ -5,6 +5,8 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.31.8] — 2026-10-28
+
 ### Added
 - **`GGPlot::legend_bottom_when_narrow(share)`** (#287): a `Right` legend
   moves to `Bottom` (horizontal) when it would take more than `share` of
