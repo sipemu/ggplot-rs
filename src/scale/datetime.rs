@@ -252,9 +252,20 @@ impl ScaleDateTime {
     /// Default label of an auto month-step break (`2026-10`, or the locale's
     /// [`month_format`](crate::locale::Locale::month_format)).
     fn month_label(&self, y: i64, m: u32, secs: f64) -> String {
+        if let Some(fmt) = &self.date_labels {
+            return strftime_locale(secs, fmt, self.locale.as_ref());
+        }
         match &self.locale {
             Some(loc) => strftime_locale(secs, &loc.month_format, Some(loc)),
             None => format!("{y:04}-{m:02}"),
+        }
+    }
+
+    /// Label of an auto year-step break: `with_date_labels` when set, else `2026`.
+    fn year_label(&self, y: i64, secs: f64) -> String {
+        match &self.date_labels {
+            Some(fmt) => strftime_locale(secs, fmt, self.locale.as_ref()),
+            None => format!("{y}"),
         }
     }
 
@@ -492,7 +503,7 @@ impl Scale for ScaleDateTime {
             let mut breaks = Vec::new();
             while (secs_from_civil(y, 1, 1) as f64) <= emax + 1.0 {
                 let secs = secs_from_civil(y, 1, 1) as f64;
-                breaks.push((self.map(&Value::Float(secs)), format!("{y}")));
+                breaks.push((self.map(&Value::Float(secs)), self.year_label(y, secs)));
                 y += n;
             }
             return breaks;
@@ -584,6 +595,54 @@ mod tests {
         assert_eq!(
             s.format_value(&Value::Float(1_791_763_200.0)), // 2026-10-12
             Some("12.10.2026".to_string())
+        );
+    }
+
+    #[test]
+    fn auto_month_and_year_breaks_honour_with_date_labels() {
+        // #352: the calendar-aware month/year branches labelled breaks
+        // themselves and ignored `with_date_labels`.
+        let monthly = |fmt: Option<&str>| {
+            let mut s = ScaleDateTime::new();
+            if let Some(f) = fmt {
+                s = s.with_date_labels(f);
+            }
+            // 18 monthly dates, 2025-01 … 2026-06.
+            let vals: Vec<Value> = (0..18)
+                .map(
+                    |i| Value::Float(secs_from_civil(2025 + i / 12, (i % 12) as u32 + 1, 1) as f64),
+                )
+                .collect();
+            s.train(&vals);
+            s.breaks().into_iter().map(|(_, l)| l).collect::<Vec<_>>()
+        };
+        assert_eq!(monthly(None), vec!["2025-01", "2025-07", "2026-01"]);
+        assert_eq!(
+            monthly(Some("%b %Y")),
+            vec!["Jan 2025", "Jul 2025", "Jan 2026"]
+        );
+        assert_eq!(monthly(Some("%b")), vec!["Jan", "Jul", "Jan"]);
+
+        let yearly = |fmt: Option<&str>| {
+            let mut s = ScaleDateTime::new();
+            if let Some(f) = fmt {
+                s = s.with_date_labels(f);
+            }
+            let vals: Vec<Value> = (2010..2021)
+                .map(|y| Value::Float(secs_from_civil(y, 1, 1) as f64))
+                .collect();
+            s.train(&vals);
+            s.breaks().into_iter().map(|(_, l)| l).collect::<Vec<_>>()
+        };
+        let plain = yearly(None);
+        assert!(
+            !plain.is_empty() && plain.iter().all(|l| l.len() == 4),
+            "{plain:?}"
+        );
+        assert_eq!(yearly(Some("%Y")), plain);
+        assert_eq!(
+            yearly(Some("%b %Y")),
+            plain.iter().map(|y| format!("Jan {y}")).collect::<Vec<_>>()
         );
     }
 
