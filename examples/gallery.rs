@@ -99,6 +99,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     venn()?;
     wordcloud()?;
     marimekko()?;
+    timeline()?;
     radar()?;
     gauge()?;
     calendar()?;
@@ -1268,6 +1269,53 @@ fn marimekko() -> Result<(), Box<dyn std::error::Error>> {
         .ylab("Share of region")
         .theme_minimal()
         .save_with_size(&out("marimekko"), W, H)?;
+    Ok(())
+}
+
+/// Milestones of a project on a date axis (`geom_timeline`).
+fn timeline() -> Result<(), Box<dyn std::error::Error>> {
+    use ggplot_rs::stat::calendar::days_from_civil;
+    let day = |y: i64, m: u32, d: u32| Value::DateTime(days_from_civil(y, m, d) * 86_400);
+    let events = [
+        ((2024, 1, 15), "Kick-off", None),
+        ((2024, 2, 20), "Spec signed", None),
+        ((2024, 3, 1), "Prototype", Some((2024, 4, 20))),
+        ((2024, 4, 28), "Alpha", None),
+        ((2024, 5, 6), "Security review", None),
+        ((2024, 6, 3), "Beta", Some((2024, 7, 15))),
+        ((2024, 6, 20), "Pricing set", None),
+        ((2024, 7, 22), "Launch", None),
+        ((2024, 9, 2), "v1.1", None),
+        ((2024, 10, 14), "EU rollout", None),
+    ];
+    let data = vec![
+        (
+            "date".to_string(),
+            events.iter().map(|e| day(e.0 .0, e.0 .1, e.0 .2)).collect(),
+        ),
+        (
+            "end".to_string(),
+            events
+                .iter()
+                .map(|e| {
+                    e.2.map(|d: (i64, u32, u32)| day(d.0, d.1, d.2))
+                        .unwrap_or(Value::Na)
+                })
+                .collect(),
+        ),
+        (
+            "what".to_string(),
+            events.iter().map(|e| Value::Str(e.1.to_string())).collect(),
+        ),
+    ];
+    GGPlot::new(data)
+        .aes(Aes::new().x("date").label("what"))
+        .geom_timeline_with(GeomTimeline::default().with_end("end"))
+        .title("Timeline")
+        .subtitle("Project milestones 2024; bands mark phases")
+        .xlab("")
+        .theme_minimal()
+        .save_with_size(&out("timeline"), W, 300)?;
     Ok(())
 }
 

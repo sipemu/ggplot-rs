@@ -228,6 +228,7 @@ impl PlotBuilder {
             warnings: plot_warnings,
             default_aspect_ratio,
             hide_position_guides,
+            hide_y_guides,
             legend_bottom_share: _,
             locale,
             svg_root_data: _,
@@ -244,6 +245,9 @@ impl PlotBuilder {
         }
         if hide_position_guides {
             theme.hide_position_guides();
+        }
+        if hide_y_guides {
+            theme.hide_y_guides();
         }
 
         // Malformed input (e.g. mismatched column lengths) is reported here as

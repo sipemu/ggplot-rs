@@ -63,6 +63,7 @@ pub mod step;
 pub(crate) mod support;
 pub mod text;
 pub mod tile;
+pub mod timeline;
 pub mod tree;
 pub mod treemap;
 pub mod venn;
