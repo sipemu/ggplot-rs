@@ -1330,6 +1330,27 @@ impl GGPlot {
         )
     }
 
+    /// Lollipop chart: a stem from 0 to `y` capped with a dot, per `x`
+    /// (`coord_flip` for horizontal lollipops).
+    pub fn geom_lollipop(self) -> Self {
+        self.add_geom(crate::geom::lollipop::GeomLollipop::default())
+    }
+
+    pub fn geom_lollipop_with(self, geom: crate::geom::lollipop::GeomLollipop) -> Self {
+        self.add_geom_with(geom)
+    }
+
+    /// Dumbbell chart: a segment from `ymin` to `ymax` per `x`, with a dot at
+    /// each end (low / high colours); `coord_flip` for the usual horizontal
+    /// layout.
+    pub fn geom_dumbbell(self) -> Self {
+        self.add_geom(crate::geom::lollipop::GeomDumbbell::default())
+    }
+
+    pub fn geom_dumbbell_with(self, geom: crate::geom::lollipop::GeomDumbbell) -> Self {
+        self.add_geom_with(geom)
+    }
+
     /// Candlestick chart: map `x` and `open`/`high`/`low`/`close`
     /// (`Aes::new().x("date").open("o").high("h").low("l").close("c")`).
     pub fn geom_candlestick(self) -> Self {

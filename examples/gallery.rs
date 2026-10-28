@@ -90,6 +90,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     funnel()?;
     stream()?;
     spline()?;
+    dumbbell()?;
     radar()?;
     gauge()?;
     calendar()?;
@@ -986,6 +987,26 @@ fn spline() -> Result<(), Box<dyn std::error::Error>> {
         .ylab("°C")
         .theme_minimal()
         .save_with_size(&out("spline"), W, H)?;
+    Ok(())
+}
+
+/// Life expectancy gains 1990 → 2022 as a dumbbell chart (`geom_dumbbell`).
+fn dumbbell() -> Result<(), Box<dyn std::error::Error>> {
+    let df = df! {
+        "country" => ["Ethiopia", "Rwanda", "India", "Bangladesh", "China", "Brazil", "Germany", "Japan"],
+        "y1990" => [47.0, 33.4, 58.6, 58.2, 69.1, 66.3, 75.4, 78.9],
+        "y2022" => [65.0, 66.1, 67.7, 73.7, 78.6, 73.4, 80.7, 84.0],
+    }?;
+    GGPlot::new(df)
+        .aes(Aes::new().x("country").ymin("y1990").ymax("y2022"))
+        .geom_dumbbell()
+        .coord_flip()
+        .title("Dumbbell")
+        .subtitle("Life expectancy at birth, 1990 (grey) → 2022 (blue)")
+        .xlab("")
+        .ylab("Years")
+        .theme_minimal()
+        .save_with_size(&out("dumbbell"), W, H)?;
     Ok(())
 }
 
