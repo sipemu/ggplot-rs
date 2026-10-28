@@ -88,6 +88,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     treemap()?;
     sunburst()?;
     funnel()?;
+    stream()?;
     radar()?;
     gauge()?;
     calendar()?;
@@ -922,6 +923,35 @@ fn funnel() -> Result<(), Box<dyn std::error::Error>> {
         .subtitle("Sessions per stage, % of visits")
         .theme_void()
         .save_with_size(&out("funnel"), W, H)?;
+    Ok(())
+}
+
+/// Listening share by genre over a year as a streamgraph (`geom_stream`).
+fn stream() -> Result<(), Box<dyn std::error::Error>> {
+    let genres = ["Pop", "Rock", "Hip-hop", "Jazz", "Electronic", "Classical"];
+    let (mut week, mut genre, mut plays) = (vec![], vec![], vec![]);
+    for w in 0..52 {
+        for (k, g) in genres.iter().enumerate() {
+            let t = w as f64 / 52.0 * std::f64::consts::TAU;
+            let v = 8.0 - k as f64
+                + 4.0 * (t * (1.0 + 0.3 * k as f64) + k as f64).sin()
+                + 2.5 * (2.0 * t + 1.7 * k as f64).cos();
+            week.push(w as f64);
+            genre.push(*g);
+            plays.push(v.max(0.4));
+        }
+    }
+    let df = df! { "week" => week, "genre" => genre, "plays" => plays }?;
+    GGPlot::new(df)
+        .aes(Aes::new().x("week").y("plays").fill("genre"))
+        .geom_stream()
+        .scale_fill_brewer(PaletteName::Set2)
+        .title("Streamgraph")
+        .subtitle("Weekly plays by genre (synthetic)")
+        .xlab("Week")
+        .ylab("")
+        .theme_minimal()
+        .save_with_size(&out("stream"), W, H)?;
     Ok(())
 }
 

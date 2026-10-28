@@ -1318,6 +1318,18 @@ impl GGPlot {
         plot
     }
 
+    /// Streamgraph: [`geom_area`](Self::geom_area) stacked around a
+    /// wiggle-minimising baseline ([`StackOffset::Wiggle`](crate::position::stack::StackOffset::Wiggle)).
+    /// Map `x`, `y` (non-negative) and `fill` (the series). For a
+    /// symmetric ThemeRiver use
+    /// `.geom_area().position(position_stack().with_offset(StackOffset::Silhouette))`.
+    pub fn geom_stream(self) -> Self {
+        self.geom_area().position(
+            crate::position::stack::position_stack()
+                .with_offset(crate::position::stack::StackOffset::Wiggle),
+        )
+    }
+
     /// Candlestick chart: map `x` and `open`/`high`/`low`/`close`
     /// (`Aes::new().x("date").open("o").high("h").low("l").close("c")`).
     pub fn geom_candlestick(self) -> Self {
