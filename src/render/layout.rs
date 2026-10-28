@@ -96,6 +96,29 @@ impl PlotLayout {
         )
     }
 
+    /// Height the layout reserves for the bottom x axis (ticks, labels,
+    /// title); `x_label_height` is the measured rotated-label height, if any.
+    pub(crate) fn x_axis_band(theme: &Theme, x_label_height: Option<f64>) -> f64 {
+        theme.axis_ticks_length
+            + if theme.axis_text_x.visible {
+                // Rotated labels extend vertically, so reserve more bottom space —
+                // measured from the actual labels by the caller when available.
+                if theme.axis_text_x.angle.abs() > 10.0 {
+                    x_label_height.unwrap_or(theme.axis_text_x.size * 5.0)
+                } else {
+                    // Dodged labels stack across N rows.
+                    (theme.axis_text_x.size + 4.0) * theme.axis_text_x_dodge.max(1) as f64
+                }
+            } else {
+                0.0
+            }
+            + if theme.axis_title_x.visible {
+                theme.axis_title_x.size + 8.0
+            } else {
+                0.0
+            }
+    }
+
     /// Like [`compute_full`](Self::compute_full), plus [`LayoutExtras`] for
     /// the outer-label-fit left/right panel reservation (B3-1) and the
     /// legend auto-wrap extra rows (B3-2). `extras` all-zero is byte-identical
@@ -134,24 +157,7 @@ impl PlotLayout {
             0.0
         };
 
-        let x_axis_height = theme.axis_ticks_length
-            + if theme.axis_text_x.visible {
-                // Rotated labels extend vertically, so reserve more bottom space —
-                // measured from the actual labels by the caller when available.
-                if theme.axis_text_x.angle.abs() > 10.0 {
-                    x_label_height.unwrap_or(theme.axis_text_x.size * 5.0)
-                } else {
-                    // Dodged labels stack across N rows.
-                    (theme.axis_text_x.size + 4.0) * theme.axis_text_x_dodge.max(1) as f64
-                }
-            } else {
-                0.0
-            }
-            + if theme.axis_title_x.visible {
-                theme.axis_title_x.size + 8.0
-            } else {
-                0.0
-            };
+        let x_axis_height = Self::x_axis_band(theme, x_label_height);
 
         let y_axis_width = theme.axis_ticks_length
             + if theme.axis_text_y.visible {
