@@ -5,6 +5,8 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.33.0] — 2026-10-28
+
 ### Added
 Small-multiple maps (#293, for DataZooDE/anofox-visualization#149 M3):
 - **`facet_wrap` under `coord_sf`** sizes every panel to the data's aspect
