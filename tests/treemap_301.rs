@@ -57,6 +57,7 @@ fn renders_tiles_labels_tooltips_and_no_axes() {
         .unwrap();
     assert!(warnings.is_empty(), "{warnings:?}");
     assert!(svg.contains("<title>USA: 27</title>"));
+    assert!(!svg.contains(">NA<"), "group rows add no NA legend key");
     assert!(svg.contains(">Germany<") && svg.contains(">Americas<"));
     assert!(
         !svg.contains(">0.5<") && !svg.contains(">1.0<"),

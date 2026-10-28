@@ -1386,6 +1386,33 @@ impl GGPlot {
         plot
     }
 
+    /// Packed bubble chart: circles with area ∝ `weight`, packed without
+    /// overlap; with `subgroup` they cluster per group (outlined). Fills by
+    /// subgroup when `subgroup` is mapped at plot level and `fill` is not.
+    /// The panel is square and the axes and grid are hidden.
+    pub fn geom_packed_bubble(self) -> Self {
+        self.geom_packed_bubble_with(crate::geom::pack::GeomPackedBubble::default())
+    }
+
+    /// [`geom_packed_bubble`](Self::geom_packed_bubble) with explicit styling.
+    pub fn geom_packed_bubble_with(self, geom: crate::geom::pack::GeomPackedBubble) -> Self {
+        use crate::aes::Aesthetic;
+        let fill_by = match (
+            self.mapping.get_mapping(&Aesthetic::Fill),
+            self.mapping.get_mapping(&Aesthetic::Subgroup),
+        ) {
+            (None, Some(sub)) => Some(sub.to_string()),
+            _ => None,
+        };
+        let mut plot = self.add_geom_with(geom);
+        plot.hide_position_guides = true;
+        plot.default_aspect_ratio = Some(1.0);
+        if let Some(sub) = fill_by {
+            plot = plot.layer_aes(Aes::new().fill(&sub));
+        }
+        plot
+    }
+
     /// Candlestick chart: map `x` and `open`/`high`/`low`/`close`
     /// (`Aes::new().x("date").open("o").high("h").low("l").close("c")`).
     pub fn geom_candlestick(self) -> Self {
