@@ -63,3 +63,66 @@ fn parliament_bottom_legend_is_drawn() {
         &svg[svg.len().saturating_sub(3000)..]
     );
 }
+
+#[test]
+fn edge_cases_unmapped_fill_explicit_rows_and_bad_weights() {
+    use ggplot_rs::geom::waffle::GeomWaffle;
+    use ggplot_rs::stat::waffle::UnitLayout;
+    // No fill mapping: one category, the geom's own fill; one unit per row.
+    let svg = GGPlot::new(data())
+        .geom_waffle(4)
+        .render_svg_native_with_size(300, 300)
+        .unwrap();
+    assert_eq!(svg.matches("data-geom=\"waffle\"").count(), 3);
+    // Explicit arcs, a single arc, rounded squares and a custom gap.
+    for layout in [
+        UnitLayout::Parliament {
+            rows: 3,
+            inner: 0.3,
+        },
+        UnitLayout::Parliament {
+            rows: 1,
+            inner: 0.5,
+        },
+        UnitLayout::Waffle { rows: 0 },
+    ] {
+        let svg = GGPlot::new(data())
+            .aes(Aes::new().fill("party").weight("seats"))
+            .geom_waffle_with(GeomWaffle {
+                layout,
+                gap: 0.2,
+                roundness: 0.3,
+                ..Default::default()
+            })
+            .render_svg_native_with_size(400, 300)
+            .unwrap();
+        assert_eq!(
+            svg.matches("data-geom=\"waffle\"").count(),
+            100,
+            "{layout:?}"
+        );
+        assert!(!svg.contains("NaN"));
+    }
+    // Missing / non-positive weights contribute no units.
+    let bad = vec![
+        (
+            "party".to_string(),
+            ["A", "B", "C"]
+                .iter()
+                .map(|s| Value::Str(s.to_string()))
+                .collect(),
+        ),
+        (
+            "seats".to_string(),
+            vec![Value::Float(3.0), Value::Na, Value::Float(-2.0)],
+        ),
+    ];
+    let svg = GGPlot::new(bad)
+        .aes(Aes::new().fill("party").weight("seats"))
+        .geom_parliament(0)
+        .render_svg_native_with_size(300, 200)
+        .unwrap();
+    assert_eq!(svg.matches("data-geom=\"waffle\"").count(), 3);
+    let p = GeomWaffle::parliament(2);
+    assert!(matches!(p.layout, UnitLayout::Parliament { rows: 2, .. }));
+}
