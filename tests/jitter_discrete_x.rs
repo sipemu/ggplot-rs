@@ -65,3 +65,14 @@ fn jitterdodge_spreads_points_on_a_discrete_axis() {
         .unwrap();
     assert!(distinct_cx(&svg) > 10, "points stay on dodge lines");
 }
+
+#[test]
+fn jitterdodge_without_groups_still_jitters_a_discrete_axis() {
+    let svg = GGPlot::new(data())
+        .aes(Aes::new().x("g").y("y"))
+        .geom_point()
+        .position(PositionJitterDodge::default())
+        .render_svg_native_with_size(400, 300)
+        .unwrap();
+    assert!(distinct_cx(&svg) > 10, "points stay on two lines");
+}
