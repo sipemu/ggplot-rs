@@ -64,6 +64,7 @@ pub use crate::geom::venn::GeomVenn;
 pub use crate::geom::violin::GeomViolin;
 pub use crate::geom::waffle::GeomWaffle;
 pub use crate::geom::waterfall::GeomWaterfall;
+pub use crate::geom::wordcloud::GeomWordcloud;
 pub use crate::ggpubr::{
     ggarrange, ggarrange_save, ggboxplot, ggdensity, gghistogram, ggline, ggscatter, ggviolin,
 };
