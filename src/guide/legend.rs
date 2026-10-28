@@ -480,7 +480,13 @@ pub(crate) fn legend_position(
         ),
         LegendPosition::Bottom => (
             plot_area.x + theme.legend_margin.left,
-            plot_area.y + plot_area.height + theme.legend_margin.top + 30.0,
+            // Below the x axis — at most the 30px it used to assume, so an
+            // axis-less theme (`theme_void`) keeps the legend inside the band
+            // the layout reserved rather than off the canvas (#341).
+            plot_area.y
+                + plot_area.height
+                + theme.legend_margin.top
+                + crate::render::layout::PlotLayout::x_axis_band(theme, None).min(30.0),
             true,
         ),
         LegendPosition::None => (0.0, 0.0, false),
