@@ -225,6 +225,38 @@ fn fill_polygon_rings_with(
 }
 
 impl DrawBackend for PixelBackend {
+    /// #325: nearest-neighbour blit, blended at `alpha` × the image's own.
+    fn draw_image(
+        &mut self,
+        bytes: &[u8],
+        rect: &Rect,
+        clip: &Rect,
+        alpha: f64,
+    ) -> Result<(), RenderError> {
+        let Some(((x0, y0), img)) = crate::render::raster::decode_visible(
+            bytes,
+            rect,
+            clip,
+            self.width as u32,
+            self.height as u32,
+        ) else {
+            return Ok(());
+        };
+        for (dx, dy, p) in img.enumerate_pixels() {
+            let [r, g, b, a] = p.0;
+            blend(
+                &mut self.buf,
+                self.width,
+                self.height,
+                x0 + dx as i32,
+                y0 + dy as i32,
+                (r, g, b),
+                alpha * a as f64 / 255.0,
+            );
+        }
+        Ok(())
+    }
+
     fn plot_area(&self) -> Rect {
         self.plot_area.clone()
     }

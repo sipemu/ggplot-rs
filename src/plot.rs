@@ -914,6 +914,42 @@ impl GGPlot {
         self.add_geom(crate::geom::annotation_scale::GeomAttribution::new(text))
     }
 
+    /// A raster basemap from an XYZ tile provider (feature `tiles`, #325),
+    /// drawn under every other layer: tiles fetched through `fetcher` for
+    /// the plot's Web-Mercator view (project `geom_sf` layers with
+    /// `SfProjection::Mercator`, add `coord_sf()`), at a zoom picked from
+    /// the panel size, plus the source's attribution in a corner. E.g.
+    /// `annotation_map_tile(TileSource::xyz("https://tile.openstreetmap.org/{z}/{x}/{y}.png")
+    /// .attribution("© OpenStreetMap contributors"), my_http_fetcher)`.
+    #[cfg(feature = "tiles")]
+    pub fn annotation_map_tile(
+        self,
+        source: crate::geom::map_tile::TileSource,
+        fetcher: impl crate::geom::map_tile::TileFetcher + 'static,
+    ) -> Self {
+        self.annotation_map_tile_with(crate::geom::map_tile::GeomMapTile::new(source, fetcher))
+    }
+
+    /// [`annotation_map_tile`](Self::annotation_map_tile) with a configured
+    /// layer (fixed zoom, detail, opacity).
+    #[cfg(feature = "tiles")]
+    pub fn annotation_map_tile_with(self, geom: crate::geom::map_tile::GeomMapTile) -> Self {
+        let attribution = geom.source.attribution.clone();
+        let mut plot = self.add_geom_with(geom);
+        // Under every other layer (per-layer settings shift up by one).
+        if let Some(layer) = plot.layers.pop() {
+            plot.layers.insert(0, layer);
+            for (idx, ..) in plot.layer_svg_attrs.iter_mut() {
+                *idx += 1;
+            }
+        }
+        if attribution.is_empty() {
+            plot
+        } else {
+            plot.annotation_attribution(attribution)
+        }
+    }
+
     #[cfg(feature = "sf")]
     pub fn annotation_attribution_with(
         self,

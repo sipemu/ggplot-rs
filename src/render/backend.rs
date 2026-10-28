@@ -642,6 +642,19 @@ pub trait DrawBackend {
         let joined: String = runs.iter().map(|(t, _)| *t).collect();
         self.draw_text(&joined, pos, style)
     }
+    /// Draw an encoded raster image (PNG or JPEG bytes) stretched over
+    /// `rect`, clipped to `clip`, at opacity `alpha` — a map tile (#325).
+    /// Default: draws nothing (a backend without raster support).
+    fn draw_image(
+        &mut self,
+        _bytes: &[u8],
+        _rect: &Rect,
+        _clip: &Rect,
+        _alpha: f64,
+    ) -> Result<(), RenderError> {
+        Ok(())
+    }
+
     fn plot_area(&self) -> Rect;
     fn total_area(&self) -> Rect;
 
@@ -933,6 +946,14 @@ mod tests {
         let mid = lines[0][16];
         assert!((mid.0 - 5.0).abs() < 1e-9);
         assert!((mid.1 - 5.0).abs() < 1e-9);
+    }
+
+    #[test]
+    fn default_draw_image_draws_nothing() {
+        let mut b = RecordingBackend::default();
+        let r = b.plot_area();
+        b.draw_image(b"png", &r, &r, 1.0).unwrap();
+        assert!(b.rects.borrow().is_empty() && b.polygons.borrow().is_empty());
     }
 
     #[test]

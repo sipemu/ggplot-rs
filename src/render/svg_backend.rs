@@ -855,6 +855,25 @@ fn opacity_attr(prefix: &str, alpha: f64) -> String {
 ///
 /// The `x`/`y` names refer to the x/y *aesthetics*. Omitted entirely for
 /// plots with free facet scales (each panel has its own domain).
+/// Standard (RFC 4648) base64 with padding.
+fn base64(bytes: &[u8]) -> String {
+    const T: &[u8; 64] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+    let mut out = String::with_capacity(bytes.len().div_ceil(3) * 4);
+    for c in bytes.chunks(3) {
+        let n = (c[0] as u32) << 16
+            | (*c.get(1).unwrap_or(&0) as u32) << 8
+            | *c.get(2).unwrap_or(&0) as u32;
+        for i in 0..4 {
+            if i <= c.len() {
+                out.push(T[(n >> (18 - 6 * i) & 63) as usize] as char);
+            } else {
+                out.push('=');
+            }
+        }
+    }
+    out
+}
+
 pub fn root_data_attrs(built: &crate::build::BuiltPlot) -> Vec<(String, String)> {
     use crate::aes::Aesthetic;
     let mut out = Vec::new();
@@ -1439,6 +1458,48 @@ impl DrawBackend for SvgBackend {
     fn draw_polygon(&mut self, pts: &[(f64, f64)], style: &RectStyle) -> Result<(), RenderError> {
         let fill = style.fill.map(rgb).unwrap_or_else(|| "none".into());
         self.polygon_markup(pts, &fill, style)
+    }
+
+    /// #325: an `<image>` with the bytes as a `data:` URI, in a nested
+    /// `<svg>` viewport that clips it to `clip`.
+    fn draw_image(
+        &mut self,
+        bytes: &[u8],
+        rect: &Rect,
+        clip: &Rect,
+        alpha: f64,
+    ) -> Result<(), RenderError> {
+        let finite = [rect.x, rect.y, rect.width, rect.height, clip.x, clip.y]
+            .iter()
+            .chain([&clip.width, &clip.height])
+            .all(|v| v.is_finite());
+        if !finite || rect.width <= 0.0 || rect.height <= 0.0 {
+            return Ok(());
+        }
+        let mime = match bytes {
+            [0xFF, 0xD8, ..] => "image/jpeg",
+            _ => "image/png",
+        };
+        self.emit(&format!(
+            "<svg x=\"{:.2}\" y=\"{:.2}\" width=\"{:.2}\" height=\"{:.2}\" overflow=\"hidden\">",
+            clip.x, clip.y, clip.width, clip.height
+        ));
+        let attrs = format!(
+            "x=\"{:.2}\" y=\"{:.2}\" width=\"{:.2}\" height=\"{:.2}\" preserveAspectRatio=\"none\"{} href=\"data:{mime};base64,{}\"",
+            rect.x - clip.x,
+            rect.y - clip.y,
+            rect.width,
+            rect.height,
+            if alpha < 1.0 {
+                format!(" opacity=\"{:.3}\"", alpha.clamp(0.0, 1.0))
+            } else {
+                String::new()
+            },
+            base64(bytes)
+        );
+        self.push_mark("image", "image", &attrs);
+        self.emit("</svg>");
+        Ok(())
     }
 
     /// #206: same markup [`draw_polygon`](Self::draw_polygon) builds,
