@@ -62,6 +62,7 @@ pub mod text;
 pub mod tile;
 pub mod treemap;
 pub mod violin;
+pub mod waffle;
 pub mod waterfall;
 
 use std::collections::HashMap;
