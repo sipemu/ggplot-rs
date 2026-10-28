@@ -65,6 +65,11 @@ impl Position for PositionJitterDodge {
             Some(col) => col.iter().map(|v| v.to_group_key()).collect(),
             None => {
                 // No groups — just jitter
+                if super::is_discrete_x(&x_col) {
+                    let (seed, w) = (self.seed, self.jitter_width);
+                    super::add_x_offsets(data, |i| Self::pseudo_random(seed, i) * w);
+                    return;
+                }
                 let mut new_x = x_col;
                 for (i, v) in new_x.iter_mut().enumerate() {
                     if let Some(f) = v.as_f64() {
@@ -92,6 +97,24 @@ impl Position for PositionJitterDodge {
         } else {
             0.0
         };
+
+        if super::is_discrete_x(&x_col) {
+            // Categories can't move: dodge + jitter go to the offset column.
+            let offsets: Vec<f64> = group_keys
+                .iter()
+                .enumerate()
+                .map(|(i, group)| {
+                    let dodge = if n_groups > 1.0 {
+                        let k = unique_groups.iter().position(|g| g == group).unwrap() as f64;
+                        (k - (n_groups - 1.0) / 2.0) * group_width
+                    } else {
+                        0.0
+                    };
+                    dodge + Self::pseudo_random(self.seed, i) * self.jitter_width
+                })
+                .collect();
+            super::add_x_offsets(data, |i| offsets[i]);
+        }
 
         let mut new_x = x_col.clone();
         for (i, (x, group)) in x_col.iter().zip(group_keys.iter()).enumerate() {

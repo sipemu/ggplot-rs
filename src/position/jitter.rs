@@ -117,7 +117,14 @@ impl Position for PositionJitter {
     fn compute(&self, data: &mut DataFrame, _params: &PositionParams) {
         let mut rng = SplitMix64::new(self.seed);
 
-        if let Some(x_col) = data.column_mut("x") {
+        if data.column("x").is_some_and(super::is_discrete_x) {
+            // A category can't move: jitter its offset (one category = 1,
+            // ggplot2's resolution of a mapped discrete axis).
+            let w = self.width.unwrap_or(0.4);
+            if w > 0.0 && w.is_finite() {
+                super::add_x_offsets(data, |_| rng.range_f64(-w, w));
+            }
+        } else if let Some(x_col) = data.column_mut("x") {
             let w = self.width.unwrap_or_else(|| 0.4 * resolution(x_col));
             if w > 0.0 && w.is_finite() {
                 jitter_column(x_col, w, &mut rng);
@@ -163,6 +170,32 @@ mod tests {
 
     fn floats(v: &[f64]) -> Vec<Value> {
         v.iter().map(|f| Value::Float(*f)).collect()
+    }
+
+    #[test]
+    fn discrete_x_jitters_through_the_offset_column() {
+        let mut df = frame(
+            ["a", "a", "b", "b"]
+                .iter()
+                .map(|s| Value::Str(s.to_string()))
+                .collect(),
+            floats(&[1.0, 2.0, 3.0, 4.0]),
+        );
+        PositionJitter::default()
+            .with_height(0.0)
+            .compute(&mut df, &PositionParams::default());
+        assert!(
+            matches!(df.column("x").unwrap()[0], Value::Str(_)),
+            "x unchanged"
+        );
+        let off: Vec<f64> = df
+            .column(crate::position::DODGE_OFFSET_COL)
+            .expect("offset column")
+            .iter()
+            .map(|v| v.as_f64().unwrap())
+            .collect();
+        assert!(off.iter().all(|o| o.abs() <= 0.4), "{off:?}");
+        assert!(off.iter().any(|o| o.abs() > 0.01), "{off:?}");
     }
 
     #[test]
