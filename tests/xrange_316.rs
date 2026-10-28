@@ -75,3 +75,46 @@ fn date_ranges_get_a_date_axis() {
     assert!(svg.contains(">2024-"), "date axis labels");
     assert!(!svg.contains(">17"), "no epoch-second labels");
 }
+
+#[test]
+fn overlapping_dependency_missing_predecessor_fill_and_primary() {
+    let s = |v: &[&str]| {
+        v.iter()
+            .map(|x| Value::Str(x.to_string()))
+            .collect::<Vec<_>>()
+    };
+    let f = |v: &[f64]| v.iter().map(|&x| Value::Float(x)).collect::<Vec<_>>();
+    let data = vec![
+        ("task".to_string(), s(&["A", "B", "C"])),
+        ("start".to_string(), f(&[0.0, 2.0, 6.0])),
+        ("end".to_string(), f(&[5.0, 8.0, 9.0])),
+        ("team".to_string(), s(&["x", "y", "x"])),
+        // B starts before A ends (S-shaped route); C names an unknown task.
+        ("after".to_string(), s(&["", "A", "Nope"])),
+    ];
+    let svg = GGPlot::new(data.clone())
+        .aes(Aes::new().y("task").xmin("start").xmax("end").fill("team"))
+        .geom_xrange_with(GeomXrange::default().with_dependencies("after"))
+        .render_svg_native_with_size(600, 300)
+        .unwrap();
+    assert!(svg.contains("<title>A → B</title>"));
+    assert!(!svg.contains("Nope →"), "unknown predecessor is skipped");
+    // The overlapping route bends back: a 6-point path.
+    let path = svg
+        .match_indices("<polyline")
+        .map(|(i, _)| &svg[i..i + svg[i..].find('>').unwrap()])
+        .find(|t| t.contains("data-geom=\"xrange\""))
+        .unwrap();
+    let p = path.find("points=\"").unwrap() + 8;
+    assert_eq!(
+        path[p..p + path[p..].find('"').unwrap()].split(' ').count(),
+        6
+    );
+    let svg = GGPlot::new(data)
+        .aes(Aes::new().y("task").xmin("start").xmax("end"))
+        .geom_xrange()
+        .primary_color((200, 0, 100))
+        .render_svg_native_with_size(600, 300)
+        .unwrap();
+    assert!(svg.contains("#C80064"));
+}

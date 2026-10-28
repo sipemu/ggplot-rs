@@ -1590,11 +1590,15 @@ impl GGPlot {
     /// [`GeomXrange`](crate::geom::xrange::GeomXrange) for progress and
     /// dependency arrows.
     pub fn geom_xrange(self) -> Self {
-        self.geom_xrange_with(crate::geom::xrange::GeomXrange::default())
+        self.add_xrange(crate::geom::xrange::GeomXrange::default(), false)
     }
 
     /// [`geom_xrange`](Self::geom_xrange) with progress / dependency columns.
     pub fn geom_xrange_with(self, geom: crate::geom::xrange::GeomXrange) -> Self {
+        self.add_xrange(geom, true)
+    }
+
+    fn add_xrange(self, geom: crate::geom::xrange::GeomXrange, explicit: bool) -> Self {
         use crate::aes::Aesthetic;
         let has_y = self.scales.iter().any(|s| s.aesthetic() == Aesthetic::Y);
         // First task on top: reverse the data order for the discrete axis.
@@ -1609,7 +1613,11 @@ impl GGPlot {
                 }
                 seen.into_iter().rev().collect()
             });
-        let mut plot = self.add_geom_with(geom);
+        let mut plot = if explicit {
+            self.add_geom_with(geom)
+        } else {
+            self.add_geom(geom)
+        };
         if let (false, Some(levels)) = (has_y, levels) {
             let refs: Vec<&str> = levels.iter().map(String::as_str).collect();
             plot = plot
