@@ -18,6 +18,9 @@ pub struct GeomArea {
     pub color: (u8, u8, u8),
     pub alpha: f64,
     pub line_width: f64,
+    /// How consecutive points are joined (straight by default; a smooth
+    /// `areaspline` with [`Interpolate::MonotoneCubic`](super::support::Interpolate::MonotoneCubic)).
+    pub interpolate: super::support::Interpolate,
 }
 
 impl Default for GeomArea {
@@ -27,6 +30,7 @@ impl Default for GeomArea {
             color: (50, 50, 50),
             alpha: 0.4,
             line_width: 1.0,
+            interpolate: super::support::Interpolate::Linear,
         }
     }
 }
@@ -94,8 +98,8 @@ impl Geom for GeomArea {
                 })
                 .unwrap_or(self.fill);
 
-            let mut upper: Vec<(f64, f64)> = Vec::with_capacity(idx.len());
-            let mut lower: Vec<(f64, f64)> = Vec::with_capacity(idx.len());
+            let mut upper_raw: Vec<(f64, f64)> = Vec::with_capacity(idx.len());
+            let mut lower_raw: Vec<(f64, f64)> = Vec::with_capacity(idx.len());
             for &i in &idx {
                 let nx = x_scale.map(|s| s.map(&x_col[i])).unwrap_or(0.0);
                 let ny = y_scale.map(|s| s.map(&y_col[i])).unwrap_or(0.0);
@@ -103,9 +107,17 @@ impl Geom for GeomArea {
                     .and_then(|c| c[i].as_f64())
                     .and_then(|v| y_scale.map(|s| s.map(&Value::Float(v))))
                     .unwrap_or(base_ny);
-                upper.push(coord.transform((nx, ny), &plot_area));
-                lower.push(coord.transform((nx, nb), &plot_area));
+                upper_raw.push((nx, ny));
+                lower_raw.push((nx, nb));
             }
+            let to_px = |pts: Vec<(f64, f64)>| -> Vec<(f64, f64)> {
+                super::support::interpolate(&pts, self.interpolate)
+                    .0
+                    .into_iter()
+                    .map(|p| coord.transform(p, &plot_area))
+                    .collect()
+            };
+            let (upper, mut lower) = (to_px(upper_raw), to_px(lower_raw));
 
             let mut polygon = upper.clone();
             lower.reverse();

@@ -269,6 +269,7 @@ fn bar_col_area_positions() {
                 color: (0, 0, 0),
                 alpha: 0.5,
                 line_width: 1.0,
+                ..Default::default()
             })
             .position(PositionStack),
         "area_with stack",
@@ -539,6 +540,7 @@ fn range_geoms() {
             .geom_ribbon_with(GeomRibbon {
                 fill: (150, 200, 250),
                 alpha: 0.4,
+                ..Default::default()
             }),
         "ribbon_with",
     );

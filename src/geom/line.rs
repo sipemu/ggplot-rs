@@ -23,6 +23,10 @@ pub struct GeomLine {
     pub arrow: Option<Arrow>,
     /// Line cap style (R grid's `lineend`).
     pub lineend: LineEnd,
+    /// How consecutive points are joined (straight by default; a smooth
+    /// spline through the points with
+    /// [`Interpolate::MonotoneCubic`](super::support::Interpolate::MonotoneCubic)).
+    pub interpolate: super::support::Interpolate,
 }
 
 impl Default for GeomLine {
@@ -33,6 +37,7 @@ impl Default for GeomLine {
             alpha: 1.0,
             arrow: None,
             lineend: LineEnd::Butt,
+            interpolate: super::support::Interpolate::Linear,
         }
     }
 }
@@ -121,19 +126,24 @@ impl Geom for GeomLine {
                     xa.total_cmp(&xb)
                 });
 
-                let mut points: Vec<(f64, f64)> = sorted
+                let raw: Vec<(f64, f64)> = sorted
                     .iter()
                     .map(|&i| {
                         let nx = x_scale.map(|s| s.map(&x_col[i])).unwrap_or(0.0);
                         let ny = y_scale.map(|s| s.map(&y_col[i])).unwrap_or(0.0);
-                        coord.transform((nx, ny), &plot_area)
+                        (nx, ny)
                     })
                     .collect();
-                let mut widths: Vec<f64> = sorted
+                let (raw, origin) = super::support::interpolate(&raw, self.interpolate);
+                let mut points: Vec<(f64, f64)> = raw
+                    .into_iter()
+                    .map(|p| coord.transform(p, &plot_area))
+                    .collect();
+                let mut widths: Vec<f64> = origin
                     .iter()
-                    .map(|&i| {
+                    .map(|&k| {
                         linewidth_col
-                            .and_then(|lc| scales.map_linewidth(&lc[i]))
+                            .and_then(|lc| scales.map_linewidth(&lc[sorted[k]]))
                             .unwrap_or(self.width)
                     })
                     .collect();
@@ -175,19 +185,24 @@ impl Geom for GeomLine {
                 xa.total_cmp(&xb)
             });
 
-            let mut points: Vec<(f64, f64)> = sorted_indices
+            let raw: Vec<(f64, f64)> = sorted_indices
                 .iter()
                 .map(|&i| {
                     let nx = x_scale.map(|s| s.map(&x_col[i])).unwrap_or(0.0);
                     let ny = y_scale.map(|s| s.map(&y_col[i])).unwrap_or(0.0);
-                    coord.transform((nx, ny), &plot_area)
+                    (nx, ny)
                 })
                 .collect();
-            let mut widths: Vec<f64> = sorted_indices
+            let (raw, origin) = super::support::interpolate(&raw, self.interpolate);
+            let mut points: Vec<(f64, f64)> = raw
+                .into_iter()
+                .map(|p| coord.transform(p, &plot_area))
+                .collect();
+            let mut widths: Vec<f64> = origin
                 .iter()
-                .map(|&i| {
+                .map(|&k| {
                     linewidth_col
-                        .and_then(|lc| scales.map_linewidth(&lc[i]))
+                        .and_then(|lc| scales.map_linewidth(&lc[sorted_indices[k]]))
                         .unwrap_or(self.width)
                 })
                 .collect();

@@ -51,6 +51,7 @@ pub use crate::geom::segment::GeomSegment;
 pub use crate::geom::smooth::GeomSmooth;
 pub use crate::geom::spoke::GeomSpoke;
 pub use crate::geom::step::{GeomStep, StepDirection};
+pub use crate::geom::support::Interpolate;
 pub use crate::geom::text::{GeomLabel, GeomText};
 pub use crate::geom::tile::GeomTile;
 pub use crate::geom::treemap::GeomTreemap;
