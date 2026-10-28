@@ -56,11 +56,11 @@ impl Geom for GeomJitter {
         let shape_col = data.column("shape");
 
         let plot_area = backend.plot_area();
-        let x_scale = scales.get(&Aesthetic::X);
+        let xm = super::support::XMapper::new(data, scales);
         let y_scale = scales.get(&Aesthetic::Y);
 
         for i in 0..data.nrows() {
-            let nx = x_scale.map(|s| s.map(&x_col[i])).unwrap_or(0.0);
+            let nx = xm.map(&x_col[i], i);
             let ny = y_scale.map(|s| s.map(&y_col[i])).unwrap_or(0.0);
             let (px, py) = coord.transform((nx, ny), &plot_area);
 

@@ -148,3 +148,32 @@ pub const DODGE_OFFSET_COL: &str = ".x_dodge_offset";
 /// Number of dodged groups sharing a row's discrete x position (stored next to
 /// [`DODGE_OFFSET_COL`]); bar-like geoms divide their width by it.
 pub const DODGE_N_COL: &str = ".x_dodge_n";
+
+/// Is this x column discrete (its categories can't move — a position stores
+/// its shift in [`DODGE_OFFSET_COL`] instead)?
+pub(crate) fn is_discrete_x(col: &[crate::data::Value]) -> bool {
+    col.iter()
+        .any(|v| matches!(v, crate::data::Value::Str(_) | crate::data::Value::Bool(_)))
+}
+
+/// Add `offset(i)` (category units) to each row's [`DODGE_OFFSET_COL`],
+/// creating the column (zeros) if absent — for a jitter on a discrete x.
+pub(crate) fn add_x_offsets(
+    data: &mut crate::data::DataFrame,
+    mut offset: impl FnMut(usize) -> f64,
+) {
+    use crate::data::Value;
+    let n = data.nrows();
+    let mut col: Vec<Value> = data
+        .column(DODGE_OFFSET_COL)
+        .map(|c| c.to_vec())
+        .unwrap_or_else(|| vec![Value::Float(0.0); n]);
+    for (i, v) in col.iter_mut().enumerate() {
+        let base = v.as_f64().filter(|f| f.is_finite()).unwrap_or(0.0);
+        *v = Value::Float(base + offset(i));
+    }
+    match data.column_mut(DODGE_OFFSET_COL) {
+        Some(c) => *c = col,
+        None => data.add_column(DODGE_OFFSET_COL.to_string(), col),
+    }
+}
