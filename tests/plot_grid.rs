@@ -206,7 +206,7 @@ fn legend_strip_at_bottom() {
 
 #[test]
 fn legend_column_moves_below_when_narrow_363() {
-    let grid = || (scatter() / scatter() | line()).collect_legends(true);
+    let grid = || ((scatter() / scatter()) | line()).collect_legends(true);
     // Phone width: the legend column would take > 15% of the page → a row
     // below, and the right cell keeps (almost) its full half of the width.
     let svg = grid()
