@@ -1626,6 +1626,24 @@ impl GGPlot {
         plot
     }
 
+    /// Tile-grid cartogram: map `x` (grid column), `y` (grid row, 0 at the
+    /// top), `fill` and `label`; one equal tile per row (see
+    /// [`us_state_grid`](crate::geom::tilemap::us_state_grid) for a ready
+    /// US layout). Axes and grid are hidden.
+    pub fn geom_tilemap(self, shape: crate::geom::tilemap::TileShape) -> Self {
+        self.geom_tilemap_with(crate::geom::tilemap::GeomTilemap {
+            shape,
+            ..Default::default()
+        })
+    }
+
+    /// [`geom_tilemap`](Self::geom_tilemap) with explicit styling.
+    pub fn geom_tilemap_with(self, geom: crate::geom::tilemap::GeomTilemap) -> Self {
+        let mut plot = self.add_geom_with(geom);
+        plot.hide_position_guides = true;
+        plot
+    }
+
     /// Candlestick chart: map `x` and `open`/`high`/`low`/`close`
     /// (`Aes::new().x("date").open("o").high("h").low("l").close("c")`).
     pub fn geom_candlestick(self) -> Self {
