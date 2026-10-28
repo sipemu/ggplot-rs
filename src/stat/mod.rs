@@ -1,4 +1,5 @@
 pub mod align;
+pub mod arcdiagram;
 pub mod bin;
 pub mod bin2d;
 pub mod bindot;

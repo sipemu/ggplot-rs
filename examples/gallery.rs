@@ -84,6 +84,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     pareto()?;
     sankey()?;
     chord()?;
+    arcdiagram()?;
     radar()?;
     gauge()?;
     calendar()?;
@@ -840,6 +841,24 @@ fn chord() -> Result<(), Box<dyn std::error::Error>> {
         .subtitle("Trade between regions, USD bn (illustrative)")
         .theme_minimal()
         .save_with_size(&out("chord"), W, H)?;
+    Ok(())
+}
+
+/// Co-appearances between characters as an arc diagram (`geom_arcdiagram`).
+fn arcdiagram() -> Result<(), Box<dyn std::error::Error>> {
+    let df = df! {
+        "from" => ["Ana", "Ana", "Ana", "Ben", "Ben", "Cleo", "Cleo", "Dev", "Eli", "Eli", "Fay", "Gus", "Ana", "Hal"],
+        "to" => ["Ben", "Cleo", "Gus", "Cleo", "Dev", "Dev", "Fay", "Eli", "Fay", "Hal", "Gus", "Hal", "Hal", "Ben"],
+        "scenes" => [9.0, 6.0, 2.0, 7.0, 3.0, 5.0, 2.0, 8.0, 4.0, 3.0, 6.0, 5.0, 1.0, 2.0],
+    }?;
+    GGPlot::new(df)
+        .aes(Aes::new().from("from").to("to").weight("scenes"))
+        .geom_arcdiagram()
+        .scale_fill_brewer(PaletteName::Dark2)
+        .title("Arc diagram")
+        .subtitle("Shared scenes between characters")
+        .theme_minimal()
+        .save_with_size(&out("arcdiagram"), W, H)?;
     Ok(())
 }
 
