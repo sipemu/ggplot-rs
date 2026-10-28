@@ -1671,6 +1671,20 @@ impl GGPlot {
         plot
     }
 
+    /// HLC bars: a high–low bar with a close tick (no `open` needed); map
+    /// `x` and `high`/`low`/`close`.
+    pub fn geom_hlc(self) -> Self {
+        self.add_geom(crate::geom::candlestick::GeomOhlc::hlc())
+    }
+
+    /// Heikin-Ashi candles: [`geom_candlestick`](Self::geom_candlestick)
+    /// over the Heikin-Ashi transform of the OHLC values
+    /// ([`StatHeikinAshi`](crate::stat::heikin_ashi::StatHeikinAshi)).
+    pub fn geom_heikin_ashi(self) -> Self {
+        self.add_geom(crate::geom::candlestick::GeomCandlestick::default())
+            .stat(crate::stat::heikin_ashi::StatHeikinAshi)
+    }
+
     /// Candlestick chart: map `x` and `open`/`high`/`low`/`close`
     /// (`Aes::new().x("date").open("o").high("h").low("l").close("c")`).
     pub fn geom_candlestick(self) -> Self {

@@ -1,6 +1,8 @@
-//! Financial OHLC charts: `geom_candlestick` (body + wick) and `geom_ohlc`
-//! (bar with open/close ticks). Map `x` plus the `open`/`high`/`low`/`close`
-//! aesthetics; the y scale trains on the high–low range.
+//! Financial OHLC charts: `geom_candlestick` (body + wick; filled or
+//! hollow), `geom_ohlc` (bar with open/close ticks), `geom_hlc` (bar with a
+//! close tick only) and `geom_heikin_ashi` (candles over Heikin-Ashi
+//! values). Map `x` plus the `open`/`high`/`low`/`close` aesthetics; the y
+//! scale trains on the high–low range.
 
 use crate::aes::Aesthetic;
 use crate::coord::Coord;
@@ -16,9 +18,22 @@ use crate::theme::Theme;
 
 use super::{Geom, GeomParams};
 
+/// How candle bodies encode direction.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
+pub enum CandleStyle {
+    /// Solid bodies, coloured `up` when close ≥ open, else `down`.
+    #[default]
+    Filled,
+    /// Hollow candles: the body is hollow when close ≥ open and filled
+    /// otherwise; the colour is `up` when close ≥ the previous close.
+    Hollow,
+}
+
 /// Candlestick chart: a wick from low to high and a body from open to close,
 /// coloured `up` when close ≥ open and `down` otherwise.
 pub struct GeomCandlestick {
+    /// Filled (default) or hollow candles.
+    pub style: CandleStyle,
     /// Colour of rising periods (close ≥ open).
     pub up: (u8, u8, u8),
     /// Colour of falling periods (close < open).
@@ -32,6 +47,7 @@ pub struct GeomCandlestick {
 impl Default for GeomCandlestick {
     fn default() -> Self {
         GeomCandlestick {
+            style: CandleStyle::Filled,
             up: (0x0c, 0xa6, 0x78),
             down: (0xe0, 0x31, 0x31),
             width: 0.6,
@@ -44,6 +60,8 @@ impl Default for GeomCandlestick {
 /// OHLC bar chart: a vertical high–low bar with a left tick at the open and a
 /// right tick at the close, coloured `up`/`down` like [`GeomCandlestick`].
 pub struct GeomOhlc {
+    /// Draw the left open tick; `false` gives an HLC bar (no `open` needed).
+    pub open_tick: bool,
     pub up: (u8, u8, u8),
     pub down: (u8, u8, u8),
     /// Tick span as a fraction of the x spacing.
@@ -55,6 +73,7 @@ pub struct GeomOhlc {
 impl Default for GeomOhlc {
     fn default() -> Self {
         GeomOhlc {
+            open_tick: true,
             up: (0x0c, 0xa6, 0x78),
             down: (0xe0, 0x31, 0x31),
             width: 0.6,
@@ -94,6 +113,8 @@ struct Period {
     low: f64,
     close: f64,
     up: bool,
+    /// Close ≥ the previous period's close (the first period: close ≥ open).
+    up_from_prev: bool,
 }
 
 /// Shared walk over the rows: maps x/ohlc, sets hover metadata, and calls
@@ -109,13 +130,9 @@ fn for_each_period(
         data.column(n)
             .ok_or_else(|| RenderError::MissingAesthetic(n.into()))
     };
-    let (x_col, o_col, h_col, l_col, c_col) = (
-        col("x")?,
-        col("open")?,
-        col("high")?,
-        col("low")?,
-        col("close")?,
-    );
+    let (x_col, h_col, l_col, c_col) = (col("x")?, col("high")?, col("low")?, col("close")?);
+    // Without `open` (HLC bars) a period opens at its close.
+    let o_col = data.column("open").unwrap_or(c_col);
     let x_scale = scales.get(&Aesthetic::X);
     let y_scale = scales.get(&Aesthetic::Y);
     let my = |v: f64| y_scale.map(|s| s.map(&Value::Float(v))).unwrap_or(0.0);
@@ -129,7 +146,12 @@ fn for_each_period(
             0.01,
         )
     };
-    for i in 0..data.nrows() {
+    // Walk in x order so each period can compare with the previous close.
+    let nx_of = |i: usize| x_scale.map(|s| s.map(&x_col[i])).unwrap_or(0.5);
+    let mut order: Vec<usize> = (0..data.nrows()).collect();
+    order.sort_by(|&a, &b| nx_of(a).total_cmp(&nx_of(b)));
+    let mut prev_close: Option<f64> = None;
+    for i in order {
         let (Some(o), Some(h), Some(l), Some(c)) = (
             o_col[i].as_f64(),
             h_col[i].as_f64(),
@@ -139,22 +161,33 @@ fn for_each_period(
             continue;
         };
         let p = Period {
-            nx: x_scale.map(|s| s.map(&x_col[i])).unwrap_or(0.5),
+            nx: nx_of(i),
             open: my(o),
             high: my(h),
             low: my(l),
             close: my(c),
             up: c >= o,
+            up_from_prev: c >= prev_close.unwrap_or(o),
         };
+        prev_close = Some(c);
         let x = super::tip_value(&x_col[i]);
         let f = |v: &Value| super::tip_value(v);
-        let tip = format!(
-            "{x} — O {} H {} L {} C {}",
-            f(&o_col[i]),
-            f(&h_col[i]),
-            f(&l_col[i]),
-            f(&c_col[i])
-        );
+        let tip = if data.has_column("open") {
+            format!(
+                "{x} — O {} H {} L {} C {}",
+                f(&o_col[i]),
+                f(&h_col[i]),
+                f(&l_col[i]),
+                f(&c_col[i])
+            )
+        } else {
+            format!(
+                "{x} — H {} L {} C {}",
+                f(&h_col[i]),
+                f(&l_col[i]),
+                f(&c_col[i])
+            )
+        };
         let series =
             super::series_key(data, i).or_else(|| Some(if p.up { "up" } else { "down" }.into()));
         super::set_mark(
@@ -188,7 +221,11 @@ impl Geom for GeomCandlestick {
     ) -> Result<(), RenderError> {
         let area = backend.plot_area();
         for_each_period(data, scales, self.width, backend, |p, half, b| {
-            let color = if p.up { self.up } else { self.down };
+            let rising = match self.style {
+                CandleStyle::Filled => p.up,
+                CandleStyle::Hollow => p.up_from_prev,
+            };
+            let color = if rising { self.up } else { self.down };
             let wick = [
                 coord.transform((p.nx, p.low), &area),
                 coord.transform((p.nx, p.high), &area),
@@ -207,13 +244,23 @@ impl Geom for GeomCandlestick {
             let (x1, y1) = coord.transform((p.nx + half, p.open.min(p.close)), &area);
             // A doji (open == close) still shows a 1px body.
             let (top, bottom) = (y0.min(y1), y0.max(y1).max(y0.min(y1) + 1.0));
+            // Hollow style: rising bodies (close ≥ open) are outlined only.
+            let hollow = self.style == CandleStyle::Hollow && p.up;
             b.draw_rect(
                 (x0.min(x1), top),
                 (x0.max(x1), bottom),
                 &RectStyle {
-                    fill: Some(color),
+                    fill: if hollow {
+                        Some((255, 255, 255))
+                    } else {
+                        Some(color)
+                    },
                     stroke: Some(color),
-                    stroke_width: self.line_width * 0.5,
+                    stroke_width: if hollow {
+                        self.line_width
+                    } else {
+                        self.line_width * 0.5
+                    },
                     alpha: self.alpha,
                     clip: true,
                     corner_radius: 0.0,
@@ -242,6 +289,16 @@ impl Geom for GeomCandlestick {
     }
 }
 
+impl GeomOhlc {
+    /// HLC bars: a high–low bar with a close tick, no open.
+    pub fn hlc() -> Self {
+        GeomOhlc {
+            open_tick: false,
+            ..Default::default()
+        }
+    }
+}
+
 impl Geom for GeomOhlc {
     fn draw(
         &self,
@@ -262,13 +319,19 @@ impl Geom for GeomOhlc {
             };
             let t = |x: f64, y: f64| coord.transform((x, y), &area);
             b.draw_line(&[t(p.nx, p.low), t(p.nx, p.high)], &style)?;
-            b.draw_line(&[t(p.nx - half, p.open), t(p.nx, p.open)], &style)?;
+            if self.open_tick {
+                b.draw_line(&[t(p.nx - half, p.open), t(p.nx, p.open)], &style)?;
+            }
             b.draw_line(&[t(p.nx, p.close), t(p.nx + half, p.close)], &style)
         })
     }
 
     fn required_aes(&self) -> Vec<Aesthetic> {
-        ohlc_required()
+        let mut req = ohlc_required();
+        if !self.open_tick {
+            req.retain(|a| *a != Aesthetic::Open);
+        }
+        req
     }
     fn default_stat(&self) -> Box<dyn Stat> {
         Box::new(StatIdentity)
@@ -280,7 +343,11 @@ impl Geom for GeomOhlc {
         GeomParams::default()
     }
     fn name(&self) -> &str {
-        "ohlc"
+        if self.open_tick {
+            "ohlc"
+        } else {
+            "hlc"
+        }
     }
     fn setup_data(&self, data: &mut DataFrame, _warnings: &mut Vec<String>) {
         ohlc_setup(data);
