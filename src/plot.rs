@@ -1685,6 +1685,24 @@ impl GGPlot {
             .stat(crate::stat::heikin_ashi::StatHeikinAshi)
     }
 
+    /// Renko chart: map `y` to the price (rows in time order); a brick of
+    /// `box_size` per full move, reversals after two boxes. The x axis
+    /// counts bricks.
+    pub fn geom_renko(self, box_size: f64) -> Self {
+        self.add_geom_with(crate::geom::renko::GeomRenko::renko(box_size))
+            .xlab("Brick")
+    }
+
+    /// Point-and-figure chart: map `y` to the price (rows in time order);
+    /// X columns rise, O columns fall, a column reverses after `reversal`
+    /// boxes of `box_size`. The x axis counts columns.
+    pub fn geom_point_figure(self, box_size: f64, reversal: usize) -> Self {
+        self.add_geom_with(crate::geom::renko::GeomRenko::point_figure(
+            box_size, reversal,
+        ))
+        .xlab("Column")
+    }
+
     /// Candlestick chart: map `x` and `open`/`high`/`low`/`close`
     /// (`Aes::new().x("date").open("o").high("h").low("l").close("c")`).
     pub fn geom_candlestick(self) -> Self {

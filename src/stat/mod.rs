@@ -35,6 +35,7 @@ pub mod partition;
 pub mod qq;
 #[cfg(feature = "regression")]
 pub mod quantile;
+pub mod renko;
 pub mod sankey;
 pub mod smooth;
 pub mod sum;

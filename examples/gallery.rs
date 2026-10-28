@@ -105,6 +105,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     windbarb()?;
     variable_pie()?;
     heikin_ashi()?;
+    renko()?;
     radar()?;
     gauge()?;
     calendar()?;
@@ -1521,6 +1522,27 @@ fn heikin_ashi() -> Result<(), Box<dyn std::error::Error>> {
         .ylab("Price")
         .theme_minimal()
         .save_with_size(&out("heikin_ashi"), W, H)?;
+    Ok(())
+}
+
+/// A random-walk price series as Renko bricks (`geom_renko`).
+fn renko() -> Result<(), Box<dyn std::error::Error>> {
+    let mut price = 100.0f64;
+    let close: Vec<f64> = (0..240)
+        .map(|i| {
+            price += 1.1 * (i as f64 * 0.37).sin() + 0.8 * (i as f64 * 1.9).cos() + 0.05;
+            price
+        })
+        .collect();
+    let df = df! { "close" => close }?;
+    GGPlot::new(df)
+        .aes(Aes::new().y("close"))
+        .geom_renko(1.0)
+        .title("Renko")
+        .subtitle("240 closes as 1-point bricks (time drops out)")
+        .ylab("Price")
+        .theme_minimal()
+        .save_with_size(&out("renko"), W, H)?;
     Ok(())
 }
 
