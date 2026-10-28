@@ -1030,6 +1030,50 @@ impl GGPlot {
         self.add_geom_with(geom)
     }
 
+    /// Waterfall (bridge) chart: map `x` (steps, in data order) and `y` (each
+    /// step's change). Bars float from the running total and are filled by
+    /// direction (Increase / Decrease / Total, with a legend); dashed
+    /// connectors join consecutive bars. See [`geom_waterfall_with`](Self::geom_waterfall_with)
+    /// for subtotals and a closing total.
+    pub fn geom_waterfall(self) -> Self {
+        self.geom_waterfall_with(crate::geom::waterfall::GeomWaterfall::default())
+    }
+
+    /// [`geom_waterfall`](Self::geom_waterfall) with explicit colours,
+    /// `totals` (subtotal x levels) and `final_total`. Unless `fill` is
+    /// already mapped at plot level, the layer maps `after_stat(fill =
+    /// direction)`; unless a fill scale is already set, a manual fill scale
+    /// with the geom's `up`/`down`/`total` colours is added (a later
+    /// `scale_fill_*` call replaces it).
+    pub fn geom_waterfall_with(self, geom: crate::geom::waterfall::GeomWaterfall) -> Self {
+        use crate::scale::color::RGBAColor;
+        use crate::stat::waterfall::{WATERFALL_DECREASE, WATERFALL_INCREASE, WATERFALL_TOTAL};
+        let rgba = |(r, g, b): (u8, u8, u8)| RGBAColor::new(r, g, b);
+        let mut values = vec![
+            (WATERFALL_INCREASE, rgba(geom.up)),
+            (WATERFALL_DECREASE, rgba(geom.down)),
+        ];
+        if geom.has_totals() {
+            values.push((WATERFALL_TOTAL, rgba(geom.total)));
+        }
+        let fill_mapped = self
+            .mapping
+            .get_mapping(&crate::aes::Aesthetic::Fill)
+            .is_some();
+        let has_fill_scale = self
+            .scales
+            .iter()
+            .any(|s| s.aesthetic() == crate::aes::Aesthetic::Fill);
+        let mut plot = self.add_geom_with(geom);
+        if !fill_mapped {
+            plot = plot.layer_aes(Aes::new().after_stat_fill("direction"));
+            if !has_fill_scale {
+                plot = plot.scale_fill_manual(values);
+            }
+        }
+        plot
+    }
+
     /// Candlestick chart: map `x` and `open`/`high`/`low`/`close`
     /// (`Aes::new().x("date").open("o").high("h").low("l").close("c")`).
     pub fn geom_candlestick(self) -> Self {
