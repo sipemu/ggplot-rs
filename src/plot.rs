@@ -1139,6 +1139,34 @@ impl GGPlot {
             .show_legend(false)
     }
 
+    /// Chord diagram / dependency wheel from an edge list: map `from`, `to`
+    /// and optionally `weight`. Each node is an arc sized by its total flow
+    /// (in + out); each link a ribbon through the centre, coloured by its
+    /// source. Nodes are coloured by name through the fill scale (no legend
+    /// — they are labelled); axes and grid are hidden and the panel is kept
+    /// square so the circle stays round.
+    pub fn geom_chord(self) -> Self {
+        self.add_chord(crate::geom::chord::GeomChord::default(), false)
+    }
+
+    /// [`geom_chord`](Self::geom_chord) with explicit padding and styling.
+    pub fn geom_chord_with(self, geom: crate::geom::chord::GeomChord) -> Self {
+        self.add_chord(geom, true)
+    }
+
+    fn add_chord(self, geom: crate::geom::chord::GeomChord, explicit: bool) -> Self {
+        let (ex, ey) = geom.extents();
+        let mut plot = if explicit {
+            self.add_geom_with(geom)
+        } else {
+            self.add_geom(geom)
+        };
+        plot.hide_position_guides = true;
+        plot.default_aspect_ratio = Some(ey / ex);
+        plot.layer_aes(Aes::new().after_stat_fill("node"))
+            .show_legend(false)
+    }
+
     /// Candlestick chart: map `x` and `open`/`high`/`low`/`close`
     /// (`Aes::new().x("date").open("o").high("h").low("l").close("c")`).
     pub fn geom_candlestick(self) -> Self {
