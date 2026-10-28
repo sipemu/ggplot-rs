@@ -1652,6 +1652,25 @@ impl GGPlot {
         self.add_geom(geom)
     }
 
+    /// Variable-radius pie (Highcharts `variablepie`): map `y` (wedge
+    /// angle), `radius` (wedge length) and `fill` (category), optionally
+    /// `label`. Square panel, axes and grid hidden.
+    pub fn geom_variable_pie(self) -> Self {
+        let mut plot = self.add_geom(crate::geom::variablepie::GeomVariablePie::default());
+        plot.hide_position_guides = true;
+        plot.default_aspect_ratio = Some(1.0);
+        plot
+    }
+
+    /// [`geom_variable_pie`](Self::geom_variable_pie) with explicit settings
+    /// (e.g. a donut `inner`).
+    pub fn geom_variable_pie_with(self, geom: crate::geom::variablepie::GeomVariablePie) -> Self {
+        let mut plot = self.add_geom_with(geom);
+        plot.hide_position_guides = true;
+        plot.default_aspect_ratio = Some(1.0);
+        plot
+    }
+
     /// Candlestick chart: map `x` and `open`/`high`/`low`/`close`
     /// (`Aes::new().x("date").open("o").high("h").low("l").close("c")`).
     pub fn geom_candlestick(self) -> Self {

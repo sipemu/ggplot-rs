@@ -103,6 +103,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     gantt()?;
     tilemap()?;
     windbarb()?;
+    variable_pie()?;
     radar()?;
     gauge()?;
     calendar()?;
@@ -1455,6 +1456,28 @@ fn windbarb() -> Result<(), Box<dyn std::error::Error>> {
         .ylab("Speed (kt)")
         .theme_minimal()
         .save_with_size(&out("windbarb"), W, H)?;
+    Ok(())
+}
+
+/// Area (angle) vs population density (radius) by country (`geom_variable_pie`).
+fn variable_pie() -> Result<(), Box<dyn std::error::Error>> {
+    let df = df! {
+        "country" => ["Spain", "France", "Poland", "Czechia", "Italy", "Switzerland", "Germany"],
+        "area" => [505.0, 551.5, 312.7, 78.9, 301.3, 41.3, 357.0],
+        "density" => [92.0, 118.0, 124.0, 136.0, 200.0, 213.0, 235.0],
+    }?;
+    GGPlot::new(df)
+        .aes(Aes::new().y("area").radius("density").fill("country"))
+        .geom_variable_pie_with(GeomVariablePie {
+            inner: 0.25,
+            ..Default::default()
+        })
+        .scale_fill_brewer(PaletteName::Set2)
+        .title("Variable-radius pie")
+        .subtitle("Angle = land area, radius = population density")
+        .theme_void()
+        .legend_position(LegendPosition::None)
+        .save_with_size(&out("variable_pie"), W, H)?;
     Ok(())
 }
 
