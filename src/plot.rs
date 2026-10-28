@@ -110,6 +110,8 @@ pub struct GGPlot {
     pub(crate) warnings: Vec<String>,
     /// [`GGPlot::legend_bottom_when_narrow`]'s share, if set (#287).
     pub(crate) legend_bottom_share: Option<f64>,
+    /// [`GGPlot::legend_inside_auto`]'s settings, if set (#332).
+    pub(crate) legend_auto: Option<LegendAuto>,
     /// Panel aspect ratio used when the theme sets none (helpers such as
     /// `geom_calendar` need square cells; survives theme presets).
     pub(crate) default_aspect_ratio: Option<f64>,
@@ -173,6 +175,7 @@ impl GGPlot {
             guide_legend: crate::guide::config::GuideLegend::default(),
             warnings: Vec::new(),
             legend_bottom_share: None,
+            legend_auto: None,
             default_aspect_ratio: None,
             hide_position_guides: false,
             hide_y_guides: false,
@@ -2988,6 +2991,48 @@ impl GGPlot {
         self
     }
 
+    /// Put the legend inside the panel, in an empty corner (#332): after
+    /// layout, each corner's real legend box is tested against the drawn
+    /// marks (polygons, lines, points, labels, corner furniture such as a
+    /// scale bar), and the first corner it overlaps nothing in wins, in the
+    /// order bottom-right, bottom-left, top-right, top-left. If every
+    /// corner is taken the legend goes outside, `Top` or `Right`, whichever
+    /// leaves the data area (e.g. a `coord_sf` map) larger. The choice is
+    /// written as the root `data-legend-at` attribute (`inside-top-left`,
+    /// `top`, …). Single-panel plots only; a faceted plot keeps its legend
+    /// position. See [`legend_inside_auto_with`](Self::legend_inside_auto_with).
+    pub fn legend_inside_auto(self) -> Self {
+        self.legend_inside_auto_with(&crate::theme::LegendCorner::ALL, None)
+    }
+
+    /// [`legend_inside_auto`](Self::legend_inside_auto) with the candidate
+    /// `corners` (in preference order) and an outside `fallback`
+    /// (`Top`/`Right`/`Bottom`/`Left`; `None` = the larger of `Top` and
+    /// `Right`).
+    pub fn legend_inside_auto_with(
+        mut self,
+        corners: &[crate::theme::LegendCorner],
+        fallback: Option<crate::theme::LegendPosition>,
+    ) -> Self {
+        use crate::theme::LegendPosition as P;
+        let mut c = [None; 4];
+        for (slot, corner) in c.iter_mut().zip(corners) {
+            *slot = Some(*corner);
+        }
+        let fallback = match fallback {
+            Some(P::Top) => Some(LegendSide::Top),
+            Some(P::Right) => Some(LegendSide::Right),
+            Some(P::Bottom) => Some(LegendSide::Bottom),
+            Some(P::Left) => Some(LegendSide::Left),
+            _ => None,
+        };
+        self.legend_auto = Some(LegendAuto {
+            corners: c,
+            fallback,
+        });
+        self
+    }
+
     pub fn primary_color(mut self, color: (u8, u8, u8)) -> Self {
         self.theme.primary = Some(color);
         self
@@ -3465,6 +3510,7 @@ impl GGPlot {
         let has_caption = plot.labels.caption.is_some();
         let has_legend = plot.has_legend_mapping();
         let legend_bottom_share = plot.legend_bottom_share;
+        let legend_auto = plot.legend_auto;
         let x_label = plot.labels.x.clone();
         let y_label = plot.labels.y.clone();
 
@@ -3493,6 +3539,7 @@ impl GGPlot {
                 has_caption,
                 has_legend,
                 legend_bottom_share,
+                legend_auto,
             },
         ))
     }
@@ -3505,12 +3552,125 @@ impl GGPlot {
         w: u32,
         h: u32,
     ) -> PlotLayout {
+        match meta.legend_auto {
+            Some(auto) if meta.has_legend && built.panels.is_empty() => {
+                Self::layout_legend_auto(built, meta, auto, w, h)
+            }
+            _ => Self::layout_built_inner(built, meta, w, h),
+        }
+    }
+
+    /// #332: try each candidate corner for an inside legend against the
+    /// marks a dry render draws; fall back outside when none is free.
+    fn layout_legend_auto(
+        built: &mut crate::build::BuiltPlot,
+        meta: &RenderMeta,
+        auto: LegendAuto,
+        w: u32,
+        h: u32,
+    ) -> PlotLayout {
+        use crate::render::probe::Probe;
+        use crate::theme::LegendPosition as P;
+        let total = crate::render::Rect {
+            x: 0.0,
+            y: 0.0,
+            width: w as f64,
+            height: h as f64,
+        };
+        // `layout_built_inner` may rotate axis labels and push warnings:
+        // every trial starts from the same state.
+        let (theme0, n_warnings) = (built.theme.clone(), built.warnings.len());
+        let reset = |built: &mut crate::build::BuiltPlot, pos: P| {
+            built.theme = theme0.clone();
+            built.theme.legend_position = pos;
+            built.warnings.truncate(n_warnings);
+        };
+
+        reset(built, P::Inside(1.0, 0.0));
+        let layout = Self::layout_built_inner(built, meta, w, h);
+        let pa = layout.plot_area.clone();
+        let mut marks = Probe::new(pa.clone(), total.clone());
+        for layer in built.layers.iter().filter(|l| l.data.nrows() > 0) {
+            let _ = layer.geom.draw(
+                &layer.data,
+                built.coord.as_ref(),
+                &built.scales,
+                &built.theme,
+                &mut marks,
+            );
+        }
+        for corner in auto.corners.iter().flatten() {
+            built.theme.legend_position = corner.inside();
+            let mut legend = Probe::new(pa.clone(), total.clone());
+            let drawn = crate::guide::legend::draw_legend_planned(
+                &built.scales,
+                &built.theme,
+                &pa,
+                pa.width,
+                &mut legend,
+                &built.guide_legend,
+                &built.suppressed_aes,
+                &built.legend_plans,
+            );
+            let Some((x0, y0, x1, y1)) = legend.extent().filter(|_| drawn.is_ok()) else {
+                continue;
+            };
+            const PAD: f64 = 2.0;
+            if !marks.hits((x0 - PAD, y0 - PAD, x1 + PAD, y1 + PAD)) {
+                built.legend_at = Some(format!("inside-{}", corner.name()));
+                return layout;
+            }
+        }
+
+        // Outside: the given side, else whichever of Top/Right leaves the
+        // data area (a fixed-aspect map's letterboxed rect) larger.
+        let sides = match auto.fallback {
+            Some(side) => vec![side],
+            None => vec![LegendSide::Top, LegendSide::Right],
+        };
+        let data_area = |built: &crate::build::BuiltPlot, layout: &PlotLayout| {
+            let r = built
+                .coord
+                .data_rect(&layout.plot_area)
+                .unwrap_or_else(|| layout.plot_area.clone());
+            r.width.max(0.0) * r.height.max(0.0)
+        };
+        let mut best = (sides[0], f64::MIN);
+        for &side in &sides {
+            reset(built, side.position());
+            let trial = Self::layout_built_inner(built, meta, w, h);
+            let area = data_area(built, &trial);
+            if area > best.1 {
+                best = (side, area);
+            }
+        }
+        reset(built, best.0.position());
+        let layout = Self::layout_built_inner(built, meta, w, h);
+        built.legend_at = Some(
+            match built.theme.legend_position {
+                P::Top => "top",
+                P::Right => "right",
+                P::Bottom => "bottom",
+                _ => "left",
+            }
+            .to_string(),
+        );
+        layout
+    }
+
+    fn layout_built_inner(
+        built: &mut crate::build::BuiltPlot,
+        meta: &RenderMeta,
+        w: u32,
+        h: u32,
+    ) -> PlotLayout {
         let RenderMeta {
             has_title,
             has_subtitle,
             has_caption,
             has_legend,
             legend_bottom_share,
+            legend_auto: _,
         } = *meta;
         let x_axis_top = built
             .scales
@@ -4385,6 +4545,35 @@ pub(crate) struct RenderMeta {
     pub(crate) has_caption: bool,
     pub(crate) has_legend: bool,
     pub(crate) legend_bottom_share: Option<f64>,
+    pub(crate) legend_auto: Option<LegendAuto>,
+}
+
+/// [`GGPlot::legend_inside_auto_with`]'s settings (#332).
+#[derive(Clone, Copy, Debug)]
+pub(crate) struct LegendAuto {
+    corners: [Option<crate::theme::LegendCorner>; 4],
+    fallback: Option<LegendSide>,
+}
+
+/// An outside legend side (a `Copy` subset of `LegendPosition`).
+#[derive(Clone, Copy, Debug)]
+enum LegendSide {
+    Top,
+    Right,
+    Bottom,
+    Left,
+}
+
+impl LegendSide {
+    fn position(self) -> crate::theme::LegendPosition {
+        use crate::theme::LegendPosition as P;
+        match self {
+            LegendSide::Top => P::Top,
+            LegendSide::Right => P::Right,
+            LegendSide::Bottom => P::Bottom,
+            LegendSide::Left => P::Left,
+        }
+    }
 }
 
 /// Top-level error type.

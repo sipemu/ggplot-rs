@@ -875,6 +875,9 @@ pub fn root_data_attrs(built: &crate::build::BuiltPlot) -> Vec<(String, String)>
             None => (None, None),
         }
     };
+    if let Some(at) = &built.legend_at {
+        out.push(("data-legend-at".into(), at.clone()));
+    }
     let (xd, xl) = axis(&Aesthetic::X);
     let (yd, yl) = axis(&Aesthetic::Y);
     if let (Some((x0, x1)), Some((y0, y1))) = (xd, yd) {

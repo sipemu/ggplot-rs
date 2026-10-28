@@ -50,6 +50,9 @@ pub struct BuiltPlot {
     /// (sipemu/ggplot-rs#155) — previously this only ever held at most
     /// one plan, for a single discrete guide.
     pub(crate) legend_plans: std::collections::HashMap<Aesthetic, crate::guide::legend::LegendPlan>,
+    /// Where `legend_inside_auto` put the legend (`inside-bottom-right`,
+    /// `top`, …), written as the root `data-legend-at` attribute (#332).
+    pub(crate) legend_at: Option<String>,
 }
 
 impl BuiltPlot {
@@ -230,6 +233,7 @@ impl PlotBuilder {
             hide_position_guides,
             hide_y_guides,
             legend_bottom_share: _,
+            legend_auto: _,
             locale,
             svg_root_data: _,
             root_attrs: _,
@@ -422,6 +426,7 @@ impl PlotBuilder {
             panel_scales,
             warnings,
             legend_plans: std::collections::HashMap::new(),
+            legend_at: None,
         })
     }
 
