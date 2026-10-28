@@ -266,4 +266,68 @@ mod tests {
         assert!(p.hits((40.0, 40.0, 60.0, 60.0)));
         assert!(!p.hits((40.0, 70.0, 60.0, 90.0)));
     }
+
+    #[test]
+    fn every_primitive_is_recorded_with_its_extent() {
+        let mut p = probe();
+        assert_eq!(p.extent(), None);
+        let point = PointStyle::default();
+        p.draw_circle((10.0, 10.0), 2.0, &point).unwrap();
+        p.draw_shape((90.0, 90.0), 3.0, &point).unwrap();
+        let unfilled = RectStyle {
+            fill: None,
+            stroke: Some((0, 0, 0)),
+            stroke_width: 1.0,
+            alpha: 1.0,
+            clip: false,
+            corner_radius: 0.0,
+        };
+        p.draw_rect((20.0, 20.0), (30.0, 30.0), &unfilled).unwrap();
+        p.draw_polygon(&[(50.0, 0.0), (60.0, 5.0)], &unfilled)
+            .unwrap();
+        p.draw_quadratic(
+            (0.0, 100.0),
+            (50.0, 50.0),
+            (100.0, 100.0),
+            &LineStyle::default(),
+        )
+        .unwrap();
+        p.draw_line(&[(70.0, 70.0)], &LineStyle::default()).unwrap();
+        for anchor in [TextAnchor::Start, TextAnchor::Middle, TextAnchor::End] {
+            let style = TextStyle {
+                anchor,
+                size: 10.0,
+                ..Default::default()
+            };
+            p.draw_text("abc", (40.0, 60.0), &style).unwrap();
+        }
+        assert_eq!(p.extent(), Some((0.0, 0.0, 100.0, 100.0)));
+        // An unfilled rect only hits along its outline, not inside.
+        assert!(p.hits((19.0, 24.0, 21.0, 26.0)));
+        assert!(!p.hits((24.0, 24.0, 26.0, 26.0)));
+        assert!(p.hits((69.0, 69.0, 71.0, 71.0)), "a single-point line");
+        assert_eq!(p.plot_area().width, 100.0);
+        assert_eq!(p.total_area().height, 100.0);
+    }
+
+    #[test]
+    fn corner_claims_are_kept_until_cleared() {
+        let mut p = probe();
+        let r = p.plot_area();
+        p.claim_corner_box(r.clone());
+        assert_eq!(p.corner_claims().len(), 1);
+        p.clear_corner_claims();
+        assert!(p.corner_claims().is_empty());
+    }
+
+    #[test]
+    fn primitives_past_the_cap_are_sampled() {
+        let mut p = probe();
+        for i in 0..(MAX_PRIMITIVES + 1000) {
+            let x = (i % 100) as f64;
+            p.draw_circle((x, x), 0.5, &PointStyle::default()).unwrap();
+        }
+        assert!(p.boxes.len() >= MAX_PRIMITIVES);
+        assert!(p.boxes.len() < MAX_PRIMITIVES + 1000);
+    }
 }

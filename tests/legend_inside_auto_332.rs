@@ -167,6 +167,48 @@ mod maps {
 }
 
 #[test]
+fn every_corner_and_fallback_side_is_reported() {
+    // A free plot (one point in the middle): each single candidate wins.
+    let one = || {
+        GGPlot::new(vec![
+            ("x".into(), vec![Value::Float(0.0), Value::Float(1.0)]),
+            ("y".into(), vec![Value::Float(0.0), Value::Float(1.0)]),
+            (
+                "g".into(),
+                vec![Value::Str("a".into()), Value::Str("b".into())],
+            ),
+        ])
+        .aes(Aes::new().x("x").y("y").color("g"))
+        .geom_blank()
+    };
+    for corner in [
+        LegendCorner::TopLeft,
+        LegendCorner::TopRight,
+        LegendCorner::BottomLeft,
+        LegendCorner::BottomRight,
+    ] {
+        let svg = one()
+            .legend_inside_auto_with(&[corner], None)
+            .render_svg_native_with_size(400, 300)
+            .unwrap();
+        assert_eq!(legend_at(&svg), Some(format!("inside-{}", corner.name())));
+    }
+    // No candidates: straight to the fallback.
+    for (pos, name) in [
+        (LegendPosition::Top, "top"),
+        (LegendPosition::Right, "right"),
+        (LegendPosition::Bottom, "bottom"),
+        (LegendPosition::Left, "left"),
+    ] {
+        let svg = one()
+            .legend_inside_auto_with(&[], Some(pos))
+            .render_svg_native_with_size(400, 300)
+            .unwrap();
+        assert_eq!(legend_at(&svg).as_deref(), Some(name));
+    }
+}
+
+#[test]
 fn faceted_plots_keep_their_legend() {
     let svg = scatter()
         .facet_wrap("g", None)
