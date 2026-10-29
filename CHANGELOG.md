@@ -5,6 +5,29 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.35.0] — 2026-10-29
+
+### Added
+- **`GridElement`** — non-plot `PlotGrid` cells (patchwork's
+  `wrap_elements`, #378): `GridElement::fixed(svg, w, h)` scales a fragment
+  drawn in its own `w × h` box into the cell keeping its aspect;
+  `GridElement::fill(|w, h| svg)` renders at the cell's real size. The cell
+  is a nested `<svg … data-cell="i">`, takes part in widths/heights and
+  `tag_levels`, and is skipped by `axis_collect` / `collect_legends`; the
+  `|` / `/` operators accept it. Markup is inserted verbatim.
+
+### Fixed
+- Inside legends (`LegendPosition::Inside`, `legend_inside_auto`) are inset
+  by `legend_margin` from the panel edges, and the title — drawn centred on
+  the legend origin — no longer sticks out above the box (it was clipped in
+  a top corner); a colourbar's bottom label overhang is counted too (#377).
+
+### Changed
+- **Breaking**: `GridCell` has a new `Element` variant (exhaustive matches
+  need an arm).
+- Inside legends with a non-zero `legend_margin` sit that margin further
+  in from the panel edge.
+
 ## [0.34.0] — 2026-10-28
 
 ### Added
