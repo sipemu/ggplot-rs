@@ -347,3 +347,85 @@ fn fragment_for_dashboards() {
     assert!(frag.starts_with("<svg x=\"10.00\" y=\"20.00\""));
     assert!(!frag.contains("xmlns"));
 }
+
+mod elements_378 {
+    use super::*;
+    use ggplot_rs::compose::{AxisCollect, GridElement, TagLevels};
+
+    fn open_tag<'a>(svg: &'a str, needle: &str) -> &'a str {
+        let i = svg.find(needle).expect(needle);
+        let start = svg[..i].rfind('<').unwrap();
+        &svg[start..i + svg[i..].find('>').unwrap()]
+    }
+
+    fn attr(tag: &str, name: &str) -> f64 {
+        tag.split(&format!(" {name}=\""))
+            .nth(1)
+            .unwrap()
+            .split('"')
+            .next()
+            .unwrap()
+            .parse()
+            .unwrap()
+    }
+
+    #[test]
+    fn fixed_and_fill_elements_size_into_their_cells() {
+        let table = GridElement::fixed(
+            "<rect width=\"100\" height=\"50\" fill=\"#123456\"/>",
+            100.0,
+            50.0,
+        );
+        let note = GridElement::fill(|w, h| format!("<text x=\"4\" y=\"12\">{w:.0}x{h:.0}</text>"));
+        let svg = PlotGrid::new()
+            .add(scatter())
+            .add(table)
+            .add(note)
+            .ncol(3)
+            .widths(&[2.0, 1.0, 1.0])
+            .render_svg_native_with_size(800, 300)
+            .unwrap();
+        well_formed(&svg);
+        // Cells count plots and elements alike: the elements are 2 and 3.
+        let fixed = open_tag(&svg, "data-cell=\"2\"");
+        assert!(fixed.contains("viewBox=\"0 0 100 50\""), "{fixed}");
+        assert!((attr(fixed, "width") - 200.0).abs() < 1.0, "{fixed}");
+        assert!((attr(fixed, "x") - 400.0).abs() < 1.0, "{fixed}");
+        assert!(svg.contains("fill=\"#123456\""));
+        let fill = open_tag(&svg, "data-cell=\"3\"");
+        assert!(!fill.contains("viewBox"));
+        assert!(
+            svg.contains(">200x300</text>"),
+            "fill rendered at the cell size"
+        );
+    }
+
+    #[test]
+    fn elements_get_tags_and_work_with_operators_and_collection() {
+        let svg = ((scatter() | GridElement::fixed("<circle r=\"5\"/>", 10.0, 10.0)) / line())
+            .tag_levels(TagLevels::Lower)
+            .collect_legends(true)
+            .axis_collect(AxisCollect::CollectX)
+            .render_svg_native_with_size(600, 500)
+            .unwrap();
+        well_formed(&svg);
+        for t in [">a<", ">b<", ">c<"] {
+            assert!(svg.contains(t), "tag {t}");
+        }
+        assert!(svg.contains("data-cell="));
+    }
+
+    #[test]
+    fn an_invalid_fixed_size_is_skipped_with_a_warning() {
+        let (svg, warnings) = PlotGrid::new()
+            .add(scatter())
+            .add(GridElement::fixed("<g/>", 0.0, 10.0))
+            .render_svg_native_with_warnings(400, 200)
+            .unwrap();
+        assert!(!svg.contains("data-cell"));
+        assert!(
+            warnings.iter().any(|w| w.contains("invalid size")),
+            "{warnings:?}"
+        );
+    }
+}
