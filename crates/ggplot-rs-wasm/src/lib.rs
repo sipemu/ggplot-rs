@@ -13,6 +13,237 @@ use ggplot_rs::geom::sf::GeomSf;
 use ggplot_rs::prelude::*;
 use ggplot_rs::spatial::SfProjection;
 
+mod spec;
+
+// TypeScript mirror of `spec::PlotSpec` — keep in sync with spec.rs.
+#[wasm_bindgen(typescript_custom_section)]
+const PLOT_SPEC_TS: &'static str = r##"
+/** One data column: numbers → continuous, strings/booleans → categorical, null → missing. */
+export type Column = (number | string | boolean | null)[];
+/** Column-oriented data: `{ column: [values…] }`; all columns the same length. */
+export type Data = Record<string, Column>;
+
+export type Aesthetic =
+  | "x" | "y" | "color" | "colour" | "fill" | "size" | "shape" | "alpha" | "group"
+  | "linetype" | "linewidth" | "label" | "weight" | "xmin" | "xmax" | "ymin" | "ymax"
+  | "xend" | "yend" | "angle" | "radius" | "tooltip" | "from" | "to" | "subgroup"
+  | "open" | "high" | "low" | "close" | "lower" | "middle" | "upper" | "fontface" | "class";
+/** Aesthetic → column name. */
+export type AesMap = Partial<Record<Aesthetic, string>>;
+
+export type GeomName =
+  | "point" | "jitter" | "line" | "path" | "step" | "area" | "ribbon" | "col" | "bar"
+  | "histogram" | "freqpoly" | "density" | "boxplot" | "violin" | "dotplot" | "smooth"
+  | "text" | "label" | "errorbar" | "linerange" | "pointrange" | "crossbar" | "segment"
+  | "rect" | "tile" | "raster" | "polygon" | "rug" | "count" | "bin2d" | "hex"
+  | "density2d" | "contour" | "qq" | "qq_line" | "hline" | "vline" | "abline" | "blank"
+  | "waterfall" | "pareto" | "sankey" | "chord" | "treemap" | "sunburst" | "icicle"
+  | "funnel" | "stream" | "lollipop" | "dumbbell" | "candlestick" | "ohlc" | "calendar";
+
+export interface LayerParams {
+  /** histogram: bin count. */
+  bins?: number;
+  /** smooth: fitting method (default "lm"). */
+  method?: "lm" | "loess";
+  /** smooth (loess): span (default 0.75). */
+  span?: number;
+  /** smooth: draw the confidence ribbon (default true). */
+  se?: boolean;
+  /** hline (required). */
+  yintercept?: number;
+  /** vline (required). */
+  xintercept?: number;
+  /** abline (slope required, intercept default 0). */
+  slope?: number;
+  intercept?: number;
+  /** sunburst / icicle (required): hierarchy columns, outermost first. */
+  levels?: string[];
+}
+
+export type PositionName = "identity" | "stack" | "fill" | "dodge" | "dodge2" | "jitter" | "nudge";
+export type Position =
+  | PositionName
+  | { type: PositionName; width?: number; height?: number; padding?: number; x?: number; y?: number };
+
+export interface Layer {
+  geom: GeomName;
+  /** Merged over the plot-level `aes` (layer wins). */
+  aes?: AesMap;
+  /** Layer-specific data, replacing the plot's. */
+  data?: Data;
+  params?: LayerParams;
+  /** Override the geom's default stat; only "identity" is supported. */
+  stat?: "identity";
+  position?: Position;
+}
+
+export interface PositionScale {
+  trans?: "identity" | "log10" | "log2" | "ln" | "log" | "sqrt" | "reverse" | "logit"
+    | "probit" | "pseudo_log" | "reciprocal" | "exp";
+  limits?: [number, number];
+  breaks?: number[];
+  /** Axis title. */
+  name?: string;
+}
+
+export interface ColorScale {
+  /** Discrete ("Set1", "Dark2", "Paired", "npg", "lancet", …) for a categorical
+   *  column; "viridis" | "magma" | "plasma" | "inferno" for a numeric one. */
+  palette?: string;
+  /** Fixed level order for a categorical column. */
+  levels?: string[];
+  /** Manual colors: `{ level: "#rrggbb" }`. */
+  values?: Record<string, string>;
+  /** Two-color gradient `["#low", "#high"]` for a numeric column. */
+  gradient?: [string, string];
+}
+
+export type Facet =
+  | { wrap: string; ncol?: number; scales?: "fixed" | "free" | "free_x" | "free_y" }
+  | { rows?: string; cols?: string; scales?: "fixed" | "free" | "free_x" | "free_y" };
+
+export type CoordName = "cartesian" | "flip" | "polar" | "fixed" | "equal" | "radar";
+export type Coord =
+  | CoordName
+  | { type: CoordName; ratio?: number; xlim?: [number, number]; ylim?: [number, number] };
+
+export interface Labels {
+  title?: string;
+  subtitle?: string;
+  caption?: string;
+  tag?: string;
+  x?: string;
+  y?: string;
+}
+
+export type ThemePreset = "gray" | "grey" | "bw" | "minimal" | "classic" | "dark" | "light" | "void" | "linedraw";
+export interface TextElement {
+  family?: string; size?: number; color?: [number, number, number];
+  face?: "plain" | "bold" | "italic"; hjust?: number; vjust?: number; angle?: number; visible?: boolean;
+}
+export interface LineElement {
+  color?: [number, number, number]; width?: number; visible?: boolean;
+  linetype?: "solid" | "dashed" | "dotted" | "dashdot" | "longdash" | "twodash";
+}
+export interface RectElement {
+  fill?: [number, number, number]; color?: [number, number, number]; width?: number; visible?: boolean;
+}
+/** A partial theme overlay (same schema as the CLI's `--theme-config`). */
+export interface ThemeConfig {
+  /** Preset to start from (default "minimal"). */
+  base?: ThemePreset;
+  /** Brand color `[r, g, b]` for single-series geoms. */
+  primary?: [number, number, number];
+  /** Default discrete palette for categorical color/fill mappings. */
+  palette?: string;
+  aspect_ratio?: number;
+  panel_ontop?: boolean;
+  axis_minor_ticks?: boolean;
+  title_position?: "panel" | "plot";
+  tag_position?: "topleft" | "topright" | "bottomleft" | "bottomright";
+  legend_direction?: "vertical" | "horizontal";
+  text?: TextElement; title?: TextElement; subtitle?: TextElement; caption?: TextElement;
+  axis_title_x?: TextElement; axis_title_y?: TextElement;
+  axis_text_x?: TextElement; axis_text_y?: TextElement;
+  legend_title?: TextElement; legend_text?: TextElement; strip_text?: TextElement;
+  axis_line?: LineElement; axis_ticks?: LineElement;
+  panel_grid_major?: LineElement; panel_grid_minor?: LineElement; panel_border?: LineElement;
+  panel_background?: RectElement; plot_background?: RectElement;
+  legend_background?: RectElement; strip_background?: RectElement;
+  [key: string]: unknown;
+}
+
+/** "inside" places the legend automatically in the emptiest panel corner. */
+export type Legend = "right" | "left" | "top" | "bottom" | "none" | "inside" | [number, number];
+
+/** A layered grammar-of-graphics plot, mirroring the ggplot-rs builder. */
+export interface PlotSpec {
+  data: Data;
+  /** Plot-level mapping inherited by every layer. */
+  aes?: AesMap;
+  layers: Layer[];
+  scales?: { x?: PositionScale; y?: PositionScale; color?: ColorScale; colour?: ColorScale; fill?: ColorScale };
+  facet?: Facet;
+  coord?: Coord;
+  labels?: Labels;
+  /** A preset name or a theme overlay (default "minimal"). */
+  theme?: ThemePreset | ThemeConfig;
+  legend?: Legend;
+  /** Pixels (default 640 × 400). */
+  width?: number;
+  height?: number;
+}
+"##;
+
+#[wasm_bindgen]
+extern "C" {
+    #[wasm_bindgen(typescript_type = "PlotSpec | string")]
+    pub type PlotSpecInput;
+}
+
+/// Accept a spec as a JS object or as JSON text.
+fn spec_json(spec: PlotSpecInput) -> Result<String, JsValue> {
+    let v: JsValue = spec.into();
+    if let Some(s) = v.as_string() {
+        return Ok(s);
+    }
+    js_sys::JSON::stringify(&v)
+        .map(String::from)
+        .map_err(|_| JsValue::from_str("spec is not JSON-serialisable"))
+}
+
+/// Render a layered plot spec (a {@link PlotSpec} object or its JSON text) to
+/// an SVG document. Throws an `Error` naming the offending field — unknown
+/// columns list the available ones.
+#[wasm_bindgen]
+pub fn render(spec: PlotSpecInput) -> Result<String, JsValue> {
+    let json = spec_json(spec)?;
+    spec::render_json(&json)
+        .map(|(svg, _)| svg)
+        .map_err(|e| js_sys::Error::new(&e).into())
+}
+
+/// An SVG plus the build warnings (rows dropped for non-finite values, layers
+/// whose stat produced no data, …).
+#[wasm_bindgen]
+pub struct RenderResult {
+    svg: String,
+    warnings: Vec<String>,
+}
+
+#[wasm_bindgen]
+impl RenderResult {
+    #[wasm_bindgen(getter)]
+    pub fn svg(&self) -> String {
+        self.svg.clone()
+    }
+    #[wasm_bindgen(getter)]
+    pub fn warnings(&self) -> Vec<String> {
+        self.warnings.clone()
+    }
+}
+
+/// Like {@link render}, but also returns the build warnings.
+#[wasm_bindgen(js_name = renderWithWarnings)]
+pub fn render_with_warnings(spec: PlotSpecInput) -> Result<RenderResult, JsValue> {
+    let json = spec_json(spec)?;
+    spec::render_json(&json)
+        .map(|(svg, warnings)| RenderResult { svg, warnings })
+        .map_err(|e| js_sys::Error::new(&e).into())
+}
+
+/// The geom names {@link render} accepts.
+#[wasm_bindgen]
+pub fn geoms() -> Vec<String> {
+    spec::GEOMS.iter().map(|g| g.to_string()).collect()
+}
+
+/// The ggplot-rs version this package was built from.
+#[wasm_bindgen]
+pub fn version() -> String {
+    env!("CARGO_PKG_VERSION").to_string()
+}
+
 /// Render a `geom_sf` map from a JSON spec, returning an SVG document.
 ///
 /// Spec fields:

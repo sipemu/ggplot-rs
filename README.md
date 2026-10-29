@@ -2,6 +2,7 @@
 
 [![CI](https://github.com/sipemu/ggplot-rs/actions/workflows/ci.yml/badge.svg)](https://github.com/sipemu/ggplot-rs/actions/workflows/ci.yml)
 [![Crates.io](https://img.shields.io/crates/v/ggplot-rs.svg)](https://crates.io/crates/ggplot-rs)
+[![npm](https://img.shields.io/npm/v/@sipemu/ggplot-rs.svg)](https://www.npmjs.com/package/@sipemu/ggplot-rs)
 [![Documentation](https://docs.rs/ggplot-rs/badge.svg)](https://docs.rs/ggplot-rs)
 [![codecov](https://codecov.io/gh/sipemu/ggplot-rs/branch/main/graph/badge.svg)](https://codecov.io/gh/sipemu/ggplot-rs)
 [![License: MIT OR Apache-2.0](https://img.shields.io/badge/license-MIT%2FApache--2.0-blue.svg)](#license)
@@ -655,6 +656,35 @@ just works.
 
 ## In the browser (WASM)
 
+### npm: `@sipemu/ggplot-rs`
+
+[![npm](https://img.shields.io/npm/v/@sipemu/ggplot-rs.svg)](https://www.npmjs.com/package/@sipemu/ggplot-rs)
+
+The same grammar from JavaScript/TypeScript: a typed, layered spec in, an SVG
+string out. It works in the browser (Vite, plain ESM, Observable) and in Node,
+with no runtime dependencies. The `.wasm` file is about 0.6 MB gzipped. See
+[`js/README.md`](js/README.md) for the quickstart and the full spec.
+
+```sh
+npm i @sipemu/ggplot-rs
+```
+
+```js
+import init, { render } from "@sipemu/ggplot-rs";
+await init();
+const svg = render({
+  data: { x: [1, 2, 3], y: [2, 4, 3], g: ["a", "b", "a"] },
+  aes: { x: "x", y: "y", color: "g" },
+  layers: [{ geom: "point" }, { geom: "line" }],
+  facet: { wrap: "g" },
+  labels: { title: "Hello from npm" },
+});
+```
+
+The npm version always matches the crate version.
+
+### The wasm crate
+
 **▶ Live demo: <https://sipemu.github.io/ggplot-rs/>** — DuckDB-Wasm reads Natural
 Earth countries into a hover-able choropleth, plus a **100k-point scatter** via the
 raster backend.
@@ -662,8 +692,8 @@ raster backend.
 The [`crates/ggplot-rs-wasm`](crates/ggplot-rs-wasm) workspace crate (a `cdylib`,
 not published) exposes a plotters-free renderer to JavaScript via `wasm-bindgen`.
 It compiles to `wasm32` and uses the self-contained [`SvgBackend`](#rendering), so
-the bundle is small (~310 KB `.wasm`, no polars, no fonts — text is `<text>` the
-browser draws). The `ggplot-rs` library itself is a plain `rlib` with no
+the bundle needs no polars and no fonts (text is `<text>`, which the browser
+draws). The `ggplot-rs` library itself is a plain `rlib` with no
 wasm-specific dependencies, so it also builds for `wasm32-unknown-unknown` /
 emscripten targets directly (`default-features = false`):
 

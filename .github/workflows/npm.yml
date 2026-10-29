@@ -1,0 +1,140 @@
+name: Publish to npm
+
+# Publishes @sipemu/ggplot-rs (js/) when a GitHub Release is published — the
+# same release that publishes the crate to crates.io (release.yml), so the npm
+# and crate versions move together. Run it by hand with `dry_run` to check the
+# package without uploading.
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: 'Dry run (pack and verify, skip the upload)'
+        required: false
+        default: true
+        type: boolean
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  build-wasm:
+    name: Build WASM package
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Versions match (crate, wasm crate, js/package.json, tag)
+        run: node js/check-version.mjs ${{ github.event_name == 'release' && github.ref_name || '' }}
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
+
+      - uses: jetli/wasm-pack-action@v0.4.0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Build package
+        working-directory: js
+        run: npm run build
+
+      - name: Wasm size
+        run: |
+          raw=$(stat -c%s js/dist/ggplot_rs_bg.wasm)
+          gz=$(gzip -9c js/dist/ggplot_rs_bg.wasm | wc -c)
+          echo "ggplot_rs_bg.wasm: $raw bytes raw, $gz bytes gzipped" | tee -a "$GITHUB_STEP_SUMMARY"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: npm-package
+          path: |
+            js/dist/
+            js/LICENSE-MIT
+            js/LICENSE-APACHE
+          retention-days: 1
+
+  test-wasm:
+    name: Test WASM
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
+
+      - uses: jetli/wasm-pack-action@v0.4.0
+
+      - name: wasm-bindgen tests
+        run: wasm-pack test --node crates/ggplot-rs-wasm --no-default-features
+
+  test-js:
+    name: Test JavaScript
+    needs: build-wasm
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: npm-package
+          path: js/
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Install
+        working-directory: js
+        run: npm ci
+
+      - name: Typecheck (shipped .d.ts)
+        working-directory: js
+        run: npm run typecheck
+
+      - name: vitest
+        working-directory: js
+        run: npm test
+
+  publish-npm:
+    name: Publish to npm
+    needs: [build-wasm, test-wasm, test-js]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write # npm provenance / trusted publishing
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: npm-package
+          path: js/
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          registry-url: 'https://registry.npmjs.org'
+
+      - name: Upgrade npm (OIDC trusted publishing needs npm >= 11.5)
+        run: npm install -g npm@latest
+
+      - name: Package contents
+        working-directory: js
+        run: npm pack --dry-run
+
+      - name: Publish (dry run)
+        if: github.event_name == 'workflow_dispatch' && inputs.dry_run
+        working-directory: js
+        run: npm publish --access public --dry-run
+
+      - name: Publish
+        if: github.event_name == 'release' || (github.event_name == 'workflow_dispatch' && !inputs.dry_run)
+        working-directory: js
+        run: npm publish --access public --provenance
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
