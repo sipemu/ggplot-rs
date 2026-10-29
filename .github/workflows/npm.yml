@@ -4,6 +4,11 @@ name: Publish to npm
 # same release that publishes the crate to crates.io (release.yml), so the npm
 # and crate versions move together. Run it by hand with `dry_run` to check the
 # package without uploading.
+#
+# Auth is npm trusted publishing (OIDC via `id-token: write`), as for
+# @sipemu/anofox-regression: no NPM_TOKEN secret. The trusted publisher
+# (sipemu/ggplot-rs, workflow npm.yml) is configured on the package's npmjs.com
+# settings page.
 on:
   release:
     types: [published]
@@ -136,5 +141,3 @@ jobs:
         if: github.event_name == 'release' || (github.event_name == 'workflow_dispatch' && !inputs.dry_run)
         working-directory: js
         run: npm publish --access public --provenance
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
