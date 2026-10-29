@@ -416,6 +416,36 @@ mod elements_378 {
     }
 
     #[test]
+    fn a_tagged_element_sits_below_its_tag() {
+        let note =
+            || GridElement::fill(|w, h| format!("<text x=\"0\" y=\"10\">{w:.0}x{h:.0}</text>"));
+        let untagged = PlotGrid::new()
+            .add(scatter())
+            .add(note())
+            .ncol(2)
+            .render_svg_native_with_size(800, 300)
+            .unwrap();
+        let tagged = PlotGrid::new()
+            .add(scatter())
+            .add(note())
+            .ncol(2)
+            .tag_levels(TagLevels::Upper)
+            .render_svg_native_with_size(800, 300)
+            .unwrap();
+        well_formed(&tagged);
+        let (u, t) = (
+            open_tag(&untagged, "data-cell=\"2\""),
+            open_tag(&tagged, "data-cell=\"2\""),
+        );
+        let band = attr(t, "y") - attr(u, "y");
+        assert!(band > 10.0, "the content moves below the tag: {u} → {t}");
+        assert!((attr(u, "height") - attr(t, "height") - band).abs() < 0.01);
+        // the fill renders at the smaller size, and the tag is drawn
+        assert!(tagged.contains(&format!(">400x{:.0}</text>", 300.0 - band)));
+        assert!(tagged.contains(">B<"));
+    }
+
+    #[test]
     fn an_invalid_fixed_size_is_skipped_with_a_warning() {
         let (svg, warnings) = PlotGrid::new()
             .add(scatter())
