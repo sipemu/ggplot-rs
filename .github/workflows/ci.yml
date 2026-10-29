@@ -109,6 +109,54 @@ jobs:
       - name: Build examples
         run: cargo build --examples
 
+  # The npm package (@sipemu/ggplot-rs, js/): version lock-step with the crate,
+  # wasm-bindgen tests across the JS boundary, then vitest + tsc against the
+  # built package exactly as it will be packed.
+  npm:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Versions match (crate, wasm crate, js/package.json)
+        run: node js/check-version.mjs
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
+
+      - uses: Swatinem/rust-cache@v2
+
+      - uses: jetli/wasm-pack-action@v0.4.0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: js/package-lock.json
+
+      - name: wasm-bindgen tests
+        run: wasm-pack test --node crates/ggplot-rs-wasm --no-default-features
+
+      - name: Install
+        working-directory: js
+        run: npm ci
+
+      - name: Build package
+        working-directory: js
+        run: npm run build
+
+      - name: Typecheck (shipped .d.ts)
+        working-directory: js
+        run: npm run typecheck
+
+      - name: vitest
+        working-directory: js
+        run: npm test
+
+      - name: Pack (dry run)
+        working-directory: js
+        run: npm pack --dry-run
+
   coverage:
     runs-on: ubuntu-latest
     steps:

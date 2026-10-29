@@ -1,0 +1,64 @@
+{
+  "name": "@sipemu/ggplot-rs",
+  "version": "0.35.0",
+  "description": "Grammar-of-graphics charts (ggplot2-style) rendered to SVG — WebAssembly build of the ggplot-rs Rust crate, no runtime dependencies",
+  "type": "module",
+  "main": "./dist/ggplot_rs.js",
+  "module": "./dist/ggplot_rs.js",
+  "types": "./dist/ggplot_rs.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/ggplot_rs.d.ts",
+      "default": "./dist/ggplot_rs.js"
+    },
+    "./ggplot_rs_bg.wasm": "./dist/ggplot_rs_bg.wasm",
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "dist/ggplot_rs.js",
+    "dist/ggplot_rs.d.ts",
+    "dist/ggplot_rs_bg.wasm",
+    "dist/ggplot_rs_bg.wasm.d.ts",
+    "README.md",
+    "LICENSE-MIT",
+    "LICENSE-APACHE"
+  ],
+  "sideEffects": [
+    "./dist/ggplot_rs.js"
+  ],
+  "scripts": {
+    "build": "node build.mjs",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@types/node": "^22.20.5",
+    "typescript": "^5.6.0",
+    "vitest": "^3.0.0"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/sipemu/ggplot-rs.git"
+  },
+  "keywords": [
+    "ggplot",
+    "ggplot2",
+    "grammar-of-graphics",
+    "chart",
+    "plot",
+    "svg",
+    "visualization",
+    "dataviz",
+    "wasm",
+    "webassembly"
+  ],
+  "author": "Simon Müller <sm@data-zoo.de>",
+  "license": "(MIT OR Apache-2.0)",
+  "bugs": {
+    "url": "https://github.com/sipemu/ggplot-rs/issues"
+  },
+  "homepage": "https://github.com/sipemu/ggplot-rs/tree/main/js#readme"
+}

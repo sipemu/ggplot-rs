@@ -5,6 +5,26 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Added
+- **npm package `@sipemu/ggplot-rs`** (#382): the wasm build is published
+  to npm from the same GitHub release as the crate, at the same version
+  (`.github/workflows/npm.yml`, with provenance; `js/check-version.mjs`
+  checks that the versions match in CI and on release).
+  - `render(spec)` / `renderWithWarnings(spec)` take a **layered spec**
+    (`{ data, aes, layers: [{ geom, aes, data, params, stat, position }],
+    scales, facet, coord, labels, theme, legend, width, height }`) as a JS
+    object or as JSON text. It covers 53 geoms, including waterfall, sankey,
+    chord, treemap, sunburst and candlestick; facet wrap/grid with free
+    scales; coord flip/polar/fixed/radar/zoom; theme presets or a
+    `ThemeConfig` overlay; and the legend position, including `inside`.
+  - The shipped `.d.ts` has a typed `PlotSpec`.
+  - Errors are `Error` objects naming the bad field. An unknown column
+    lists the available ones; unknown geoms, aesthetics and spec fields are
+    rejected.
+  - The package is SVG-only, about 0.59 MB of gzipped `.wasm`. CI runs
+    vitest against the built package, a typecheck of the shipped `.d.ts`,
+    and wasm-bindgen tests.
+
 ## [0.35.0] — 2026-10-29
 
 ### Added
