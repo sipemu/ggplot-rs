@@ -4088,6 +4088,7 @@ impl GGPlot {
                     &layout0.plot_area,
                     extras.legend_extra_rows,
                     (0.0, 0.0),
+                    0.0,
                     &layout0.total,
                 );
                 if let Some(dir) = built.theme.legend_direction {
@@ -4169,6 +4170,7 @@ impl GGPlot {
                             &final_layout.plot_area,
                             extras.legend_extra_rows,
                             (0.0, 0.0),
+                            0.0,
                             &final_layout.total,
                         );
                         let swatch_and_gap =
@@ -4380,6 +4382,7 @@ impl GGPlot {
                                     &retry_layout.plot_area,
                                     retry_extras.legend_extra_rows,
                                     (0.0, 0.0),
+                                    0.0,
                                     &retry_layout.total,
                                 );
                                 let all_still_fit = plans.iter().all(|(aes, plan)| {

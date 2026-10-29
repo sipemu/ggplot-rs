@@ -167,7 +167,7 @@ pub fn draw_legend(
     // it's unused internally and has no direct public replacement to
     // keep behaviourally current.
     let (legend_x, legend_y, mut is_horizontal) =
-        legend_position(theme, plot_area, 0, (0.0, 0.0), plot_area);
+        legend_position(theme, plot_area, 0, (0.0, 0.0), 0.0, plot_area);
     // legend.direction overrides the auto layout from the position.
     if let Some(dir) = theme.legend_direction {
         is_horizontal = matches!(dir, crate::theme::LegendDirection::Horizontal);
@@ -388,7 +388,12 @@ fn estimate_legend_box(
         let is_continuous_bar =
             matches!(aes, Aesthetic::Color | Aesthetic::Fill) && !scale.is_discrete();
         let (w, h) = if is_continuous_bar {
-            (single_col_width, title_offset + key_height * 8.0)
+            // The bottom break label is centred on the bar's end: its lower
+            // half hangs below the bar (#377).
+            (
+                single_col_width,
+                title_offset + key_height * 8.0 + theme.legend_text.size / 2.0,
+            )
         } else if let Some(plan) = legend_plans.get(aes) {
             let w = if plan.col_pitch > 0.0 {
                 plan.cols as f64 * plan.col_pitch
@@ -460,6 +465,7 @@ pub(crate) fn legend_position(
     plot_area: &Rect,
     legend_extra_rows: usize,
     legend_size_hint: (f64, f64),
+    title_lift: f64,
     canvas: &Rect,
 ) -> (f64, f64, bool) {
     match theme.legend_position {
@@ -492,14 +498,50 @@ pub(crate) fn legend_position(
         LegendPosition::None => (0.0, 0.0, false),
         LegendPosition::Inside(fx, fy) => {
             let (legend_w, legend_h) = legend_size_hint;
-            let raw_x = plot_area.x + fx * (plot_area.width - legend_w);
+            // #377: inset by `legend_margin` from the panel edges, like
+            // every outside position, and place the *visible* box: the
+            // title is drawn centred on the origin's y, so its upper half
+            // (`lift`) sits above the origin.
+            let m = &theme.legend_margin;
+            let lift = title_lift;
+            let box_h = legend_h + lift;
+            let raw_x = plot_area.x + m.left + fx * (plot_area.width - m.left - m.right - legend_w);
             // fy = 1 is the panel's top in ggplot-rs's convention (y grows
             // down in SVG space, same flip the old formula already had).
-            let raw_y = plot_area.y + (1.0 - fy) * (plot_area.height - legend_h);
+            let raw_top =
+                plot_area.y + m.top + (1.0 - fy) * (plot_area.height - m.top - m.bottom - box_h);
             let x = clamp_span(raw_x, legend_w, canvas.x, canvas.x + canvas.width);
-            let y = clamp_span(raw_y, legend_h, canvas.y, canvas.y + canvas.height);
-            (x, y, false)
+            let top = clamp_span(raw_top, box_h, canvas.y, canvas.y + canvas.height);
+            (x, top + lift, false)
         }
+    }
+}
+
+/// How far an inside legend's title reaches above the legend origin (it is
+/// drawn centred on the origin's y): half the title's size when the first
+/// guide has a title, else nothing (#377).
+fn inside_title_lift(
+    scales: &ScaleSet,
+    representatives: &[Aesthetic],
+    theme: &Theme,
+    guide: &GuideLegend,
+) -> f64 {
+    let first = representatives
+        .iter()
+        .filter_map(|aes| scales.get(aes))
+        .find(|scale| !scale.breaks().is_empty());
+    match first {
+        Some(scale)
+            if theme.legend_title.visible
+                && !guide
+                    .title
+                    .as_deref()
+                    .unwrap_or_else(|| scale.name())
+                    .is_empty() =>
+        {
+            theme.legend_title.size / 2.0
+        }
+        _ => 0.0,
     }
 }
 
@@ -1494,12 +1536,15 @@ pub(crate) fn inside_legend_box(
     let representatives: Vec<Aesthetic> = groups.iter().map(|g| g[0].clone()).collect();
     let legend_size_hint =
         estimate_legend_box(scales, &representatives, theme, guide, legend_plans);
-    let (legend_x, legend_y, _) = legend_position(theme, plot_area, 0, legend_size_hint, canvas);
+    let lift = inside_title_lift(scales, &representatives, theme, guide);
+    let (legend_x, legend_y, _) =
+        legend_position(theme, plot_area, 0, legend_size_hint, lift, canvas);
+    // The visible box, title included (#377).
     Some(Rect {
         x: legend_x,
-        y: legend_y,
+        y: legend_y - lift,
         width: legend_size_hint.0,
-        height: legend_size_hint.1,
+        height: legend_size_hint.1 + lift,
     })
 }
 
@@ -1581,6 +1626,7 @@ pub(crate) fn draw_legend_planned(
         plot_area,
         legend_extra_rows,
         legend_size_hint,
+        inside_title_lift(scales, &representatives, theme, guide),
         &canvas,
     );
     if let Some(dir) = theme.legend_direction {
@@ -2074,11 +2120,13 @@ mod inside_legend_box_tests {
         let representatives: Vec<Aesthetic> = groups.iter().map(|g| g[0].clone()).collect();
         let size_hint =
             estimate_legend_box(&scales, &representatives, &theme, &guide, &legend_plans);
-        let (x, y, _) = legend_position(&theme, &plot_area, 0, size_hint, &canvas);
+        let lift = inside_title_lift(&scales, &representatives, &theme, &guide);
+        let (x, y, _) = legend_position(&theme, &plot_area, 0, size_hint, lift, &canvas);
 
+        // The visible box: the title's upper half above the origin (#377).
         assert_eq!(
             (rect.x, rect.y, rect.width, rect.height),
-            (x, y, size_hint.0, size_hint.1)
+            (x, y - lift, size_hint.0, size_hint.1 + lift)
         );
     }
 }
