@@ -158,8 +158,10 @@ fn discrete_legend_justification_point_matches_the_panel_at_several_positions() 
         let legend_w = single_col_width(&theme);
         let legend_h = 10.0 * theme.legend_key_height;
         let panel = data_plot_rect(&svg);
-        let expected_x = panel[0] + fx * (panel[2] - legend_w);
-        let expected_y = panel[1] + (1.0 - fy) * (panel[3] - legend_h);
+        // #377: justified within the panel inset by `legend_margin`.
+        let m = &theme.legend_margin;
+        let expected_x = panel[0] + m.left + fx * (panel[2] - m.left - m.right - legend_w);
+        let expected_y = panel[1] + m.top + (1.0 - fy) * (panel[3] - m.top - m.bottom - legend_h);
         let (first_x, first_y) = first_rect_xy(&svg, "12.00", "12.00");
         assert!(
             (first_x - expected_x).abs() < 0.5,
@@ -186,10 +188,13 @@ fn continuous_legend_justification_point_matches_the_panel_at_several_positions(
             .unwrap();
         let theme = Theme::default();
         let legend_w = single_col_width(&theme);
-        let legend_h = theme.legend_key_height * 8.0;
+        // The bar plus its bottom label's lower half (#377).
+        let legend_h = theme.legend_key_height * 8.0 + theme.legend_text.size / 2.0;
         let panel = data_plot_rect(&svg);
-        let expected_x = panel[0] + fx * (panel[2] - legend_w);
-        let expected_y = panel[1] + (1.0 - fy) * (panel[3] - legend_h);
+        // #377: justified within the panel inset by `legend_margin`.
+        let m = &theme.legend_margin;
+        let expected_x = panel[0] + m.left + fx * (panel[2] - m.left - m.right - legend_w);
+        let expected_y = panel[1] + m.top + (1.0 - fy) * (panel[3] - m.top - m.bottom - legend_h);
         // The first bar slice (i=0, the top of the bar) — a 12px-wide
         // rect whose height is the thin per-slice height, not 12.00.
         let (first_x, first_y) = all_rects_xy(&svg, "12.00")
@@ -268,9 +273,9 @@ fn discrete_legend_at_0_0_anchors_its_own_bottom_left_on_the_panel() {
     let legend_h = 10.0 * theme.legend_key_height;
     let (_, first_y) = first_rect_xy(&svg, "12.00", "12.00");
     // The legend's bottom edge (first_y + legend_h) must sit at the
-    // panel's bottom edge.
+    // panel's bottom edge, inset by `legend_margin.bottom` (#377).
     assert!(
-        (first_y + legend_h - (panel[1] + panel[3])).abs() < 0.5,
+        (first_y + legend_h - (panel[1] + panel[3] - theme.legend_margin.bottom)).abs() < 0.5,
         "legend bottom edge should sit at the panel's bottom edge: \
          first_y={first_y} legend_h={legend_h} panel_bottom={}",
         panel[1] + panel[3]
@@ -288,14 +293,15 @@ fn discrete_legend_at_1_1_anchors_its_own_top_right_on_the_panel() {
     let theme = Theme::default();
     let legend_w = single_col_width(&theme);
     let (first_x, first_y) = first_rect_xy(&svg, "12.00", "12.00");
+    let m = &theme.legend_margin;
     assert!(
-        (first_x + legend_w - (panel[0] + panel[2])).abs() < 0.5,
+        (first_x + legend_w - (panel[0] + panel[2] - m.right)).abs() < 0.5,
         "legend right edge should sit at the panel's right edge: \
          first_x={first_x} legend_w={legend_w} panel_right={}",
         panel[0] + panel[2]
     );
     assert!(
-        (first_y - panel[1]).abs() < 0.5,
+        (first_y - (panel[1] + m.top)).abs() < 0.5,
         "legend top edge should sit at the panel's top edge: \
          first_y={first_y} panel_y={}",
         panel[1]
