@@ -25,6 +25,14 @@ All notable changes to this project are documented here. The format follows
     vitest against the built package, a typecheck of the shipped `.d.ts`,
     and wasm-bindgen tests.
 
+### Fixed
+- **Title and subtitle no longer overlap** (#384). Previously the subtitle
+  was centred 2px above the panel, so its lower half sat inside the panel,
+  and it overlapped the title at the default sizes. Both now stack inside
+  the bands the layout reserves. This applies to the single-panel and
+  faceted paths, and the subtitle is now also lifted above a top x-axis.
+  A title with no subtitle stays where it was.
+
 ## [0.35.0] — 2026-10-29
 
 ### Added

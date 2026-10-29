@@ -207,7 +207,12 @@ impl PlotRenderer {
             } else {
                 0.0
             };
-            let title_y = plot_area.y - theme.title.size * 0.9 - x_axis_lift - legend_lift;
+            let (title_y, _) = Self::title_subtitle_y(
+                theme,
+                plot_area.y,
+                x_axis_lift + legend_lift,
+                built.labels.subtitle.is_some(),
+            );
             let family = if theme.title.family.is_empty() {
                 None
             } else {
@@ -215,7 +220,7 @@ impl PlotRenderer {
             };
             backend.draw_text(
                 title,
-                (tx, title_y.max(theme.title.size)),
+                (tx, title_y),
                 &TextStyle {
                     color: theme.title.color,
                     size: theme.title.size,
@@ -232,16 +237,19 @@ impl PlotRenderer {
         // 8. Draw subtitle
         if let Some(ref subtitle) = built.labels.subtitle {
             let (sx, anchor) = Self::hjust_pos(&theme.subtitle, &title_ref);
-            // #281: apply the Top-legend lift *after* the no-title floor,
-            // not before. `theme.title.size + theme.subtitle.size` is a
-            // generic "don't draw above the top margin" minimum for the
-            // legend-less case; subtracting `legend_lift` first let that
-            // floor win over the correctly-lifted value whenever it was
-            // bigger (always true once `title_height` drops to zero with
-            // no title), silently cancelling the lift and landing the
-            // subtitle back in the legend's own band instead of above it.
-            let subtitle_y =
-                (plot_area.y - 2.0).max(theme.title.size + theme.subtitle.size) - legend_lift;
+            // #281: lifted above a Top legend's band; a top x-axis too.
+            let x_axis_top = built
+                .scales
+                .get(&Aesthetic::X)
+                .map(|s| s.axis_position_opposite())
+                .unwrap_or(false);
+            let x_axis_lift = if x_axis_top {
+                theme.axis_ticks_length + theme.axis_text_x.size + theme.legend_spacing
+            } else {
+                0.0
+            };
+            let (_, subtitle_y) =
+                Self::title_subtitle_y(theme, plot_area.y, x_axis_lift + legend_lift, true);
             let family = if theme.subtitle.family.is_empty() {
                 None
             } else {
@@ -325,6 +333,31 @@ impl PlotRenderer {
             TextAnchor::Middle
         };
         (x, anchor)
+    }
+
+    /// Vertical centres `(title_y, subtitle_y)` of the title and subtitle
+    /// (#384). Text is drawn `dominant-baseline="middle"`, so these are the
+    /// line centres, stacked bottom-up from the panel top inside the bands
+    /// `PlotLayout` reserves: the subtitle in its `1.5 × size` band directly
+    /// above the panel (less `lift` — a top x-axis and/or a Top legend,
+    /// #233/#281), the title above that. Without a subtitle the title keeps
+    /// its old place, `0.9 × size` above the panel. The title is floored at
+    /// `title.size` so it never leaves the canvas.
+    fn title_subtitle_y(
+        theme: &crate::theme::Theme,
+        panel_top: f64,
+        lift: f64,
+        has_subtitle: bool,
+    ) -> (f64, f64) {
+        let base = panel_top - lift;
+        let subtitle_band = if has_subtitle {
+            theme.subtitle.size * 1.5
+        } else {
+            0.0
+        };
+        let subtitle_y = base - subtitle_band / 2.0;
+        let title_y = (base - subtitle_band - theme.title.size * 0.9).max(theme.title.size);
+        (title_y, subtitle_y)
     }
 
     /// Horizontal reference rect for titles: the panel or the whole plot width
@@ -852,7 +885,12 @@ impl PlotRenderer {
         );
         if let Some(ref title) = built.labels.title {
             let (tx, anchor) = Self::hjust_pos(&theme.title, &title_ref);
-            let title_y = plot_area.y - theme.title.size * 0.9 - legend_lift;
+            let (title_y, _) = Self::title_subtitle_y(
+                theme,
+                plot_area.y,
+                legend_lift,
+                built.labels.subtitle.is_some(),
+            );
             let family = if theme.title.family.is_empty() {
                 None
             } else {
@@ -860,7 +898,7 @@ impl PlotRenderer {
             };
             backend.draw_text(
                 title,
-                (tx, title_y.max(theme.title.size)),
+                (tx, title_y),
                 &TextStyle {
                     color: theme.title.color,
                     size: theme.title.size,
@@ -877,10 +915,7 @@ impl PlotRenderer {
         // Draw subtitle
         if let Some(ref subtitle) = built.labels.subtitle {
             let (sx, anchor) = Self::hjust_pos(&theme.subtitle, &title_ref);
-            // #281: see render_single's identical fix — apply legend_lift
-            // after the no-title floor, not before.
-            let subtitle_y =
-                (plot_area.y - 2.0).max(theme.title.size + theme.subtitle.size) - legend_lift;
+            let (_, subtitle_y) = Self::title_subtitle_y(theme, plot_area.y, legend_lift, true);
             let family = if theme.subtitle.family.is_empty() {
                 None
             } else {

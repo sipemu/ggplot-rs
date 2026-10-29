@@ -254,11 +254,11 @@ fn a_wrapped_two_row_top_legend_with_subtitle_no_title_sits_above_the_first_row(
 }
 
 #[test]
-fn no_top_legend_subtitle_position_is_byte_identical() {
-    // No Top legend (default Right position) -> `legend_lift` is 0.0, so
-    // the fix (moving `- legend_lift` to after the `.max()`) must be a
-    // no-op here: `max(a, b) - 0.0 == max(a - 0.0, b - 0.0)` exactly. The
-    // subtitle must land exactly on the pre-#281 floor, unchanged.
+fn no_top_legend_subtitle_sits_centred_in_its_band() {
+    // No Top legend (default Right position) -> `legend_lift` is 0.0. Since
+    // #384 the subtitle is centred in the `1.5 × subtitle.size` band the
+    // layout reserves directly above the panel (it used to sit 2px above
+    // the panel top, half inside it).
     let svg = GGPlot::new(discrete_fill_data())
         .aes(Aes::new().x("x").y("y").fill("grp"))
         .geom_point()
@@ -267,11 +267,16 @@ fn no_top_legend_subtitle_position_is_byte_identical() {
         .unwrap();
     let subtitle = text_boxes(&svg, "week: 3");
     assert_eq!(subtitle.len(), 1, "{svg}");
-    assert_eq!(
-        subtitle[0].0,
-        default_subtitle_floor(),
-        "no-legend subtitle y must stay exactly on the pre-#281 floor value"
+    let theme = Theme::default();
+    let band_top = theme.plot_margin.top;
+    let expected = band_top + theme.subtitle.size * 0.75;
+    assert!(
+        (subtitle[0].0 - expected).abs() < 0.01,
+        "no-legend subtitle y {} should be centred in its band ({expected}): {svg}",
+        subtitle[0].0
     );
+    // And still at/above the pre-#281 floor's legend-less position.
+    assert!(subtitle[0].0 <= default_subtitle_floor(), "{svg}");
 }
 
 /// The exact minimal repro posted on the issue: `theme_void()`,
