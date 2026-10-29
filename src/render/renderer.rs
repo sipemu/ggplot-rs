@@ -347,6 +347,16 @@ impl PlotRenderer {
     }
 
     /// Draw the corner tag label (position from `plot.tag.position`).
+    /// [`draw_tag`](Self::draw_tag) for a non-plot grid cell (#378).
+    pub(crate) fn draw_cell_tag(
+        labels: &crate::plot::Labels,
+        theme: &crate::theme::Theme,
+        area: &crate::render::Rect,
+        backend: &mut dyn DrawBackend,
+    ) -> Result<(), RenderError> {
+        Self::draw_tag(labels, theme, area, backend)
+    }
+
     fn draw_tag(
         labels: &crate::plot::Labels,
         theme: &crate::theme::Theme,

@@ -171,6 +171,61 @@ pub enum GridCell {
     Grid(Box<PlotGrid>),
     /// An empty cell (patchwork's `plot_spacer()`).
     Spacer,
+    /// A non-plot cell — a caller-rendered SVG fragment such as a table,
+    /// a KPI or a note (patchwork's `wrap_elements`, #378).
+    Element(Box<GridElement>),
+}
+
+/// How a [`GridElement`] gets its markup.
+enum ElementContent {
+    /// A fragment drawn in a `width` × `height` coordinate box, scaled into
+    /// the cell keeping its aspect.
+    Fixed {
+        svg: String,
+        width: f64,
+        height: f64,
+    },
+    /// Rendered for the cell's real size.
+    Fill(Box<dyn Fn(f64, f64) -> String + Send + Sync>),
+}
+
+/// A non-plot [`PlotGrid`] cell: an SVG fragment (patchwork's
+/// `wrap_elements`, #378). The markup is inserted verbatim, so escape any
+/// untrusted text in it. It takes part in the grid's widths/heights and
+/// tags, and is skipped by [`AxisCollect`] and legend collection. In the
+/// output it is a nested `<svg x y width height data-cell="i">` (`i` = its
+/// 1-based position among the grid's plot and element cells, the same count
+/// as a plot's untagged `data-panel`) holding the fragment.
+pub struct GridElement {
+    content: ElementContent,
+}
+
+impl GridElement {
+    /// A fragment whose coordinates span `0..width` × `0..height`; the grid
+    /// scales it into the cell keeping its aspect, centred (letterboxed).
+    pub fn fixed(svg: impl Into<String>, width: f64, height: f64) -> Self {
+        GridElement {
+            content: ElementContent::Fixed {
+                svg: svg.into(),
+                width,
+                height,
+            },
+        }
+    }
+
+    /// A fragment rendered by `render(width, height)` at the cell's real
+    /// size in pixels — for text and tables laid out to fit.
+    pub fn fill(render: impl Fn(f64, f64) -> String + Send + Sync + 'static) -> Self {
+        GridElement {
+            content: ElementContent::Fill(Box::new(render)),
+        }
+    }
+}
+
+impl From<GridElement> for GridCell {
+    fn from(e: GridElement) -> Self {
+        GridCell::Element(Box::new(e))
+    }
 }
 
 impl From<GGPlot> for GridCell {
@@ -662,8 +717,18 @@ struct PreparedPlot {
     root_attrs: Vec<(String, String)>,
 }
 
+/// An element cell awaiting its size.
+struct PreparedElement {
+    element: GridElement,
+    index: usize,
+    tag: Option<String>,
+    /// The enclosing grid's theme, for the tag.
+    theme: Theme,
+}
+
 enum Prepared {
     Plot(Box<PreparedPlot>),
+    Element(Box<PreparedElement>),
     Grid(Box<PreparedGrid>),
     Spacer,
 }
@@ -716,6 +781,22 @@ fn prepare_grid(grid: PlotGrid, ctx: &mut PrepCtx) -> Result<Prepared, GGError> 
             GridCell::Spacer => Prepared::Spacer,
             GridCell::Grid(g) => prepare_grid(*g, ctx)?,
             GridCell::Plot(p) => Prepared::Plot(Box::new(prepare_plot(*p, ctx)?)),
+            GridCell::Element(e) => {
+                ctx.next_index += 1;
+                let tag = ctx
+                    .tags
+                    .as_ref()
+                    .map(|(levels, pre, suf)| format!("{pre}{}{suf}", levels.tag(ctx.next_tag)));
+                if tag.is_some() {
+                    ctx.next_tag += 1;
+                }
+                Prepared::Element(Box::new(PreparedElement {
+                    element: *e,
+                    index: ctx.next_index,
+                    tag,
+                    theme: theme.clone(),
+                }))
+            }
         });
     }
     Ok(Prepared::Grid(Box::new(PreparedGrid {
@@ -955,6 +1036,41 @@ fn render_prepared(
 ) -> Result<(), GGError> {
     match prepared {
         Prepared::Spacer => Ok(()),
+        Prepared::Element(e) => {
+            let PreparedElement {
+                element,
+                index,
+                tag,
+                theme,
+            } = *e;
+            let (x, y, w, h) = (area.x, area.y, area.width.max(0.0), area.height.max(0.0));
+            let (view_box, body) = match element.content {
+                ElementContent::Fixed { svg, width, height } => {
+                    let ok = width.is_finite() && height.is_finite() && width > 0.0 && height > 0.0;
+                    if !ok {
+                        warnings.push(format!(
+                            "plot_grid: element cell {index} has an invalid size {width}×{height}; skipped"
+                        ));
+                        return Ok(());
+                    }
+                    (format!(" viewBox=\"0 0 {width} {height}\""), svg)
+                }
+                ElementContent::Fill(render) => (String::new(), render(w, h)),
+            };
+            page.push_raw(&format!(
+                "<svg x=\"{x:.2}\" y=\"{y:.2}\" width=\"{w:.2}\" height=\"{h:.2}\"{view_box} data-cell=\"{index}\">{body}</svg>"
+            ));
+            // The tag, where a plot cell draws its own (`labs(tag)`).
+            if let Some(tag) = tag {
+                let labels = crate::plot::Labels {
+                    tag: Some(tag),
+                    ..Default::default()
+                };
+                PlotRenderer::draw_cell_tag(&labels, &theme, area, page)
+                    .map_err(GGError::Render)?;
+            }
+            Ok(())
+        }
         Prepared::Plot(p) => {
             let PreparedPlot {
                 mut built,
@@ -1487,6 +1603,10 @@ grid_ops!(GGPlot, GGPlot);
 grid_ops!(GGPlot, PlotGrid);
 grid_ops!(PlotGrid, GGPlot);
 grid_ops!(PlotGrid, PlotGrid);
+grid_ops!(GGPlot, GridElement);
+grid_ops!(GridElement, GGPlot);
+grid_ops!(PlotGrid, GridElement);
+grid_ops!(GridElement, PlotGrid);
 
 #[cfg(test)]
 mod tests {
