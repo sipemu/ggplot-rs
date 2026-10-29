@@ -5,6 +5,8 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.35.1] — 2026-10-30
+
 ### Added
 - **npm package `@sipemu/ggplot-rs`** (#382): the wasm build is published
   to npm from the same GitHub release as the crate, at the same version
