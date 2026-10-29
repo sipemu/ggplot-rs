@@ -1043,7 +1043,24 @@ fn render_prepared(
                 tag,
                 theme,
             } = *e;
-            let (x, y, w, h) = (area.x, area.y, area.width.max(0.0), area.height.max(0.0));
+            // A tagged element keeps clear of its tag: the tag sits in a
+            // band of twice the title size at the top (or bottom) of the
+            // cell — where a plot cell has its own margin — and the
+            // content takes the rest.
+            let band = if tag.is_some() {
+                (2.0 * theme.title.size).min(area.height.max(0.0))
+            } else {
+                0.0
+            };
+            let top = matches!(
+                theme.tag_position,
+                crate::theme::TagPosition::TopLeft | crate::theme::TagPosition::TopRight
+            );
+            let (x, w) = (area.x, area.width.max(0.0));
+            let (y, h) = (
+                if top { area.y + band } else { area.y },
+                (area.height - band).max(0.0),
+            );
             let (view_box, body) = match element.content {
                 ElementContent::Fixed { svg, width, height } => {
                     let ok = width.is_finite() && height.is_finite() && width > 0.0 && height > 0.0;

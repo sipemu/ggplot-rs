@@ -26,6 +26,12 @@ All notable changes to this project are documented here. The format follows
     and wasm-bindgen tests.
 
 ### Fixed
+- **A tagged grid element keeps clear of its tag** (`GridElement` with
+  `tag_levels`). The tag sits in a band twice the title size at the cell's
+  top (or bottom, with a bottom tag position) and the element is drawn in the
+  rest of the cell, as a plot cell's margin already leaves room for its own.
+  Previously a table or note drawn from the cell's top left sat under the
+  tag.
 - **Title and subtitle no longer overlap** (#384). Previously the subtitle
   was centred 2px above the panel, so its lower half sat inside the panel,
   and it overlapped the title at the default sizes. Both now stack inside
