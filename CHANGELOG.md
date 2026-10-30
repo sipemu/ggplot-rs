@@ -5,6 +5,15 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.35.3] — 2026-10-30
+
+### Added
+- **`format::format_timestamp(secs, fmt, locale)`**: formats a timestamp
+  with the strftime subset the datetime scales use for their labels
+  (`%Y %y %m %-m %b %B %d %-d %e %a %A %H %M %S %%`), with the month and
+  weekday names of a locale. For hosts that format a date the way an axis
+  would, e.g. in their own tooltips (anofox-visualization#751).
+
 ## [0.35.2] — 2026-10-30
 
 ### Fixed
