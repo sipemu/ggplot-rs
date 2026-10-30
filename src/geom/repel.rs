@@ -87,6 +87,10 @@ pub struct RepelParams {
     pub segment_color: Option<(u8, u8, u8)>,
     /// Segment width (px).
     pub segment_width: f64,
+    /// Straight lines labels keep clear of, as `(slope, intercept)` in the
+    /// same (scale) space as [`crate::geom::refline::GeomAbline`] — pass the
+    /// plot's ablines so a label isn't drawn across one.
+    pub avoid_ablines: Vec<(f64, f64)>,
 }
 
 impl Default for RepelParams {
@@ -108,6 +112,7 @@ impl Default for RepelParams {
             max_labels: 500,
             segment_color: None,
             segment_width: 0.6,
+            avoid_ablines: Vec::new(),
         }
     }
 }
@@ -179,6 +184,12 @@ macro_rules! repel_builders {
             /// Label-count cap of the force layout.
             pub fn max_labels(mut self, n: usize) -> Self {
                 self.repel.max_labels = n;
+                self
+            }
+            /// Keep labels clear of the line `y = intercept + slope * x`
+            /// (scale space, like `geom_abline`).
+            pub fn avoid_abline(mut self, slope: f64, intercept: f64) -> Self {
+                self.repel.avoid_ablines.push((slope, intercept));
                 self
             }
             /// Segment colour.
@@ -288,6 +299,7 @@ pub(crate) struct RepelLayout {
 /// Lay out `labels` (anchor point, half extents incl. any label padding) so
 /// they avoid each other and `points`, inside `panel`. Pure and
 /// deterministic for a given `params.seed` (unless `max_time` cuts it short).
+#[cfg(test)]
 pub(crate) fn layout(
     anchors: &[(f64, f64)],
     targets: &[(f64, f64)],
@@ -296,6 +308,55 @@ pub(crate) fn layout(
     panel: &Rect,
     p: &RepelParams,
 ) -> RepelLayout {
+    layout_with_lines(anchors, targets, half, points, &[], panel, p)
+}
+
+/// Does the segment `a`–`b` pass through `bx` grown by `pad` (Liang–Barsky)?
+fn segment_hits_box(a: (f64, f64), b: (f64, f64), bx: &LabelBox, pad: f64) -> bool {
+    let (dx, dy) = (b.0 - a.0, b.1 - a.1);
+    let (mut t0, mut t1) = (0.0f64, 1.0f64);
+    for (q, d, lo, hi) in [
+        (a.0, dx, bx.cx - bx.hw - pad, bx.cx + bx.hw + pad),
+        (a.1, dy, bx.cy - bx.hh - pad, bx.cy + bx.hh + pad),
+    ] {
+        if d == 0.0 {
+            if q < lo || q > hi {
+                return false;
+            }
+            continue;
+        }
+        let (mut ta, mut tb) = ((lo - q) / d, (hi - q) / d);
+        if ta > tb {
+            std::mem::swap(&mut ta, &mut tb);
+        }
+        t0 = t0.max(ta);
+        t1 = t1.min(tb);
+        if t0 > t1 {
+            return false;
+        }
+    }
+    true
+}
+
+/// [`layout`], also keeping boxes clear of `lines` (pixel segments): a box a
+/// segment crosses is pushed along the segment's normal, to the side its
+/// centre is on.
+pub(crate) fn layout_with_lines(
+    anchors: &[(f64, f64)],
+    targets: &[(f64, f64)],
+    half: &[(f64, f64)],
+    points: &[(f64, f64)],
+    lines: &[Seg],
+    panel: &Rect,
+    p: &RepelParams,
+) -> RepelLayout {
+    let lines: Vec<Seg> = lines
+        .iter()
+        .copied()
+        .filter(|(a, b)| {
+            [a.0, a.1, b.0, b.1].iter().all(|v| v.is_finite()) && (a.0 != b.0 || a.1 != b.1)
+        })
+        .collect();
     let n = anchors.len();
     let finite = |v: f64, d: f64| if v.is_finite() { v } else { d };
     let box_pad = finite(p.box_padding, 0.0).max(0.0);
@@ -468,6 +529,32 @@ pub(crate) fn layout(
                 }
             }
 
+            // Box–line: push a label a line crosses off it, along the line's
+            // normal (the same phases as the points).
+            for i in 0..n {
+                if point_force == 0.0 {
+                    break;
+                }
+                let b = boxes[i];
+                for &(a, e) in &lines {
+                    if !segment_hits_box(a, e, &b, box_pad) {
+                        continue;
+                    }
+                    overlaps += 1;
+                    hit[i] = true;
+                    let (lx, ly) = (e.0 - a.0, e.1 - a.1);
+                    let len = lx.hypot(ly);
+                    let (nx, ny) = (-ly / len, lx / len);
+                    let d = (b.cx - a.0) * nx + (b.cy - a.1) * ny;
+                    let side = if d == 0.0 { tie(&mut rng) } else { d.signum() };
+                    let need = b.hw * nx.abs() + b.hh * ny.abs() + box_pad - d.abs();
+                    if need > 0.0 {
+                        delta[i].0 += side * nx * need * point_force;
+                        delta[i].1 += side * ny * need * point_force;
+                    }
+                }
+            }
+
             // Spring back towards the target, then move and clamp.
             let mut moved = 0.0f64;
             for i in 0..n {
@@ -546,6 +633,9 @@ fn tie(rng: &mut crate::rng::SplitMix64) -> f64 {
         1.0
     }
 }
+
+/// A pixel line segment (start, end).
+type Seg = ((f64, f64), (f64, f64));
 
 /// One label to place.
 struct Item {
@@ -657,7 +747,31 @@ fn draw_repel(
         .collect();
     let anchors: Vec<(f64, f64)> = items.iter().map(|it| it.anchor).collect();
     let targets: Vec<(f64, f64)> = items.iter().map(|it| it.target).collect();
-    let lay = layout(&anchors, &targets, &half, &points, &panel, p);
+    // `avoid_ablines` in pixels: the line between two far-apart x values
+    // (the data's own x range, widened) — the box test clips it.
+    let mut lines = Vec::new();
+    if !p.avoid_ablines.is_empty() && !x_discrete && !y_discrete {
+        let xs: Vec<f64> = x_col
+            .iter()
+            .filter_map(|v| v.as_f64())
+            .filter(|v| v.is_finite())
+            .collect();
+        if let (Some(lo), Some(hi)) = (
+            xs.iter().copied().reduce(f64::min),
+            xs.iter().copied().reduce(f64::max),
+        ) {
+            let w = (hi - lo).max(1.0);
+            let (lo, hi) = (lo - 4.0 * w, hi + 4.0 * w);
+            for &(slope, intercept) in &p.avoid_ablines {
+                if !(slope.is_finite() && intercept.is_finite()) {
+                    continue;
+                }
+                let at = |x: f64| to_px(&Value::Float(x), &Value::Float(intercept + slope * x));
+                lines.push((at(lo), at(hi)));
+            }
+        }
+    }
+    let lay = layout_with_lines(&anchors, &targets, &half, &points, &lines, &panel, p);
 
     if lay.capped {
         backend.warn(format!(
@@ -1060,5 +1174,73 @@ mod tests {
         for b in &lay.boxes {
             assert!(b.cx.is_finite() && b.cy.is_finite());
         }
+    }
+
+    #[test]
+    fn labels_move_off_a_line() {
+        // three labels sitting on the diagonal y = x
+        let anchors = vec![(100.0, 100.0), (200.0, 200.0), (300.0, 300.0)];
+        let half = vec![(20.0, 6.0); 3];
+        let line = ((0.0, 0.0), (400.0, 400.0));
+        let lay = layout_with_lines(
+            &anchors,
+            &anchors,
+            &half,
+            &anchors,
+            &[line],
+            &panel(),
+            &RepelParams::default(),
+        );
+        for (k, b) in lay.boxes.iter().enumerate() {
+            assert!(lay.kept[k]);
+            assert!(
+                !segment_hits_box(line.0, line.1, b, 0.0),
+                "label {k} still on the line: {b:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn segment_box_test() {
+        let b = LabelBox {
+            cx: 50.0,
+            cy: 50.0,
+            hw: 10.0,
+            hh: 5.0,
+        };
+        assert!(segment_hits_box((0.0, 0.0), (100.0, 100.0), &b, 0.0));
+        assert!(segment_hits_box((0.0, 50.0), (100.0, 50.0), &b, 0.0));
+        assert!(!segment_hits_box((0.0, 70.0), (100.0, 70.0), &b, 0.0));
+        assert!(segment_hits_box((0.0, 57.0), (100.0, 57.0), &b, 3.0));
+        assert!(!segment_hits_box((0.0, 0.0), (30.0, 30.0), &b, 0.0));
+    }
+
+    #[test]
+    fn avoid_abline_in_a_plot() {
+        let render = |avoid: bool| {
+            let xs: Vec<Value> = (0..8).map(|i| Value::Float(i as f64)).collect();
+            let labels: Vec<Value> = (0..8).map(|i| Value::Str(format!("point {i}"))).collect();
+            crate::plot::GGPlot::new(vec![
+                ("x".into(), xs.clone()),
+                ("y".into(), xs),
+                ("l".into(), labels),
+            ])
+            .aes(crate::aes::Aes::new().x("x").y("y").label("l"))
+            .geom_point()
+            .geom_text_repel_with(if avoid {
+                GeomTextRepel::default().avoid_abline(1.0, 0.0)
+            } else {
+                GeomTextRepel::default()
+            })
+            .render_svg_native_with_size(400, 300)
+            .unwrap()
+        };
+        let (with, without) = (render(true), render(false));
+        assert_eq!(
+            with.matches(">point ").count(),
+            without.matches(">point ").count(),
+            "no label dropped"
+        );
+        assert_ne!(with, without, "the line moved the labels");
     }
 }
