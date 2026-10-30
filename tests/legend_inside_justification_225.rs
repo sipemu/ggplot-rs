@@ -87,9 +87,19 @@ fn all_rects_xy(svg: &str, width: &str) -> Vec<(f64, f64)> {
 
 /// This theme's single-column legend width estimate
 /// (`estimate_legend_box`'s formula — key width + spacing + 6 text-sizes).
-fn single_col_width(theme: &Theme) -> f64 {
-    theme.legend_key_width + theme.legend_spacing + theme.legend_text.size * 6.0
+/// The legend's estimated width: key, spacing and the widest label as
+/// drawn, or the title when that is wider.
+fn single_col_width(theme: &Theme, widest_label: &str, title: &str) -> f64 {
+    use ggplot_rs::render::text::text_width;
+    (theme.legend_key_width
+        + theme.legend_spacing
+        + text_width(widest_label, theme.legend_text.size))
+    .max(text_width(title, theme.legend_title.size))
 }
+/// The discrete plot's widest label and title.
+const DISCRETE: (&str, &str) = ("Group 00", "g");
+/// The colourbar's widest break label (breaks over 0..=100) and title.
+const CONTINUOUS: (&str, &str) = ("100", "z");
 
 fn ten_level_discrete_data() -> Vec<(String, Vec<Value>)> {
     let n = 10;
@@ -155,7 +165,7 @@ fn discrete_legend_justification_point_matches_the_panel_at_several_positions() 
             .render_svg_native_with_size(W, H)
             .unwrap();
         let theme = Theme::default();
-        let legend_w = single_col_width(&theme);
+        let legend_w = single_col_width(&theme, DISCRETE.0, DISCRETE.1);
         let legend_h = 10.0 * theme.legend_key_height;
         let panel = data_plot_rect(&svg);
         // #377: justified within the panel inset by `legend_margin`.
@@ -187,7 +197,7 @@ fn continuous_legend_justification_point_matches_the_panel_at_several_positions(
             .render_svg_native_with_size(W, H)
             .unwrap();
         let theme = Theme::default();
-        let legend_w = single_col_width(&theme);
+        let legend_w = single_col_width(&theme, CONTINUOUS.0, CONTINUOUS.1);
         // The bar plus its bottom label's lower half (#377).
         let legend_h = theme.legend_key_height * 8.0 + theme.legend_text.size / 2.0;
         let panel = data_plot_rect(&svg);
@@ -291,7 +301,7 @@ fn discrete_legend_at_1_1_anchors_its_own_top_right_on_the_panel() {
         .unwrap();
     let panel = data_plot_rect(&svg);
     let theme = Theme::default();
-    let legend_w = single_col_width(&theme);
+    let legend_w = single_col_width(&theme, DISCRETE.0, DISCRETE.1);
     let (first_x, first_y) = first_rect_xy(&svg, "12.00", "12.00");
     let m = &theme.legend_margin;
     assert!(
@@ -320,4 +330,53 @@ fn a_legend_taller_than_the_whole_canvas_still_left_top_aligns_without_panicking
         .unwrap();
     let (x, y) = first_rect_xy(&svg, "12.00", "12.00");
     assert!(x >= 0.0 && y >= 0.0, "{svg}");
+}
+
+#[test]
+fn a_long_title_or_label_stays_inside_a_right_corner_legend() {
+    // anofox-visualization#666: the estimate assumed six characters per
+    // label and ignored the title, so a top-right legend ran off the panel.
+    let data = frame(vec![
+        ("x", floats(&[1.0, 2.0, 3.0])),
+        ("y", floats(&[1.0, 2.0, 3.0])),
+        ("g", strs(&["0 · DC", "1 · under 100 km", "2 · 100–200 km"])),
+    ]);
+    let svg = GGPlot::new(data)
+        .aes(Aes::new().x("x").y("y").color("g"))
+        .geom_point()
+        .guides(
+            ggplot_rs::guide::config::GuideLegend::new()
+                .with_title("Road km to the nearest distribution centre"),
+        )
+        .legend_position(LegendPosition::Inside(1.0, 1.0))
+        .render_svg_native_with_size(500, 400)
+        .unwrap();
+    let panel = data_plot_rect(&svg);
+    let right = panel[0] + panel[2];
+    let theme = Theme::default();
+    for (label, size) in [
+        (
+            "Road km to the nearest distribution centre",
+            theme.legend_title.size,
+        ),
+        ("1 · under 100 km", theme.legend_text.size),
+    ] {
+        let at = svg.find(&format!(">{label}<")).expect(label);
+        let open = svg[..at].rfind("<text").unwrap();
+        let tag = &svg[open..at];
+        let x0: f64 = tag
+            .split(" x=\"")
+            .nth(1)
+            .unwrap()
+            .split('"')
+            .next()
+            .unwrap()
+            .parse()
+            .unwrap();
+        let x1 = x0 + ggplot_rs::render::text::text_width(label, size);
+        assert!(
+            x1 <= right + 0.5,
+            "{label}: ends at {x1}, panel right {right}"
+        );
+    }
 }

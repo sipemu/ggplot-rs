@@ -5,6 +5,14 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Fixed
+- **An inside legend no longer runs off a right-hand panel edge**
+  (`LegendPosition::Inside`, `legend_inside_auto`). Its width was estimated
+  as six characters per label and ignored the title, so at a right corner a
+  longer label or title was drawn past the panel (and cut off by the
+  canvas). The estimate now measures the widest label and the title as
+  drawn.
+
 ## [0.35.1] — 2026-10-30
 
 ### Added

@@ -384,7 +384,14 @@ fn estimate_legend_box(
         let diameter = size_key_diameter(aes, scales, scale, &breaks);
         let key_width = theme.legend_key_width.max(diameter);
         let key_height = theme.legend_key_height.max(key_width);
-        let single_col_width = key_width + theme.legend_spacing + theme.legend_text.size * 6.0;
+        // The widest label and the title as drawn (a fixed six-character
+        // guess let a long label or title run off a right-corner legend).
+        let label_w = breaks
+            .iter()
+            .map(|(_, l)| crate::render::text::text_width(l, theme.legend_text.size))
+            .fold(0.0_f64, f64::max);
+        let title_w = crate::render::text::text_width(title, theme.legend_title.size);
+        let single_col_width = (key_width + theme.legend_spacing + label_w).max(title_w);
         let is_continuous_bar =
             matches!(aes, Aesthetic::Color | Aesthetic::Fill) && !scale.is_discrete();
         let (w, h) = if is_continuous_bar {
