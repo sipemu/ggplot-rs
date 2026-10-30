@@ -15,6 +15,22 @@ pub use crate::scale::format::{
     label_scientific, label_si, LabelFormatter,
 };
 
+/// Format a timestamp (seconds since the Unix epoch, UTC) with the same
+/// strftime subset the datetime scales use for their labels —
+/// `%Y %y %m %-m %b %B %d %-d %e %a %A %H %M %S %%` — and the month / weekday
+/// names of `locale` (English without). For hosts that format a date the way
+/// an axis would, e.g. in their own tooltips.
+///
+/// ```
+/// use ggplot_rs::format::format_timestamp;
+/// assert_eq!(format_timestamp(86_400.0, "%d %b %Y", None), "02 Jan 1970");
+/// let de = ggplot_rs::format::Locale::from_tag("de-DE");
+/// assert_eq!(format_timestamp(86_400.0 * 40.0, "%-d. %B", Some(&de)), "10. Februar");
+/// ```
+pub fn format_timestamp(secs: f64, fmt: &str, locale: Option<&Locale>) -> String {
+    crate::scale::datetime::strftime_locale(secs, fmt, locale)
+}
+
 /// Format one data value for display (tooltips, data labels):
 ///
 /// - strings as-is, booleans as `true`/`false`, `NA` as the empty string;
