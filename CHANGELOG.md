@@ -5,6 +5,8 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.35.2] — 2026-10-30
+
 ### Fixed
 - **An inside legend no longer runs off a right-hand panel edge**
   (`LegendPosition::Inside`, `legend_inside_auto`). Its width was estimated
