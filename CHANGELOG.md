@@ -5,6 +5,20 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.36.0] — 2026-10-30
+
+### Added
+- **Repelled labels keep clear of straight lines**: `RepelParams::avoid_ablines`
+  (`(slope, intercept)` in scale space, like `geom_abline`) and the
+  `avoid_abline(slope, intercept)` builder on `GeomTextRepel` /
+  `GeomLabelRepel`. A label a line crosses is pushed off it along the line's
+  normal, in the same phases as the point avoidance
+  (anofox-visualization#753).
+
+### Changed (breaking)
+- `RepelParams` has a new public field (`avoid_ablines`); a struct literal
+  without `..Default::default()` no longer compiles.
+
 ## [0.35.3] — 2026-10-30
 
 ### Added
