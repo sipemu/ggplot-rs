@@ -109,3 +109,25 @@ mod tests {
         );
     }
 }
+
+#[cfg(test)]
+mod format_timestamp_tests {
+    use super::*;
+
+    #[test]
+    fn formats_like_the_datetime_scales() {
+        assert_eq!(
+            format_timestamp(0.0, "%Y-%m-%d %H:%M", None),
+            "1970-01-01 00:00"
+        );
+        assert_eq!(
+            format_timestamp(86_400.0 * 59.0, "%a %-d %b %y", None),
+            "Sun 1 Mar 70"
+        );
+        let de = Locale::from_tag("de-DE");
+        assert_eq!(
+            format_timestamp(86_400.0 * 59.0, "%A, %-d. %B %Y", Some(&de)),
+            "Sonntag, 1. März 1970"
+        );
+    }
+}
