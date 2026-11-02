@@ -112,11 +112,19 @@ impl Geom for GeomHistogram {
             // Hover tooltip: the bin range and its count.
             let cnt = super::tip_value(&y_col[i]);
             let tip = match (xmin_col, xmax_col) {
-                (Some(lo), Some(hi)) => format!(
-                    "[{}, {}): {cnt}",
-                    super::tip_value(&lo[i]),
-                    super::tip_value(&hi[i])
-                ),
+                (Some(lo), Some(hi)) => match (lo[i].as_f64(), hi[i].as_f64()) {
+                    // Edges rounded to the bin width's precision: "[223.4,
+                    // 230.7)", not the raw "[223.35, 230.7266)".
+                    (Some(a), Some(b)) if a.is_finite() && b.is_finite() && b > a => {
+                        let d = (1.0 - (b - a).log10().floor()).clamp(0.0, 8.0) as usize;
+                        format!("[{}, {}): {cnt}", edge(a, d), edge(b, d))
+                    }
+                    _ => format!(
+                        "[{}, {}): {cnt}",
+                        super::tip_value(&lo[i]),
+                        super::tip_value(&hi[i])
+                    ),
+                },
                 _ => format!("count: {cnt}"),
             };
             super::set_mark(
@@ -200,6 +208,16 @@ impl Geom for GeomHistogram {
     }
 }
 
+/// A bin edge with `d` decimals, trailing zeros dropped (`223.40` → `223.4`).
+fn edge(v: f64, d: usize) -> String {
+    let s = format!("{v:.d$}");
+    if s.contains('.') {
+        s.trim_end_matches('0').trim_end_matches('.').to_string()
+    } else {
+        s
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use crate::aes::{AesMapping, Aesthetic, MappingStage};
@@ -230,6 +248,35 @@ mod tests {
             .unwrap();
 
         assert!(svg.contains("data-n=\""));
+    }
+
+    /// A bar's tooltip rounds its bin edges to the bin width's precision
+    /// (no raw "238.753").
+    #[test]
+    fn tooltip_edges_follow_the_bin_width() {
+        assert_eq!(super::edge(223.36, 1), "223.4");
+        assert_eq!(super::edge(230.0, 1), "230");
+        assert_eq!(super::edge(0.125, 3), "0.125");
+        let x: Vec<Value> = (0..200)
+            .map(|i| Value::Float(100.0 + i as f64 * 1.37))
+            .collect();
+        let svg = GGPlot::new(vec![("x".into(), x)])
+            .aes(Aes::new().x("x"))
+            .geom_histogram()
+            .render_svg_native_with_size(400, 300)
+            .unwrap();
+        let tip = svg
+            .split("<title>")
+            .nth(1)
+            .unwrap()
+            .split("</title>")
+            .next()
+            .unwrap();
+        let edges = tip.trim_start_matches('[').split(')').next().unwrap();
+        for e in edges.split(", ") {
+            let dec = e.split('.').nth(1).map_or(0, str::len);
+            assert!(dec <= 2, "{tip}");
+        }
     }
 
     /// Every `data-geom="histogram"` rect's `fill="#rrggbb"`.
