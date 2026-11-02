@@ -112,19 +112,19 @@ impl Geom for GeomHistogram {
             // Hover tooltip: the bin range and its count.
             let cnt = super::tip_value(&y_col[i]);
             let tip = match (xmin_col, xmax_col) {
-                (Some(lo), Some(hi)) => match (lo[i].as_f64(), hi[i].as_f64()) {
-                    // Edges rounded to the bin width's precision: "[223.4,
-                    // 230.7)", not the raw "[223.35, 230.7266)".
-                    (Some(a), Some(b)) if a.is_finite() && b.is_finite() && b > a => {
-                        let d = (1.0 - (b - a).log10().floor()).clamp(0.0, 8.0) as usize;
-                        format!("[{}, {}): {cnt}", edge(a, d), edge(b, d))
-                    }
-                    _ => format!(
-                        "[{}, {}): {cnt}",
-                        super::tip_value(&lo[i]),
-                        super::tip_value(&hi[i])
-                    ),
-                },
+                // Edges rounded to the bin width's precision: "[223.4,
+                // 230.7)", not the raw "[223.35, 230.7266)".
+                (Some(lo), Some(hi)) => {
+                    let (a, b) = (lo[i].as_f64(), hi[i].as_f64());
+                    let d = a.zip(b).map(|(a, b)| {
+                        (1.0 - (b - a).abs().log10().floor()).clamp(0.0, 8.0) as usize
+                    });
+                    let e = |v: Option<f64>, raw: &crate::data::Value| match (v, d) {
+                        (Some(v), Some(d)) if v.is_finite() => edge(v, d),
+                        _ => super::tip_value(raw),
+                    };
+                    format!("[{}, {}): {cnt}", e(a, &lo[i]), e(b, &hi[i]))
+                }
                 _ => format!("count: {cnt}"),
             };
             super::set_mark(
