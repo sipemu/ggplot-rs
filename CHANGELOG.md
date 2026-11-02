@@ -5,6 +5,14 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.36.1] — 2026-11-02
+
+### Fixed
+- **Histogram tooltips round their bin edges** to the bin width's precision
+  (`[223.4, 230.7): 12`, not `[223.35, 230.7266): 12`) —
+  anofox-visualization#877. The default-output snapshot of `histogram`
+  changes accordingly.
+
 ## [0.36.0] — 2026-10-30
 
 ### Added

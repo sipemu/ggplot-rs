@@ -295,7 +295,10 @@ fn expected() -> Vec<(&'static str, u64)> {
         ("segment", 0x68fcc015406c8eb9),
         ("bar", 0x14377a5e4f3d4e62),
         ("col", 0xc5738d84e879e5f8),
-        ("histogram", 0x509a73b585ca7049),
+        // the bar tooltips' bin edges are rounded to the bin width's
+        // precision ("[223.4, 230.7)", not raw floats) — a documented
+        // follow-up, not a regression
+        ("histogram", 0x0f2550e139291e4b),
         ("boxplot", 0x1e4e90592a30f608),
         // 0.24.0 (sipemu/ggplot-rs#171 review finding 5): geom_area()'s
         // default position changed from PositionIdentity to
