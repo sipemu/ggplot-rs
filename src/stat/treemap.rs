@@ -188,12 +188,24 @@ impl Stat for StatTreemap {
             let mut vals: Vec<Value> = rows.iter().map(|&i| col[i].clone()).collect();
             if name == "subgroup" {
                 vals.extend(groups.iter().map(|g| g.0.clone()));
+            } else if name == "weight" {
+                // A group row weighs its members' total (its `area`): an NA
+                // weight made the build drop every group row as missing
+                // values, losing the group rectangles and labels.
+                vals.extend(groups.iter().map(|g| Value::Float(g.1)));
             } else if name == "fill" {
                 // A group row isn't filled, but its fill must not train the
                 // scale with an NA level: take its first member's.
                 vals.extend(groups.iter().map(|g| col[g.3].clone()));
-            } else {
+            } else if name == "label" {
+                // a group row is labelled by its `subgroup`, not a tile's text
                 vals.extend(std::iter::repeat_n(Value::Na, groups.len()));
+            } else {
+                // Any other passthrough column takes the group's first
+                // member's value: an NA there (a data column that happens to
+                // be called `x` or `y`) made the build drop every group row as
+                // missing, losing the group rectangles and labels.
+                vals.extend(groups.iter().map(|g| col[g.3].clone()));
             }
             debug_assert_eq!(vals.len(), n);
             out.add_column(name.to_string(), vals);
