@@ -5,6 +5,13 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.37.3] — 2026-11-03
+
+### Added
+- `GeomMapTile::units(per_radian)`: the X/Y domain's Mercator units per
+  radian (default 1; 6378137 for EPSG:3857 metres), for layers projected by
+  the caller — anofox-visualization#760.
+
 ## [0.37.2] — 2026-11-03
 
 ### Fixed
