@@ -5,6 +5,15 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.37.2] — 2026-11-03
+
+### Fixed
+- **Nested treemaps keep their group rectangles and labels.** A group row
+  left its passthrough columns NA, so a data column named `x` or `y` made
+  the build drop every group row as "missing values" (with a warning).
+  Group rows now carry their first member's passthrough values (`label`
+  stays NA, `weight` is the group total).
+
 ## [0.37.1] — 2026-11-03
 
 ### Added
