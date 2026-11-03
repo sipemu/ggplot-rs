@@ -141,6 +141,14 @@ impl Geom for GeomText {
             .column("label")
             .ok_or(RenderError::MissingAesthetic("label".into()))?;
         let fontface_col = data.column("fontface");
+        // per-row justification (R's hjust / vjust aesthetics); a missing
+        // value keeps the geom's own
+        let num = |name: &str, i: usize, dflt: f64| {
+            data.column(name)
+                .and_then(|c| c[i].as_f64())
+                .filter(|v| v.is_finite())
+                .unwrap_or(dflt)
+        };
 
         let plot_area = backend.plot_area();
         let xm = super::support::XMapper::new(data, scales);
@@ -149,6 +157,7 @@ impl Geom for GeomText {
         let mut drawn_bboxes: Vec<(f64, f64, f64, f64)> = Vec::new();
 
         for i in 0..data.nrows() {
+            let (hjust, vjust) = (num("hjust", i, self.hjust), num("vjust", i, self.vjust));
             // #221: `Aes::class`/`group_wrap`/`data_attr` per row.
             super::set_row_extras(backend, data, i);
             // Text geoms don't consume tooltips (the build warns if one is
@@ -196,7 +205,19 @@ impl Geom for GeomText {
             // `(vjust - 0.5) * size` shift — `line_height` only matters once a
             // label actually wraps, so an un-wrapped plot's output is unchanged.
             let block_h = if n <= 1.0 { self.size } else { lh * n };
-            let py_block = py + (self.vjust - 0.5) * block_h;
+            let py_block = py + (vjust - 0.5) * block_h;
+            // hjust outside [0, 1] moves the text by that share of its own
+            // width beyond the anchored edge (R: `hjust = -0.1` sits a tenth
+            // of its width right of the point)
+            let w_text = wrapped_block_width(&lines, self.size);
+            let px = px
+                + if hjust < 0.0 {
+                    -hjust * w_text
+                } else if hjust > 1.0 {
+                    -(hjust - 1.0) * w_text
+                } else {
+                    0.0
+                };
 
             if self.check_overlap {
                 let w = wrapped_block_width(&lines, self.size);
@@ -212,7 +233,7 @@ impl Geom for GeomText {
                 drawn_bboxes.push(bbox);
             }
 
-            let anchor = hjust_to_anchor(self.hjust);
+            let anchor = hjust_to_anchor(hjust);
             let family = super::resolve_font_family(&self.fontfamily, theme);
             let top = py_block - block_h / 2.0;
             for (li, line) in lines.iter().enumerate() {

@@ -1,0 +1,4 @@
+# Cap parallel build/link jobs so the polars-heavy test link step
+# doesn't spawn one rust-lld linker per core (was 20 -> ~39 GB RAM spike).
+[build]
+jobs = 8

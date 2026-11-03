@@ -82,6 +82,9 @@ impl ScaleSet {
                 // Per-row fontface (#228) is parsed straight into
                 // `FontFace` — no visual mapping, no legend.
                 | Aesthetic::Fontface
+                // Per-row text justification: numbers used as they are.
+                | Aesthetic::Hjust
+                | Aesthetic::Vjust
                 // Boxplot stat="identity" hinges/outliers (B3-5) live on
                 // the y scale (via `column_aesthetic`/`Y_FAMILY`/the
                 // build's stat_aes training list), not a scale of their
