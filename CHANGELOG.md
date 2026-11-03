@@ -5,6 +5,21 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.38.0] — 2026-11-03
+
+### Added
+- `Aes::hjust(col)` / `Aes::vjust(col)` (`Aesthetic::Hjust` / `Vjust`):
+  per-row text justification for `geom_text`, as R's `hjust` / `vjust`
+  aesthetics — e.g. value labels outside the end of positive and negative
+  bars in one layer (anofox-visualization#959). No scale, no legend.
+
+### Changed
+- `geom_text`: an `hjust` below 0 or above 1 now moves the text by that
+  share of its own width beyond the anchored edge, as in ggplot2
+  (`hjust = -0.1` sits a tenth of its width right of the point); before it
+  only picked the start / end anchor.
+- Breaking only for exhaustive `match`es on `Aesthetic` (two new variants).
+
 ## [0.37.3] — 2026-11-03
 
 ### Added

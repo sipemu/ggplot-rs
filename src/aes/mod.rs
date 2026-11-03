@@ -25,6 +25,14 @@ pub enum Aesthetic {
     Xend,
     Yend,
     Angle,
+    /// Per-row horizontal justification for `geom_text` (R's `hjust`
+    /// aesthetic): `0` left, `0.5` centre, `1` right; below `0` / above `1`
+    /// moves the text further by that share of its own width. No scale.
+    Hjust,
+    /// Per-row vertical justification for `geom_text` (R's `vjust`): `0`
+    /// above the point, `0.5` centred, `1` below; beyond moves it further by
+    /// that share of its height. No scale.
+    Vjust,
     Radius,
     /// Stroke width for segment/curve/path/line (R's `linewidth`).
     Linewidth,
@@ -123,6 +131,8 @@ impl Aesthetic {
             Aesthetic::Xend => "xend",
             Aesthetic::Yend => "yend",
             Aesthetic::Angle => "angle",
+            Aesthetic::Hjust => "hjust",
+            Aesthetic::Vjust => "vjust",
             Aesthetic::Radius => "radius",
             Aesthetic::Linewidth => "linewidth",
             Aesthetic::Fontface => "fontface",
@@ -303,6 +313,15 @@ impl Aes {
     }
     pub fn angle(self, col: &str) -> Self {
         self.push(col, Aesthetic::Angle)
+    }
+    /// Per-row `hjust` for `geom_text` from `col` (numbers; see
+    /// [`Aesthetic::Hjust`]). A missing value keeps the geom's own `hjust`.
+    pub fn hjust(self, col: &str) -> Self {
+        self.push(col, Aesthetic::Hjust)
+    }
+    /// Per-row `vjust` for `geom_text` from `col` (see [`Aesthetic::Vjust`]).
+    pub fn vjust(self, col: &str) -> Self {
+        self.push(col, Aesthetic::Vjust)
     }
     pub fn radius(self, col: &str) -> Self {
         self.push(col, Aesthetic::Radius)
