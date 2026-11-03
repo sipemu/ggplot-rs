@@ -1,3 +1,6 @@
+/// A label formatter for a secondary axis' tick values.
+pub type SecLabeller = std::sync::Arc<dyn Fn(f64) -> String + Send + Sync>;
+
 /// A secondary axis specification — defines a transformation from the primary axis domain.
 ///
 /// # Example
@@ -18,6 +21,12 @@ pub struct SecAxis {
     /// Label the axis as a percentage of the primary scale's trained data
     /// maximum ([`SecAxis::percent_of_max`]) instead of through `transform`.
     pub percent_of_max: bool,
+    /// `secondary = primary * scale + offset` ([`SecAxis::linear`]): the
+    /// axis gets its own nice ticks in the secondary range.
+    pub linear: Option<(f64, f64)>,
+    /// Formats the secondary axis' tick values ([`SecAxis::with_labeller`]);
+    /// `None` uses the plot's number format.
+    pub labeller: Option<SecLabeller>,
 }
 
 impl SecAxis {
@@ -28,6 +37,8 @@ impl SecAxis {
             name: String::new(),
             breaks: None,
             percent_of_max: false,
+            linear: None,
+            labeller: None,
         }
     }
 
@@ -43,6 +54,26 @@ impl SecAxis {
         }
     }
 
+    /// A linear secondary axis: `secondary = primary * scale + offset`,
+    /// e.g. a second measure drawn rescaled into the primary range (a
+    /// combo chart's right axis). Its ticks sit at nice values of the
+    /// secondary range, not at the primary breaks. A zero or non-finite
+    /// `scale` falls back to the identity.
+    pub fn linear(scale: f64, offset: f64) -> Self {
+        let ok = scale.is_finite() && scale != 0.0 && offset.is_finite();
+        SecAxis {
+            linear: Some(if ok { (scale, offset) } else { (1.0, 0.0) }),
+            ..SecAxis::new(|v| v)
+        }
+    }
+
+    /// Format the secondary axis' tick labels with `f` (e.g. a currency or
+    /// percent format of the second measure).
+    pub fn with_labeller(mut self, f: impl Fn(f64) -> String + Send + Sync + 'static) -> Self {
+        self.labeller = Some(std::sync::Arc::new(f));
+        self
+    }
+
     pub fn with_name(mut self, name: &str) -> Self {
         self.name = name.to_string();
         self
@@ -55,13 +86,41 @@ impl SecAxis {
 
     /// Transform a primary axis value to the secondary axis value.
     pub fn transform_value(&self, v: f64) -> f64 {
-        (self.transform)(v)
+        match self.linear {
+            Some((a, b)) => v * a + b,
+            None => (self.transform)(v),
+        }
+    }
+
+    /// A tick label for a secondary value: the labeller, else the number
+    /// format.
+    pub(crate) fn label(&self, v: f64, locale: Option<&crate::locale::Locale>) -> String {
+        match &self.labeller {
+            Some(f) => f(v),
+            None => crate::scale::util::format_number_opt(v, locale),
+        }
     }
 
     /// The axis' own ticks as `(normalized position, label)` when it does not
     /// simply relabel the primary breaks (the [`percent_of_max`](Self::percent_of_max)
     /// mode); `None` otherwise.
     pub(crate) fn own_ticks(&self, primary: &dyn super::Scale) -> Option<Vec<(f64, String)>> {
+        if let Some((a, b)) = self.linear {
+            let (lo, hi) = primary.expanded_domain()?;
+            let (s1, s2) = (lo * a + b, hi * a + b);
+            let (smin, smax) = (s1.min(s2), s1.max(s2));
+            let eps = 1e-9 * (smax - smin).abs().max(1e-12);
+            return Some(
+                super::util::extended_breaks(smin, smax, 5)
+                    .into_iter()
+                    .filter(|t| *t >= smin - eps && *t <= smax + eps)
+                    .map(|t| {
+                        let pos = primary.map(&crate::data::Value::Float((t - b) / a));
+                        (pos, self.label(t, primary.locale()))
+                    })
+                    .collect(),
+            );
+        }
         if !self.percent_of_max {
             return None;
         }
@@ -92,6 +151,8 @@ impl std::fmt::Debug for SecAxis {
             .field("name", &self.name)
             .field("breaks", &self.breaks)
             .field("percent_of_max", &self.percent_of_max)
+            .field("linear", &self.linear)
+            .field("labeller", &self.labeller.is_some())
             .finish()
     }
 }

@@ -587,8 +587,7 @@ pub fn draw_sec_y_axis(
             let sec_label = if own_ticks.is_some() {
                 label.clone()
             } else if let Some(v) = parsed {
-                let transformed = sec_axis.transform_value(v);
-                crate::scale::util::format_number_opt(transformed, locale)
+                sec_axis.label(sec_axis.transform_value(v), locale)
             } else {
                 label.clone()
             };
