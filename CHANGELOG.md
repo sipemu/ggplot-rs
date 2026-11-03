@@ -5,6 +5,20 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.37.0] — 2026-11-03
+
+### Added
+- **Linear secondary axes**: `SecAxis::linear(scale, offset)`
+  (`secondary = primary * scale + offset`) for a second measure drawn
+  rescaled into the primary range — its ticks sit at nice values of the
+  secondary range, not at relabelled primary breaks.
+  `SecAxis::with_labeller(f)` formats its tick labels (currency, percent, …)
+  — anofox-visualization#919.
+
+### Changed (breaking)
+- `SecAxis` gains the public fields `linear` and `labeller`; a struct
+  literal must now fill them (use `SecAxis::new` / `..`).
+
 ## [0.36.1] — 2026-11-02
 
 ### Fixed
