@@ -23,6 +23,7 @@ use crate::geom::crossbar::GeomCrossbar;
 use crate::geom::curve::GeomCurve;
 use crate::geom::density::GeomDensity;
 use crate::geom::density2d::GeomDensity2d;
+use crate::geom::density_ridges::GeomDensityRidges;
 use crate::geom::dotplot::GeomDotplot;
 use crate::geom::errorbar::GeomErrorbar;
 use crate::geom::freqpoly::GeomFreqpoly;
@@ -998,6 +999,17 @@ impl GGPlot {
     }
 
     pub fn geom_violin_with(self, geom: GeomViolin) -> Self {
+        self.add_geom_with(geom)
+    }
+
+    /// A ridgeline plot: one density of `x` per level of a discrete `y`,
+    /// drawn upward from the level's baseline and overlapping the row above
+    /// ([`GeomDensityRidges::scale`]) — distributions over time or groups.
+    pub fn geom_density_ridges(self) -> Self {
+        self.add_geom(GeomDensityRidges::default())
+    }
+
+    pub fn geom_density_ridges_with(self, geom: GeomDensityRidges) -> Self {
         self.add_geom_with(geom)
     }
 
