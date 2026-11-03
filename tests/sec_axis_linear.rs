@@ -43,7 +43,7 @@ fn linear_axis_ticks_at_nice_secondary_values() {
                         .with_labeller(|v| format!("{v:.0}%")),
                 ),
         )
-        .render_svg()
+        .render_svg_native()
         .unwrap();
     let t = texts(&svg);
     for want in ["0%", "10%", "20%", "30%", "40%", "Margin"] {
@@ -65,7 +65,7 @@ fn linear_axis_with_offset_and_default_labels() {
                 .for_aesthetic(Aesthetic::Y)
                 .with_sec_axis(SecAxis::linear(2.0, 100.0)),
         )
-        .render_svg()
+        .render_svg_native()
         .unwrap();
     // secondary range ~100..2100: nice values, not 2 × the primary breaks + 100
     let t = texts(&svg);
