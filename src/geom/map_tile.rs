@@ -128,6 +128,9 @@ pub struct GeomMapTile {
     pub detail: f64,
     pub alpha: f64,
     cache: TileCache,
+    /// Map units per radian of the X/Y domain (1 = unit-sphere Mercator;
+    /// 6378137 = EPSG:3857 metres) — [`GeomMapTile::units`].
+    units: f64,
 }
 
 impl std::fmt::Debug for GeomMapTile {
@@ -148,7 +151,18 @@ impl GeomMapTile {
             detail: 1.0,
             alpha: 1.0,
             cache: Arc::default(),
+            units: 1.0,
         }
+    }
+
+    /// The X/Y domain's Mercator units per radian: 1 (the default) for
+    /// `SfProjection::Mercator`, 6378137 for EPSG:3857 metres (layers
+    /// projected elsewhere, e.g. by the caller).
+    pub fn units(mut self, per_radian: f64) -> Self {
+        if per_radian.is_finite() && per_radian > 0.0 {
+            self.units = per_radian;
+        }
+        self
     }
 
     pub fn zoom(mut self, z: u32) -> Self {
@@ -224,10 +238,11 @@ impl Geom for GeomMapTile {
                 &plot_area,
             )
         };
-        let z = self.pick_zoom((x1 - x0, y1 - y0), (view.width, view.height));
+        let u = self.units;
+        let z = self.pick_zoom(((x1 - x0) / u, (y1 - y0) / u), (view.width, view.height));
         let n = 1i64 << z;
-        let (tx0, ty0) = tile_xy(z, x0, y1);
-        let (tx1, ty1) = tile_xy(z, x1, y0);
+        let (tx0, ty0) = tile_xy(z, x0 / u, y1 / u);
+        let (tx1, ty1) = tile_xy(z, x1 / u, y0 / u);
         let ty_range = (ty0.floor().max(0.0) as i64)..=(ty1.ceil() as i64 - 1).min(n - 1);
         for ty in ty_range {
             for tx in tx0.floor() as i64..=tx1.ceil() as i64 - 1 {
@@ -237,6 +252,7 @@ impl Geom for GeomMapTile {
                     continue;
                 };
                 let (bx0, by0, bx1, by1) = tile_bounds(z, tx, ty);
+                let (bx0, by0, bx1, by1) = (bx0 * u, by0 * u, bx1 * u, by1 * u);
                 let (a, b) = (px(bx0, by0), px(bx1, by1));
                 let rect = Rect {
                     x: a.0.min(b.0),
