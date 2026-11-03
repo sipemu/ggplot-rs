@@ -25,6 +25,7 @@ pub use crate::geom::crossbar::GeomCrossbar;
 pub use crate::geom::curve::GeomCurve;
 pub use crate::geom::density::GeomDensity;
 pub use crate::geom::density2d::GeomDensity2d;
+pub use crate::geom::density_ridges::GeomDensityRidges;
 pub use crate::geom::dotplot::GeomDotplot;
 pub use crate::geom::errorbar::GeomErrorbar;
 pub use crate::geom::flags::{FlagShape, GeomFlags};

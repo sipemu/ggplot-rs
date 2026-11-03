@@ -23,6 +23,7 @@ pub mod curve;
 pub(crate) mod decorative;
 pub mod density;
 pub mod density2d;
+pub mod density_ridges;
 pub mod dotplot;
 pub mod errorbar;
 pub mod errorbarh;

@@ -48,6 +48,7 @@ pub mod treemap;
 pub mod venn;
 pub mod waffle;
 pub mod waterfall;
+pub mod xdensity_ridges;
 pub mod ydensity;
 
 use crate::aes::{Aes, Aesthetic};

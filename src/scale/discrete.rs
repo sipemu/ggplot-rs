@@ -15,6 +15,9 @@ pub struct ScaleDiscrete {
     custom_labels: Option<Vec<String>>,
     /// Pre-set level order/filter. When set, only these levels are shown (in this order).
     limits: Option<IndexSet<String>>,
+    /// Extra room below the first and above the last level, in levels
+    /// ([`ScaleDiscrete::with_expand`]).
+    expand: (f64, f64),
 }
 
 impl ScaleDiscrete {
@@ -25,7 +28,24 @@ impl ScaleDiscrete {
             levels: IndexSet::new(),
             custom_labels: None,
             limits: None,
+            expand: (0.0, 0.0),
         }
+    }
+
+    /// Extra room below the first level and above the last one, in levels
+    /// (0 by default: each level sits in the middle of its `1/n` slot). A
+    /// ridgeline's top ridge needs `scale - 0.5` above
+    /// ([`GeomDensityRidges`](crate::geom::density_ridges::GeomDensityRidges)).
+    pub fn with_expand(mut self, lower: f64, upper: f64) -> Self {
+        let ok = |v: f64| if v.is_finite() { v.max(0.0) } else { 0.0 };
+        self.expand = (ok(lower), ok(upper));
+        self
+    }
+
+    /// The mapped position of the `i`-th of `n` levels.
+    fn slot(&self, i: usize, n: usize) -> f64 {
+        let (lo, hi) = self.expand;
+        (i as f64 + 0.5 + lo) / (n as f64 + lo + hi)
     }
 
     pub fn for_aesthetic(mut self, aes: Aesthetic) -> Self {
@@ -105,7 +125,7 @@ impl Scale for ScaleDiscrete {
             return 0.5;
         }
         match effective.get_index_of(key.as_ref()) {
-            Some(idx) => (idx as f64 + 0.5) / n as f64,
+            Some(idx) => self.slot(idx, n),
             None => 0.5, // Not in limits → maps to middle
         }
     }
@@ -120,7 +140,7 @@ impl Scale for ScaleDiscrete {
             .iter()
             .enumerate()
             .map(|(i, level)| {
-                let pos = (i as f64 + 0.5) / n as f64;
+                let pos = self.slot(i, n);
                 let label = if let Some(ref labels) = self.custom_labels {
                     labels.get(i).cloned().unwrap_or_else(|| level.clone())
                 } else {

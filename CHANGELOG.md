@@ -5,6 +5,17 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.37.1] — 2026-11-03
+
+### Added
+- **Ridgeline plots**: `geom_density_ridges()` / `GeomDensityRidges` (stat
+  `StatXDensityRidges`) — one density of `x` per level of a discrete `y`,
+  drawn upward from the level's baseline and overlapping the row above
+  (`scale`, default 1.6 rows), the top row first so lower ridges sit in
+  front — anofox-visualization#917.
+- `ScaleDiscrete::with_expand(lower, upper)`: room below the first and above
+  the last level, in levels (a ridgeline's top ridge needs `scale - 0.5`).
+
 ## [0.37.0] — 2026-11-03
 
 ### Added
