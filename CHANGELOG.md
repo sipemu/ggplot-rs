@@ -11,6 +11,10 @@ All notable changes to this project are documented here. The format follows
   (`ScaleContinuous::time()`): seconds on the axis, breaks on round time
   steps, `HH:MM:SS` labels. Spec / npm: `scales.x/y.n_breaks`,
   `scales.x/y.time`.
+- `guide_override(aes, KeyOverride)` (#409): ggplot2's
+  `guide_legend(override.aes = …)` — fixed colour / fill / shape / linetype /
+  size / alpha / linewidth for one legend's keys. Spec / npm:
+  `guides.<aes>.override_aes`.
 - Theme (#413): `axis_text_x_top` / `axis_text_y_right` (ggplot2's
   `axis.text.x.top` / `axis.text.y.right`) for a top x axis and the
   secondary y axis; `theme_test()` (`theme_bw` without gridlines; preset

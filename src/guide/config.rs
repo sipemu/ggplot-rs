@@ -23,6 +23,9 @@ pub struct GuideLegend {
     pub hidden: Vec<crate::aes::Aesthetic>,
     /// Per-aesthetic legend titles (`guides(colour = guide_legend(title =))`, #409).
     pub titles: Vec<(crate::aes::Aesthetic, String)>,
+    /// Fixed key appearance per legend (ggplot2's `guide_legend(override.aes
+    /// = list(...))`, #409).
+    pub overrides: Vec<(crate::aes::Aesthetic, KeyOverride)>,
     /// Aesthetics whose legend keys run in reverse (`guides(colour =
     /// guide_legend(reverse = TRUE))`, #409) — `reverse` above flips all.
     pub reversed: Vec<crate::aes::Aesthetic>,
@@ -226,6 +229,55 @@ impl GuideColourbar {
 
     pub fn with_show_limits(mut self, show: bool) -> Self {
         self.show_limits = show;
+        self
+    }
+}
+
+/// Fixed values a legend's keys are drawn with, whatever the data maps
+/// (ggplot2's `override.aes`, #409) — e.g. opaque, larger keys for a
+/// scatter plot drawn with small, translucent points. `None` keeps the key's
+/// own value.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct KeyOverride {
+    pub color: Option<(u8, u8, u8)>,
+    pub fill: Option<(u8, u8, u8)>,
+    pub shape: Option<crate::render::backend::PointShape>,
+    pub linetype: Option<crate::render::backend::Linetype>,
+    pub size: Option<f64>,
+    pub alpha: Option<f64>,
+    pub linewidth: Option<f64>,
+}
+
+impl KeyOverride {
+    pub fn new() -> Self {
+        Self::default()
+    }
+    pub fn color(mut self, c: (u8, u8, u8)) -> Self {
+        self.color = Some(c);
+        self
+    }
+    pub fn fill(mut self, c: (u8, u8, u8)) -> Self {
+        self.fill = Some(c);
+        self
+    }
+    pub fn shape(mut self, s: crate::render::backend::PointShape) -> Self {
+        self.shape = Some(s);
+        self
+    }
+    pub fn linetype(mut self, l: crate::render::backend::Linetype) -> Self {
+        self.linetype = Some(l);
+        self
+    }
+    pub fn size(mut self, v: f64) -> Self {
+        self.size = Some(v);
+        self
+    }
+    pub fn alpha(mut self, v: f64) -> Self {
+        self.alpha = Some(v.clamp(0.0, 1.0));
+        self
+    }
+    pub fn linewidth(mut self, v: f64) -> Self {
+        self.linewidth = Some(v);
         self
     }
 }

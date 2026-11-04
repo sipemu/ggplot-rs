@@ -339,7 +339,7 @@ fn legend_position(l: &LegendCfg) -> Result<LegendPosition, String> {
     })
 }
 
-fn parse_linetype(s: &str) -> Result<Linetype, String> {
+pub(crate) fn parse_linetype(s: &str) -> Result<Linetype, String> {
     Ok(match s.to_lowercase().as_str() {
         "solid" => Linetype::Solid,
         "dashed" => Linetype::Dashed,

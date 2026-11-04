@@ -433,7 +433,7 @@ pub enum ThemeSpec {
 pub enum GuideSpec {
     /// `"none"` drops the legend.
     Name(String),
-    Full(GuideFull),
+    Full(Box<GuideFull>),
 }
 
 #[derive(Deserialize)]
@@ -454,6 +454,21 @@ pub struct GuideFull {
     pub ticks: Option<bool>,
     pub even_steps: Option<bool>,
     pub show_limits: Option<bool>,
+    /// Fixed key appearance (`override.aes`, #409).
+    pub override_aes: Option<OverrideSpec>,
+}
+
+#[derive(Deserialize, Default)]
+#[serde(deny_unknown_fields)]
+pub struct OverrideSpec {
+    pub color: Option<String>,
+    pub fill: Option<String>,
+    /// A shape name (`"square"`) or ggplot2 `pch` code.
+    pub shape: Option<serde_json::Value>,
+    pub linetype: Option<String>,
+    pub size: Option<f64>,
+    pub alpha: Option<f64>,
+    pub linewidth: Option<f64>,
 }
 
 /// The `GuideColourbar` a `"colourbar"` / `"coloursteps"` guide spec means
@@ -748,7 +763,45 @@ pub fn build_plot_with_data(
                 if let Some(r) = g.reverse {
                     plot = plot.guide_reverse(aes.clone(), r);
                 }
-                match colourbar_spec(name, g.kind.as_deref(), Some(g))? {
+                if let Some(o) = &g.override_aes {
+                    let mut k = crate::guide::config::KeyOverride::new();
+                    let rgb = |c: &str| parse_hex(c).map(|c| (c.r, c.g, c.b));
+                    if let Some(c) = &o.color {
+                        k = k.color(rgb(c).map_err(|e| format!("guides.{name}: {e}"))?);
+                    }
+                    if let Some(c) = &o.fill {
+                        k = k.fill(rgb(c).map_err(|e| format!("guides.{name}: {e}"))?);
+                    }
+                    if let Some(v) = &o.shape {
+                        let value = match v {
+                            serde_json::Value::String(s) => Value::Str(s.clone()),
+                            serde_json::Value::Number(n) => {
+                                Value::Float(n.as_f64().unwrap_or(-1.0))
+                            }
+                            _ => Value::Na,
+                        };
+                        let shape = crate::scale::values::shape_from_value(&value)
+                            .ok_or(format!("guides.{name}.override_aes: unknown shape {v}"))?;
+                        k = k.shape(shape);
+                    }
+                    if let Some(l) = &o.linetype {
+                        k = k.linetype(
+                            crate::theme::config::parse_linetype(l)
+                                .map_err(|e| format!("guides.{name}: {e}"))?,
+                        );
+                    }
+                    if let Some(v) = o.size {
+                        k = k.size(v);
+                    }
+                    if let Some(v) = o.alpha {
+                        k = k.alpha(v);
+                    }
+                    if let Some(v) = o.linewidth {
+                        k = k.linewidth(v);
+                    }
+                    plot = plot.guide_override(aes.clone(), k);
+                }
+                match colourbar_spec(name, g.kind.as_deref(), Some(g.as_ref()))? {
                     Some(bar) => plot.guide_colourbar(aes, bar),
                     None => plot,
                 }
@@ -2316,6 +2369,22 @@ mod tests {
         )
         .unwrap();
         assert!(svg.contains(">01:00:00<") && svg.contains(">90<"), "{svg}");
+    }
+
+    #[test]
+    fn guide_override_aes() {
+        let svg = render(&format!(
+            r#"{{ {DATA}, "aes": {{"x": "x", "y": "y", "color": "g"}}, "layers": [{{"geom": "point"}}],
+               "guides": {{"color": {{"override_aes": {{"shape": "square", "size": 5, "alpha": 0.5}}}}}} }}"#
+        ))
+        .unwrap();
+        assert!(svg.contains("opacity=\"0.5"), "{svg}");
+        let e = render(&format!(
+            r#"{{ {DATA}, "aes": {{"x": "x", "y": "y", "color": "g"}}, "layers": [{{"geom": "point"}}],
+               "guides": {{"color": {{"override_aes": {{"shape": "blob"}}}}}} }}"#
+        ))
+        .unwrap_err();
+        assert!(e.contains("unknown shape"), "{e}");
     }
 
     #[test]

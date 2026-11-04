@@ -136,7 +136,8 @@ With polars (default feature): `GGPlot::new(df!{ "x" => [1.0, 2.0], "y" => [3.0,
   `.theme(theme_minimal().with_primary((26, 153, 136)))`; legend via
   `.legend_position(LegendPosition::Bottom)` (call **after** a theme preset —
   presets replace the whole theme); per aesthetic `.guide_none(Aesthetic::Fill)`
-  and `.guide_title(Aesthetic::Color, "Group")`, `.guide_reverse(Aesthetic::Color, true)`;
+  and `.guide_title(Aesthetic::Color, "Group")`, `.guide_reverse(Aesthetic::Color, true)`,
+  `.guide_override(Aesthetic::Color, KeyOverride::new().size(4.0).alpha(1.0))` (`override.aes`);
   a continuous colour bar: `.guide_coloursteps(Aesthetic::Fill)` or
   `.guide_colourbar(Aesthetic::Fill, GuideColourbar::new().with_bar_height(150.0)
   .with_nbin(10).with_display(ColourbarDisplay::Rectangles).with_ticks(false))`.
