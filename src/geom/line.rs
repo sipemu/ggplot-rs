@@ -263,6 +263,10 @@ impl Geom for GeomLine {
         if let (true, Some(ink)) = (self.color == (0, 0, 0), el.ink) {
             self.color = ink;
         }
+        // #413: `element_geom(linewidth =)` for the built-in default only.
+        if let (true, Some(w)) = (self.width == GeomLine::default().width, el.linewidth) {
+            self.width = w;
+        }
     }
 
     fn set_series_color(&mut self, color: (u8, u8, u8)) {

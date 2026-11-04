@@ -141,6 +141,10 @@ pub struct GeomCfg {
     pub paper: Option<[u8; 3]>,
     pub accent: Option<[u8; 3]>,
     pub family: Option<String>,
+    /// `geom_point`'s default size (`element_geom(pointsize =)`, #413).
+    pub pointsize: Option<f64>,
+    /// `geom_line`'s default width (`element_geom(linewidth =)`, #413).
+    pub linewidth: Option<f64>,
 }
 
 #[derive(Deserialize, Default)]
@@ -326,6 +330,12 @@ impl ThemeConfig {
             }
             if let Some([r, g, b]) = cfg.accent {
                 t.geom.accent = Some((r, g, b));
+            }
+            if let Some(v) = cfg.pointsize {
+                t.geom.pointsize = Some(v.max(0.0));
+            }
+            if let Some(v) = cfg.linewidth {
+                t.geom.linewidth = Some(v.max(0.0));
             }
             if let Some(f) = &cfg.family {
                 t.geom.family = Some(f.clone());

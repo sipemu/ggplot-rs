@@ -120,6 +120,11 @@ impl Geom for GeomPoint {
         if let (true, Some(ink)) = (self.color == (0, 0, 0), el.ink) {
             self.color = ink;
         }
+        // #413: `element_geom(pointsize =)` for the built-in default only.
+        let d = GeomPoint::default();
+        if let (true, Some(sz)) = (self.size == d.size, el.pointsize) {
+            self.size = sz;
+        }
     }
 
     fn set_series_color(&mut self, color: (u8, u8, u8)) {

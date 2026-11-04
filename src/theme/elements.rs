@@ -168,6 +168,12 @@ pub struct ElementGeom {
     /// Font family — the middle tier of B2-6's resolution order
     /// (a geom's own `fontfamily`, then this, then `theme.text.family`).
     pub family: Option<String>,
+    /// Replaces `geom_point`'s built-in size (ggplot2 4.0's
+    /// `element_geom(pointsize =)`, #413).
+    pub pointsize: Option<f64>,
+    /// Replaces `geom_line` / `geom_path`'s built-in width (`linewidth =`,
+    /// #413).
+    pub linewidth: Option<f64>,
 }
 
 impl ElementGeom {
@@ -194,6 +200,18 @@ impl ElementGeom {
     /// Builder for [`family`](Self::family).
     pub fn with_family(mut self, family: &str) -> Self {
         self.family = Some(family.to_string());
+        self
+    }
+
+    /// Builder for [`pointsize`](Self::pointsize) (#413).
+    pub fn with_pointsize(mut self, size: f64) -> Self {
+        self.pointsize = Some(size);
+        self
+    }
+
+    /// Builder for [`linewidth`](Self::linewidth) (#413).
+    pub fn with_linewidth(mut self, width: f64) -> Self {
+        self.linewidth = Some(width);
         self
     }
 }
