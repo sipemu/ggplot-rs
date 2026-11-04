@@ -686,6 +686,28 @@ impl PlotRenderer {
         // row / column reserves for them are the thickest strip it carries
         // on each side.
         use crate::facet::StripPosition as Side;
+        // #412: `strip.placement = "outside"` — a bottom / left strip of a
+        // panel that draws that axis sits beyond the axis (+ the pad).
+        let outside = theme.strip_placement_outside;
+        let x_axis_off =
+            super::layout::PlotLayout::x_axis_band(theme, None) + theme.strip_switch_pad;
+        let y_axis_off = theme.axis_ticks_length
+            + built
+                .panel_scales
+                .iter()
+                .chain(std::iter::once(&built.scales))
+                .filter_map(|s| s.get(&Aesthetic::Y))
+                .map(|ys| axis::y_label_reserve(theme, &ys.breaks()))
+                .fold(0.0_f64, f64::max)
+            + theme.strip_switch_pad;
+        let n_panels = built.panels.len();
+        let draws_x = |pi: usize, r: usize| r == nrow - 1 || pi + ncol >= n_panels || all_x;
+        let draws_y = |c: usize| c == 0 || all_y;
+        let off = |side: Side, pi: usize, r: usize, c: usize| match side {
+            Side::Bottom if outside && draws_x(pi, r) => x_axis_off,
+            Side::Left if outside && draws_y(c) => y_axis_off,
+            _ => 0.0,
+        };
         let strips: Vec<Vec<(Side, String, f64)>> = built
             .panels
             .iter()
@@ -721,13 +743,14 @@ impl PlotRenderer {
         for (pi, list) in strips.iter().enumerate() {
             let (r, c) = cell[pi];
             for (side, _, t) in list {
+                let o = off(*side, pi, r, c);
                 let b = match side {
                     Side::Top => &mut band_top[r],
                     Side::Bottom => &mut band_bottom[r],
                     Side::Left => &mut band_left[c],
                     Side::Right => &mut band_right[c],
                 };
-                *b = b.max(*t);
+                *b = b.max(*t + o);
             }
         }
         // Every row / column of a wrap keeps its strip band, even one whose
@@ -735,8 +758,10 @@ impl PlotRenderer {
         if !is_grid {
             match wrap_side {
                 Side::Top => band_top.fill(strip_height),
-                Side::Bottom => band_bottom.fill(strip_height),
-                Side::Left => band_left.fill(strip_height),
+                Side::Bottom => band_bottom
+                    .iter_mut()
+                    .for_each(|b| *b = b.max(strip_height)),
+                Side::Left => band_left.iter_mut().for_each(|b| *b = b.max(strip_height)),
                 Side::Right => band_right.fill(strip_height),
             }
         }
@@ -884,18 +909,31 @@ impl PlotRenderer {
 
             // Strips (#412): each on its side of the panel, the side ones
             // with their text turned to read along them.
+            // An inside strip pushes its axis out; an outside one sits
+            // beyond the axis and only moves the axis title.
             let mut bottom_strip = 0.0_f64;
             let mut left_strip = 0.0_f64;
+            let mut bottom_title = 0.0_f64;
+            let mut left_title = 0.0_f64;
             for (side, label, t) in &strips[pi] {
+                let o = off(*side, pi, prow, pcol);
                 let (rect, angle) = match side {
                     Side::Top => ((px, py - t, panel_width, *t), 0.0),
                     Side::Bottom => {
-                        bottom_strip = *t;
-                        ((px, py + panel_height, panel_width, *t), 0.0)
+                        if o > 0.0 {
+                            bottom_title = *t + o;
+                        } else {
+                            bottom_strip = *t;
+                        }
+                        ((px, py + panel_height + o, panel_width, *t), 0.0)
                     }
                     Side::Left => {
-                        left_strip = *t;
-                        ((px - t, py, *t, panel_height), 270.0)
+                        if o > 0.0 {
+                            left_title = *t + o;
+                        } else {
+                            left_strip = *t;
+                        }
+                        ((px - t - o, py, *t, panel_height), 270.0)
                     }
                     Side::Right => ((px + panel_width, py, *t, panel_height), 90.0),
                 };
@@ -1003,7 +1041,11 @@ impl PlotRenderer {
                         backend,
                     )?;
                     if bottom_edge {
-                        x_title_area = Some(union(&x_title_area, &axis_rect));
+                        let title_rect = crate::render::Rect {
+                            height: axis_rect.height + bottom_title,
+                            ..axis_rect.clone()
+                        };
+                        x_title_area = Some(union(&x_title_area, &title_rect));
                     }
                 }
 
@@ -1031,7 +1073,12 @@ impl PlotRenderer {
                         let reserve = axis::y_label_reserve(theme, &ys.breaks());
                         let prev = y_title_area.as_ref().map(|(r, _)| r.clone());
                         let widest = y_title_area.as_ref().map_or(0.0, |(_, w)| *w);
-                        y_title_area = Some((union(&prev, &axis_rect), widest.max(reserve)));
+                        let title_rect = crate::render::Rect {
+                            x: axis_rect.x - left_title,
+                            width: axis_rect.width + left_title,
+                            ..axis_rect.clone()
+                        };
+                        y_title_area = Some((union(&prev, &title_rect), widest.max(reserve)));
                     }
                 }
             }

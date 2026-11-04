@@ -6,6 +6,10 @@ All notable changes to this project are documented here. The format follows
 ## [Unreleased]
 
 ### Added
+- `strip.placement = "outside"` (#412 / #413): `Theme.strip_placement_outside`
+  (+ `strip_switch_pad`) puts a bottom / left facet strip beyond the axis of
+  a panel that draws one, instead of between panel and axis. Theme config
+  keys `strip_placement`, `strip_switch_pad`, `legend_ticks_length`.
 - `guide_axis_logticks(aes)` (#409) / `ScaleContinuous::with_log_ticks()`:
   ggplot2's `guide_axis_logticks()` — on a log10 axis, ticks at every
   1–9 × 10ᵏ outside the panel (long at decades, mid at 5s, short
