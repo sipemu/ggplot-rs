@@ -3050,6 +3050,7 @@ impl GGPlot {
             vertical: false,
             as_table: true,
             strip_position: crate::facet::StripPosition::Top,
+            space: FacetSpace::Fixed,
         };
         self
     }
@@ -3064,6 +3065,7 @@ impl GGPlot {
             vertical: false,
             as_table: true,
             strip_position: crate::facet::StripPosition::Top,
+            space: FacetSpace::Fixed,
         };
         self
     }
@@ -3083,6 +3085,7 @@ impl GGPlot {
             vertical: false,
             as_table: true,
             strip_position: crate::facet::StripPosition::Top,
+            space: FacetSpace::Fixed,
         };
         self
     }
@@ -3117,6 +3120,16 @@ impl GGPlot {
         match &mut self.facet {
             Facet::Wrap { labeller, .. } | Facet::Grid { labeller, .. } => *labeller = l,
             Facet::None => {}
+        }
+        self
+    }
+
+    /// ggplot2 3.5's `facet_wrap(space = "free_x" | "free_y")` (#412):
+    /// panel widths follow their x range in a single-row wrap (heights their
+    /// y range in a single column); pair with free scales.
+    pub fn facet_wrap_space(mut self, space: FacetSpace) -> Self {
+        if let Facet::Wrap { space: s, .. } = &mut self.facet {
+            *s = space;
         }
         self
     }

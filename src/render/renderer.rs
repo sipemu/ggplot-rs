@@ -216,6 +216,12 @@ impl PlotRenderer {
 
         // 7. Draw title
         let title_ref = Self::title_ref_rect(theme, &plot_area, &total_area);
+        let caption_ref = Self::ref_rect(
+            theme.caption_position.unwrap_or(theme.title_position),
+            theme,
+            &plot_area,
+            &total_area,
+        );
         // #233: a Top legend reserves its own band just above the panel,
         // same idea as a top x-axis's x_axis_lift below — lift title and
         // subtitle above it too, or they'd land inside the legend's band
@@ -301,7 +307,7 @@ impl PlotRenderer {
 
         // 10. Draw caption
         if let Some(ref caption) = built.labels.caption {
-            let (cx, anchor) = Self::hjust_pos(&theme.caption, &title_ref);
+            let (cx, anchor) = Self::hjust_pos(&theme.caption, &caption_ref);
             // Inside the layout's `caption_area`: the bottom of the
             // canvas less `plot_margin.bottom` (#286).
             let caption_y = total_area.y + total_area.height
@@ -383,7 +389,18 @@ impl PlotRenderer {
         plot_area: &crate::render::Rect,
         total_area: &crate::render::Rect,
     ) -> crate::render::Rect {
-        match theme.title_position {
+        Self::ref_rect(theme.title_position, theme, plot_area, total_area)
+    }
+
+    /// The rectangle a title / caption aligns to under `pos` (#413: the
+    /// caption can differ, `plot.caption.position`).
+    fn ref_rect(
+        pos: crate::theme::TitlePosition,
+        theme: &crate::theme::Theme,
+        plot_area: &crate::render::Rect,
+        total_area: &crate::render::Rect,
+    ) -> crate::render::Rect {
+        match pos {
             crate::theme::TitlePosition::Panel => plot_area.clone(),
             crate::theme::TitlePosition::Plot => crate::render::Rect {
                 x: total_area.x + theme.plot_margin.left,
@@ -770,6 +787,16 @@ impl PlotRenderer {
         // their data x-range, free_y sizes rows to their y-range. Fixed = equal.
         let space = match &built.facet {
             Facet::Grid { space, .. } => space.clone(),
+            // #412: a wrap sizes only along its single row / column.
+            Facet::Wrap { space, .. } if fixed_grid.is_none() => {
+                use crate::facet::FacetSpace as S;
+                match (space.free_x() && nrow == 1, space.free_y() && ncol == 1) {
+                    (true, true) => S::Free,
+                    (true, false) => S::FreeX,
+                    (false, true) => S::FreeY,
+                    _ => S::Fixed,
+                }
+            }
             _ => crate::facet::FacetSpace::Fixed,
         };
         let extent = |pi: usize, col: &str| -> Option<f64> {
@@ -1161,6 +1188,12 @@ impl PlotRenderer {
 
         // Draw title
         let title_ref = Self::title_ref_rect(theme, &plot_area, &total_area);
+        let caption_ref = Self::ref_rect(
+            theme.caption_position.unwrap_or(theme.title_position),
+            theme,
+            &plot_area,
+            &total_area,
+        );
         // #233: see render_single's identical lift — a Top legend must not
         // overlap the title/subtitle (zero when there's no Top legend).
         let legend_lift = legend::top_legend_lift(
@@ -1226,7 +1259,7 @@ impl PlotRenderer {
 
         // Draw caption
         if let Some(ref caption) = built.labels.caption {
-            let (cx, anchor) = Self::hjust_pos(&theme.caption, &title_ref);
+            let (cx, anchor) = Self::hjust_pos(&theme.caption, &caption_ref);
             // Inside the layout's `caption_area`: the bottom of the
             // canvas less `plot_margin.bottom` (#286).
             let caption_y = total_area.y + total_area.height
