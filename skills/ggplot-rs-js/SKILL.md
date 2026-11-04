@@ -71,7 +71,8 @@ if (!svg.startsWith("<svg")) throw new Error("render failed");
 | `layers[].key_glyph` | legend key picture: `point path rect polygon boxplot crossbar pointrange linerange smooth text label vline vpath abline timeseries dotplot blank` (default per geom; layers on one mapping share a key) |
 | `layers[].show_legend` | `false` hides the layer from legends; `{ color: false }` per aesthetic |
 | `scales.x/y` | `{ trans, limits: [lo, hi], breaks: [...], name }`; trans `log10 log2 ln sqrt reverse logit probit pseudo_log reciprocal exp` |
-| `scales.color/fill` | `{ palette }` (`Set1 Dark2 Paired npg …`, `hue` = ggplot2's default hues, `viridis:A`…`viridis:H` for categorical; `viridis magma plasma inferno` or any Brewer name (a distiller gradient) for numeric), `{ values: { level: "#rrggbb" } }`, `{ gradient: ["#lo", "#hi"] }`, `{ levels: [...] }` |
+| `scales.color/fill` | `{ palette }` (`Set1 Dark2 Paired npg …`, `hue` = ggplot2's default hues, `viridis:A`…`viridis:H` for categorical; `viridis magma plasma inferno` or any Brewer name (a distiller gradient) for numeric), `{ values: { level: "#rrggbb" } }`, `{ gradient: ["#lo", "#hi"] }`, `{ steps2: ["#lo", "#mid", "#hi"], midpoint: 0, bins: 5 }`, `{ palette: "viridis_b:C", bins: 6 }` (binned), `{ levels: [...] }` |
+| `scales.size/alpha/linewidth/shape` | exactly one of `{ identity: true }` (the column holds the values; shape: `pch` codes or names), `{ values: { level: n } }` (not shape), `{ range: [lo, hi] }` |
 | `facet` | `{ wrap, ncol?, scales?, dir?: "h"/"v", as_table?, label_wrap?: width }` or `{ rows?, cols?, scales? }`; scales `fixed free free_x free_y` |
 | `coord` | `cartesian flip polar radial fixed radar quickmap map sf`, or `{ type, xlim, ylim, ratio, reverse: "x"/"y"/"xy", start, end, inner_radius }` (`quickmap` / `map` = plain lon/lat data; `radial` partial circles / donuts) |
 | `labels` | `title subtitle caption tag x y` (axis titles are not auto-filled from column names) |

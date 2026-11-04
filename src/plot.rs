@@ -2469,6 +2469,66 @@ impl GGPlot {
     }
 
     /// Binned (stepped) two-colour continuous fill scale.
+    /// `scale_colour_steps2(low, mid, high, midpoint)`: diverging binned
+    /// colour scale (#408).
+    pub fn scale_color_steps2(
+        self,
+        low: crate::scale::color::RGBAColor,
+        mid: crate::scale::color::RGBAColor,
+        high: crate::scale::color::RGBAColor,
+        midpoint: f64,
+        n_bins: usize,
+    ) -> Self {
+        self.scale_color(crate::scale::steps::ScaleColorSteps::diverging(
+            crate::aes::Aesthetic::Color,
+            (low.r, low.g, low.b),
+            (mid.r, mid.g, mid.b),
+            (high.r, high.g, high.b),
+            midpoint,
+            n_bins,
+        ))
+    }
+
+    /// `scale_fill_steps2(low, mid, high, midpoint)` — see
+    /// [`scale_color_steps2`](Self::scale_color_steps2).
+    pub fn scale_fill_steps2(
+        self,
+        low: crate::scale::color::RGBAColor,
+        mid: crate::scale::color::RGBAColor,
+        high: crate::scale::color::RGBAColor,
+        midpoint: f64,
+        n_bins: usize,
+    ) -> Self {
+        self.scale_fill(crate::scale::steps::ScaleColorSteps::diverging(
+            crate::aes::Aesthetic::Fill,
+            (low.r, low.g, low.b),
+            (mid.r, mid.g, mid.b),
+            (high.r, high.g, high.b),
+            midpoint,
+            n_bins,
+        ))
+    }
+
+    /// `scale_colour_viridis_b(option)`: binned viridis, `option` 'A'–'H'
+    /// (#408).
+    pub fn scale_color_viridis_b(self, option: char, n_bins: usize) -> Self {
+        self.scale_color(crate::scale::steps::ScaleColorSteps::viridis(
+            crate::aes::Aesthetic::Color,
+            option,
+            n_bins,
+        ))
+    }
+
+    /// `scale_fill_viridis_b(option)` — see
+    /// [`scale_color_viridis_b`](Self::scale_color_viridis_b).
+    pub fn scale_fill_viridis_b(self, option: char, n_bins: usize) -> Self {
+        self.scale_fill(crate::scale::steps::ScaleColorSteps::viridis(
+            crate::aes::Aesthetic::Fill,
+            option,
+            n_bins,
+        ))
+    }
+
     pub fn scale_fill_steps(
         self,
         low: crate::scale::color::RGBAColor,
@@ -2717,6 +2777,66 @@ impl GGPlot {
             crate::scale::size::ScaleSizeContinuous::new().area(max_size),
         ));
         self
+    }
+
+    /// `scale_radius(range)` (ggplot2): point *radius*, not area,
+    /// proportional to the value — ggplot-rs's default size mapping (#408).
+    pub fn scale_radius(self, min: f64, max: f64) -> Self {
+        self.scale_size(crate::scale::size::ScaleSizeContinuous::new().with_range(min, max))
+    }
+
+    /// `scale_size_manual(values)`: named levels → point sizes (#408).
+    pub fn scale_size_manual(self, values: Vec<(&str, f64)>) -> Self {
+        self.scale_color(crate::scale::values::ScaleValueManual::new(
+            crate::aes::Aesthetic::Size,
+            values,
+        ))
+    }
+
+    /// `scale_alpha_manual(values)`: named levels → opacities (#408).
+    pub fn scale_alpha_manual(self, values: Vec<(&str, f64)>) -> Self {
+        self.scale_color(crate::scale::values::ScaleValueManual::new(
+            crate::aes::Aesthetic::Alpha,
+            values,
+        ))
+    }
+
+    /// `scale_linewidth_manual(values)`: named levels → line widths (#408).
+    pub fn scale_linewidth_manual(self, values: Vec<(&str, f64)>) -> Self {
+        self.scale_color(crate::scale::values::ScaleValueManual::new(
+            crate::aes::Aesthetic::Linewidth,
+            values,
+        ))
+    }
+
+    /// `scale_size_identity()`: the column already holds point sizes (#408).
+    pub fn scale_size_identity(self) -> Self {
+        self.scale_color(crate::scale::values::ScaleValueIdentity::new(
+            crate::aes::Aesthetic::Size,
+        ))
+    }
+
+    /// `scale_alpha_identity()`: the column already holds opacities (#408).
+    pub fn scale_alpha_identity(self) -> Self {
+        self.scale_color(crate::scale::values::ScaleValueIdentity::new(
+            crate::aes::Aesthetic::Alpha,
+        ))
+    }
+
+    /// `scale_linewidth_identity()`: the column already holds line widths
+    /// (#408).
+    pub fn scale_linewidth_identity(self) -> Self {
+        self.scale_color(crate::scale::values::ScaleValueIdentity::new(
+            crate::aes::Aesthetic::Linewidth,
+        ))
+    }
+
+    /// `scale_shape_identity()`: the column holds ggplot2 `pch` codes or
+    /// shape names (`"triangle"`), drawn as the nearest shape (#408).
+    pub fn scale_shape_identity(self) -> Self {
+        self.scale_color(crate::scale::values::ScaleValueIdentity::new(
+            crate::aes::Aesthetic::Shape,
+        ))
     }
 
     pub fn scale_alpha(mut self, s: crate::scale::alpha::ScaleAlphaContinuous) -> Self {

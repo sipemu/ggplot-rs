@@ -275,6 +275,21 @@ pub struct ScalesSpec {
     #[serde(alias = "colour")]
     pub color: Option<ColorScaleSpec>,
     pub fill: Option<ColorScaleSpec>,
+    /// #408: `{"identity": true}`, `{"values": {level: n}}` or
+    /// `{"range": [lo, hi]}` (size: radius, ggplot2's `scale_radius`).
+    pub size: Option<ValueScaleSpec>,
+    pub alpha: Option<ValueScaleSpec>,
+    pub linewidth: Option<ValueScaleSpec>,
+    /// `{"identity": true}`: the column holds `pch` codes / shape names.
+    pub shape: Option<ValueScaleSpec>,
+}
+
+#[derive(Deserialize, Default)]
+#[serde(deny_unknown_fields)]
+pub struct ValueScaleSpec {
+    pub identity: Option<bool>,
+    pub values: Option<BTreeMap<String, f64>>,
+    pub range: Option<[f64; 2]>,
 }
 
 #[derive(Deserialize, Default)]
@@ -301,6 +316,12 @@ pub struct ColorScaleSpec {
     pub values: Option<BTreeMap<String, String>>,
     /// Two-color gradient `["#low", "#high"]` for a numeric column.
     pub gradient: Option<[String; 2]>,
+    /// #408: diverging binned `["#low", "#mid", "#high"]` for a numeric
+    /// column (`scale_*_steps2`), `mid` at `midpoint` (default 0).
+    pub steps2: Option<[String; 3]>,
+    pub midpoint: Option<f64>,
+    /// Bin count for `steps2` / `"palette": "viridis_b:X"` (default 5).
+    pub bins: Option<usize>,
 }
 
 #[derive(Deserialize)]
@@ -598,6 +619,16 @@ pub fn build_plot_with_data(
     }
     if let Some(s) = &spec.scales.y {
         plot = plot.scale_y_continuous(position_scale(s).map_err(|e| format!("scales.y: {e}"))?);
+    }
+    for (name, aes, v) in [
+        ("size", Aesthetic::Size, &spec.scales.size),
+        ("alpha", Aesthetic::Alpha, &spec.scales.alpha),
+        ("linewidth", Aesthetic::Linewidth, &spec.scales.linewidth),
+        ("shape", Aesthetic::Shape, &spec.scales.shape),
+    ] {
+        if let Some(v) = v {
+            plot = apply_value_scale(plot, aes, v).map_err(|e| format!("scales.{name}: {e}"))?;
+        }
     }
     // `theme.palette` (a scale, not a theme element) colors any categorical
     // color/fill mapping that has no explicit scale.
@@ -1352,6 +1383,41 @@ fn parse_hex(s: &str) -> Result<RGBAColor, String> {
     Ok(RGBAColor::new(byte(0)?, byte(2)?, byte(4)?))
 }
 
+/// A `size` / `alpha` / `linewidth` / `shape` scale spec (#408).
+fn apply_value_scale(plot: GGPlot, aes: Aesthetic, v: &ValueScaleSpec) -> Result<GGPlot, String> {
+    let set = [
+        v.identity == Some(true),
+        v.values.is_some(),
+        v.range.is_some(),
+    ]
+    .iter()
+    .filter(|b| **b)
+    .count();
+    if set != 1 {
+        return Err("set exactly one of identity, values, range".into());
+    }
+    if v.identity == Some(true) {
+        return Ok(plot.scale_color(crate::scale::values::ScaleValueIdentity::new(aes)));
+    }
+    if aes == Aesthetic::Shape {
+        return Err("shape takes only {\"identity\": true}".into());
+    }
+    if let Some(values) = &v.values {
+        let refs: Vec<(&str, f64)> = values.iter().map(|(k, n)| (k.as_str(), *n)).collect();
+        return Ok(plot.scale_color(crate::scale::values::ScaleValueManual::new(aes, refs)));
+    }
+    let [lo, hi] = v.range.unwrap_or([1.0, 6.0]);
+    Ok(match aes {
+        Aesthetic::Size => plot.scale_radius(lo, hi),
+        Aesthetic::Alpha => {
+            plot.scale_alpha(crate::scale::alpha::ScaleAlphaContinuous::new().with_range(lo, hi))
+        }
+        _ => plot.scale_linewidth(
+            crate::scale::linewidth::ScaleLinewidthContinuous::new().with_range(lo, hi),
+        ),
+    })
+}
+
 fn apply_color_scale(
     plot: GGPlot,
     aes: Aesthetic,
@@ -1368,6 +1434,28 @@ fn apply_color_scale(
             plot.scale_color_manual(refs)
         } else {
             plot.scale_fill_manual(refs)
+        });
+    }
+    let bins = s.bins.unwrap_or(5).max(1);
+    if let Some([lo, mid, hi]) = &s.steps2 {
+        let (lo, mid, hi) = (parse_hex(lo)?, parse_hex(mid)?, parse_hex(hi)?);
+        let m = s.midpoint.unwrap_or(0.0);
+        return Ok(if aes == Aesthetic::Color {
+            plot.scale_color_steps2(lo, mid, hi, m, bins)
+        } else {
+            plot.scale_fill_steps2(lo, mid, hi, m, bins)
+        });
+    }
+    if let Some(opt) = s
+        .palette
+        .as_deref()
+        .and_then(|p| p.strip_prefix("viridis_b"))
+    {
+        let option = opt.trim_start_matches(':').chars().next().unwrap_or('D');
+        return Ok(if aes == Aesthetic::Color {
+            plot.scale_color_viridis_b(option, bins)
+        } else {
+            plot.scale_fill_viridis_b(option, bins)
         });
     }
     if let Some([lo, hi]) = &s.gradient {
@@ -1957,6 +2045,37 @@ mod tests {
                "guides": {{"color": {{"reverse": true}}}} }}"#
         ))
         .unwrap();
+    }
+
+    #[test]
+    fn value_scales_steps2_and_viridis_b() {
+        let d = r#""data": {"x": [1, 2, 3], "y": [1, 2, 3], "g": ["a", "b", "c"],
+               "s": [2, 5, 9], "z": [-10, 0, 30]}"#;
+        for extra in [
+            r#""aes": {"x": "x", "y": "y", "size": "s"}, "scales": {"size": {"identity": true}}"#,
+            r#""aes": {"x": "x", "y": "y", "size": "g"}, "scales": {"size": {"values": {"a": 1, "b": 3, "c": 6}}}"#,
+            r#""aes": {"x": "x", "y": "y", "alpha": "g"}, "scales": {"alpha": {"values": {"a": 0.2, "b": 0.5, "c": 1}}}"#,
+            r#""aes": {"x": "x", "y": "y", "size": "s"}, "scales": {"size": {"range": [1, 9]}}"#,
+            r#""aes": {"x": "x", "y": "y", "shape": "s"}, "scales": {"shape": {"identity": true}}"#,
+            r##""aes": {"x": "x", "y": "y", "color": "z"}, "scales": {"color": {"steps2": ["#0000ff", "#ffffff", "#ff0000"], "bins": 4}}"##,
+            r#""aes": {"x": "x", "y": "y", "color": "z"}, "scales": {"color": {"palette": "viridis_b:C"}}"#,
+        ] {
+            render(&format!(
+                r#"{{ {d}, {extra}, "layers": [{{"geom": "point"}}] }}"#
+            ))
+            .unwrap_or_else(|e| panic!("{extra}: {e}"));
+        }
+        let e = render(&format!(
+            r#"{{ {d}, "aes": {{"x": "x", "y": "y", "shape": "g"}},
+               "scales": {{"shape": {{"values": {{"a": 1}}}}}}, "layers": [{{"geom": "point"}}] }}"#
+        ))
+        .unwrap_err();
+        assert!(e.contains("scales.shape"), "{e}");
+        let e = render(&format!(
+            r#"{{ {d}, "aes": {{"x": "x", "y": "y"}}, "scales": {{"size": {{}}}}, "layers": [{{"geom": "point"}}] }}"#
+        ))
+        .unwrap_err();
+        assert!(e.contains("exactly one"), "{e}");
     }
 
     #[test]

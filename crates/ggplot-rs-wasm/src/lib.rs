@@ -184,6 +184,21 @@ export interface ColorScale {
   values?: Record<string, string>;
   /** Two-color gradient `["#low", "#high"]` for a numeric column. */
   gradient?: [string, string];
+  /** Diverging binned `["#low", "#mid", "#high"]` (`scale_*_steps2`), mid at `midpoint` (default 0). */
+  steps2?: [string, string, string];
+  midpoint?: number;
+  /** Bins for `steps2` / `palette: "viridis_b:A"…"viridis_b:H"` (default 5). */
+  bins?: number;
+}
+
+/** A size / alpha / linewidth / shape scale: exactly one of these (#408). */
+export interface ValueScale {
+  /** The column already holds the values (shape: `pch` codes or names). */
+  identity?: boolean;
+  /** Manual `{ level: number }` (not for shape). */
+  values?: Record<string, number>;
+  /** Output range `[lo, hi]` (size: radius, ggplot2's `scale_radius`). */
+  range?: [number, number];
 }
 
 export type Facet =
@@ -265,7 +280,7 @@ export interface PlotSpec {
   /** Plot-level mapping inherited by every layer. */
   aes?: AesMap;
   layers: Layer[];
-  scales?: { x?: PositionScale; y?: PositionScale; color?: ColorScale; colour?: ColorScale; fill?: ColorScale };
+  scales?: { x?: PositionScale; y?: PositionScale; color?: ColorScale; colour?: ColorScale; fill?: ColorScale; size?: ValueScale; alpha?: ValueScale; linewidth?: ValueScale; shape?: ValueScale };
   facet?: Facet;
   coord?: Coord;
   labels?: Labels;

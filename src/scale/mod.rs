@@ -26,6 +26,7 @@ pub mod transform;
 #[rustfmt::skip]
 pub(crate) mod viridis_lut;
 pub mod util;
+pub mod values;
 
 pub use scale_set::ScaleSet;
 
