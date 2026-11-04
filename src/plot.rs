@@ -3747,6 +3747,22 @@ impl GGPlot {
         self
     }
 
+    /// ggplot2's `%+replace%`: the elements `update` sets replace the
+    /// current ones whole (#413) — the same as [`theme_update`](Self::theme_update),
+    /// named for parity. For ggplot2's merging `+ theme(..)` (only the given
+    /// properties change) use [`theme_with`](Self::theme_with).
+    pub fn theme_replace(self, update: crate::theme::ThemeUpdate) -> Self {
+        self.theme_update(update)
+    }
+
+    /// Change single theme properties in place (ggplot2's merging `+ theme(
+    /// axis.text.x = element_text(size = 14))`, #413), e.g.
+    /// `.theme_with(|t| t.axis_text_x.size = 14.0)`.
+    pub fn theme_with(mut self, f: impl FnOnce(&mut Theme)) -> Self {
+        f(&mut self.theme);
+        self
+    }
+
     // ─── Guides ──────────────────────────────────────────────────
 
     /// Configure legend guide (title, ncol, reverse).

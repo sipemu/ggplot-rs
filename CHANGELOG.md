@@ -40,6 +40,13 @@ All notable changes to this project are documented here. The format follows
   TRUE`). `Facet::Grid` gains `row_levels` / `col_levels` / `margins`.
   Spec / npm: `facet.levels` (wrap), `facet.row_levels` / `col_levels` /
   `margins` (grid).
+- Theme helpers (#413): `theme_sub_axis_x` / `_axis_y` / `_legend` /
+  `_panel` / `_strip` / `_plot` (ggplot2 4.0 shortcuts, each a
+  `ThemeUpdate`); `ElementText::rel` / `ElementLine::rel` (`rel()`);
+  `GGPlot::theme_replace` (`%+replace%`) and `GGPlot::theme_with(|t| …)`
+  (ggplot2's merging `+ theme()`); `Theme.legend_ticks_length`
+  (`legend.ticks.length`, config key of the same name). `ThemeUpdate` gains
+  `axis_line_x/_y`, `axis_ticks_x/_y`; `Theme` gains one field.
 - Theme (#413): `axis_text_x_top` / `axis_text_y_right` (ggplot2's
   `axis.text.x.top` / `axis.text.y.right`) for a top x axis and the
   secondary y axis; `theme_test()` (`theme_bw` without gridlines; preset

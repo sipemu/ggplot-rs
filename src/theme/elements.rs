@@ -13,6 +13,15 @@ pub struct ElementText {
 }
 
 impl ElementText {
+    /// ggplot2's `rel(factor)` for a text size (#413): this element with its
+    /// size scaled, e.g. `theme.title.rel(1.2)` — 120 % of the current.
+    pub fn rel(&self, factor: f64) -> ElementText {
+        ElementText {
+            size: self.size * factor,
+            ..self.clone()
+        }
+    }
+
     /// Create an invisible (blank) text element.
     pub fn blank() -> Self {
         ElementText {
@@ -48,6 +57,14 @@ pub struct ElementLine {
 }
 
 impl ElementLine {
+    /// ggplot2's `rel(factor)` for a line width (#413).
+    pub fn rel(&self, factor: f64) -> ElementLine {
+        ElementLine {
+            width: self.width * factor,
+            ..self.clone()
+        }
+    }
+
     /// Create an invisible (blank) line element.
     pub fn blank() -> Self {
         ElementLine {
