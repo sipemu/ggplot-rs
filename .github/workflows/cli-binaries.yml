@@ -7,10 +7,19 @@ name: CLI binaries
 # `releases/latest/download/ggplot-rs-<target>.tar.gz` always works, and
 # `cargo binstall ggplot-rs` finds them via [package.metadata.binstall].
 #
-# Re-run for an existing release with workflow_dispatch + its tag.
+# Re-run for an existing release with workflow_dispatch + its tag. Pull
+# requests that touch dependencies or the CLI build (and smoke-test) every
+# target without uploading, so a platform break — like bundled DuckDB 1.2
+# failing on newer MSVC — shows up before the release.
 on:
   release:
     types: [published]
+  pull_request:
+    paths:
+      - Cargo.toml
+      - Cargo.lock
+      - src/bin/**
+      - .github/workflows/cli-binaries.yml
   workflow_dispatch:
     inputs:
       tag:
@@ -21,6 +30,7 @@ on:
 env:
   CARGO_TERM_COLOR: always
   TAG: ${{ github.event_name == 'release' && github.ref_name || inputs.tag }}
+  PUBLISH: ${{ github.event_name != 'pull_request' }}
 
 permissions:
   contents: write # gh release upload
@@ -41,13 +51,14 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: ${{ env.TAG }}
+          ref: ${{ env.TAG || github.sha }}
 
       - uses: dtolnay/rust-toolchain@stable
         with:
           targets: ${{ matrix.target }}
 
       - name: Versions match (crate, wasm crate, js/package.json, tag)
+        if: env.PUBLISH == 'true'
         run: node js/check-version.mjs ${{ env.TAG }}
 
       - name: Build
@@ -83,6 +94,7 @@ jobs:
           "ASSET=ggplot-rs-${{ matrix.target }}.zip" | Out-File -FilePath $env:GITHUB_ENV -Append
 
       - name: Upload to the release
+        if: env.PUBLISH == 'true'
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
