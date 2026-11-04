@@ -17,13 +17,6 @@ LOESS, and axis-tick placement (extended-Wilkinson) — are checked against
 histogram or a stacked bar comes out where ggplot2 puts it. See
 [`validation/`](validation/).
 
-**No polars required.** [polars](https://pola.rs/) is a convenient — and fully
-optional — input adapter. The core pipeline runs on its own internal DataFrame,
-so you can plot straight from plain Rust vectors, or from
-[Apache Arrow](https://arrow.apache.org/) `RecordBatch`es produced by
-[DuckDB](https://duckdb.org/) — with polars switched off entirely. See
-[Data Input](#data-input) and [Feature Flags](#feature-flags).
-
 ## Gallery
 
 Every image below is produced by [`examples/gallery.rs`](examples/gallery.rs) —
