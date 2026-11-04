@@ -86,6 +86,10 @@ With polars (default feature): `GGPlot::new(df!{ "x" => [1.0, 2.0], "y" => [3.0,
   `geom_boxplot_with(GeomBoxplot::default().notched().varwidth().with_coef(1.0))`,
   `geom_violin_with(GeomViolin::default().with_scale(ViolinScale::Count)
   .untrimmed().with_quantiles([0.25, 0.5, 0.75]))`.
+- **Function / extra stats:** `geom_function(|x| x.sin())`,
+  `geom_function_xlim(f, lo, hi)` (no data needed), `stat_connect(Connection::Mid)`,
+  `stat_unique()`, `stat_manual(|df| …)`, `stat_summary_hex(SummaryFun::Mean)`
+  (raw `z` column), `stat_sf_coordinates()` (feature `sf`).
 - **Stat / position overrides** apply to the last layer: `.stat(StatIdentity)`,
   `.position(PositionDodge::new(0.9))` (`.with_preserve_single()` keeps
   widths in partial slots), `PositionDodge2`, `PositionStack`, `PositionFill`,

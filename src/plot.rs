@@ -736,6 +736,67 @@ impl GGPlot {
         self.add_geom_with(geom)
     }
 
+    /// Plot `fun(x)` as a line over the plot data's x range (ggplot2's
+    /// `geom_function()`); see [`geom_function_xlim`](Self::geom_function_xlim)
+    /// to plot without data.
+    pub fn geom_function(self, fun: impl Fn(f64) -> f64 + Send + Sync + 'static) -> Self {
+        self.geom_line()
+            .stat(crate::stat::function::StatFunction::new(fun))
+    }
+
+    /// Plot `fun(x)` over `[lo, hi]` without any data (`geom_function(xlim =)`).
+    pub fn geom_function_xlim(
+        self,
+        fun: impl Fn(f64) -> f64 + Send + Sync + 'static,
+        lo: f64,
+        hi: f64,
+    ) -> Self {
+        let range = vec![("x".to_string(), vec![Value::Float(lo), Value::Float(hi)])];
+        self.geom_line()
+            .layer_data(range)
+            .layer_aes(Aes::new().x("x"))
+            .stat(crate::stat::function::StatFunction::new(fun).with_xlim(lo, hi))
+    }
+
+    /// Join each group's points (in x order) with steps or straight lines
+    /// (ggplot2 4.0's `stat_connect(connection)`), drawn as a path.
+    pub fn stat_connect(self, connection: crate::stat::connect::Connection) -> Self {
+        self.geom_path()
+            .stat(crate::stat::connect::StatConnect::new(connection))
+    }
+
+    /// Points with duplicate rows dropped (`stat_unique()`); `.stat(StatUnique)`
+    /// applies it to any other layer.
+    pub fn stat_unique(self) -> Self {
+        self.geom_point().stat(crate::stat::unique::StatUnique)
+    }
+
+    /// Points from an arbitrary per-group transform (ggplot2 4.0's
+    /// `stat_manual(fun)`); `.stat(StatManual::new(f))` for other geoms.
+    pub fn stat_manual(
+        self,
+        fun: impl Fn(&crate::data::DataFrame) -> crate::data::DataFrame + Send + Sync + 'static,
+    ) -> Self {
+        self.geom_point()
+            .stat(crate::stat::manual::StatManual::new(fun))
+    }
+
+    /// Hexagons filled with a summary of the raw `z` column
+    /// (`stat_summary_hex(fun)`).
+    pub fn stat_summary_hex(self, fun: crate::stat::summary::SummaryFun) -> Self {
+        self.geom_hex()
+            .stat(crate::stat::binhex::StatSummaryHex::new(fun))
+    }
+
+    /// A point per WKT `geometry` (feature `sf`; `stat_sf_coordinates()`).
+    /// Use `.stat(StatSfCoordinates::default())` to put text, labels or any
+    /// other geom on a map.
+    #[cfg(feature = "sf")]
+    pub fn stat_sf_coordinates(self) -> Self {
+        self.geom_point()
+            .stat(crate::stat::sf_coordinates::StatSfCoordinates::default())
+    }
+
     /// Add a confidence-ellipse layer (default 95%) as a path per group.
     pub fn stat_ellipse(self) -> Self {
         self.geom_path()

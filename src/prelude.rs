@@ -122,9 +122,11 @@ pub use crate::scale::transform::ScaleTransform;
 pub use crate::scale::Oob;
 pub use crate::stat::align::StatAlign;
 pub use crate::stat::bin::StatBin;
+pub use crate::stat::binhex::StatSummaryHex;
 pub use crate::stat::calendar::StatCalendar;
 #[cfg(feature = "ggpubr")]
 pub use crate::stat::compare_means::{CompareMethod, StatCompareMeans};
+pub use crate::stat::connect::{Connection, StatConnect};
 pub use crate::stat::contour_filled::StatContourFilled;
 #[cfg(feature = "ggpubr")]
 pub use crate::stat::cor::{CorMethod, StatCor};
@@ -137,9 +139,12 @@ pub use crate::stat::funnel::FunnelShape;
 pub use crate::stat::identity::StatIdentity;
 pub use crate::stat::indicator::{Indicator, MacdPart, StatIndicator};
 pub use crate::stat::loess::StatLoess;
+pub use crate::stat::manual::StatManual;
 pub use crate::stat::network::NetworkLayout;
 #[cfg(feature = "regression")]
 pub use crate::stat::quantile::StatQuantile;
+#[cfg(feature = "sf")]
+pub use crate::stat::sf_coordinates::StatSfCoordinates;
 pub use crate::stat::smooth::SmoothMethod;
 #[cfg(feature = "regression")]
 pub use crate::stat::smooth::{SmoothBinomialLink, SmoothFamily, SmoothGammaLink};
@@ -148,6 +153,7 @@ pub use crate::stat::summary::{StatSummary, SummaryData, SummaryFun};
 pub use crate::stat::summary2d::StatSummary2d;
 pub use crate::stat::summary_bin::StatSummaryBin;
 pub use crate::stat::tree::{dendrogram_links, TreeOrientation};
+pub use crate::stat::unique::StatUnique;
 pub use crate::stat::waffle::UnitLayout;
 pub use crate::theme::elements::{ElementGeom, ElementLine, ElementRect, ElementText};
 pub use crate::theme::presets::{

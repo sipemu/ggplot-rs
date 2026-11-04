@@ -107,6 +107,10 @@ export interface LayerParams {
   bw?: number;
   /** violin: bandwidth multiplier. */
   adjust?: number;
+  /** stat "connect": how consecutive points join (default "hv"). */
+  connection?: "hv" | "vh" | "mid" | "linear";
+  /** stat "summary_hex": summary of the raw `z` column (default "mean"). */
+  fun?: "mean" | "median" | "min" | "max" | "sum";
 }
 
 export type PositionName = "identity" | "stack" | "fill" | "dodge" | "dodge2" | "jitter" | "nudge";
@@ -125,8 +129,11 @@ export interface Layer {
   /** Layer-specific data, replacing the plot's. */
   data?: Data;
   params?: LayerParams;
-  /** Override the geom's default stat; only "identity" is supported. */
-  stat?: "identity";
+  /** Override the geom's default stat: "identity" (plot values as given), "unique"
+   *  (drop duplicate rows), "connect" (steps, see params.connection), "summary_hex"
+   *  (hexagons of params.fun over a `z` column), "sf_coordinates" (a point per WKT
+   *  `geometry`, e.g. text on a map). */
+  stat?: "identity" | "unique" | "connect" | "summary_hex" | "sf_coordinates";
   position?: Position;
 }
 
