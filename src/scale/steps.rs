@@ -19,6 +19,9 @@ pub struct ScaleColorSteps {
     min: f64,
     max: f64,
     trained: bool,
+    /// `scale_*_steps2()` (#408): the value the middle stop sits at; the
+    /// stops then spread over `midpoint ± max |limit − midpoint|`.
+    midpoint: Option<f64>,
 }
 
 impl ScaleColorSteps {
@@ -36,7 +39,41 @@ impl ScaleColorSteps {
             min: f64::INFINITY,
             max: f64::NEG_INFINITY,
             trained: false,
+            midpoint: None,
         }
+    }
+
+    /// Diverging binned scale (ggplot2's `scale_*_steps2(low, mid, high,
+    /// midpoint)`, #408): `mid` sits at `midpoint`, not at the domain centre.
+    pub fn diverging(
+        aesthetic: Aesthetic,
+        low: (u8, u8, u8),
+        mid: (u8, u8, u8),
+        high: (u8, u8, u8),
+        midpoint: f64,
+        n_bins: usize,
+    ) -> Self {
+        let mut s = Self::new(aesthetic, vec![low, mid, high], n_bins);
+        s.midpoint = Some(midpoint);
+        s
+    }
+
+    /// Binned viridis (ggplot2's `scale_*_viridis_b(option)`, #408):
+    /// `option` 'A'–'H' as [`GeneratedPalette::Viridis`].
+    ///
+    /// [`GeneratedPalette::Viridis`]: super::color::GeneratedPalette::Viridis
+    pub fn viridis(aesthetic: Aesthetic, option: char, n_bins: usize) -> Self {
+        let stops = super::color::GeneratedPalette::Viridis {
+            option,
+            begin: 0.0,
+            end: 1.0,
+            direction: 1,
+        }
+        .colors(16)
+        .into_iter()
+        .map(|c| (c.r, c.g, c.b))
+        .collect();
+        Self::new(aesthetic, stops, n_bins)
     }
 
     /// Two-colour low→high binned scale.
@@ -69,7 +106,15 @@ impl ScaleColorSteps {
 
     fn bin_color(&self, i: usize) -> (u8, u8, u8) {
         // Colour at the bin centre.
-        self.interp((i as f64 + 0.5) / self.n_bins as f64)
+        let f = (i as f64 + 0.5) / self.n_bins as f64;
+        match self.midpoint {
+            Some(mid) if self.trained && self.max > self.min => {
+                let v = self.min + f * (self.max - self.min);
+                let half = (self.max - mid).abs().max((self.min - mid).abs());
+                self.interp(0.5 + (v - mid) / (2.0 * half))
+            }
+            _ => self.interp(f),
+        }
     }
 
     fn bin_label(&self, i: usize) -> String {
@@ -163,6 +208,36 @@ mod tests {
         let mut s = ScaleColorSteps::two(Aesthetic::Color, (0, 0, 0), (255, 255, 255), n);
         s.train(&[Value::Float(0.0), Value::Float(100.0)]);
         s
+    }
+
+    #[test]
+    fn steps2_puts_mid_at_the_midpoint() {
+        let mut s = ScaleColorSteps::diverging(
+            Aesthetic::Fill,
+            (0, 0, 255),
+            (255, 255, 255),
+            (255, 0, 0),
+            0.0,
+            4,
+        );
+        s.train(&[Value::Float(-10.0), Value::Float(30.0)]);
+        // Bins of 10: [-10, 0) is below the midpoint → bluish; [20, 30) red.
+        let lo = s.map_to_color(&Value::Float(-5.0)).unwrap();
+        let hi = s.map_to_color(&Value::Float(25.0)).unwrap();
+        assert!(lo.2 > lo.0, "{lo:?}");
+        assert!(hi.0 > hi.2, "{hi:?}");
+        // The bin just above 0 is near-white (mid), not purple.
+        let near = s.map_to_color(&Value::Float(5.0)).unwrap();
+        assert!(near.1 > 150, "{near:?}");
+    }
+
+    #[test]
+    fn viridis_b_runs_dark_to_yellow() {
+        let mut s = ScaleColorSteps::viridis(Aesthetic::Color, 'D', 5);
+        s.train(&[Value::Float(0.0), Value::Float(1.0)]);
+        let lo = s.map_to_color(&Value::Float(0.0)).unwrap();
+        let hi = s.map_to_color(&Value::Float(1.0)).unwrap();
+        assert!(hi.0 as u32 + hi.1 as u32 > lo.0 as u32 + lo.1 as u32);
     }
 
     #[test]

@@ -14,6 +14,15 @@ All notable changes to this project are documented here. The format follows
   `guide_reverse(aes, bool)` reverses one aesthetic's legend. Spec / npm:
   `"guides": {"fill": "coloursteps", "color": {"type": "colourbar",
   "barheight": 150, "nbin": 10, "display": "rectangles", "reverse": true}}`.
+- Scales (#408): `scale_color_steps2` / `scale_fill_steps2` (diverging
+  binned, `ScaleColorSteps::diverging`), `scale_color_viridis_b` /
+  `scale_fill_viridis_b` (`ScaleColorSteps::viridis`), `scale_size_manual` /
+  `scale_alpha_manual` / `scale_linewidth_manual` (`ScaleValueManual`),
+  `scale_size_identity` / `scale_alpha_identity` / `scale_linewidth_identity`
+  / `scale_shape_identity` (`ScaleValueIdentity`; shapes from `pch` codes or
+  names), `scale_radius`. Spec / npm: `scales.{size,alpha,linewidth,shape}`
+  (`identity` / `values` / `range`), colour `steps2` / `midpoint` / `bins`,
+  `"palette": "viridis_b:C"`.
 - Guides per aesthetic (#409): `guide_none(aes)` (ggplot2's `guides(fill =
   "none")`) and `guide_title(aes, title)`; `guides(..)` keeps them. Spec /
   npm: `"guides": {"fill": "none", "color": {"title": "Group"}}`.
