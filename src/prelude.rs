@@ -96,7 +96,9 @@ pub use crate::render::backend::{FontFace, LineEnd, Linetype, PointShape};
 pub use crate::scale::alpha::ScaleAlphaContinuous;
 pub use crate::scale::binned::ScaleFillBinned;
 pub use crate::scale::bivariate::ScaleFillBivariate;
-pub use crate::scale::color::{RGBAColor, ScaleColorContinuous, ScaleColorDiscrete};
+pub use crate::scale::color::{
+    GeneratedPalette, HuePalette, RGBAColor, ScaleColorContinuous, ScaleColorDiscrete,
+};
 pub use crate::scale::continuous::ScaleContinuous;
 pub use crate::scale::datetime::ScaleDateTime;
 pub use crate::scale::discrete::ScaleDiscrete;

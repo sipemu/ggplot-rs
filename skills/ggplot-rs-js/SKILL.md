@@ -71,7 +71,7 @@ if (!svg.startsWith("<svg")) throw new Error("render failed");
 | `layers[].key_glyph` | legend key picture: `point path rect polygon boxplot crossbar pointrange linerange smooth text label vline vpath abline timeseries dotplot blank` (default per geom; layers on one mapping share a key) |
 | `layers[].show_legend` | `false` hides the layer from legends; `{ color: false }` per aesthetic |
 | `scales.x/y` | `{ trans, limits: [lo, hi], breaks: [...], name }`; trans `log10 log2 ln sqrt reverse logit probit pseudo_log reciprocal exp` |
-| `scales.color/fill` | `{ palette }` (`Set1 Dark2 Paired npg …` categorical; `viridis magma plasma inferno` numeric), `{ values: { level: "#rrggbb" } }`, `{ gradient: ["#lo", "#hi"] }`, `{ levels: [...] }` |
+| `scales.color/fill` | `{ palette }` (`Set1 Dark2 Paired npg …`, `hue` = ggplot2's default hues, `viridis:A`…`viridis:H` for categorical; `viridis magma plasma inferno` or any Brewer name (a distiller gradient) for numeric), `{ values: { level: "#rrggbb" } }`, `{ gradient: ["#lo", "#hi"] }`, `{ levels: [...] }` |
 | `facet` | `{ wrap, ncol?, scales? }` or `{ rows?, cols?, scales? }`; scales `fixed free free_x free_y` |
 | `coord` | `cartesian flip polar fixed radar sf`, or `{ type, xlim, ylim, ratio }` |
 | `labels` | `title subtitle caption tag x y` (axis titles are not auto-filled from column names) |

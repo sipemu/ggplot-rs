@@ -1233,18 +1233,55 @@ fn apply_color_scale(
         });
     }
     let palette = s.palette.as_deref();
+    // #408: generated discrete palettes — "hue" (ggplot2's default colours
+    // for any number of levels) and "viridis:A" … "viridis:H".
+    let generated = match palette {
+        Some("hue") if discrete => Some(crate::scale::color::GeneratedPalette::Hue(
+            crate::scale::color::HuePalette::default(),
+        )),
+        Some(p) if discrete && p.starts_with("viridis:") => {
+            Some(crate::scale::color::GeneratedPalette::Viridis {
+                option: p[8..].chars().next().unwrap_or('D'),
+                begin: 0.0,
+                end: 1.0,
+                direction: 1,
+            })
+        }
+        _ => None,
+    };
+    if let Some(g) = generated {
+        let mut d = ScaleColorDiscrete::new(aes.clone()).with_generated(g);
+        if let Some(lv) = &s.levels {
+            d = d.with_levels(lv.clone());
+        }
+        return Ok(if aes == Aesthetic::Color {
+            plot.scale_color(d)
+        } else {
+            plot.scale_fill(d)
+        });
+    }
     if !discrete {
         let g = match palette.map(str::to_lowercase).as_deref() {
             None | Some("viridis") => ScaleColorGradientN::viridis(aes.clone()),
             Some("magma") => ScaleColorGradientN::magma(aes.clone()),
             Some("plasma") => ScaleColorGradientN::plasma(aes.clone()),
             Some("inferno") => ScaleColorGradientN::inferno(aes.clone()),
-            Some(other) => {
-                return Err(format!(
-                    "palette '{other}' is discrete but the mapped column is numeric (use \
-                     viridis, magma, plasma, inferno, or gradient)"
-                ))
-            }
+            // #408: a Brewer palette on a numeric column → `distiller`.
+            Some(other) => match parse_palette(other) {
+                Ok(p) => {
+                    return Ok(if aes == Aesthetic::Color {
+                        plot.scale_color_distiller(p, -1)
+                    } else {
+                        plot.scale_fill_distiller(p, -1)
+                    })
+                }
+                Err(_) => {
+                    return Err(format!(
+                        "palette '{other}' is unknown for a numeric column (use viridis, \
+                         magma, plasma, inferno, a Brewer name, or gradient)"
+                    ))
+                }
+            },
         };
         return Ok(if aes == Aesthetic::Color {
             plot.scale_color(g)
@@ -1701,13 +1738,39 @@ mod tests {
     }
 
     #[test]
-    fn numeric_color_with_discrete_palette_errors() {
+    fn numeric_color_with_brewer_palette_is_a_distiller() {
+        // #408: a Brewer name on a numeric column interpolates it
+        // (`scale_colour_distiller`); an unknown name still errors.
+        let svg = render(&format!(
+            r#"{{ {DATA}, "aes": {{"x": "x", "y": "y", "color": "y"}}, "layers": [{{"geom": "point"}}],
+                 "scales": {{"color": {{"palette": "Blues"}}}} }}"#
+        ))
+        .unwrap();
+        assert!(svg.contains("<circle"));
         let e = render(&format!(
             r#"{{ {DATA}, "aes": {{"x": "x", "y": "y", "color": "y"}}, "layers": [{{"geom": "point"}}],
-                 "scales": {{"color": {{"palette": "Set1"}}}} }}"#
+                 "scales": {{"color": {{"palette": "Nope"}}}} }}"#
         ))
         .unwrap_err();
-        assert!(e.contains("numeric"), "{e}");
+        assert!(e.contains("unknown"), "{e}");
+        let svg = render(&format!(
+            r#"{{ {DATA}, "aes": {{"x": "x", "y": "y", "color": "g"}}, "layers": [{{"geom": "point"}}],
+                 "scales": {{"color": {{"palette": "hue"}}}} }}"#
+        ))
+        .unwrap();
+        assert!(
+            svg.contains("#F8766D") && svg.contains("#00BFC4"),
+            "ggplot2's 2-level hues"
+        );
+        let svg = render(&format!(
+            r#"{{ {DATA}, "aes": {{"x": "x", "y": "y", "color": "g"}}, "layers": [{{"geom": "point"}}],
+                 "scales": {{"color": {{"palette": "viridis:D"}}}} }}"#
+        ))
+        .unwrap();
+        assert!(
+            svg.contains("#440154") && svg.contains("#FDE725"),
+            "viridis_d ends"
+        );
     }
 
     #[test]

@@ -2508,6 +2508,94 @@ impl GGPlot {
         self.scale_color(ScaleColorDiscrete::new(crate::aes::Aesthetic::Color).sorted())
     }
 
+    /// ggplot2's `scale_colour_hue(h, c, l, h.start, direction)`: hues evenly
+    /// spaced for the number of levels — `HuePalette::default()` gives
+    /// exactly ggplot2's default colours for any number of groups (#408).
+    pub fn scale_color_hue(self, p: crate::scale::color::HuePalette) -> Self {
+        self.scale_color(
+            crate::scale::color::ScaleColorDiscrete::new(crate::aes::Aesthetic::Color)
+                .with_generated(crate::scale::color::GeneratedPalette::Hue(p)),
+        )
+    }
+
+    /// `scale_fill_hue(...)` — see [`scale_color_hue`](Self::scale_color_hue).
+    pub fn scale_fill_hue(self, p: crate::scale::color::HuePalette) -> Self {
+        self.scale_fill(
+            crate::scale::color::ScaleColorDiscrete::new(crate::aes::Aesthetic::Fill)
+                .with_generated(crate::scale::color::GeneratedPalette::Hue(p)),
+        )
+    }
+
+    /// `scale_colour_viridis_d(option, begin, end, direction)` for a
+    /// categorical mapping: `option` 'A' magma … 'D' viridis … 'H' turbo.
+    pub fn scale_color_viridis_d(self, option: char, begin: f64, end: f64, direction: i32) -> Self {
+        self.scale_color(
+            crate::scale::color::ScaleColorDiscrete::new(crate::aes::Aesthetic::Color)
+                .with_generated(crate::scale::color::GeneratedPalette::Viridis {
+                    option,
+                    begin,
+                    end,
+                    direction,
+                }),
+        )
+    }
+
+    /// `scale_fill_viridis_d(...)` — see [`scale_color_viridis_d`](Self::scale_color_viridis_d).
+    pub fn scale_fill_viridis_d(self, option: char, begin: f64, end: f64, direction: i32) -> Self {
+        self.scale_fill(
+            crate::scale::color::ScaleColorDiscrete::new(crate::aes::Aesthetic::Fill)
+                .with_generated(crate::scale::color::GeneratedPalette::Viridis {
+                    option,
+                    begin,
+                    end,
+                    direction,
+                }),
+        )
+    }
+
+    /// `scale_colour_distiller(palette, direction)`: a Brewer palette
+    /// interpolated as a continuous gradient (ggplot2's default `direction
+    /// = -1` puts the darkest colour at the low end — pass `-1` for that).
+    pub fn scale_color_distiller(
+        self,
+        palette: crate::scale::palettes::PaletteName,
+        direction: i32,
+    ) -> Self {
+        self.scale_color(distiller(crate::aes::Aesthetic::Color, &palette, direction))
+    }
+
+    /// `scale_fill_distiller(...)` — see [`scale_color_distiller`](Self::scale_color_distiller).
+    pub fn scale_fill_distiller(
+        self,
+        palette: crate::scale::palettes::PaletteName,
+        direction: i32,
+    ) -> Self {
+        self.scale_fill(distiller(crate::aes::Aesthetic::Fill, &palette, direction))
+    }
+
+    /// Force values into the x / y scales' ranges (ggplot2's
+    /// `expand_limits(x = …, y = …)`), e.g. `expand_limits(&[0.0], &[])` to
+    /// include 0. Adds an invisible `geom_blank` layer.
+    pub fn expand_limits(self, x: &[f64], y: &[f64]) -> Self {
+        let n = x.len().max(y.len());
+        if n == 0 {
+            return self;
+        }
+        let col =
+            |v: &[f64]| -> Vec<Value> { (0..n).map(|i| Value::Float(v[i % v.len()])).collect() };
+        let mut data = Vec::new();
+        let mut aes = Aes::new();
+        if !x.is_empty() {
+            data.push(("x".to_string(), col(x)));
+            aes = aes.x("x");
+        }
+        if !y.is_empty() {
+            data.push(("y".to_string(), col(y)));
+            aes = aes.y("y");
+        }
+        self.geom_blank().layer_data(data).layer_aes(aes)
+    }
+
     pub fn scale_fill_brewer(self, name: crate::scale::palettes::PaletteName) -> Self {
         use crate::scale::color::ScaleColorDiscrete;
         let s = ScaleColorDiscrete::new(crate::aes::Aesthetic::Fill).with_named_palette(&name);
@@ -4810,3 +4898,22 @@ impl std::fmt::Display for GGError {
 }
 
 impl std::error::Error for GGError {}
+
+/// A Brewer palette as a continuous gradient (`scale_*_distiller`).
+fn distiller(
+    aes: crate::aes::Aesthetic,
+    palette: &crate::scale::palettes::PaletteName,
+    direction: i32,
+) -> crate::scale::gradient_n::ScaleColorGradientN {
+    let mut colors = crate::scale::palettes::palette(palette).to_vec();
+    if direction < 0 {
+        colors.reverse();
+    }
+    let n = colors.len().max(2) - 1;
+    let stops = colors
+        .into_iter()
+        .enumerate()
+        .map(|(i, c)| (i as f64 / n as f64, c))
+        .collect();
+    crate::scale::gradient_n::ScaleColorGradientN::new(aes, stops)
+}

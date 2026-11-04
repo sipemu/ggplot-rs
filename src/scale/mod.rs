@@ -23,6 +23,8 @@ pub mod shape_manual;
 pub mod size;
 pub mod steps;
 pub mod transform;
+#[rustfmt::skip]
+pub(crate) mod viridis_lut;
 pub mod util;
 
 pub use scale_set::ScaleSet;
