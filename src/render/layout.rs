@@ -101,7 +101,7 @@ impl PlotLayout {
     /// Height the layout reserves for the bottom x axis (ticks, labels,
     /// title); `x_label_height` is the measured rotated-label height, if any.
     pub(crate) fn x_axis_band(theme: &Theme, x_label_height: Option<f64>) -> f64 {
-        theme.axis_ticks_length
+        theme.ticks_len_x()
             + if theme.axis_text_x.visible {
                 // Rotated labels extend vertically, so reserve more bottom space —
                 // measured from the actual labels by the caller when available.
@@ -161,7 +161,7 @@ impl PlotLayout {
 
         let x_axis_height = Self::x_axis_band(theme, x_label_height);
 
-        let y_axis_width = theme.axis_ticks_length
+        let y_axis_width = theme.ticks_len_y()
             + if theme.axis_text_y.visible {
                 y_label_width.unwrap_or(theme.axis_text_y.size * 3.5 + 4.0)
             } else {

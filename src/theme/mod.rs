@@ -223,6 +223,10 @@ pub struct Theme {
     /// Align an outside legend with the whole plot instead of the panel
     /// (ggplot2's `legend.location = "plot"`, #413).
     pub legend_location_plot: bool,
+    /// One axis's tick length (ggplot2's `axis.ticks.length.x` / `.y`,
+    /// #413); `None` = `axis_ticks_length`.
+    pub axis_ticks_length_x: Option<f64>,
+    pub axis_ticks_length_y: Option<f64>,
     /// Facet strips below / left of a panel sit outside its axis
     /// (ggplot2's `strip.placement = "outside"`, #412); default inside.
     pub strip_placement_outside: bool,
@@ -287,6 +291,16 @@ pub struct Theme {
 }
 
 impl Theme {
+    /// The x axis's tick length (`axis_ticks_length_x`, else the shared one).
+    pub fn ticks_len_x(&self) -> f64 {
+        self.axis_ticks_length_x.unwrap_or(self.axis_ticks_length)
+    }
+
+    /// The y axis's tick length (`axis_ticks_length_y`, else the shared one).
+    pub fn ticks_len_y(&self) -> f64 {
+        self.axis_ticks_length_y.unwrap_or(self.axis_ticks_length)
+    }
+
     /// Hide only the y position guides (axis text, title, line, ticks and
     /// the horizontal grid lines) — layout charts with a real x axis but a
     /// meaningless y (`geom_timeline`).
