@@ -147,7 +147,15 @@ fn for_each_period(
         )
     };
     // Walk in x order so each period can compare with the previous close.
-    let nx_of = |i: usize| x_scale.map(|s| s.map(&x_col[i])).unwrap_or(0.5);
+    // A dodge (a discrete group mapped, #404) shifts and narrows the bars.
+    let x_mapper = super::support::XMapper::new(data, scales);
+    let nx_of = |i: usize| {
+        if x_scale.is_some() {
+            x_mapper.map(&x_col[i], i)
+        } else {
+            0.5
+        }
+    };
     let mut order: Vec<usize> = (0..data.nrows()).collect();
     order.sort_by(|&a, &b| nx_of(a).total_cmp(&nx_of(b)));
     let mut prev_close: Option<f64> = None;
@@ -204,7 +212,7 @@ fn for_each_period(
             &Aesthetic::Y,
             Some(&c_col[i]),
         );
-        draw(&p, half, backend)?;
+        draw(&p, half / x_mapper.slot_n(i), backend)?;
     }
     super::clear_mark(backend);
     Ok(())

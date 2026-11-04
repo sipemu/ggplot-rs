@@ -84,7 +84,8 @@ With polars (default feature): `GGPlot::new(df!{ "x" => [1.0, 2.0], "y" => [3.0,
   `geom_histogram_with(GeomHistogram::default().with_bins(20))`,
   `geom_smooth_with(GeomSmooth::default().loess(0.75))`.
 - **Stat / position overrides** apply to the last layer: `.stat(StatIdentity)`,
-  `.position(PositionDodge::new(0.9))`, `PositionStack`, `PositionFill`,
+  `.position(PositionDodge::new(0.9))` (`.with_preserve_single()` keeps
+  widths in partial slots), `PositionDodge2`, `PositionStack`, `PositionFill`,
   `PositionJitter::new(w, h)`, `PositionNudge::new(x, y)`.
 - **Scales:** `scale_x_log10()`, `scale_x_continuous(ScaleContinuous::new()
   .with_limits(0.0, 10.0).with_breaks(vec![..]).with_transform(ScaleTransform::Sqrt)
@@ -161,6 +162,9 @@ builds a `GGPlot` over your own columns.
    warnings (they explain empty layers / dropped rows).
 4. Errors (`GGError`) name the missing column or aesthetic — fix the mapping,
    don't guess.
+- Grouped `geom_boxplot` (dodge2) and `geom_violin` (dodge) sit side by side
+  by default; crossbar, pointrange, linerange, errorbar, dotplot, candlestick
+  dodge with an explicit `.position(PositionDodge::new(w))`.
 - Required aesthetics per geom follow ggplot2 (`geom_bar` needs only `x`;
   `geom_col` needs `x` and `y`; `geom_boxplot` a discrete `x` and numeric `y`).
 - Fonts are bundled; rendering needs no system fonts (works in containers).

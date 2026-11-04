@@ -15,6 +15,9 @@ pub struct PositionDodge2 {
     pub width: Option<f64>,
     /// Reverse the group order.
     pub reverse: bool,
+    /// `preserve = "single"` (see
+    /// [`PositionDodge::preserve_single`](super::dodge::PositionDodge::preserve_single)).
+    pub preserve_single: bool,
 }
 
 impl PositionDodge2 {
@@ -36,6 +39,13 @@ impl PositionDodge2 {
         self.reverse = reverse;
         self
     }
+
+    /// `preserve = "single"`: elements keep one group's width in a slot with
+    /// fewer groups.
+    pub fn with_preserve_single(mut self) -> Self {
+        self.preserve_single = true;
+        self
+    }
 }
 
 impl Default for PositionDodge2 {
@@ -44,6 +54,7 @@ impl Default for PositionDodge2 {
             padding: 0.1,
             width: None,
             reverse: false,
+            preserve_single: false,
         }
     }
 }
@@ -55,6 +66,7 @@ impl Position for PositionDodge2 {
             self.width.unwrap_or(params.width),
             Some(self.padding),
             self.reverse,
+            self.preserve_single,
             params.group_order.as_deref(),
         );
     }

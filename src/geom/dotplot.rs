@@ -51,9 +51,15 @@ impl Geom for GeomDotplot {
         let plot_area = backend.plot_area();
         let x_scale = scales.get(&Aesthetic::X);
         let y_scale = scales.get(&Aesthetic::Y);
+        // Honour a dodge (grouped dot stacks side by side, #404).
+        let x_mapper = super::support::XMapper::new(data, scales);
 
         for i in 0..data.nrows() {
-            let nx = x_scale.map(|s| s.map(&x_col[i])).unwrap_or(0.0);
+            let nx = if x_scale.is_some() {
+                x_mapper.map(&x_col[i], i)
+            } else {
+                0.0
+            };
             let ny = y_scale.map(|s| s.map(&y_col[i])).unwrap_or(0.0);
             let (px, py) = coord.transform((nx, ny), &plot_area);
 

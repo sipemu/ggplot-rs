@@ -1,7 +1,7 @@
 use crate::aes::Aesthetic;
 use crate::coord::Coord;
 use crate::data::{DataFrame, Value};
-use crate::position::identity::PositionIdentity;
+use crate::position::dodge2::PositionDodge2;
 use crate::position::Position;
 use crate::render::backend::{DrawBackend, LineStyle, Linetype, PointShape, PointStyle, RectStyle};
 use crate::render::RenderError;
@@ -82,13 +82,20 @@ impl Geom for GeomBoxplot {
         let y_scale = scales.get(&Aesthetic::Y);
 
         let x_is_discrete = x_scale.map(|s| s.is_discrete()).unwrap_or(false);
+        // A dodge (the default `position_dodge2`) shifts each box within its
+        // x slot and shares the slot's width between the groups there (#404).
+        let x_mapper = super::support::XMapper::new(data, scales);
 
         for i in 0..data.nrows() {
-            let nx = x_scale.map(|s| s.map(&x_col[i])).unwrap_or(0.5);
+            let nx = if x_scale.is_some() {
+                x_mapper.map(&x_col[i], i)
+            } else {
+                0.5
+            };
 
             let half_width = if x_is_discrete {
                 let n = x_scale.map(|s| s.breaks().len()).unwrap_or(1);
-                self.width / (n.max(1) as f64 * 2.5)
+                self.width / (n.max(1) as f64 * 2.5) / x_mapper.slot_n(i)
             } else {
                 0.03
             };
@@ -259,8 +266,9 @@ impl Geom for GeomBoxplot {
         Box::new(StatBoxplot)
     }
 
+    /// ggplot2's default: grouped boxes sit side by side in their x slot.
     fn default_position(&self) -> Box<dyn Position> {
-        Box::new(PositionIdentity)
+        Box::new(PositionDodge2::default())
     }
 
     fn default_params(&self) -> GeomParams {

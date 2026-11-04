@@ -180,6 +180,9 @@ pub struct PositionFull {
     /// nudge offsets.
     pub x: Option<f64>,
     pub y: Option<f64>,
+    /// dodge / dodge2: `"total"` (default) or `"single"` (elements keep one
+    /// group's width in slots with fewer groups).
+    pub preserve: Option<String>,
 }
 
 #[derive(Deserialize, Default)]
@@ -923,12 +926,25 @@ pub fn apply_position(plot: GGPlot, p: &PositionSpec) -> Result<GGPlot, String> 
         PositionSpec::Full(f) => (f.kind.as_str(), Some(f)),
     };
     let get = |f: fn(&PositionFull) -> Option<f64>, d: f64| full.and_then(f).unwrap_or(d);
+    let single = match full.and_then(|f| f.preserve.as_deref()) {
+        None | Some("total") => false,
+        Some("single") => true,
+        Some(o) => return Err(format!("unknown preserve '{o}' (expected total, single)")),
+    };
     Ok(match kind {
         "identity" => plot.position(pos::identity::PositionIdentity),
         "stack" => plot.position(pos::stack::position_stack()),
         "fill" => plot.position(pos::fill::position_fill()),
-        "dodge" => plot.position(pos::dodge::position_dodge(get(|f| f.width, 0.9))),
-        "dodge2" => plot.position(pos::dodge2::PositionDodge2::new(get(|f| f.padding, 0.1))),
+        "dodge" => {
+            let mut d = pos::dodge::position_dodge(get(|f| f.width, 0.9));
+            d.preserve_single = single;
+            plot.position(d)
+        }
+        "dodge2" => {
+            let mut d = pos::dodge2::PositionDodge2::new(get(|f| f.padding, 0.1));
+            d.preserve_single = single;
+            plot.position(d)
+        }
         "jitter" => plot.position(pos::jitter::PositionJitter::new(
             get(|f| f.width, 0.4),
             get(|f| f.height, 0.0),
@@ -1373,6 +1389,22 @@ mod tests {
             ..Default::default()
         };
         assert!(add_geom(plot(), "smooth", &p).is_err());
+    }
+
+    #[test]
+    fn grouped_boxplot_with_preserve_single_renders() {
+        let svg = render(&format!(
+            r#"{{ {DATA}, "aes": {{"x": "g", "y": "y", "fill": "g"}},
+               "layers": [{{"geom": "boxplot", "position": {{"type": "dodge2", "preserve": "single"}}}}] }}"#
+        ))
+        .unwrap();
+        assert!(svg.contains("<rect"));
+        let e = render(&format!(
+            r#"{{ {DATA}, "aes": {{"x": "g", "y": "y"}},
+               "layers": [{{"geom": "col", "position": {{"type": "dodge", "preserve": "some"}}}}] }}"#
+        ))
+        .unwrap_err();
+        assert!(e.contains("unknown preserve"), "{e}");
     }
 
     #[test]

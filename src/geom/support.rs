@@ -38,6 +38,7 @@ pub(crate) fn row_groups(data: &DataFrame) -> Vec<Vec<usize>> {
 pub(crate) struct XMapper<'a> {
     scale: Option<&'a dyn Scale>,
     offsets: Option<&'a [Value]>,
+    counts: Option<&'a [Value]>,
     band: f64,
 }
 
@@ -52,8 +53,22 @@ impl<'a> XMapper<'a> {
         XMapper {
             scale,
             offsets,
+            counts: data.column(crate::position::DODGE_N_COL),
             band,
         }
+    }
+
+    /// How many groups share row `i`'s slot on a dodged *discrete* axis
+    /// (1 otherwise): slot-filling geoms divide their element width by it.
+    pub(crate) fn slot_n(&self, i: usize) -> f64 {
+        if self.band == 0.0 {
+            return 1.0;
+        }
+        self.counts
+            .and_then(|c| c.get(i))
+            .and_then(|v| v.as_f64())
+            .filter(|n| n.is_finite() && *n >= 1.0)
+            .unwrap_or(1.0)
     }
 
     /// Normalized x of `value` at row `i` (the dodge offset of row `i` added).
