@@ -142,6 +142,10 @@ All notable changes to this project are documented here. The format follows
   `map`, `radial` (`start`, `end`, `inner_radius`), cartesian `reverse`.
 
 ### Fixed
+- Fixed-aspect coords (#411): `coord_fixed` / `coord_sf` / `coord_map` /
+  `coord_quickmap` letterboxed the data inside a full-size panel; now, as in
+  ggplot2, a single panel itself takes the aspect (background, grid and axes
+  hug the data) unless the theme sets `aspect_ratio`. **Visible change.**
 - `facet_wrap` with a free scale (#412): only the outer panels had axes,
   so the other panels' own (different) ranges had no labels. As in
   ggplot2, a free axis is now drawn — labelled — on every panel.

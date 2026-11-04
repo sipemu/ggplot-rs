@@ -4304,6 +4304,20 @@ impl GGPlot {
         // Resolve R-style theme inheritance (root `text` → child text elements).
         built.theme.resolve_inheritance();
 
+        // #411: a fixed-aspect coord (coord_fixed / coord_sf / coord_map /
+        // coord_quickmap) shrinks the single panel to its aspect — the
+        // background, grid and axes hug the data, as in ggplot2 — instead
+        // of letterboxing the data inside a full-size panel.
+        if built.facet.is_none() && built.theme.aspect_ratio.is_none() {
+            if let Some(a) = built
+                .coord
+                .fixed_aspect()
+                .filter(|a| a.is_finite() && *a > 0.0)
+            {
+                built.theme.aspect_ratio = Some(a);
+            }
+        }
+
         // Apply user label overrides to scales
         if let Some(ref label) = x_label {
             if let Some(s) = built.scales.get_mut(&crate::aes::Aesthetic::X) {
