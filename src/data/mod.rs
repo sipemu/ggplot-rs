@@ -1,4 +1,5 @@
 mod dataframe;
+mod polars_macro;
 mod source;
 
 pub use dataframe::DataFrame;
