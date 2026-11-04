@@ -5,6 +5,8 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.41.0] — 2026-11-04
+
 ### Changed
 - `xend` / `yend` now train the x / y scales, as in ggplot2 (#411): a
   segment / curve ending beyond the other data no longer runs off the
