@@ -125,7 +125,7 @@ With polars (default feature): `GGPlot::new(df!{ "x" => [1.0, 2.0], "y" => [3.0,
   `.facet_margins(true)` ("(all)" panels; ggplot2's `margins = TRUE`).
 - **Coords:** `coord_flip()`, `coord_polar()`, `coord_radial(start, end,
   inner_radius)`, `coord_fixed(ratio)`, `coord_cartesian_zoom(Some((lo, hi)), None)`,
-  `coord_reverse(x, y)`, `coord_cartesian_with(CoordCartesian::new().expand(t, r, b, l))`
+  `coord_reverse(x, y)`, `coord_cartesian_with(CoordCartesian::new().expand(t, r, b, l))`, `coord_clip(false)` (`clip = "off"`; layers are clipped to the panel by default)
   (`expand = FALSE` per side), `coord_polar_with(CoordPolar::new().reverse(theta, r)
   .rotate_angle(true).r_axis_inside(true))`, `coord_trans`/`coord_transform(x, y)`, `coord_quickmap()`,
   `coord_map()` (Mercator, plain lon/lat), `coord_radar()`, `coord_sf()`.

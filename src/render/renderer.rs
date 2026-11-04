@@ -183,7 +183,20 @@ impl PlotRenderer {
 
         // 5. Draw each layer's geometry
         // A layer whose data is empty (no input rows, or a stat that produced
-        // nothing) simply draws nothing.
+        // nothing) simply draws nothing. #411: layers reaching past the
+        // panel (a zoomed coord) are clipped to it (`clip = "on"`), or may
+        // draw past it everywhere (`clip = "off"`).
+        let clip_group = built.clip
+            && built
+                .layers
+                .iter()
+                .any(|l| layer_spills(&l.data, &built.scales, built.coord.as_ref(), &plot_area));
+        if clip_group {
+            backend.begin_clip(&plot_area);
+        }
+        if !built.clip {
+            backend.set_clipping(false);
+        }
         for layer in built.layers.iter().filter(|l| l.data.nrows() > 0) {
             backend.set_mark_geom(Some(layer.geom.name()));
             let drawn = layer.geom.draw(
@@ -195,6 +208,12 @@ impl PlotRenderer {
             );
             backend.set_mark_geom(None);
             drawn?;
+        }
+        if !built.clip {
+            backend.set_clipping(true);
+        }
+        if clip_group {
+            backend.end_clip();
         }
 
         // 5b. Gridlines on top of the data (R's panel.ontop).
@@ -1127,6 +1146,22 @@ impl PlotRenderer {
                     .unwrap_or_else(|| panel_rect.clone());
                 backend.begin_panel(pi, &panel.label, &panel_rect, &data);
             }
+            // #411: as for a single panel — clip this panel's layers when
+            // they reach past it (a fixed-aspect grid's panel group already
+            // clips), or let them draw past it with `clip = "off"`.
+            let clip_group = built.clip
+                && fixed_grid.is_none()
+                && built.panels_data.get(pi).is_some_and(|layers| {
+                    layers.iter().any(|d| {
+                        layer_spills(d, panel_scale_set, built.coord.as_ref(), &panel_rect)
+                    })
+                });
+            if clip_group {
+                backend.begin_clip(&panel_rect);
+            }
+            if !built.clip {
+                backend.set_clipping(false);
+            }
             if pi < built.panels_data.len() {
                 for (li, layer_data) in built.panels_data[pi].iter().enumerate() {
                     if li < built.layers.len() && layer_data.nrows() > 0 && !is_figure(li) {
@@ -1147,6 +1182,12 @@ impl PlotRenderer {
                         drawn?;
                     }
                 }
+            }
+            if !built.clip {
+                backend.set_clipping(true);
+            }
+            if clip_group {
+                backend.end_clip();
             }
             if fixed_grid.is_some() {
                 backend.end_panel();
@@ -1674,6 +1715,56 @@ fn annotation_ink(color: (u8, u8, u8), theme: &crate::theme::Theme) -> (u8, u8, 
     }
 }
 
+/// Does a layer's data reach past `area` (#411)? Its position columns
+/// (`x`, `xmin`, …, `yend`), mapped and transformed like the geoms do,
+/// tested against the panel with half a pixel of slack. A polar coord
+/// never spills (its scales fill the circle).
+fn layer_spills(
+    data: &crate::data::DataFrame,
+    scales: &crate::scale::ScaleSet,
+    coord: &dyn crate::coord::Coord,
+    area: &crate::render::Rect,
+) -> bool {
+    if coord.is_polar() || data.nrows() == 0 {
+        return false;
+    }
+    const SLACK: f64 = 0.5;
+    let outside = |(px, py): (f64, f64)| {
+        px < area.x - SLACK
+            || px > area.x + area.width + SLACK
+            || py < area.y - SLACK
+            || py > area.y + area.height + SLACK
+    };
+    let axes = [
+        (Aesthetic::X, ["x", "xmin", "xmax", "xend"], true),
+        (Aesthetic::Y, ["y", "ymin", "ymax", "yend"], false),
+    ];
+    for (aes, cols, is_x) in axes {
+        let Some(scale) = scales.get(&aes) else {
+            continue;
+        };
+        for col in cols {
+            let Some(values) = data.column(col) else {
+                continue;
+            };
+            for v in values {
+                if !v.as_f64().is_some_and(f64::is_finite) {
+                    continue;
+                }
+                let n = scale.map(v);
+                if !n.is_finite() {
+                    continue;
+                }
+                let p = if is_x { (n, 0.5) } else { (0.5, n) };
+                if outside(coord.transform(p, area)) {
+                    return true;
+                }
+            }
+        }
+    }
+    false
+}
+
 /// Wrapper that overrides plot_area() to return the panel rect.
 struct PanelBackendAdapter<'a> {
     inner: &'a mut dyn DrawBackend,
@@ -1683,6 +1774,12 @@ struct PanelBackendAdapter<'a> {
 impl<'a> DrawBackend for PanelBackendAdapter<'a> {
     fn set_clipping(&mut self, on: bool) {
         self.inner.set_clipping(on)
+    }
+    fn begin_clip(&mut self, rect: &crate::render::Rect) {
+        self.inner.begin_clip(rect)
+    }
+    fn end_clip(&mut self) {
+        self.inner.end_clip()
     }
     fn draw_image(
         &mut self,

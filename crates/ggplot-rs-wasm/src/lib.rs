@@ -278,6 +278,8 @@ export type Coord =
       start?: number; end?: number; inner_radius?: number;
       /** radial: r axis along the start spoke; theta labels follow the circle. */
       r_axis_inside?: boolean; rotate_angle?: boolean;
+      /** "on" (default) clips layers to the panel; "off" lets them draw past it. */
+      clip?: "on" | "off";
     };
 
 export interface Labels {

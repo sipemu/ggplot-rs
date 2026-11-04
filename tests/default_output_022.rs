@@ -288,7 +288,9 @@ fn expected() -> Vec<(&'static str, u64)> {
     vec![
         ("point", 0xc261d09053f2041e), // #410 key glyph
         ("line", 0x5eb4712a5a898d16),  // #410 key glyph
-        ("segment", 0x68fcc015406c8eb9),
+        // #411: xend / yend train the position scales (ggplot2), so the
+        // segments no longer run off the panel.
+        ("segment", 0x870737d9e729855a),
         ("bar", 0x14377a5e4f3d4e62),
         ("col", 0x49e97c146eb3412b), // #408 hue_pal default palette
         // the bar tooltips' bin edges are rounded to the bin width's
