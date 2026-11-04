@@ -720,7 +720,9 @@ fn draw_discrete_legend_at(
     };
     let title_offset = if !title.is_empty() {
         backend.set_element_class(Some("gg-legend gg-legend-title"));
-        backend.draw_text(
+        crate::render::rich::draw(
+            backend,
+            theme.rich_text,
             title,
             (legend_x, legend_y),
             &TextStyle {
@@ -870,7 +872,9 @@ fn draw_discrete_legend_at(
             Some(theme.legend_text.family.clone())
         };
         backend.set_element_class(Some("gg-legend gg-legend-text"));
-        backend.draw_text(
+        crate::render::rich::draw(
+            backend,
+            theme.rich_text,
             label,
             (x + swatch_size + theme.legend_spacing, center_y),
             &TextStyle {
@@ -1035,7 +1039,9 @@ fn draw_bins_keys(
             )
         };
         backend.set_element_class(Some("gg-legend gg-legend-text"));
-        backend.draw_text(
+        crate::render::rich::draw(
+            backend,
+            theme.rich_text,
             label,
             pos,
             &TextStyle {
@@ -1136,7 +1142,9 @@ fn draw_continuous_legend_at(
     };
     let title_offset = if !title.is_empty() {
         backend.set_element_class(Some("gg-legend gg-legend-title"));
-        backend.draw_text(
+        crate::render::rich::draw(
+            backend,
+            theme.rich_text,
             title,
             (legend_x, legend_y),
             &TextStyle {
@@ -1372,7 +1380,9 @@ fn draw_continuous_legend_at(
                 )?;
             }
             backend.set_element_class(Some("gg-legend gg-legend-text"));
-            backend.draw_text(
+            crate::render::rich::draw(
+                backend,
+                theme.rich_text,
                 label,
                 (
                     tick_x,
@@ -1402,7 +1412,9 @@ fn draw_continuous_legend_at(
                 )?;
             }
             backend.set_element_class(Some("gg-legend gg-legend-text"));
-            backend.draw_text(
+            crate::render::rich::draw(
+                backend,
+                theme.rich_text,
                 label,
                 (
                     legend_x + bar_width + tick_len + theme.legend_spacing,
@@ -2438,7 +2450,9 @@ fn draw_legend_planned_inner(
         let title_offset = custom.title_offset(theme);
         if let Some(title) = custom.title.as_deref().filter(|t| !t.is_empty()) {
             backend.set_element_class(Some("gg-legend gg-legend-title"));
-            backend.draw_text(
+            crate::render::rich::draw(
+                backend,
+                theme.rich_text,
                 title,
                 (offset_x, offset_y),
                 &TextStyle {
@@ -2514,7 +2528,9 @@ fn draw_discrete_legend_grid(
     };
     let title_offset = if !title.is_empty() {
         backend.set_element_class(Some("gg-legend gg-legend-title"));
-        backend.draw_text(
+        crate::render::rich::draw(
+            backend,
+            theme.rich_text,
             title,
             (legend_x, legend_y),
             &TextStyle {
@@ -2609,7 +2625,9 @@ fn draw_discrete_legend_grid(
             Some(theme.legend_text.family.clone())
         };
         backend.set_element_class(Some("gg-legend gg-legend-text"));
-        backend.draw_text(
+        crate::render::rich::draw(
+            backend,
+            theme.rich_text,
             &ov.text,
             (x, y),
             &TextStyle {

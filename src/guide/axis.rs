@@ -381,7 +381,9 @@ pub(crate) fn draw_x_axis_title(
             Some(theme.axis_title_x.family.clone())
         };
         backend.set_element_class(Some("gg-axis-title gg-axis-title-x"));
-        backend.draw_text(
+        crate::render::rich::draw(
+            backend,
+            theme.rich_text,
             title,
             (center_x, title_y),
             &TextStyle {
@@ -572,7 +574,9 @@ pub(crate) fn draw_y_axis_title(
             Some(theme.axis_title_y.family.clone())
         };
         backend.set_element_class(Some("gg-axis-title gg-axis-title-y"));
-        backend.draw_text(
+        crate::render::rich::draw(
+            backend,
+            theme.rich_text,
             title,
             (title_x, center_y),
             &TextStyle {
@@ -712,7 +716,9 @@ pub fn draw_sec_y_axis(
             Some(theme.axis_title_y.family.clone())
         };
         backend.set_element_class(Some("gg-axis-title gg-axis-title-y"));
-        backend.draw_text(
+        crate::render::rich::draw(
+            backend,
+            theme.rich_text,
             &sec_axis.name,
             (title_x, center_y),
             &TextStyle {
@@ -834,7 +840,9 @@ pub fn draw_sec_x_axis(
     if !sec_axis.name.is_empty() && theme.axis_title_x.visible {
         let y = top_y - sec_x_axis_height(theme, sec_axis) + theme.axis_title_x.size / 2.0;
         backend.set_element_class(Some("gg-axis-title gg-axis-title-x"));
-        backend.draw_text(
+        crate::render::rich::draw(
+            backend,
+            theme.rich_text,
             &sec_axis.name,
             (plot_area.x + plot_area.width / 2.0, y),
             &TextStyle {

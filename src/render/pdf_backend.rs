@@ -52,6 +52,24 @@ fn font_bytes(family: Option<&str>, face: FontFace) -> &'static [u8] {
     }
 }
 
+/// `text`'s advance width at `size` in the font `bytes`, kerned.
+fn text_advance(bytes: &[u8], text: &str, size: f64) -> f64 {
+    FontRef::try_from_slice(bytes).map_or(0.0, |f| {
+        let sf = f.as_scaled(size as f32);
+        let mut w = 0.0_f32;
+        let mut prev = None;
+        for ch in text.chars() {
+            let id = sf.glyph_id(ch);
+            if let Some(p) = prev {
+                w += sf.kern(p, id);
+            }
+            w += sf.h_advance(id);
+            prev = Some(id);
+        }
+        w as f64
+    })
+}
+
 /// One recorded drawing operation.
 enum Op {
     Path {
@@ -524,20 +542,7 @@ impl DrawBackend for PdfBackend {
         };
         let size = style.size;
         // Real advance widths (with kerning) for the anchor.
-        let width = FontRef::try_from_slice(bytes).map_or(0.0, |f| {
-            let sf = f.as_scaled(size as f32);
-            let mut w = 0.0_f32;
-            let mut prev = None;
-            for ch in text.chars() {
-                let id = sf.glyph_id(ch);
-                if let Some(p) = prev {
-                    w += sf.kern(p, id);
-                }
-                w += sf.h_advance(id);
-                prev = Some(id);
-            }
-            w as f64
-        });
+        let width = text_advance(bytes, text, size);
         let dx = match style.anchor {
             TextAnchor::Start => 0.0,
             TextAnchor::Middle => -width / 2.0,
@@ -569,6 +574,23 @@ impl DrawBackend for PdfBackend {
             halo,
             transform,
         });
+        Ok(())
+    }
+
+    /// Rich text (#413): runs laid out with real advance widths.
+    fn draw_rich_text(
+        &mut self,
+        runs: &[crate::render::rich::RichRun],
+        pos: (f64, f64),
+        style: &TextStyle,
+    ) -> Result<(), RenderError> {
+        let family = style.family.clone();
+        let placed = crate::render::rich::layout_runs(runs, pos, style, &|t, size, face| {
+            text_advance(font_bytes(family.as_deref(), face), t, size)
+        });
+        for (text, at, run_style) in placed {
+            self.draw_text(&text, at, &run_style)?;
+        }
         Ok(())
     }
 

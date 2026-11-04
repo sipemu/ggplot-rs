@@ -279,7 +279,9 @@ impl PlotRenderer {
                 Some(theme.title.family.clone())
             };
             backend.set_element_class(Some("gg-title"));
-            backend.draw_text(
+            crate::render::rich::draw(
+                backend,
+                theme.rich_text,
                 title,
                 (tx, title_y),
                 &TextStyle {
@@ -308,7 +310,9 @@ impl PlotRenderer {
                 Some(theme.subtitle.family.clone())
             };
             backend.set_element_class(Some("gg-subtitle"));
-            backend.draw_text(
+            crate::render::rich::draw(
+                backend,
+                theme.rich_text,
                 subtitle,
                 (sx, subtitle_y),
                 &TextStyle {
@@ -350,7 +354,9 @@ impl PlotRenderer {
                 Some(theme.caption.family.clone())
             };
             backend.set_element_class(Some("gg-caption"));
-            backend.draw_text(
+            crate::render::rich::draw(
+                backend,
+                theme.rich_text,
                 caption,
                 (cx, caption_y),
                 &TextStyle {
@@ -1283,7 +1289,9 @@ impl PlotRenderer {
                 Some(theme.title.family.clone())
             };
             backend.set_element_class(Some("gg-title"));
-            backend.draw_text(
+            crate::render::rich::draw(
+                backend,
+                theme.rich_text,
                 title,
                 (tx, title_y),
                 &TextStyle {
@@ -1309,7 +1317,9 @@ impl PlotRenderer {
                 Some(theme.subtitle.family.clone())
             };
             backend.set_element_class(Some("gg-subtitle"));
-            backend.draw_text(
+            crate::render::rich::draw(
+                backend,
+                theme.rich_text,
                 subtitle,
                 (sx, subtitle_y),
                 &TextStyle {
@@ -1339,7 +1349,9 @@ impl PlotRenderer {
                 Some(theme.caption.family.clone())
             };
             backend.set_element_class(Some("gg-caption"));
-            backend.draw_text(
+            crate::render::rich::draw(
+                backend,
+                theme.rich_text,
                 caption,
                 (cx, caption_y),
                 &TextStyle {
@@ -1655,7 +1667,9 @@ fn draw_strip(
             (0.0, d)
         };
         backend.set_element_class(Some("gg-strip gg-strip-text"));
-        backend.draw_text(
+        crate::render::rich::draw(
+            backend,
+            theme.rich_text,
             line,
             (x + w / 2.0 + dx, y + h / 2.0 + dy),
             &TextStyle {
@@ -1804,6 +1818,14 @@ impl<'a> DrawBackend for PanelBackendAdapter<'a> {
     }
     fn enable_element_classes(&mut self, on: bool) {
         self.inner.enable_element_classes(on)
+    }
+    fn draw_rich_text(
+        &mut self,
+        runs: &[crate::render::rich::RichRun],
+        pos: (f64, f64),
+        style: &crate::render::backend::TextStyle,
+    ) -> Result<(), RenderError> {
+        self.inner.draw_rich_text(runs, pos, style)
     }
     fn set_element_class(&mut self, class: Option<&'static str>) {
         self.inner.set_element_class(class)

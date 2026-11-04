@@ -260,6 +260,10 @@ pub struct Theme {
     /// `legend.box.just`, #413): `0` left / top (the default), `0.5`
     /// centre, `1` right / bottom.
     pub legend_box_just: f64,
+    /// Read titles, axis titles, strip and legend text as a Markdown / HTML
+    /// subset (ggtext's `element_markdown()`, #413): `**bold**`, `*italic*`,
+    /// `^sup^`, `~sub~`, `<span style='color:…'>` — see [`crate::render::rich`].
+    pub rich_text: bool,
     /// Place the tag in the panel's corner (ggplot2's `plot.tag.location =
     /// "panel"`, #413); default the plot's.
     pub tag_location_panel: bool,

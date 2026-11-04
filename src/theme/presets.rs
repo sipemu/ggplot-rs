@@ -184,6 +184,7 @@ pub fn theme_gray_base(base_size: f64) -> Theme {
         legend_key_spacing_y: None,
         legend_box_spacing: None,
         legend_box_just: 0.0,
+        rich_text: false,
         tag_location_panel: false,
         strip_switch_pad: 2.75,
         legend_margin: Margin {
@@ -645,6 +646,7 @@ pub fn theme_void_base(base_size: f64) -> Theme {
         legend_key_spacing_y: None,
         legend_box_spacing: None,
         legend_box_just: 0.0,
+        rich_text: false,
         tag_location_panel: false,
         strip_switch_pad: 2.75,
         legend_margin: Margin {

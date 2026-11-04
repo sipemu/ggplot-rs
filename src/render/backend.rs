@@ -642,6 +642,25 @@ pub trait DrawBackend {
         let joined: String = runs.iter().map(|(t, _)| *t).collect();
         self.draw_text(&joined, pos, style)
     }
+    /// Draw rich-text `runs` (#413, `Theme::rich_text`): bold / italic /
+    /// super- & subscript / coloured spans as one label placed like
+    /// [`draw_text`](Self::draw_text). Default: the runs laid out one after
+    /// another with estimated widths ([`rich::layout_runs`](crate::render::rich::layout_runs)).
+    fn draw_rich_text(
+        &mut self,
+        runs: &[crate::render::rich::RichRun],
+        pos: (f64, f64),
+        style: &TextStyle,
+    ) -> Result<(), RenderError> {
+        let placed = crate::render::rich::layout_runs(runs, pos, style, &|t, s, _| {
+            crate::render::text::text_width(t, s)
+        });
+        for (text, at, run_style) in placed {
+            self.draw_text(&text, at, &run_style)?;
+        }
+        Ok(())
+    }
+
     /// Draw an encoded raster image (PNG or JPEG bytes) stretched over
     /// `rect`, clipped to `clip`, at opacity `alpha` — a map tile (#325).
     /// Default: draws nothing (a backend without raster support).
