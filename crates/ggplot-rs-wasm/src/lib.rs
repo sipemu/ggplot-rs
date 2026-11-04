@@ -134,6 +134,12 @@ export interface Layer {
    *  (hexagons of params.fun over a `z` column), "sf_coordinates" (a point per WKT
    *  `geometry`, e.g. text on a map). */
   stat?: "identity" | "unique" | "connect" | "summary_hex" | "sf_coordinates";
+  /** Legend key picture (ggplot2's key_glyph); default per geom. */
+  key_glyph?: "point" | "path" | "rect" | "polygon" | "boxplot" | "crossbar" | "pointrange"
+    | "linerange" | "smooth" | "text" | "label" | "vline" | "vpath" | "abline" | "timeseries"
+    | "dotplot" | "blank";
+  /** Show this layer in the legends, or per aesthetic: `{ color: true, fill: false }`. */
+  show_legend?: boolean | Partial<Record<"color" | "colour" | "fill" | "shape" | "size" | "alpha" | "linetype" | "linewidth", boolean>>;
   position?: Position;
 }
 

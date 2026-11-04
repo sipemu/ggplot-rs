@@ -219,6 +219,9 @@ impl DrawBackend for OffsetBackend<'_> {
     fn end_panel(&mut self) {
         self.inner.end_panel()
     }
+    fn set_clipping(&mut self, on: bool) {
+        self.inner.set_clipping(on)
+    }
     fn set_viewport(&mut self, rect: &Rect) {
         let r = self.r(rect);
         self.inner.set_viewport(&r)

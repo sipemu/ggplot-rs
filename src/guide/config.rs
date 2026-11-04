@@ -19,6 +19,10 @@ pub struct GuideLegend {
     /// key_height)`. `Some(0)` is invalid (see `validated`, internal) and
     /// is treated as `Some(1)`.
     pub max_rows: Option<usize>,
+    /// Filled by the build (#410): every layer's legend glyph and the legend
+    /// aesthetics it shows, so keys draw each layer's own picture.
+    #[doc(hidden)]
+    pub layer_keys: Vec<crate::guide::key::LayerKey>,
 }
 
 impl GuideLegend {

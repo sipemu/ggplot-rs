@@ -92,6 +92,10 @@ pub struct Layer {
     /// A `{column}` tooltip template ([`GGPlot::tooltip`]), rendered per row
     /// from the *built* layer data (post-stat) once that's available.
     pub tooltip_template: Option<String>,
+    /// Legend key override ([`GGPlot::key_glyph`]); `None` = the geom's.
+    pub key_glyph: Option<crate::guide::key::KeyGlyph>,
+    /// Per-aesthetic `show.legend` ([`GGPlot::show_legend_for`]).
+    pub show_legend_aes: Vec<(crate::aes::Aesthetic, bool)>,
 }
 
 /// The top-level plot specification — builder pattern.
@@ -2029,6 +2033,8 @@ impl GGPlot {
             show_legend: None,
             explicit_style: false,
             tooltip_template: None,
+            key_glyph: None,
+            show_legend_aes: Vec::new(),
         });
         self
     }
@@ -2090,6 +2096,25 @@ impl GGPlot {
     pub fn show_legend(mut self, show: bool) -> Self {
         if let Some(layer) = self.layers.last_mut() {
             layer.show_legend = Some(show);
+        }
+        self
+    }
+
+    /// Show or hide the most recent layer in one aesthetic's legend only
+    /// (ggplot2's `show.legend = c(colour = TRUE, fill = FALSE)`; #410).
+    pub fn show_legend_for(mut self, aes: crate::aes::Aesthetic, show: bool) -> Self {
+        if let Some(layer) = self.layers.last_mut() {
+            layer.show_legend_aes.retain(|(a, _)| *a != aes);
+            layer.show_legend_aes.push((aes, show));
+        }
+        self
+    }
+
+    /// Draw the most recent layer's legend keys as `glyph` (ggplot2's
+    /// `key_glyph =`, e.g. `KeyGlyph::Timeseries` for a line; #410).
+    pub fn key_glyph(mut self, glyph: crate::guide::key::KeyGlyph) -> Self {
+        if let Some(layer) = self.layers.last_mut() {
+            layer.key_glyph = Some(glyph);
         }
         self
     }

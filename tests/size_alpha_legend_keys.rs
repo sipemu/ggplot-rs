@@ -63,16 +63,22 @@ fn circle_radii(svg: &str) -> Vec<f64> {
 /// drawn just before each swatch (always fully opaque, so it'd otherwise
 /// pollute every other entry). No `fill-opacity` attribute at all means
 /// fully opaque (`opacity_attr` omits it when alpha rounds to `1.000`).
+/// The opacity of every black legend key mark: the alpha swatch rects of
+/// old, and (#410) a point layer's own point keys (`<circle>`).
 fn alpha_swatch_opacities(svg: &str) -> Vec<f64> {
-    svg.split("<rect ")
+    svg.split('<')
         .skip(1)
         .filter_map(|s| {
             let tag_end = s.find('>').unwrap_or(s.len());
             let tag = &s[..tag_end];
+            if !(tag.starts_with("rect ") || tag.starts_with("circle ")) {
+                return None;
+            }
+            let attr = "fill-opacity=\"";
             if !tag.contains("fill=\"#000000\"") {
                 return None;
             }
-            Some(match tag.split("fill-opacity=\"").nth(1) {
+            Some(match tag.split(attr).nth(1) {
                 Some(rest) => rest.split('"').next().unwrap().parse::<f64>().unwrap(),
                 None => 1.0,
             })

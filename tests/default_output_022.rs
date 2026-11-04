@@ -278,15 +278,19 @@ fn big_legend_data() -> Cols {
 const SMOOTH_HASH: u64 = 0x3f3fa8247902368d;
 
 /// `(name, expected FNV-1a hash)`. Recorded at v0.21.0 (f5fc31e).
+/// Entries marked `#410 key glyph` changed when legend keys started drawing
+/// each layer's own glyph (a point key for points, a line for lines, an
+/// outlined polygon for bars, …) instead of a filled square per aesthetic —
+/// ggplot2's `draw_key_*`; documented in CHANGELOG.
 /// To re-bless an entry: confirm it is in plan §4's allowed list, change it
 /// in the commit that causes it, and add a CHANGELOG "Changed" line.
 fn expected() -> Vec<(&'static str, u64)> {
     vec![
-        ("point", 0x35b9a09e98ae7ef2),
-        ("line", 0x8fb3a52646bc0c5d),
+        ("point", 0xc261d09053f2041e), // #410 key glyph
+        ("line", 0x5eb4712a5a898d16),  // #410 key glyph
         ("segment", 0x68fcc015406c8eb9),
         ("bar", 0x14377a5e4f3d4e62),
-        ("col", 0xc5738d84e879e5f8),
+        ("col", 0xc53dff73969fa5bc), // #410 key glyph
         // the bar tooltips' bin edges are rounded to the bin width's
         // precision ("[223.4, 230.7)", not raw floats) — a documented
         // follow-up, not a regression
@@ -303,13 +307,13 @@ fn expected() -> Vec<(&'static str, u64)> {
         ("smooth", SMOOTH_HASH),
         ("polar", 0xe35758d04bde28b5),
         ("facet", 0xfd878f16570d2b78),
-        ("facet_stack", 0x19ec9f748b5bb2bc),
+        ("facet_stack", 0x913030cad2700d64), // #410 key glyph
         ("flip", 0x94fdd6d55d9a7be1),
         ("text", 0x9fc585729f348a51),
-        ("text_dodge", 0x902c0a52604228e3),
+        ("text_dodge", 0x1db15cfac02795cb), // #410 key glyph
         ("violin", 0x68cd485311890ec4),
         ("errorbar", 0xe7abdb6d7e210a85),
-        ("errorbar_dodge", 0x5728c4bd5983c21c),
+        ("errorbar_dodge", 0xea66048c4581cd36), // #410 key glyph
         // #237 (fix/size-legend-keys-236): a legend key with no mapped
         // colour of its own (here, `size`'s swatch) now falls back to
         // `theme.geom.ink`, then `theme.legend_text.color`, instead of a
@@ -319,7 +323,7 @@ fn expected() -> Vec<(&'static str, u64)> {
         // CHANGELOG [Unreleased].
         ("size", 0x44ec9b5af301ad94),
         ("wide_axis", 0xc0df1cb8d594b7d2),
-        ("big_legend", 0x0a625a0466236f03),
+        ("big_legend", 0x2e570177bbe8ab80), // #410 key glyph
     ]
 }
 

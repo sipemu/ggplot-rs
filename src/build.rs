@@ -14,6 +14,21 @@ pub struct BuiltLayer {
     pub data: DataFrame,
     pub geom: Box<dyn Geom>,
     pub show_legend: Option<bool>,
+    /// Legend key glyph (the layer's override, else the geom's).
+    pub key_glyph: Option<crate::guide::key::KeyGlyph>,
+    /// Per-aesthetic `show.legend` overrides.
+    pub show_legend_aes: Vec<(Aesthetic, bool)>,
+}
+
+impl BuiltLayer {
+    /// Whether this layer appears in `aes`'s legend.
+    pub(crate) fn shows_legend_for(&self, aes: &Aesthetic) -> Option<bool> {
+        self.show_legend_aes
+            .iter()
+            .find(|(a, _)| a == aes)
+            .map(|(_, s)| *s)
+            .or(self.show_legend)
+    }
 }
 
 /// A fully built plot ready for rendering.
@@ -402,6 +417,20 @@ impl PlotBuilder {
 
         // Compute suppressed aesthetics from show_legend flags.
         let suppressed_aes = Self::compute_suppressed_aes(&built_layers);
+        // #410: each layer's legend glyph and the legend aesthetics it shows.
+        let mut guide_legend = guide_legend;
+        guide_legend.layer_keys = built_layers
+            .iter()
+            .map(|bl| crate::guide::key::LayerKey {
+                glyph: bl.key_glyph,
+                aesthetics: crate::guide::legend::LEGEND_AESTHETICS
+                    .iter()
+                    .filter(|a| bl.data.has_column(a.col_name()))
+                    .filter(|a| bl.shows_legend_for(a) != Some(false))
+                    .cloned()
+                    .collect(),
+            })
+            .collect();
 
         // Compute per-panel scales for free facets
         let facet_scales_mode = match &facet {
@@ -732,7 +761,10 @@ impl PlotBuilder {
             show_legend,
             explicit_style,
             tooltip_template,
+            key_glyph,
+            show_legend_aes,
         } = layer;
+        let key_glyph = key_glyph.or_else(|| geom.key_glyph());
 
         // Step 1: Resolve data — use layer data if provided, else plot data
         // Borrow the plot data when the layer has none of its own (no per-layer
@@ -1033,6 +1065,8 @@ impl PlotBuilder {
                 data: DataFrame::new(),
                 geom,
                 show_legend,
+                key_glyph,
+                show_legend_aes,
             });
         }
 
@@ -1200,6 +1234,8 @@ impl PlotBuilder {
             data: working_data,
             geom,
             show_legend,
+            key_glyph,
+            show_legend_aes,
         })
     }
 
@@ -1348,7 +1384,7 @@ impl PlotBuilder {
             for bl in built_layers {
                 if bl.data.has_column(col_name) {
                     any_has = true;
-                    match bl.show_legend {
+                    match bl.shows_legend_for(aes) {
                         Some(false) => {} // still hidden
                         _ => {
                             all_hidden = false;
