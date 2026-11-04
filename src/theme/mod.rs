@@ -256,6 +256,10 @@ pub struct Theme {
     /// `legend.box.spacing`, #413) — replaces `legend_margin`'s side that
     /// faces the panel; `None` keeps it.
     pub legend_box_spacing: Option<f64>,
+    /// Line several legends up along the stack's cross axis (ggplot2's
+    /// `legend.box.just`, #413): `0` left / top (the default), `0.5`
+    /// centre, `1` right / bottom.
+    pub legend_box_just: f64,
     /// Place the tag in the panel's corner (ggplot2's `plot.tag.location =
     /// "panel"`, #413); default the plot's.
     pub tag_location_panel: bool,

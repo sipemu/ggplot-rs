@@ -371,12 +371,69 @@ fn estimate_legend_box(
     let mut total_h = 0.0_f64;
     let mut max_w = 0.0_f64;
     for aes in legend_scales {
-        let Some(scale) = scales.get(aes) else {
-            continue;
-        };
+        if let Some((w, h)) = estimate_guide_size(scales, aes, theme, guide, legend_plans) {
+            total_h += h;
+            max_w = max_w.max(w);
+        }
+    }
+    (max_w, total_h)
+}
+
+/// One guide's height when drawn horizontally (a `Top` / `Bottom`
+/// legend) — for `legend_box_just` (#413).
+fn horizontal_guide_height(
+    scales: &ScaleSet,
+    aes: &Aesthetic,
+    theme: &Theme,
+    guide: &GuideLegend,
+    legend_plans: &std::collections::HashMap<Aesthetic, LegendPlan>,
+) -> f64 {
+    let Some(scale) = scales.get(aes) else {
+        return 0.0;
+    };
+    let title = guide.title.as_deref().unwrap_or_else(|| scale.name());
+    if !scale.is_discrete() && is_colorbar_aesthetic(aes) {
+        return continuous_horizontal_bar_height(
+            theme,
+            !title.is_empty(),
+            &guide.colourbar_for(aes),
+        );
+    }
+    let breaks = scale.breaks();
+    let title_offset = if title.is_empty() {
+        0.0
+    } else {
+        theme.legend_title.size + 4.0
+    };
+    let key = theme.legend_key_height.max(
+        theme
+            .legend_key_width
+            .max(size_key_diameter(aes, scales, scale, &breaks)),
+    );
+    let rows = legend_plans.get(aes).map_or(1, |p| p.rows.max(1)) as f64;
+    let gap = theme.legend_key_gap_y();
+    let bins_labels = if guide.bins_for(aes, scale).is_some() {
+        2.0 + theme.legend_text.size
+    } else {
+        0.0
+    };
+    title_offset + rows * (key + gap) - gap + bins_labels
+}
+
+/// One guide's estimated `(width, height)` as [`estimate_legend_box`]
+/// stacks it (vertical layout); `None` when it draws nothing.
+fn estimate_guide_size(
+    scales: &ScaleSet,
+    aes: &Aesthetic,
+    theme: &Theme,
+    guide: &GuideLegend,
+    legend_plans: &std::collections::HashMap<Aesthetic, LegendPlan>,
+) -> Option<(f64, f64)> {
+    {
+        let scale = scales.get(aes)?;
         let breaks = scale.breaks();
         if breaks.is_empty() {
-            continue;
+            return None;
         }
         let title = guide.title.as_deref().unwrap_or_else(|| scale.name());
         let title_offset = if !title.is_empty() {
@@ -428,10 +485,8 @@ fn estimate_legend_box(
                 title_offset + breaks.len() as f64 * (key_height + gap) - gap,
             )
         };
-        total_h += h;
-        max_w = max_w.max(w);
+        Some((w, h))
     }
-    (max_w, total_h)
 }
 
 /// Clamp a `[pos, pos + size]` span inside `[lo, hi]` — `pos` alone when
@@ -2101,7 +2156,35 @@ fn draw_legend_planned_inner(
     let mut offset_y = legend_y;
     let mut offset_x = legend_x;
 
-    for group in &groups {
+    // #413: `legend.box.just` — line the guides up along the stack's cross
+    // axis (left / centre / right of the widest when stacked, top / centre
+    // / bottom of the tallest side by side). 0 (the default) draws nothing
+    // differently.
+    let just = theme.legend_box_just.clamp(0.0, 1.0);
+    let cross: Vec<f64> = if just > 0.0 {
+        representatives
+            .iter()
+            .map(|aes| {
+                if is_horizontal {
+                    horizontal_guide_height(scales, aes, theme, guide, legend_plans)
+                } else {
+                    estimate_guide_size(scales, aes, theme, guide, legend_plans)
+                        .map_or(0.0, |(w, _)| w)
+                }
+            })
+            .collect()
+    } else {
+        vec![0.0; representatives.len()]
+    };
+    let cross_max = cross.iter().copied().fold(0.0_f64, f64::max);
+
+    for (gi, group) in groups.iter().enumerate() {
+        let shift = (cross_max - cross[gi]) * just;
+        let (draw_x, draw_y) = if is_horizontal {
+            (offset_x, offset_y + shift)
+        } else {
+            (offset_x + shift, offset_y)
+        };
         let representative = &group[0];
         let rep_scale = scales.get(representative).unwrap();
         let scale_group: Vec<(Aesthetic, &dyn crate::scale::Scale)> = group
@@ -2124,8 +2207,8 @@ fn draw_legend_planned_inner(
             let height = draw_continuous_legend_at(
                 rep_scale,
                 theme,
-                offset_x,
-                offset_y,
+                draw_x,
+                draw_y,
                 backend,
                 guide,
                 is_horizontal,
@@ -2154,8 +2237,8 @@ fn draw_legend_planned_inner(
                         scales,
                         &scale_group,
                         theme,
-                        offset_x,
-                        offset_y,
+                        draw_x,
+                        draw_y,
                         backend,
                         guide,
                         true,
@@ -2166,8 +2249,8 @@ fn draw_legend_planned_inner(
                         scales,
                         &scale_group,
                         theme,
-                        offset_x,
-                        offset_y,
+                        draw_x,
+                        draw_y,
                         backend,
                         guide,
                         false,
@@ -2180,8 +2263,8 @@ fn draw_legend_planned_inner(
                     scales,
                     &scale_group,
                     theme,
-                    offset_x,
-                    offset_y,
+                    draw_x,
+                    draw_y,
                     backend,
                     guide,
                     plan,

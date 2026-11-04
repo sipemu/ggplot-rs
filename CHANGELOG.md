@@ -20,6 +20,9 @@ All notable changes to this project are documented here. The format follows
   label per key (still available via `guide_legend_keys`).
 
 ### Added
+- `Theme.legend_box_just` (#413, ggplot2's `legend.box.just`; config / npm
+  key `legend_box_just`: `"left"`/`"top"`, `"center"`, `"right"`/`"bottom"`
+  or a fraction): line several legends up along the stack's cross axis.
 - `GGPlot::coord_clip(bool)` (#411, ggplot2's `coord_*(clip = "off")`;
   spec / npm `coord: { clip: "off" }`): let layers draw past the panel.
 - Per-side axis lines / ticks (#413, ggplot2's `axis.line.x.top`,
