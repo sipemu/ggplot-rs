@@ -217,6 +217,9 @@ pub struct Theme {
     pub legend_spacing: f64,
     /// A colourbar's tick length (ggplot2's `legend.ticks.length`, #413).
     pub legend_ticks_length: f64,
+    /// What the caption aligns to (ggplot2's `plot.caption.position`,
+    /// #413); `None` follows `title_position`.
+    pub caption_position: Option<TitlePosition>,
     /// Facet strips below / left of a panel sit outside its axis
     /// (ggplot2's `strip.placement = "outside"`, #412); default inside.
     pub strip_placement_outside: bool,

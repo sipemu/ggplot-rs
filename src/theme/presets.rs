@@ -168,6 +168,7 @@ pub fn theme_gray_base(base_size: f64) -> Theme {
         legend_spacing: 4.0,
         legend_ticks_length: 3.0,
         strip_placement_outside: false,
+        caption_position: None,
         strip_switch_pad: 2.75,
         legend_margin: Margin {
             top: 10.0,
@@ -612,6 +613,7 @@ pub fn theme_void_base(base_size: f64) -> Theme {
         legend_spacing: 4.0,
         legend_ticks_length: 3.0,
         strip_placement_outside: false,
+        caption_position: None,
         strip_switch_pad: 2.75,
         legend_margin: Margin {
             top: 0.0,

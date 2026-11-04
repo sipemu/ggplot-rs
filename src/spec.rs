@@ -389,6 +389,9 @@ pub struct FacetSpec {
     pub col_levels: Option<Vec<String>>,
     /// grid: add "(all)" margin panels (`margins = TRUE`, #412).
     pub margins: Option<bool>,
+    /// Proportional panel sizes: `"fixed"` (default), `"free_x"`,
+    /// `"free_y"`, `"free"` (`space =`; a wrap needs one row / column).
+    pub space: Option<String>,
 }
 
 #[derive(Deserialize)]
@@ -1820,7 +1823,26 @@ fn apply_facet(plot: GGPlot, f: &FacetSpec) -> Result<GGPlot, String> {
         }
         _ => Err("set either `wrap` or `rows`/`cols`".into()),
     };
-    let plot = plot?;
+    let mut plot = plot?;
+    if let Some(sp) = f.space.as_deref() {
+        let sp = match sp {
+            "fixed" => FacetSpace::Fixed,
+            "free_x" => FacetSpace::FreeX,
+            "free_y" => FacetSpace::FreeY,
+            "free" => FacetSpace::Free,
+            o => {
+                return Err(format!(
+                    "unknown space '{o}' (expected fixed, free_x, free_y, free)"
+                ))
+            }
+        };
+        match &mut plot.facet {
+            crate::facet::Facet::Wrap { space, .. } | crate::facet::Facet::Grid { space, .. } => {
+                *space = sp
+            }
+            crate::facet::Facet::None => {}
+        }
+    }
     Ok(match labeller {
         Some(l) => plot.facet_labeller(l),
         None => plot,

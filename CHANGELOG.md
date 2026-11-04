@@ -6,6 +6,11 @@ All notable changes to this project are documented here. The format follows
 ## [Unreleased]
 
 ### Added
+- `facet_wrap_space(FacetSpace::FreeX)` (#412): ggplot2 3.5's
+  `facet_wrap(space =)` — panel widths follow their x range in a single-row
+  wrap (heights their y range in one column); `Facet::Wrap` gains `space`.
+  Spec / npm: `facet.space` (wrap and grid). `Theme.caption_position`
+  (#413, `plot.caption.position`; config key `caption_position`).
 - `strip.placement = "outside"` (#412 / #413): `Theme.strip_placement_outside`
   (+ `strip_switch_pad`) puts a bottom / left facet strip beyond the axis of
   a panel that draws one, instead of between panel and axis. Theme config

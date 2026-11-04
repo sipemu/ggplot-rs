@@ -227,6 +227,8 @@ export type Labeller =
 
 /** Which panels get axes, and whether inner axes are labelled (#412). */
 export interface FacetAxesSpec {
+  /** Proportional panels (a wrap needs one row / column). */
+  space?: "fixed" | "free_x" | "free_y" | "free";
   axes?: "margins" | "all" | "all_x" | "all_y";
   axis_labels?: "all" | "margins";
 }
@@ -318,6 +320,7 @@ export interface ThemeConfig {
   strip_background_x?: RectElement; strip_background_y?: RectElement;
   /** Strips below / left of a panel outside its axis (#412), and the gap. */
   strip_placement?: "inside" | "outside"; strip_switch_pad?: number;
+  caption_position?: "panel" | "plot";
   legend_ticks_length?: number;
   legend_title?: TextElement; legend_text?: TextElement; strip_text?: TextElement;
   axis_line?: LineElement; axis_ticks?: LineElement;

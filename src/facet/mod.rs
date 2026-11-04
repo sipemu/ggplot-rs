@@ -219,6 +219,9 @@ pub enum Facet {
         as_table: bool,
         /// The side each panel's strip sits on (`strip.position`, #412).
         strip_position: StripPosition,
+        /// Proportional panel sizes (ggplot2 3.5's `facet_wrap(space =)`,
+        /// #412): free x for a single row, free y for a single column.
+        space: FacetSpace,
     },
     Grid {
         row_var: Option<String>,

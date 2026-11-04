@@ -31,6 +31,9 @@ pub struct ThemeConfig {
     pub panel_ontop: Option<bool>,
     /// A colourbar's tick length in px (R's `legend.ticks.length`, #413).
     pub legend_ticks_length: Option<f64>,
+    /// Caption alignment reference: "panel" or "plot" (R's
+    /// `plot.caption.position`, #413).
+    pub caption_position: Option<String>,
     /// "inside" (default) or "outside" (R's `strip.placement`, #412).
     pub strip_placement: Option<String>,
     /// Gap between an axis and an outside strip, px (`strip.switch.pad.*`).
@@ -233,6 +236,16 @@ impl ThemeConfig {
             Some(o) => {
                 return Err(format!(
                     "strip_placement: unknown '{o}' (expected inside, outside)"
+                ))
+            }
+        }
+        match self.caption_position.as_deref() {
+            None => {}
+            Some("panel") => t.caption_position = Some(TitlePosition::Panel),
+            Some("plot") => t.caption_position = Some(TitlePosition::Plot),
+            Some(o) => {
+                return Err(format!(
+                    "caption_position: unknown '{o}' (expected panel, plot)"
                 ))
             }
         }
