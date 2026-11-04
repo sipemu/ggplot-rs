@@ -457,9 +457,10 @@ fn labeller_spec(l: &LabellerSpec) -> Result<crate::facet::FacetLabeller, String
             "value" => L::Value,
             "both" => L::Both,
             "multi_line" => L::MultiLine,
+            "parsed" => L::Parsed,
             o => {
                 return Err(format!(
-                    "unknown labeller '{o}' (expected value, both, multi_line)"
+                    "unknown labeller '{o}' (expected value, both, multi_line, parsed)"
                 ))
             }
         },

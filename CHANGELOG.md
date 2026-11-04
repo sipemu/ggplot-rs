@@ -6,6 +6,10 @@ All notable changes to this project are documented here. The format follows
 ## [Unreleased]
 
 ### Added
+- `FacetLabeller::Parsed` (#412, ggplot2's `label_parsed`; spec `"labeller":
+  "parsed"`): strip values read as plotmath and drawn as Unicode — Greek
+  names, `^` superscripts, `[ ]` subscripts, `==`, `%*%`, `~`
+  (`facet::plotmath_to_unicode`).
 - `Theme.tag_location_panel` (#413, ggplot2's `plot.tag.location =
   "panel"`; config key `tag_location`): the tag sits in the panel's corner.
 - `Theme.axis_ticks_length_x` / `_y` (#413, ggplot2's `axis.ticks.length.x`
