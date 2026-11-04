@@ -483,24 +483,34 @@ pub(crate) fn legend_position(
     title_lift: f64,
     canvas: &Rect,
 ) -> (f64, f64, bool) {
+    // #413: `legend.location = "plot"` aligns an outside legend with the
+    // whole plot (inside its margin) instead of the panel.
+    let (ref_x, ref_y) = if theme.legend_location_plot {
+        (
+            canvas.x + theme.plot_margin.left,
+            canvas.y + theme.plot_margin.top,
+        )
+    } else {
+        (plot_area.x, plot_area.y)
+    };
     match theme.legend_position {
         LegendPosition::Right => (
             plot_area.x + plot_area.width + theme.legend_margin.left,
-            plot_area.y + theme.legend_margin.top,
+            ref_y + theme.legend_margin.top,
             false,
         ),
         LegendPosition::Left => (
             theme.legend_margin.left,
-            plot_area.y + theme.legend_margin.top,
+            ref_y + theme.legend_margin.top,
             false,
         ),
         LegendPosition::Top => (
-            plot_area.x + theme.legend_margin.left,
+            ref_x + theme.legend_margin.left,
             plot_area.y - legend_band_height(theme, legend_extra_rows) + theme.legend_margin.top,
             true,
         ),
         LegendPosition::Bottom => (
-            plot_area.x + theme.legend_margin.left,
+            ref_x + theme.legend_margin.left,
             // Below the x axis — at most the 30px it used to assume, so an
             // axis-less theme (`theme_void`) keeps the legend inside the band
             // the layout reserved rather than off the canvas (#341).

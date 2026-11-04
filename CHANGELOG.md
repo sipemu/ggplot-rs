@@ -6,6 +6,11 @@ All notable changes to this project are documented here. The format follows
 ## [Unreleased]
 
 ### Added
+- `Theme.legend_location_plot` (#413, ggplot2's `legend.location =
+  "plot"`; config key `legend_location`): an outside legend aligns with the
+  whole plot instead of the panel. `FacetLabeller::MultiLine` (#412,
+  `multi_line`; spec `"labeller": "multi_line"`): a `facet_grid_multi`
+  combined label on one line per variable.
 - `facet_wrap_space(FacetSpace::FreeX)` (#412): ggplot2 3.5's
   `facet_wrap(space =)` — panel widths follow their x range in a single-row
   wrap (heights their y range in one column); `Facet::Wrap` gains `space`.

@@ -136,6 +136,9 @@ pub enum FacetLabeller {
     /// Fixed `value → label` lookups (ggplot2's `as_labeller(c(a = "…"))`,
     /// #412); values not listed show as they are.
     Lookup(Vec<(String, String)>),
+    /// A combined multi-variable value (`facet_grid_multi`'s `"a . b"`) on
+    /// one line per variable (ggplot2's `multi_line = TRUE`, #412).
+    MultiLine,
 }
 
 /// Greedy word wrap at `width` characters (`strwrap`), lines joined by `\n`.
@@ -179,6 +182,7 @@ impl FacetLabeller {
                 .iter()
                 .find(|(v, _)| v == var)
                 .map_or_else(|| value.to_string(), |(_, l)| l.format(var, value)),
+            FacetLabeller::MultiLine => value.replace(" . ", "\n"),
             FacetLabeller::Lookup(map) => map
                 .iter()
                 .find(|(k, _)| k == value)
@@ -279,5 +283,6 @@ mod labeller_tests {
         assert_eq!(l.format("am", "1"), "manual");
         assert_eq!(l.format("am", "2"), "2");
         assert_eq!(l.format("gear", "3"), "3");
+        assert_eq!(FacetLabeller::MultiLine.format("v", "a . b"), "a\nb");
     }
 }

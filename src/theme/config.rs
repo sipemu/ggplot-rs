@@ -34,6 +34,8 @@ pub struct ThemeConfig {
     /// Caption alignment reference: "panel" or "plot" (R's
     /// `plot.caption.position`, #413).
     pub caption_position: Option<String>,
+    /// "panel" (default) or "plot" (R's `legend.location`, #413).
+    pub legend_location: Option<String>,
     /// "inside" (default) or "outside" (R's `strip.placement`, #412).
     pub strip_placement: Option<String>,
     /// Gap between an axis and an outside strip, px (`strip.switch.pad.*`).
@@ -236,6 +238,16 @@ impl ThemeConfig {
             Some(o) => {
                 return Err(format!(
                     "strip_placement: unknown '{o}' (expected inside, outside)"
+                ))
+            }
+        }
+        match self.legend_location.as_deref() {
+            None => {}
+            Some("panel") => t.legend_location_plot = false,
+            Some("plot") => t.legend_location_plot = true,
+            Some(o) => {
+                return Err(format!(
+                    "legend_location: unknown '{o}' (expected panel, plot)"
                 ))
             }
         }
