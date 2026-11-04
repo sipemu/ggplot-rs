@@ -98,7 +98,10 @@ With polars (default feature): `GGPlot::new(df!{ "x" => [1.0, 2.0], "y" => [3.0,
   .with_limits(0.0, 10.0).with_breaks(vec![..]).with_transform(ScaleTransform::Sqrt)
   .with_label_formatter(label_percent(None)))`, `scale_color_brewer(PaletteName::Dark2)`,
   `scale_fill_manual(vec![("a", RGBAColor::new(230, 159, 0))])`,
-  `scale_color_gradient(lo, hi)`, `scale_color_gradientn(stops)`.
+  `scale_color_gradient(lo, hi)`, `scale_color_gradientn(stops)`,
+  `scale_color_hue(HuePalette::default())` (ggplot2's default colours for any
+  number of groups), `scale_color_viridis_d('D', 0.0, 1.0, 1)` (options A–H),
+  `scale_color_distiller(PaletteName::Blues, -1)`; `expand_limits(&[], &[0.0])`.
 - **Facets:** `facet_wrap("col", Some(ncol))`, `facet_grid(Some("row"), Some("col"))`,
   `facet_wrap_free(col, ncol, FacetScales::FreeY)`.
 - **Coords:** `coord_flip()`, `coord_polar()`, `coord_radial(start, end,

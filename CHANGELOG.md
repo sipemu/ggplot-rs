@@ -6,6 +6,14 @@ All notable changes to this project are documented here. The format follows
 ## [Unreleased]
 
 ### Added
+- Scales (#408): `scale_color_hue` / `scale_fill_hue` (`HuePalette { h, c,
+  l, h_start, direction }`; R's `hcl()` / `scales::hue_pal()` exactly —
+  ggplot2's default colours for any number of levels),
+  `scale_*_viridis_d(option 'A'…'H', begin, end, direction)` (viridisLite
+  maps), `scale_*_distiller(palette, direction)` (Brewer as a gradient; the
+  9-class tables), `expand_limits(x, y)`. `ScaleColorDiscrete::with_generated`.
+  Spec / npm palettes: `"hue"`, `"viridis:A"`…, and a Brewer name on a
+  numeric column (a distiller; was an error).
 - Coordinates (#411): `coord_quickmap()` and `coord_map()` (Mercator) for
   plain longitude / latitude data (`coord::map::CoordMap`),
   `coord_reverse(x, y)` / `CoordCartesian::reverse` (ggplot2 4.0's

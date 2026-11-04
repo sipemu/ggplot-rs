@@ -101,6 +101,159 @@ pub struct ScaleColorDiscrete {
     /// Keep levels in sorted (lexicographic) order instead of first-seen
     /// order — see [`ScaleColorDiscrete::sorted`].
     sorted: bool,
+    /// A palette computed for the number of levels (#408: ggplot2's
+    /// `hue_pal()` / `viridis_pal()` spread their colours over `n`);
+    /// overrides `palette` when set.
+    generated: Option<GeneratedPalette>,
+}
+
+/// ggplot2's `scale_colour_hue()` parameters (`scales::hue_pal`): `n` hues
+/// evenly spaced over `h` (degrees), at chroma `c` and luminance `l`.
+#[derive(Clone, Debug, PartialEq)]
+pub struct HuePalette {
+    pub h: (f64, f64),
+    pub c: f64,
+    pub l: f64,
+    pub h_start: f64,
+    /// `1`, or `-1` to reverse.
+    pub direction: i32,
+}
+
+impl Default for HuePalette {
+    /// ggplot2's default discrete palette.
+    fn default() -> Self {
+        HuePalette {
+            h: (15.0, 375.0),
+            c: 100.0,
+            l: 65.0,
+            h_start: 0.0,
+            direction: 1,
+        }
+    }
+}
+
+/// A discrete palette generated for the number of levels.
+#[derive(Clone, Debug, PartialEq)]
+pub enum GeneratedPalette {
+    Hue(HuePalette),
+    /// `scale_colour_viridis_d()`: `n` colours sampled from a viridis map
+    /// (`option` 'A' magma, 'B' inferno, 'C' plasma, 'D' viridis, 'E'
+    /// cividis, 'F' rocket, 'G' mako, 'H' turbo) between
+    /// `begin` and `end`, reversed with `direction = -1`.
+    Viridis {
+        option: char,
+        begin: f64,
+        end: f64,
+        direction: i32,
+    },
+}
+
+impl GeneratedPalette {
+    /// The palette for `n` levels.
+    pub fn colors(&self, n: usize) -> Vec<RGBAColor> {
+        let n = n.max(1);
+        match self {
+            GeneratedPalette::Hue(p) => hue_palette(n, p),
+            GeneratedPalette::Viridis {
+                option,
+                begin,
+                end,
+                direction,
+            } => {
+                let opt = option.to_ascii_uppercase();
+                let lut = super::viridis_lut::VIRIDIS_LUT
+                    .iter()
+                    .find(|(o, _)| *o == opt)
+                    .map_or(&super::viridis_lut::VIRIDIS_LUT[3].1, |(_, l)| l);
+                // Linear interpolation on the 256-entry map (viridisLite
+                // splines in Lab; the difference is ≤ 1 per channel).
+                let at = |t: f64| {
+                    let f = t.clamp(0.0, 1.0) * 255.0;
+                    let (i, j) = (f.floor() as usize, (f.ceil() as usize).min(255));
+                    let w = f - i as f64;
+                    let mix = |k: usize| {
+                        (lut[i][k] as f64 * (1.0 - w) + lut[j][k] as f64 * w).round() as u8
+                    };
+                    RGBAColor::new(mix(0), mix(1), mix(2))
+                };
+                let mut out: Vec<RGBAColor> = (0..n)
+                    .map(|i| {
+                        let t = if n == 1 {
+                            *begin
+                        } else {
+                            begin + (end - begin) * i as f64 / (n - 1) as f64
+                        };
+                        at(t)
+                    })
+                    .collect();
+                if *direction < 0 {
+                    out.reverse();
+                }
+                out
+            }
+        }
+    }
+}
+
+/// `grDevices::hcl(h, c, l)` (CIE-LUV polar → sRGB, D65), R's implementation.
+pub fn hcl_color(h: f64, c: f64, l: f64) -> RGBAColor {
+    const WHITE_Y: f64 = 100.0;
+    const WHITE_U: f64 = 0.1978398;
+    const WHITE_V: f64 = 0.4683363;
+    let hr = h.to_radians();
+    let (u_, v_) = (c * hr.cos(), c * hr.sin());
+    let (x, y, z) = if l <= 0.0 && u_ == 0.0 && v_ == 0.0 {
+        (0.0, 0.0, 0.0)
+    } else {
+        let y = WHITE_Y
+            * if l > 7.999592 {
+                ((l + 16.0) / 116.0).powi(3)
+            } else {
+                l / 903.3
+            };
+        let u = u_ / (13.0 * l) + WHITE_U;
+        let v = v_ / (13.0 * l) + WHITE_V;
+        let x = 9.0 * y * u / (4.0 * v);
+        let z = -x / 3.0 - 5.0 * y + 3.0 * y / v;
+        (x, y, z)
+    };
+    let gamma = |u: f64| {
+        let u = u / WHITE_Y;
+        if u > 0.00304 {
+            1.055 * u.powf(1.0 / 2.4) - 0.055
+        } else {
+            12.92 * u
+        }
+    };
+    let byte = |v: f64| (255.0 * v.clamp(0.0, 1.0) + 0.5) as u8;
+    RGBAColor::new(
+        byte(gamma(3.240479 * x - 1.537150 * y - 0.498535 * z)),
+        byte(gamma(-0.969256 * x + 1.875992 * y + 0.041556 * z)),
+        byte(gamma(0.055648 * x - 0.204043 * y + 1.057311 * z)),
+    )
+}
+
+/// `scales::hue_pal(h, c, l, h.start, direction)(n)`.
+pub fn hue_palette(n: usize, p: &HuePalette) -> Vec<RGBAColor> {
+    let n = n.max(1);
+    let (h0, mut h1) = p.h;
+    if (h1 - h0).rem_euclid(360.0) < 1.0 {
+        h1 -= 360.0 / n as f64;
+    }
+    let mut out: Vec<RGBAColor> = (0..n)
+        .map(|i| {
+            let h = if n == 1 {
+                h0
+            } else {
+                h0 + (h1 - h0) * i as f64 / (n - 1) as f64
+            };
+            hcl_color((h + p.h_start).rem_euclid(360.0), p.c, p.l)
+        })
+        .collect();
+    if p.direction == -1 {
+        out.reverse();
+    }
+    out
 }
 
 impl ScaleColorDiscrete {
@@ -112,7 +265,16 @@ impl ScaleColorDiscrete {
             level_index: HashMap::new(),
             palette: DEFAULT_PALETTE.to_vec(),
             sorted: false,
+            generated: None,
         }
+    }
+
+    /// Colours computed for the number of levels (ggplot2's `hue_pal()` /
+    /// `viridis_pal()`), e.g. `GeneratedPalette::Hue(HuePalette::default())`
+    /// — exactly ggplot2's default colours for any number of groups.
+    pub fn with_generated(mut self, p: GeneratedPalette) -> Self {
+        self.generated = Some(p);
+        self
     }
 
     /// Order levels lexicographically (instead of first appearance) so a given
@@ -140,11 +302,13 @@ impl ScaleColorDiscrete {
 
     pub fn with_palette(mut self, colors: Vec<RGBAColor>) -> Self {
         self.palette = colors;
+        self.generated = None;
         self
     }
 
     pub fn with_named_palette(mut self, name: &super::palettes::PaletteName) -> Self {
         self.palette = super::palettes::palette(name).to_vec();
+        self.generated = None;
         self
     }
 
@@ -174,6 +338,10 @@ impl ScaleColorDiscrete {
 
     /// Get color for a given level index.
     pub fn color_for_index(&self, idx: usize) -> RGBAColor {
+        if let Some(g) = &self.generated {
+            let pal = g.colors(self.levels.len().max(idx + 1));
+            return pal[idx % pal.len()];
+        }
         if self.palette.is_empty() {
             return DEFAULT_PALETTE[idx % DEFAULT_PALETTE.len()];
         }
@@ -564,5 +732,71 @@ mod tests {
         >() {
         }
         assert_traits::<ScaleColorContinuous>();
+    }
+}
+
+#[cfg(test)]
+mod hue_tests {
+    use super::*;
+
+    fn hex(c: RGBAColor) -> String {
+        format!("#{:02X}{:02X}{:02X}", c.r, c.g, c.b)
+    }
+
+    #[test]
+    fn hue_pal_matches_scales() {
+        // R: scales::hue_pal()(2), (5), and a custom one.
+        let d = HuePalette::default();
+        let got: Vec<String> = hue_palette(2, &d).into_iter().map(hex).collect();
+        assert_eq!(got, ["#F8766D", "#00BFC4"]);
+        let got: Vec<String> = hue_palette(5, &d).into_iter().map(hex).collect();
+        assert_eq!(got, ["#F8766D", "#A3A500", "#00BF7D", "#00B0F6", "#E76BF3"]);
+        let p = HuePalette {
+            h: (0.0, 180.0),
+            c: 50.0,
+            l: 80.0,
+            h_start: 30.0,
+            direction: -1,
+        };
+        let got: Vec<String> = hue_palette(4, &p).into_iter().map(hex).collect();
+        assert_eq!(got, ["#70D5E7", "#7BD9AD", "#C6CC82", "#F7B8A1"]);
+    }
+
+    #[test]
+    fn viridis_d_is_close_to_scales() {
+        // R: scales::viridis_pal(option = "D")(4); viridisLite splines in
+        // Lab space, we interpolate its 256-entry map linearly.
+        let want = [
+            (0x44, 0x01, 0x54),
+            (0x31, 0x68, 0x8E),
+            (0x35, 0xB7, 0x79),
+            (0xFD, 0xE7, 0x25),
+        ];
+        let got = GeneratedPalette::Viridis {
+            option: 'D',
+            begin: 0.0,
+            end: 1.0,
+            direction: 1,
+        }
+        .colors(4);
+        for (g, w) in got.iter().zip(want) {
+            for (a, b) in [(g.r, w.0), (g.g, w.1), (g.b, w.2)] {
+                assert!((a as i32 - b).abs() <= 1, "{} vs {w:?}", hex(*g));
+            }
+        }
+        // option A, begin .2, end .8, reversed: #FE9F6D #B63679 #3B0F70.
+        let want = [(0xFE, 0x9F, 0x6D), (0xB6, 0x36, 0x79), (0x3B, 0x0F, 0x70)];
+        let got = GeneratedPalette::Viridis {
+            option: 'A',
+            begin: 0.2,
+            end: 0.8,
+            direction: -1,
+        }
+        .colors(3);
+        for (g, w) in got.iter().zip(want) {
+            for (a, b) in [(g.r, w.0), (g.g, w.1), (g.b, w.2)] {
+                assert!((a as i32 - b).abs() <= 1, "{} vs {w:?}", hex(*g));
+            }
+        }
     }
 }
