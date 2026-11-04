@@ -2135,6 +2135,31 @@ impl GGPlot {
         self
     }
 
+    /// Options for a binned scale's legend (ggplot2's `guides(size =
+    /// guide_bins(show.limits =, axis =))`, #409 / #408). `guide_bins()` is
+    /// already the default guide of the `scale_*_binned()` scales; this
+    /// sets its options.
+    pub fn guide_bins(
+        mut self,
+        aes: crate::aes::Aesthetic,
+        bins: crate::guide::config::GuideBins,
+    ) -> Self {
+        self.guide_legend.plain_keys.retain(|a| *a != aes);
+        self.guide_legend.bins.retain(|(a, _)| *a != aes);
+        self.guide_legend.bins.push((aes, bins));
+        self
+    }
+
+    /// Draw a binned scale's legend as plain keys, one labelled `lo–hi`
+    /// per bin (`guides(size = "legend")`), instead of `guide_bins()`.
+    pub fn guide_legend_keys(mut self, aes: crate::aes::Aesthetic) -> Self {
+        self.guide_legend.bins.retain(|(a, _)| *a != aes);
+        if !self.guide_legend.plain_keys.contains(&aes) {
+            self.guide_legend.plain_keys.push(aes);
+        }
+        self
+    }
+
     /// ggplot2's `guide_coloursteps()` for `aes`: the colourbar drawn as one
     /// solid block per interval between breaks, evenly sized (#409).
     pub fn guide_coloursteps(self, aes: crate::aes::Aesthetic) -> Self {
@@ -3818,6 +3843,12 @@ impl GGPlot {
         }
         if guide.overrides.is_empty() {
             guide.overrides = std::mem::take(&mut self.guide_legend.overrides);
+        }
+        if guide.bins.is_empty() {
+            guide.bins = std::mem::take(&mut self.guide_legend.bins);
+        }
+        if guide.plain_keys.is_empty() {
+            guide.plain_keys = std::mem::take(&mut self.guide_legend.plain_keys);
         }
         self.guide_legend = guide;
         self

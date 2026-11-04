@@ -100,8 +100,9 @@ fn size_binned_legend_shows_bins() {
     .scale_size_binned(5)
     .render_svg_native_with_size(400, 300)
     .unwrap();
-    // s spans 0–95: bins 0–25, …, 75–100.
-    assert!(svg.contains(">0–25<") && svg.contains(">75–100<"), "{svg}");
+    // s spans 0–95: bins 0–25, …, 75–100, labelled at the inner edges
+    // by the default guide_bins (#409).
+    assert!(svg.contains(">25<") && svg.contains(">75<"), "{svg}");
     let radii: std::collections::BTreeSet<String> = svg
         .split("<circle")
         .skip(1)
