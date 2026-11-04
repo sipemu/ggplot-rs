@@ -36,6 +36,9 @@ pub struct ThemeConfig {
     pub caption_position: Option<String>,
     /// "panel" (default) or "plot" (R's `legend.location`, #413).
     pub legend_location: Option<String>,
+    /// Per-axis tick lengths in px (R's `axis.ticks.length.x` / `.y`).
+    pub axis_ticks_length_x: Option<f64>,
+    pub axis_ticks_length_y: Option<f64>,
     /// "inside" (default) or "outside" (R's `strip.placement`, #412).
     pub strip_placement: Option<String>,
     /// Gap between an axis and an outside strip, px (`strip.switch.pad.*`).
@@ -240,6 +243,12 @@ impl ThemeConfig {
                     "strip_placement: unknown '{o}' (expected inside, outside)"
                 ))
             }
+        }
+        if let Some(v) = self.axis_ticks_length_x {
+            t.axis_ticks_length_x = Some(v.max(0.0));
+        }
+        if let Some(v) = self.axis_ticks_length_y {
+            t.axis_ticks_length_y = Some(v.max(0.0));
         }
         match self.legend_location.as_deref() {
             None => {}

@@ -71,7 +71,7 @@ pub(crate) fn draw_x_axis_with(
         _ => theme,
     };
     let breaks = scale.breaks();
-    let tick_len = theme.axis_ticks_length;
+    let tick_len = theme.ticks_len_x();
     let axis_line = theme.get_axis_line_x();
     let axis_ticks = theme.get_axis_ticks_x();
 
@@ -344,7 +344,7 @@ pub(crate) fn draw_x_axis_title(
     backend: &mut dyn DrawBackend,
 ) -> Result<(), RenderError> {
     let plot_area = area;
-    let tick_len = theme.axis_ticks_length;
+    let tick_len = theme.ticks_len_x();
     let top = scale.axis_position_opposite();
     let edge_y = if top {
         plot_area.y
@@ -411,7 +411,7 @@ pub(crate) fn draw_y_axis_with(
     backend: &mut dyn DrawBackend,
 ) -> Result<(), RenderError> {
     let breaks = scale.breaks();
-    let tick_len = theme.axis_ticks_length;
+    let tick_len = theme.ticks_len_y();
     let axis_line = theme.get_axis_line_y();
     let axis_ticks = theme.get_axis_ticks_y();
 
@@ -546,7 +546,7 @@ pub(crate) fn draw_y_axis_title(
         // 2.75pt title margin) left of the tick-label column the layout
         // reserved — never overlapping short labels — and on the canvas.
         let size = theme.axis_title_y.size;
-        let right = area.x - theme.axis_ticks_length - label_reserve - Y_TITLE_GAP;
+        let right = area.x - theme.ticks_len_y() - label_reserve - Y_TITLE_GAP;
         let min_x = backend.total_area().x + 0.75 * size;
         let title_x = (right - 0.25 * size).max(min_x);
         let center_y = area.y + area.height / 2.0;
@@ -597,7 +597,7 @@ pub fn draw_sec_y_axis(
     };
     let own_ticks = sec_axis.own_ticks(primary_scale);
     let breaks = own_ticks.clone().unwrap_or_else(|| primary_scale.breaks());
-    let tick_len = theme.axis_ticks_length;
+    let tick_len = theme.ticks_len_y();
     let axis_line = theme.get_axis_line_y();
     let axis_ticks = theme.get_axis_ticks_y();
 
@@ -741,7 +741,7 @@ fn sec_labels(
 /// labels and its title (#409). Shared by the layout reservation and
 /// [`draw_sec_x_axis`].
 pub(crate) fn sec_x_axis_height(theme: &Theme, sec_axis: &crate::scale::sec_axis::SecAxis) -> f64 {
-    theme.axis_ticks_length
+    theme.ticks_len_x()
         + if theme.axis_text_x.visible {
             theme.axis_text_x.size + 4.0
         } else {
@@ -767,7 +767,7 @@ pub fn draw_sec_x_axis(
     let own_ticks = sec_axis.own_ticks(primary_scale);
     let breaks = own_ticks.clone().unwrap_or_else(|| primary_scale.breaks());
     let labels = sec_labels(primary_scale, sec_axis, &breaks, own_ticks.is_some());
-    let tick_len = theme.axis_ticks_length;
+    let tick_len = theme.ticks_len_x();
     let axis_line = theme.get_axis_line_x();
     let axis_ticks = theme.get_axis_ticks_x();
     let top_y = plot_area.y;
