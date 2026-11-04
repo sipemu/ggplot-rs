@@ -17,6 +17,10 @@ All notable changes to this project are documented here. The format follows
   drops a continuous scale's padding on that side; new
   `Scale::clear_expand` hook. Spec / npm: `coord: { type: "cartesian",
   expand: false | [t, r, b, l] }`.
+- Facet axes (#412): `facet_axes(FacetAxes::{all, all_x, all_y}()
+  [.margin_labels()])` — ggplot2's `axes = "all"` / `axis.labels =
+  "margins"`; the panel gaps grow to hold the inner axes. Spec / npm:
+  `facet.axes`, `facet.axis_labels`.
 - Colourbar guides (#409): `guide_colourbar(aes, GuideColourbar)` —
   `bar_width` / `bar_height` (px), `nbin`, `display` (`Gradient` /
   `Rectangles`), `frame`, `ticks` — and `guide_coloursteps(aes)`
@@ -65,6 +69,9 @@ All notable changes to this project are documented here. The format follows
   `map`, `radial` (`start`, `end`, `inner_radius`), cartesian `reverse`.
 
 ### Fixed
+- `facet_wrap` with a free scale (#412): only the outer panels had axes,
+  so the other panels' own (different) ranges had no labels. As in
+  ggplot2, a free axis is now drawn — labelled — on every panel.
 - `facet_grid` strips (#412): the row labels were never drawn and every
   panel repeated its column strip. Now, as in ggplot2, column strips run
   once along the top of the grid and row strips once down its right side

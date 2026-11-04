@@ -201,7 +201,13 @@ export interface ValueScale {
   range?: [number, number];
 }
 
-export type Facet =
+/** Which panels get axes, and whether inner axes are labelled (#412). */
+export interface FacetAxesSpec {
+  axes?: "margins" | "all" | "all_x" | "all_y";
+  axis_labels?: "all" | "margins";
+}
+
+export type Facet = FacetAxesSpec & (
   | {
       wrap: string; ncol?: number; scales?: "fixed" | "free" | "free_x" | "free_y";
       /** "h" (row by row, default) or "v" (column by column). */
@@ -217,7 +223,7 @@ export type Facet =
       rows?: string; cols?: string; scales?: "fixed" | "free" | "free_x" | "free_y";
       /** Column strips below ("x"), row strips left ("y"), or both. */
       switch?: "x" | "y" | "both";
-    };
+    });
 
 export type CoordName =
   | "cartesian" | "flip" | "polar" | "radial" | "fixed" | "equal" | "radar" | "quickmap" | "map" | "sf";

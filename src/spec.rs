@@ -344,6 +344,11 @@ pub struct FacetSpec {
     /// grid: `"x"`, `"y"` or `"both"` — column strips below, row strips
     /// left (#412).
     pub switch: Option<String>,
+    /// `"margins"` (default), `"all"`, `"all_x"`, `"all_y"`: which panels
+    /// get axes (#412).
+    pub axes: Option<String>,
+    /// `"all"` (default) or `"margins"`: label the inner axes or not.
+    pub axis_labels: Option<String>,
 }
 
 #[derive(Deserialize)]
@@ -1553,6 +1558,24 @@ fn apply_color_scale(
 }
 
 fn apply_facet(plot: GGPlot, f: &FacetSpec) -> Result<GGPlot, String> {
+    use crate::facet::FacetAxes;
+    let mut axes = match f.axes.as_deref() {
+        None | Some("margins") => FacetAxes::default(),
+        Some("all") => FacetAxes::all(),
+        Some("all_x") => FacetAxes::all_x(),
+        Some("all_y") => FacetAxes::all_y(),
+        Some(o) => {
+            return Err(format!(
+                "unknown axes '{o}' (expected margins, all, all_x, all_y)"
+            ))
+        }
+    };
+    match f.axis_labels.as_deref() {
+        None | Some("all") => {}
+        Some("margins") => axes = axes.margin_labels(),
+        Some(o) => return Err(format!("unknown axis_labels '{o}' (expected all, margins)")),
+    }
+    let plot = plot.facet_axes(axes);
     let scales = match f.scales.as_deref() {
         None | Some("fixed") => FacetScales::Fixed,
         Some("free") => FacetScales::Free,
@@ -2194,6 +2217,37 @@ mod tests {
             .unwrap();
             assert_ne!(svg, base, "{e}");
         }
+    }
+
+    #[test]
+    fn facet_axes_all_and_margin_labels() {
+        let d = r#""data": {"x": [1, 2, 3, 4], "y": [1, 2, 3, 4], "r": ["p", "p", "q", "q"],
+               "c": ["a", "b", "a", "b"]}, "aes": {"x": "x", "y": "y"}, "layers": [{"geom": "point"}]"#;
+        let base = render(&format!(
+            r#"{{ {d}, "facet": {{"rows": "r", "cols": "c"}} }}"#
+        ))
+        .unwrap();
+        let all = render(&format!(
+            r#"{{ {d}, "facet": {{"rows": "r", "cols": "c", "axes": "all"}} }}"#
+        ))
+        .unwrap();
+        let margins = render(&format!(
+            r#"{{ {d}, "facet": {{"rows": "r", "cols": "c", "axes": "all", "axis_labels": "margins"}} }}"#
+        ))
+        .unwrap();
+        let n = |s: &str| s.matches("<text").count();
+        assert!(
+            n(&all) > n(&margins) && n(&margins) == n(&base),
+            "{} {} {}",
+            n(&all),
+            n(&margins),
+            n(&base)
+        );
+        let e = render(&format!(
+            r#"{{ {d}, "facet": {{"wrap": "c", "axes": "some"}} }}"#
+        ))
+        .unwrap_err();
+        assert!(e.contains("unknown axes"), "{e}");
     }
 
     #[test]

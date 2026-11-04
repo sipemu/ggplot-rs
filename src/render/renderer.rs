@@ -514,8 +514,64 @@ impl PlotRenderer {
             wrap_side,
             crate::facet::StripPosition::Left | crate::facet::StripPosition::Right
         );
-        let gap_x = theme.get_panel_spacing_x();
-        let gap_y = theme.get_panel_spacing_y();
+        // #412: axes on inner panels too (`facet_axes`, or a free scale
+        // under `facet_wrap`, as in ggplot2) widen the gaps to hold them.
+        let (free_x, free_y) = match &built.facet {
+            Facet::Wrap { scales, .. } => (
+                matches!(
+                    scales,
+                    crate::facet::FacetScales::FreeX | crate::facet::FacetScales::Free
+                ),
+                matches!(
+                    scales,
+                    crate::facet::FacetScales::FreeY | crate::facet::FacetScales::Free
+                ),
+            ),
+            _ => (false, false),
+        };
+        let all_x = built.facet_axes.all_x || free_x;
+        let all_y = built.facet_axes.all_y || free_y;
+        // A free scale's inner axes are always labelled (they differ).
+        let inner_labels_x = !built.facet_axes.margin_labels_x || free_x;
+        let inner_labels_y = !built.facet_axes.margin_labels_y || free_y;
+        let unlabelled = |x: bool| {
+            let mut t = theme.clone();
+            if x {
+                t.axis_text_x.visible = false;
+            } else {
+                t.axis_text_y.visible = false;
+            }
+            t
+        };
+        let theme_no_x_labels = unlabelled(true);
+        let theme_no_y_labels = unlabelled(false);
+        let gap_x = theme.get_panel_spacing_x()
+            + if all_y && built.panels.len() > 1 {
+                theme.axis_ticks_length
+                    + if inner_labels_y && theme.axis_text_y.visible {
+                        built
+                            .panel_scales
+                            .iter()
+                            .chain(std::iter::once(&built.scales))
+                            .filter_map(|s| s.get(&Aesthetic::Y))
+                            .map(|ys| axis::y_label_reserve(theme, &ys.breaks()))
+                            .fold(0.0_f64, f64::max)
+                    } else {
+                        0.0
+                    }
+            } else {
+                0.0
+            };
+        let gap_y = theme.get_panel_spacing_y()
+            + if all_x && built.panels.len() > 1 {
+                if inner_labels_x {
+                    super::layout::PlotLayout::x_axis_band(theme, None)
+                } else {
+                    theme.axis_ticks_length
+                }
+            } else {
+                0.0
+            };
 
         // Figure-level layers (`GeomAttribution::figure`): one band under
         // the whole grid, which shrinks by its height.
@@ -882,42 +938,57 @@ impl PlotRenderer {
                 // Bottom row gets x axis
                 // A strip below / left of the panel sits between it and its
                 // axis (ggplot2's `strip.placement = "inside"`, #412).
-                if prow == nrow - 1 || pi + ncol >= built.panels.len() {
+                let bottom_edge = prow == nrow - 1 || pi + ncol >= built.panels.len();
+                if bottom_edge || all_x {
                     let axis_rect = crate::render::Rect {
                         height: panel_rect.height + bottom_strip,
                         ..panel_rect.clone()
                     };
+                    let t = if bottom_edge || inner_labels_x {
+                        theme
+                    } else {
+                        &theme_no_x_labels
+                    };
                     axis::draw_x_axis_with(
                         xs,
                         built.coord.as_ref(),
-                        theme,
+                        t,
                         &axis_rect,
                         &total_area,
                         false,
                         backend,
                     )?;
-                    x_title_area = Some(union(&x_title_area, &axis_rect));
+                    if bottom_edge {
+                        x_title_area = Some(union(&x_title_area, &axis_rect));
+                    }
                 }
 
-                // Left column gets y axis
-                if pcol == 0 {
+                // Left column gets y axis (every column with `all_y`).
+                if pcol == 0 || all_y {
                     let axis_rect = crate::render::Rect {
                         x: panel_rect.x - left_strip,
                         width: panel_rect.width + left_strip,
                         ..panel_rect.clone()
                     };
+                    let t = if pcol == 0 || inner_labels_y {
+                        theme
+                    } else {
+                        &theme_no_y_labels
+                    };
                     axis::draw_y_axis_with(
                         ys,
                         built.coord.as_ref(),
-                        theme,
+                        t,
                         &axis_rect,
                         false,
                         backend,
                     )?;
-                    let reserve = axis::y_label_reserve(theme, &ys.breaks());
-                    let prev = y_title_area.as_ref().map(|(r, _)| r.clone());
-                    let widest = y_title_area.as_ref().map_or(0.0, |(_, w)| *w);
-                    y_title_area = Some((union(&prev, &axis_rect), widest.max(reserve)));
+                    if pcol == 0 {
+                        let reserve = axis::y_label_reserve(theme, &ys.breaks());
+                        let prev = y_title_area.as_ref().map(|(r, _)| r.clone());
+                        let widest = y_title_area.as_ref().map_or(0.0, |(_, w)| *w);
+                        y_title_area = Some((union(&prev, &axis_rect), widest.max(reserve)));
+                    }
                 }
             }
 

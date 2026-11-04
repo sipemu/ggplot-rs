@@ -64,6 +64,55 @@ impl FacetSwitch {
     }
 }
 
+/// Which facet panels get axes (ggplot2's `facet_*(axes =, axis.labels
+/// =)`, #412). Default: axes on the outer panels only (`"margins"`).
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct FacetAxes {
+    /// An x axis under every panel (`axes = "all_x"`).
+    pub all_x: bool,
+    /// A y axis left of every panel (`axes = "all_y"`).
+    pub all_y: bool,
+    /// With `all_x`, tick labels only on the bottom panels
+    /// (`axis.labels = "margins"` / `"all_y"`).
+    pub margin_labels_x: bool,
+    /// With `all_y`, tick labels only on the left panels.
+    pub margin_labels_y: bool,
+}
+
+impl FacetAxes {
+    /// `axes = "all"`: x and y axes on every panel, labelled.
+    pub fn all() -> Self {
+        FacetAxes {
+            all_x: true,
+            all_y: true,
+            ..Self::default()
+        }
+    }
+
+    /// `axes = "all_x"`.
+    pub fn all_x() -> Self {
+        FacetAxes {
+            all_x: true,
+            ..Self::default()
+        }
+    }
+
+    /// `axes = "all_y"`.
+    pub fn all_y() -> Self {
+        FacetAxes {
+            all_y: true,
+            ..Self::default()
+        }
+    }
+
+    /// `axis.labels = "margins"`: the inner axes get ticks but no labels.
+    pub fn margin_labels(mut self) -> Self {
+        self.margin_labels_x = true;
+        self.margin_labels_y = true;
+        self
+    }
+}
+
 /// How facet strip labels are formatted.
 #[derive(Clone, Default)]
 pub enum FacetLabeller {

@@ -108,6 +108,8 @@ pub struct GGPlot {
     pub(crate) theme: Theme,
     pub(crate) labels: Labels,
     pub(crate) facet: Facet,
+    /// Which facet panels get axes (#412).
+    pub(crate) facet_axes: crate::facet::FacetAxes,
     pub(crate) annotations: Vec<Annotation>,
     pub(crate) guide_legend: crate::guide::config::GuideLegend,
     /// Warnings raised while specifying the plot (e.g. a clipped calendar
@@ -198,6 +200,7 @@ impl GGPlot {
             theme: Theme::default(),
             labels: Labels::default(),
             facet: Facet::default(),
+            facet_axes: crate::facet::FacetAxes::default(),
             annotations: Vec::new(),
             guide_legend: crate::guide::config::GuideLegend::default(),
             warnings: Vec::new(),
@@ -3012,6 +3015,13 @@ impl GGPlot {
             *v = vertical;
             *a = as_table;
         }
+        self
+    }
+
+    /// Draw axes on every facet panel, not just the outer ones (ggplot2's
+    /// `facet_*(axes = "all" | "all_x" | "all_y", axis.labels = …)`; #412).
+    pub fn facet_axes(mut self, axes: crate::facet::FacetAxes) -> Self {
+        self.facet_axes = axes;
         self
     }
 
