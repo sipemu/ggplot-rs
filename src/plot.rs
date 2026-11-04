@@ -2961,6 +2961,7 @@ impl GGPlot {
             levels: None,
             vertical: false,
             as_table: true,
+            strip_position: crate::facet::StripPosition::Top,
         };
         self
     }
@@ -2974,6 +2975,7 @@ impl GGPlot {
             levels: None,
             vertical: false,
             as_table: true,
+            strip_position: crate::facet::StripPosition::Top,
         };
         self
     }
@@ -2992,6 +2994,7 @@ impl GGPlot {
             levels: None,
             vertical: false,
             as_table: true,
+            strip_position: crate::facet::StripPosition::Top,
         };
         self
     }
@@ -3008,6 +3011,26 @@ impl GGPlot {
         {
             *v = vertical;
             *a = as_table;
+        }
+        self
+    }
+
+    /// Put each `facet_wrap` panel's strip on another side (ggplot2's
+    /// `strip.position = "bottom" | "left" | "right"`). Call after
+    /// `facet_wrap*` (#412).
+    pub fn facet_strip_position(mut self, position: crate::facet::StripPosition) -> Self {
+        if let Facet::Wrap { strip_position, .. } = &mut self.facet {
+            *strip_position = position;
+        }
+        self
+    }
+
+    /// Move `facet_grid` strips to the opposite side (ggplot2's `switch =
+    /// "x" | "y" | "both"`): column strips below the grid, row strips on its
+    /// left. Call after `facet_grid*` (#412).
+    pub fn facet_switch(mut self, switch: crate::facet::FacetSwitch) -> Self {
+        if let Facet::Grid { switch: s, .. } = &mut self.facet {
+            *s = switch;
         }
         self
     }
@@ -3038,6 +3061,7 @@ impl GGPlot {
             scales: FacetScales::Fixed,
             labeller: FacetLabeller::default(),
             space: FacetSpace::Fixed,
+            switch: crate::facet::FacetSwitch::None,
         };
         self
     }
@@ -3054,6 +3078,7 @@ impl GGPlot {
             scales,
             labeller: FacetLabeller::default(),
             space: FacetSpace::Fixed,
+            switch: crate::facet::FacetSwitch::None,
         };
         self
     }
@@ -3097,6 +3122,7 @@ impl GGPlot {
             scales,
             labeller: FacetLabeller::default(),
             space,
+            switch: crate::facet::FacetSwitch::None,
         };
         self
     }
@@ -3116,6 +3142,7 @@ impl GGPlot {
             scales,
             labeller: FacetLabeller::default(),
             space,
+            switch: crate::facet::FacetSwitch::None,
         };
         self
     }
@@ -3132,6 +3159,7 @@ impl GGPlot {
             scales: FacetScales::Fixed,
             labeller,
             space: FacetSpace::Fixed,
+            switch: crate::facet::FacetSwitch::None,
         };
         self
     }
