@@ -44,6 +44,9 @@ pub struct ThemeConfig {
     pub legend_key_spacing_y: Option<f64>,
     /// Gap between the panel and the legend in px (R's `legend.box.spacing`).
     pub legend_box_spacing: Option<f64>,
+    /// "left" / "top" (default), "center", "right" / "bottom", or a 0–1
+    /// fraction (R's `legend.box.just`, #413).
+    pub legend_box_just: Option<JustCfg>,
     /// "plot" (default) or "panel" (R's `plot.tag.location`, #413).
     pub tag_location: Option<String>,
     /// "inside" (default) or "outside" (R's `strip.placement`, #412).
@@ -115,6 +118,14 @@ pub struct ThemeConfig {
 
     /// Geom ink/paper/accent/family palette (B2-7's `element_geom`).
     pub geom: Option<GeomCfg>,
+}
+
+/// A justification: a name (`"left"`, `"center"`, …) or a 0–1 fraction.
+#[derive(Deserialize, Clone, Debug)]
+#[serde(untagged)]
+pub enum JustCfg {
+    Fraction(f64),
+    Name(String),
 }
 
 #[derive(Deserialize, Default)]
@@ -332,6 +343,22 @@ impl ThemeConfig {
         }
         if let Some(v) = self.legend_box_spacing {
             t.legend_box_spacing = Some(v.max(0.0));
+        }
+        if let Some(v) = &self.legend_box_just {
+            t.legend_box_just = match v {
+                JustCfg::Fraction(f) => f.clamp(0.0, 1.0),
+                JustCfg::Name(s) => match s.as_str() {
+                    "left" | "top" => 0.0,
+                    "center" | "centre" => 0.5,
+                    "right" | "bottom" => 1.0,
+                    o => {
+                        return Err(format!(
+                            "legend_box_just: unknown '{o}' (expected left, top, center, right, \
+                             bottom or a number)"
+                        ))
+                    }
+                },
+            };
         }
         match self.tag_location.as_deref() {
             None => {}
