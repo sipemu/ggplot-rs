@@ -5,6 +5,8 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.40.0] — 2026-11-04
+
 ### Fixed
 - Student-t quantiles without the `regression` feature: `qt` returned the
   normal 1.96 for every probability and df, so `mean_cl_normal` (and other
