@@ -3,6 +3,10 @@
 //! Reads a parquet/CSV file or a DuckDB SQL query, maps columns to aesthetics,
 //! and renders a plot to SVG/PNG. Built only with `--features cli`.
 //!
+//! The flags compile to a [`ggplot_rs::spec::PlotSpec`] — the same JSON spec
+//! the npm package renders — so every spec geom, param, scale, coord and theme
+//! option is available here too (`--spec FILE` takes the spec directly).
+//!
 //! Examples:
 //!   ggplot-rs --parquet sales.parquet --x month --y revenue --geom line -o rev.png
 //!   ggplot-rs --sql "SELECT region, sum(qty) q FROM 'orders/*.parquet' GROUP BY 1" \
@@ -10,7 +14,10 @@
 //!   ggplot-rs --parquet data.parquet --describe    # list columns + types
 
 use clap::Parser;
-use ggplot_rs::prelude::*;
+use ggplot_rs::spec::{
+    self, CoordSpec, FacetSpec, LayerParams, LayerSpec, LegendSpec, PlotSpec, PositionScaleSpec,
+    PositionSpec, ThemeSpec,
+};
 
 mod load;
 mod theme;
@@ -37,11 +44,20 @@ struct Args {
     #[arg(long)]
     spatial: bool,
 
+    // ─── spec ─────────────────────────────────────────────────────
+    /// A JSON plot spec (the npm package's `render()` schema). Its `data` is
+    /// used unless --parquet/--csv/--sql is given; other flags override it.
+    #[arg(long, value_name = "FILE")]
+    spec: Option<String>,
+
     // ─── discovery ────────────────────────────────────────────────
     /// Print the input's columns, inferred types, and row count, then exit.
     /// Use this first to discover what to map.
     #[arg(long)]
     describe: bool,
+    /// Print every geom name --geom accepts, then exit.
+    #[arg(long)]
+    list_geoms: bool,
 
     // ─── aesthetics ───────────────────────────────────────────────
     #[arg(long)]
@@ -60,12 +76,28 @@ struct Args {
     group: Option<String>,
     #[arg(long)]
     label: Option<String>,
+    /// Any other aesthetic as AES=COL (repeatable), e.g. `--aes ymin=lo
+    /// --aes ymax=hi`, `--aes weight=n`, `--aes from=src --aes to=dst`.
+    #[arg(long = "aes", value_name = "AES=COL")]
+    aes: Vec<String>,
 
-    /// Geometry: point, line, bar, col, histogram, boxplot, violin, density,
-    /// area, smooth, step, path, tile, jitter, freqpoly, sf.
-    #[arg(long, default_value = "point")]
-    geom: String,
-    /// Map projection for `--geom sf`: `mercator` or `platecarree` (default).
+    /// Geometry (repeatable — one layer each, drawn in order), e.g.
+    /// `--geom point --geom smooth`. Default `point`. See --list-geoms.
+    #[arg(long, value_name = "NAME")]
+    geom: Vec<String>,
+    /// Geom parameter KEY=VALUE (repeatable), applied to every layer, e.g.
+    /// `--param bins=30`, `--param method=loess`, `--param yintercept=0`,
+    /// `--param levels=region,country`. VALUE is JSON if it parses, a
+    /// comma list becomes an array, anything else is a string.
+    #[arg(long, value_name = "KEY=VALUE")]
+    param: Vec<String>,
+    /// Position adjustment for every layer: identity, stack, fill, dodge,
+    /// dodge2, jitter, nudge.
+    #[arg(long, value_name = "NAME")]
+    position: Option<String>,
+    /// Map projection for `--geom sf` (and sf_text/sf_label/flow): `mercator`,
+    /// `platecarree` (default), `equal-earth`, `albers-usa`, `albers-europe`,
+    /// `utm:<zone>[s]`.
     #[arg(long, value_name = "NAME")]
     projection: Option<String>,
 
@@ -76,6 +108,9 @@ struct Args {
     /// facet_grid as "ROW:COL" (either side may be empty, e.g. ":region").
     #[arg(long, value_name = "ROW:COL")]
     facet_grid: Option<String>,
+    /// Facet scales: fixed (default), free, free_x, free_y.
+    #[arg(long, value_name = "MODE")]
+    facet_scales: Option<String>,
 
     // ─── labels ───────────────────────────────────────────────────
     #[arg(long)]
@@ -99,9 +134,15 @@ struct Args {
     /// Flip x and y (coord_flip).
     #[arg(long)]
     flip: bool,
-    /// Theme: gray, bw, minimal, classic, dark, light, void, linedraw.
-    #[arg(long, default_value = "gray")]
-    theme: String,
+    /// Coordinate system: cartesian, flip, polar, fixed, radar, sf.
+    #[arg(long, value_name = "NAME")]
+    coord: Option<String>,
+    /// Legend position: right, left, top, bottom, none, inside.
+    #[arg(long, value_name = "POS")]
+    legend: Option<String>,
+    /// Theme: gray (default), bw, minimal, classic, dark, light, void, linedraw.
+    #[arg(long)]
+    theme: Option<String>,
     /// Custom theme: a TOML/JSON file of element overrides on top of the preset.
     #[arg(long, value_name = "FILE")]
     theme_config: Option<String>,
@@ -119,10 +160,12 @@ struct Args {
     /// Write SVG to stdout instead of a file.
     #[arg(long)]
     stdout: bool,
-    #[arg(long, default_value_t = 800)]
-    width: u32,
-    #[arg(long, default_value_t = 600)]
-    height: u32,
+    /// Width in pixels (default 800, or the spec's).
+    #[arg(long)]
+    width: Option<u32>,
+    /// Height in pixels (default 600, or the spec's).
+    #[arg(long)]
+    height: Option<u32>,
 }
 
 fn main() {
@@ -135,25 +178,48 @@ fn main() {
 fn run() -> Result<(), String> {
     let args = Args::parse();
 
-    // 1. Load data via DuckDB.
-    let query = load::resolve_query(&args.sql, &args.parquet, &args.csv)
-        .ok_or("provide one of --sql, --parquet, or --csv")?;
-    let columns = load::load(&args.db, &query, args.spatial)?;
-
-    // 2. Discovery mode: describe the schema and exit.
-    if args.describe {
-        load::describe(&columns);
+    if args.list_geoms {
+        for g in spec::geoms() {
+            println!("{g}");
+        }
         return Ok(());
     }
 
-    // 3. Build the plot spec from the flags.
-    let mut plot = build_plot(&args, columns)?;
-    plot = apply_output_labels(plot, &args);
+    // 1. The spec: from --spec, or empty; the flags are applied on top.
+    let mut spec = match &args.spec {
+        Some(path) => {
+            let text = std::fs::read_to_string(path).map_err(|e| format!("reading {path}: {e}"))?;
+            spec::parse(&text)?
+        }
+        None => PlotSpec::default(),
+    };
+
+    // 2. Data via DuckDB, unless the spec carries its own.
+    let query = load::resolve_query(&args.sql, &args.parquet, &args.csv);
+    let columns = match &query {
+        Some(q) => Some(load::load(&args.db, q, args.spatial)?),
+        None if args.spec.is_some() && !args.describe => None,
+        None => return Err("provide one of --sql, --parquet, --csv (or --spec with data)".into()),
+    };
+
+    // 3. Discovery mode: describe the schema and exit.
+    if args.describe {
+        load::describe(&columns.unwrap_or_default());
+        return Ok(());
+    }
+
+    apply_flags(&mut spec, &args)?;
+    let plot = match columns {
+        Some(c) => spec::build_plot_with_data(&spec, c)?,
+        None => spec::build_plot(&spec)?,
+    };
+    let width = args.width.or(spec.width).unwrap_or(800);
+    let height = args.height.or(spec.height).unwrap_or(600);
 
     // 4. Render.
     if args.stdout {
         let svg = plot
-            .render_svg_with_size(args.width, args.height)
+            .render_svg_with_size(width, height)
             .map_err(|e| format!("render failed: {e:?}"))?;
         print!("{svg}");
     } else {
@@ -161,180 +227,185 @@ fn run() -> Result<(), String> {
             .output
             .as_deref()
             .ok_or("provide -o <file> or --stdout")?;
-        plot.save_with_size(out, args.width, args.height)
+        plot.save_with_size(out, width, height)
             .map_err(|e| format!("save failed: {e:?}"))?;
         eprintln!("wrote {out}");
     }
     Ok(())
 }
 
-/// Parse `--projection`: `mercator`, `platecarree`/`plate` (default),
-/// `equal-earth`, `albers-usa`, `albers-europe`, or `utm:<zone>`/`utm:<zone>s`
-/// (south) for an explicit UTM zone (1–60).
-fn parse_projection(s: Option<&str>) -> Result<ggplot_rs::spatial::SfProjection, String> {
-    use ggplot_rs::spatial::SfProjection;
-    Ok(match s {
-        None | Some("platecarree") | Some("plate") => SfProjection::PlateCarree,
-        Some("mercator") => SfProjection::Mercator,
-        Some("equal-earth") | Some("equalearth") => SfProjection::equal_earth(0.0),
-        Some("albers-usa") => SfProjection::albers_usa(),
-        Some("albers-europe") => SfProjection::albers_europe(),
-        Some(utm) if utm.starts_with("utm:") => {
-            let rest = &utm[4..];
-            let (zone_str, south) = match rest.strip_suffix(['s', 'S']) {
-                Some(z) => (z, true),
-                None => (rest, false),
-            };
-            let zone: u8 = zone_str
-                .parse()
-                .map_err(|_| format!("bad UTM zone in --projection '{utm}'"))?;
-            if !(1..=60).contains(&zone) {
-                return Err(format!("UTM zone must be 1-60, got {zone}"));
-            }
-            SfProjection::utm(zone, south)
-        }
-        Some(other) => return Err(format!("unknown --projection '{other}'")),
-    })
+/// `KEY=VALUE` → (key, value).
+fn split_kv<'a>(s: &'a str, flag: &str) -> Result<(&'a str, &'a str), String> {
+    s.split_once('=')
+        .filter(|(k, _)| !k.is_empty())
+        .ok_or(format!("{flag} expects KEY=VALUE, got '{s}'"))
 }
 
-fn build_plot(args: &Args, columns: Vec<(String, Vec<Value>)>) -> Result<GGPlot, String> {
-    // Validate every referenced column up front with a helpful message.
-    let names: Vec<&str> = columns.iter().map(|(n, _)| n.as_str()).collect();
-    let check = |col: &Option<String>| -> Result<(), String> {
-        match col {
-            Some(c) if !names.contains(&c.as_str()) => Err(format!(
-                "column '{c}' not found. Available columns: {}",
-                names.join(", ")
-            )),
-            _ => Ok(()),
-        }
-    };
-    for col in [
-        &args.x,
-        &args.y,
-        &args.color,
-        &args.fill,
-        &args.size,
-        &args.shape,
-        &args.group,
-        &args.label,
-        &args.facet_wrap,
+/// A `--param` value: JSON if it parses, a comma list → array, else a string.
+fn param_value(v: &str) -> serde_json::Value {
+    use serde_json::Value as J;
+    if let Ok(j) = serde_json::from_str::<J>(v) {
+        return j;
+    }
+    if v.contains(',') {
+        return J::Array(
+            v.split(',')
+                .map(|p| serde_json::from_str(p).unwrap_or_else(|_| J::String(p.to_string())))
+                .collect(),
+        );
+    }
+    J::String(v.to_string())
+}
+
+/// Fold the command-line flags into `spec` (flags win over the spec file).
+fn apply_flags(spec: &mut PlotSpec, args: &Args) -> Result<(), String> {
+    // Aesthetics.
+    for (aes, col) in [
+        ("x", &args.x),
+        ("y", &args.y),
+        ("color", &args.color),
+        ("fill", &args.fill),
+        ("size", &args.size),
+        ("shape", &args.shape),
+        ("group", &args.group),
+        ("label", &args.label),
     ] {
-        check(col)?;
+        if let Some(c) = col {
+            spec.aes.insert(aes.into(), c.clone());
+        }
+    }
+    for kv in &args.aes {
+        let (k, v) = split_kv(kv, "--aes")?;
+        spec.aes.insert(k.into(), v.into());
     }
 
-    // Aesthetic mapping from the provided flags.
-    let mut aes = Aes::new();
-    let set = |a: Aes, col: &Option<String>, f: fn(Aes, &str) -> Aes| match col {
-        Some(c) => f(a, c),
-        None => a,
-    };
-    aes = set(aes, &args.x, |a, c| a.x(c));
-    aes = set(aes, &args.y, |a, c| a.y(c));
-    aes = set(aes, &args.color, |a, c| a.color(c));
-    aes = set(aes, &args.fill, |a, c| a.fill(c));
-    aes = set(aes, &args.size, |a, c| a.size(c));
-    aes = set(aes, &args.shape, |a, c| a.shape(c));
-    aes = set(aes, &args.group, |a, c| a.group(c));
-    aes = set(aes, &args.label, |a, c| a.label(c));
-
-    let mut plot = GGPlot::new(columns).aes(aes);
-
-    // Geometry.
-    plot = match args.geom.as_str() {
-        "point" => plot.geom_point(),
-        "line" => plot.geom_line(),
-        "bar" => plot.geom_bar(),
-        "col" => plot.geom_col(),
-        "histogram" => plot.geom_histogram(),
-        "boxplot" => plot.geom_boxplot(),
-        "violin" => plot.geom_violin(),
-        "density" => plot.geom_density(),
-        "area" => plot.geom_area(),
-        "smooth" => plot.geom_smooth(),
-        "step" => plot.geom_step(),
-        "path" => plot.geom_path(),
-        "tile" => plot.geom_tile(),
-        "jitter" => plot.geom_jitter(),
-        "freqpoly" => plot.geom_freqpoly(),
-        "sf" => {
-            let projection = parse_projection(args.projection.as_deref())?;
-            plot.geom_sf_with(ggplot_rs::geom::sf::GeomSf::default().project(projection))
+    // Layers: --geom replaces the spec's layers; default a single point layer.
+    if !args.geom.is_empty() {
+        spec.layers = args
+            .geom
+            .iter()
+            .map(|g| LayerSpec {
+                geom: g.clone(),
+                ..Default::default()
+            })
+            .collect();
+    } else if spec.layers.is_empty() {
+        spec.layers.push(LayerSpec {
+            geom: "point".into(),
+            ..Default::default()
+        });
+    }
+    let mut params = serde_json::Map::new();
+    for kv in &args.param {
+        let (k, v) = split_kv(kv, "--param")?;
+        params.insert(k.into(), param_value(v));
+    }
+    if let Some(p) = &args.projection {
+        params.insert("projection".into(), p.clone().into());
+    }
+    if !params.is_empty() {
+        let overlay: LayerParams = serde_json::from_value(serde_json::Value::Object(params))
+            .map_err(|e| format!("--param: {e}"))?;
+        for layer in &mut spec.layers {
+            layer.params.overlay(overlay.clone());
         }
-        other => return Err(format!("unknown --geom '{other}'")),
-    };
-
-    // A map keeps its shape under an equal-aspect spatial coord.
-    if args.geom == "sf" && !args.flip {
-        plot = plot.coord_sf();
+    }
+    if let Some(pos) = &args.position {
+        for layer in &mut spec.layers {
+            layer.position = Some(PositionSpec::Name(pos.clone()));
+        }
     }
 
     // Facets.
     if let Some(col) = &args.facet_wrap {
-        plot = plot.facet_wrap(col, None);
-    } else if let Some(spec) = &args.facet_grid {
-        let (row, col) = spec.split_once(':').unwrap_or((spec.as_str(), ""));
-        let row = (!row.is_empty()).then_some(row);
-        let col = (!col.is_empty()).then_some(col);
-        plot = plot.facet_grid(row, col);
+        spec.facet = Some(FacetSpec {
+            wrap: Some(col.clone()),
+            ncol: None,
+            rows: None,
+            cols: None,
+            scales: None,
+        });
+    } else if let Some(g) = &args.facet_grid {
+        let (row, col) = g.split_once(':').unwrap_or((g.as_str(), ""));
+        spec.facet = Some(FacetSpec {
+            wrap: None,
+            ncol: None,
+            rows: (!row.is_empty()).then(|| row.to_string()),
+            cols: (!col.is_empty()).then(|| col.to_string()),
+            scales: None,
+        });
+    }
+    if let (Some(s), Some(f)) = (&args.facet_scales, spec.facet.as_mut()) {
+        f.scales = Some(s.clone());
     }
 
     // Scales / coords.
+    let log10 = |s: &mut Option<PositionScaleSpec>| {
+        s.get_or_insert_with(Default::default).trans = Some("log10".into());
+    };
     if args.log_x {
-        plot = plot.scale_x_log10();
+        log10(&mut spec.scales.x);
     }
     if args.log_y {
-        plot = plot.scale_y_log10();
+        log10(&mut spec.scales.y);
     }
-    if args.flip {
-        plot = plot.coord_flip();
+    if let Some(c) = &args.coord {
+        spec.coord = Some(CoordSpec::Name(c.clone()));
+    } else if args.flip {
+        spec.coord = Some(CoordSpec::Name("flip".into()));
+    } else if spec.coord.is_none() && spec.layers.iter().any(|l| l.geom == "sf") {
+        // A map keeps its shape under an equal-aspect spatial coord.
+        spec.coord = Some(CoordSpec::Name("sf".into()));
     }
-
-    // Theme: preset → optional custom config overrides → optional --primary.
-    let cfg = match &args.theme_config {
-        Some(path) => Some(theme::load(path)?),
-        None => None,
-    };
-    // Start from the --theme preset; the config (which may set its own `base`)
-    // overrides on top.
-    let base = theme::preset(&args.theme)?;
-    let mut th = match &cfg {
-        Some(c) => c.apply(base)?,
-        None => base,
-    };
-    if let Some(p) = &args.primary {
-        th.primary = Some(theme::parse_rgb(p)?);
-    }
-    plot = plot.theme(th);
-
-    // Palette (flag wins over the config file), applied to color and fill.
-    let palette = args
-        .palette
-        .clone()
-        .or_else(|| cfg.as_ref().and_then(|c| c.palette.clone()));
-    if let Some(name) = palette {
-        let p = theme::parse_palette(&name)?;
-        plot = plot.scale_color_brewer(p.clone()).scale_fill_brewer(p);
+    if let Some(l) = &args.legend {
+        spec.legend = Some(LegendSpec::Name(l.clone()));
     }
 
-    Ok(plot)
-}
+    // Labels.
+    let l = &mut spec.labels;
+    for (slot, flag) in [
+        (&mut l.title, &args.title),
+        (&mut l.subtitle, &args.subtitle),
+        (&mut l.x, &args.xlab),
+        (&mut l.y, &args.ylab),
+        (&mut l.caption, &args.caption),
+    ] {
+        if flag.is_some() {
+            slot.clone_from(flag);
+        }
+    }
 
-fn apply_output_labels(mut plot: GGPlot, args: &Args) -> GGPlot {
-    if let Some(t) = &args.title {
-        plot = plot.title(t);
+    // Theme: --theme-config file (or the spec's config) → --theme preset
+    // (default gray) → --primary / --palette on top.
+    let flags_touch_theme = args.theme.is_some()
+        || args.theme_config.is_some()
+        || args.primary.is_some()
+        || args.palette.is_some();
+    if flags_touch_theme || spec.theme.is_none() {
+        let mut cfg = match (&args.theme_config, spec.theme.take()) {
+            (Some(path), _) => theme::load(path)?,
+            (None, Some(ThemeSpec::Config(c))) => *c,
+            (None, Some(ThemeSpec::Preset(p))) => theme::ThemeConfig {
+                base: Some(p),
+                ..Default::default()
+            },
+            (None, None) => theme::ThemeConfig::default(),
+        };
+        if let Some(t) = &args.theme {
+            cfg.base = Some(t.clone());
+        } else if cfg.base.is_none() {
+            cfg.base = Some("gray".into());
+        }
+        theme::preset(cfg.base.as_deref().unwrap_or("gray"))?;
+        if let Some(p) = &args.primary {
+            let (r, g, b) = theme::parse_rgb(p)?;
+            cfg.primary = Some([r, g, b]);
+        }
+        if let Some(p) = &args.palette {
+            theme::parse_palette(p)?;
+            cfg.palette = Some(p.clone());
+        }
+        spec.theme = Some(ThemeSpec::Config(Box::new(cfg)));
     }
-    if let Some(t) = &args.subtitle {
-        plot = plot.subtitle(t);
-    }
-    if let Some(t) = &args.xlab {
-        plot = plot.xlab(t);
-    }
-    if let Some(t) = &args.ylab {
-        plot = plot.ylab(t);
-    }
-    if let Some(t) = &args.caption {
-        plot = plot.caption(t);
-    }
-    plot
+    Ok(())
 }

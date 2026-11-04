@@ -1,37 +1,55 @@
-//! The layered plot spec behind the npm package's `render()` (#382).
+//! A declarative JSON plot spec (feature `spec`).
 //!
-//! A JSON object that maps one-to-one onto the `GGPlot` builder:
+//! A JSON object that maps one-to-one onto the [`GGPlot`] builder:
 //! `{ data, aes, layers: [{ geom, aes?, data?, params?, stat?, position? }],
-//! scales, facet, coord, labels, theme, legend, width, height }`. Plain Rust
-//! (no wasm-bindgen types) so it is unit-tested natively; `lib.rs` wraps it.
-//! The TypeScript mirror of these types lives in `PLOT_SPEC_TS` in `lib.rs` —
-//! keep the two in sync.
+//! scales, facet, coord, labels, theme, legend, width, height }`.
+//!
+//! This one module is the engine behind every non-Rust front end, so they
+//! stay on par: the npm package's `render()` (crates/ggplot-rs-wasm) and the
+//! CLI's `--spec` / `--geom` / `--param` (src/bin/ggplot.rs). Every
+//! `GGPlot::geom_*` builder is either reachable from [`geoms`] or listed in
+//! [`EXCLUDED_GEOMS`] with a reason — the `every_builder_geom_is_in_the_spec`
+//! test enforces that. The TypeScript mirror lives in `PLOT_SPEC_TS` in
+//! crates/ggplot-rs-wasm/src/lib.rs; a test there checks it against [`geoms`].
+//!
+//! ```
+//! let svg = ggplot_rs::spec::render_json(r#"{
+//!     "data": {"x": [1, 2, 3], "y": [2, 4, 3]},
+//!     "aes": {"x": "x", "y": "y"},
+//!     "layers": [{"geom": "point"}, {"geom": "line"}]
+//! }"#).unwrap().0;
+//! assert!(svg.starts_with("<svg"));
+//! ```
 
 use std::collections::{BTreeMap, HashMap};
 
 use serde::Deserialize;
 use serde_json::Value as J;
 
-use ggplot_rs::data::Value;
-use ggplot_rs::facet::FacetScales;
-use ggplot_rs::geom::histogram::GeomHistogram;
-use ggplot_rs::geom::smooth::GeomSmooth;
-use ggplot_rs::prelude::*;
-use ggplot_rs::scale::color::{RGBAColor, ScaleColorDiscrete};
-use ggplot_rs::scale::continuous::ScaleContinuous;
-use ggplot_rs::scale::gradient_n::ScaleColorGradientN;
-use ggplot_rs::scale::transform::ScaleTransform;
-use ggplot_rs::theme::config::{parse_palette, preset, ThemeConfig};
-use ggplot_rs::theme::LegendPosition;
+use crate::data::Value;
+use crate::facet::FacetScales;
+use crate::geom::histogram::GeomHistogram;
+use crate::geom::smooth::GeomSmooth;
+use crate::prelude::*;
+use crate::scale::color::{RGBAColor, ScaleColorDiscrete};
+use crate::scale::continuous::ScaleContinuous;
+use crate::scale::gradient_n::ScaleColorGradientN;
+use crate::scale::transform::ScaleTransform;
+use crate::spatial::SfProjection;
+use crate::theme::config::{parse_palette, preset, ThemeConfig};
+use crate::theme::LegendPosition;
 
 /// Column-oriented data: `{ column: [values…] }`.
-type Columns = BTreeMap<String, Vec<J>>;
+pub type Columns = BTreeMap<String, Vec<J>>;
 /// Aesthetic → column name.
-type AesMap = BTreeMap<String, String>;
+pub type AesMap = BTreeMap<String, String>;
 
-#[derive(Deserialize)]
+#[derive(Deserialize, Default)]
 #[serde(deny_unknown_fields)]
 pub struct PlotSpec {
+    /// Plot data. May be empty when the caller supplies the data itself
+    /// ([`build_plot_with_data`], e.g. the CLI's DuckDB input).
+    #[serde(default)]
     pub data: Columns,
     #[serde(default)]
     pub aes: AesMap,
@@ -48,7 +66,7 @@ pub struct PlotSpec {
     pub height: Option<u32>,
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, Default)]
 #[serde(deny_unknown_fields)]
 pub struct LayerSpec {
     pub geom: String,
@@ -61,7 +79,7 @@ pub struct LayerSpec {
 }
 
 /// Geom parameters. Each is read only by the geoms it applies to.
-#[derive(Deserialize, Default)]
+#[derive(Deserialize, Default, Clone)]
 #[serde(deny_unknown_fields)]
 pub struct LayerParams {
     /// histogram / freqpoly bin count.
@@ -82,6 +100,63 @@ pub struct LayerParams {
     pub intercept: Option<f64>,
     /// sunburst / icicle hierarchy columns, outermost first.
     pub levels: Option<Vec<String>>,
+    /// waffle / parliament: rows of squares / seat rows.
+    pub rows: Option<usize>,
+    /// renko / point_figure: price box size.
+    pub box_size: Option<f64>,
+    /// point_figure: reversal in boxes (default 3).
+    pub reversal: Option<usize>,
+    /// tilemap: `"square"` (default), `"hexagon"`, `"circle"`, `"diamond"`.
+    pub shape: Option<String>,
+    /// windbarb: speed column (knots).
+    pub speed: Option<String>,
+    /// windbarb: direction column (degrees the wind comes from).
+    pub direction: Option<String>,
+    /// censor_marks: 0/1 censoring-indicator column.
+    pub censor: Option<String>,
+    /// sf / sf_text / sf_label / flow: map projection (see
+    /// [`SfProjection::parse`]); default plate carrée.
+    pub projection: Option<String>,
+    /// bullet / bullet_vertical: target column.
+    pub target: Option<String>,
+    /// bullet / bullet_vertical: qualitative range band upper bounds.
+    pub ranges: Option<Vec<f64>>,
+}
+
+impl LayerParams {
+    /// Copy every parameter set in `other` onto `self` (the CLI's `--param`
+    /// over a `--spec` file's layers). Destructures exhaustively, so a new
+    /// field can't be forgotten here.
+    pub fn overlay(&mut self, other: LayerParams) {
+        let LayerParams {
+            bins,
+            method,
+            span,
+            se,
+            yintercept,
+            xintercept,
+            slope,
+            intercept,
+            levels,
+            rows,
+            box_size,
+            reversal,
+            shape,
+            speed,
+            direction,
+            censor,
+            projection,
+            target,
+            ranges,
+        } = other;
+        macro_rules! set {
+            ($($f:ident),*) => { $( if $f.is_some() { self.$f = $f; } )* };
+        }
+        set!(
+            bins, method, span, se, yintercept, xintercept, slope, intercept, levels, rows,
+            box_size, reversal, shape, speed, direction, censor, projection, target, ranges
+        );
+    }
 }
 
 #[derive(Deserialize)]
@@ -202,25 +277,50 @@ pub enum LegendSpec {
 
 /// Parse a JSON spec and render it to an SVG document plus build warnings.
 pub fn render_json(spec_json: &str) -> Result<(String, Vec<String>), String> {
-    let spec: PlotSpec =
-        serde_json::from_str(spec_json).map_err(|e| format!("invalid plot spec: {e}"))?;
-    render_spec(spec)
+    render_spec(parse(spec_json)?)
 }
 
 pub fn render_spec(spec: PlotSpec) -> Result<(String, Vec<String>), String> {
-    let (width, height) = (spec.width.unwrap_or(640), spec.height.unwrap_or(400));
-    if width == 0 || height == 0 {
-        return Err("width and height must be positive".into());
+    let (width, height) = spec.size()?;
+    build_plot(&spec)?
+        .render_svg_native_with_warnings(width, height)
+        .map_err(|e| format!("render failed: {e}"))
+}
+
+/// Parse a JSON spec.
+pub fn parse(spec_json: &str) -> Result<PlotSpec, String> {
+    serde_json::from_str(spec_json).map_err(|e| format!("invalid plot spec: {e}"))
+}
+
+impl PlotSpec {
+    /// Output size in pixels (default 640 × 400).
+    pub fn size(&self) -> Result<(u32, u32), String> {
+        let (width, height) = (self.width.unwrap_or(640), self.height.unwrap_or(400));
+        if width == 0 || height == 0 {
+            return Err("width and height must be positive".into());
+        }
+        Ok((width, height))
     }
+}
+
+/// Build the [`GGPlot`] a spec describes, from the spec's own `data`.
+pub fn build_plot(spec: &PlotSpec) -> Result<GGPlot, String> {
+    build_plot_with_data(spec, columns(&spec.data)?)
+}
+
+/// Build the [`GGPlot`] a spec describes over caller-supplied plot data
+/// (the spec's `data` is ignored). Layer-level `data` still comes from the spec.
+pub fn build_plot_with_data(
+    spec: &PlotSpec,
+    plot_data: Vec<(String, Vec<Value>)>,
+) -> Result<GGPlot, String> {
     if spec.layers.is_empty() {
         return Err("spec.layers must contain at least one layer".into());
     }
-
-    let plot_data = columns(&spec.data)?;
-    let plot_names: Vec<String> = spec.data.keys().cloned().collect();
+    let plot_names: Vec<String> = plot_data.iter().map(|(k, _)| k.clone()).collect();
     let plot_aes = build_aes(&spec.aes, &plot_names, "aes")?;
     // Column → "holds strings?", to pick discrete vs. continuous color scales.
-    let mut is_str: HashMap<String, bool> = string_columns(&spec.data);
+    let mut is_str: HashMap<String, bool> = string_columns(&plot_data);
 
     let mut plot = GGPlot::new(plot_data).aes(plot_aes);
     for (i, layer) in spec.layers.iter().enumerate() {
@@ -231,10 +331,11 @@ pub fn render_spec(spec: PlotSpec) -> Result<(String, Vec<String>), String> {
         plot =
             add_geom(plot, &layer.geom, &layer.params).map_err(|e| format!("layers[{i}]: {e}"))?;
         if let Some(d) = &layer.data {
-            plot = plot.layer_data(columns(d).map_err(|e| format!("layers[{i}].data: {e}"))?);
-            for (k, v) in string_columns(d) {
+            let d = columns(d).map_err(|e| format!("layers[{i}].data: {e}"))?;
+            for (k, v) in string_columns(&d) {
                 is_str.entry(k).or_insert(v);
             }
+            plot = plot.layer_data(d);
         }
         if let Some(a) = &layer.aes {
             // A layer mapping adds to (and overrides) the plot-level one, as
@@ -248,7 +349,7 @@ pub fn render_spec(spec: PlotSpec) -> Result<(String, Vec<String>), String> {
         }
         if let Some(s) = &layer.stat {
             plot = match s.as_str() {
-                "identity" => plot.stat(ggplot_rs::stat::identity::StatIdentity),
+                "identity" => plot.stat(crate::stat::identity::StatIdentity),
                 other => {
                     return Err(format!(
                         "layers[{i}].stat: unknown stat '{other}' (supported: \"identity\"; \
@@ -324,7 +425,7 @@ pub fn render_spec(spec: PlotSpec) -> Result<(String, Vec<String>), String> {
             format!("theme: {e} (expected gray, bw, minimal, classic, dark, light, void, linedraw)")
         })?),
         Some(ThemeSpec::Config(cfg)) => plot.theme(
-            cfg.apply(ggplot_rs::theme::presets::theme_minimal())
+            cfg.apply(crate::theme::presets::theme_minimal())
                 .map_err(|e| format!("theme: {e}"))?,
         ),
     };
@@ -368,8 +469,7 @@ pub fn render_spec(spec: PlotSpec) -> Result<(String, Vec<String>), String> {
         plot = plot.ylab(t);
     }
 
-    plot.render_svg_native_with_warnings(width, height)
-        .map_err(|e| format!("render failed: {e}"))
+    Ok(plot)
 }
 
 fn jval(x: &J) -> Value {
@@ -400,13 +500,13 @@ fn columns(data: &Columns) -> Result<Vec<(String, Vec<Value>)>, String> {
     Ok(out)
 }
 
-fn string_columns(data: &Columns) -> HashMap<String, bool> {
+fn string_columns(data: &[(String, Vec<Value>)]) -> HashMap<String, bool> {
     data.iter()
         .map(|(k, vals)| {
             let s = vals
                 .iter()
-                .find(|x| !x.is_null())
-                .map(|x| x.is_string() || x.is_boolean())
+                .find(|x| !matches!(x, Value::Na))
+                .map(|x| matches!(x, Value::Str(_) | Value::Bool(_)))
                 .unwrap_or(false);
             (k.clone(), s)
         })
@@ -505,8 +605,10 @@ fn build_aes(map: &AesMap, available: &[String], ctx: &str) -> Result<Aes, Strin
     Ok(aes)
 }
 
-/// Geom names `add_geom` understands, for the error message and the docs.
+/// Geom names [`add_geom`] understands in every build (see [`geoms`] for the
+/// feature-gated extras), in the order the docs and error messages list them.
 pub const GEOMS: &[&str] = &[
+    // basic
     "point",
     "jitter",
     "line",
@@ -514,56 +616,159 @@ pub const GEOMS: &[&str] = &[
     "step",
     "area",
     "ribbon",
+    "stepribbon",
     "col",
     "bar",
-    "histogram",
-    "freqpoly",
-    "density",
-    "boxplot",
-    "violin",
-    "dotplot",
-    "smooth",
-    "text",
-    "label",
-    "errorbar",
-    "linerange",
-    "pointrange",
-    "crossbar",
     "segment",
+    "curve",
+    "spoke",
     "rect",
     "tile",
     "raster",
     "polygon",
+    "text",
+    "label",
+    "text_repel",
+    "label_repel",
     "rug",
+    "blank",
+    // reference lines
+    "hline",
+    "vline",
+    "abline",
+    // distributions & statistics
+    "histogram",
+    "freqpoly",
+    "density",
+    "density_ridges",
+    "boxplot",
+    "violin",
+    "dotplot",
+    "smooth",
     "count",
     "bin2d",
     "hex",
     "density2d",
     "contour",
+    "contour_filled",
     "qq",
     "qq_line",
-    "hline",
-    "vline",
-    "abline",
-    "blank",
+    "qq_band",
+    "censor_marks",
+    // intervals
+    "errorbar",
+    "errorbarh",
+    "linerange",
+    "pointrange",
+    "crossbar",
+    "xrange",
+    // business charts
     "waterfall",
     "pareto",
-    "sankey",
-    "chord",
+    "funnel",
+    "pyramid",
+    "lollipop",
+    "dumbbell",
+    "bullet",
+    "bullet_vertical",
+    "marimekko",
+    "variwide",
+    "waffle",
+    "parliament",
+    "tilemap",
+    "packed_bubble",
+    "variable_pie",
+    "wordcloud",
+    "venn",
+    "timeline",
+    "calendar",
+    "flags",
+    "windbarb",
+    // hierarchies & networks
     "treemap",
     "sunburst",
     "icicle",
-    "funnel",
+    "dendrogram",
+    "tree",
+    "sankey",
+    "chord",
+    "arcdiagram",
+    "network",
     "stream",
-    "lollipop",
-    "dumbbell",
+    // finance
     "candlestick",
     "ohlc",
-    "calendar",
+    "hlc",
+    "heikin_ashi",
+    "renko",
+    "point_figure",
+    // spatial
+    "sf",
+    "sf_text",
+    "sf_label",
+    "flow",
 ];
 
-fn add_geom(plot: GGPlot, geom: &str, p: &LayerParams) -> Result<GGPlot, String> {
+/// `GGPlot::geom_*` builders that are deliberately not spec geoms, with the
+/// reason — they take arguments a JSON layer can't express (closures, extra
+/// tables) or duplicate a spec geom. Kept honest by a test.
+pub const EXCLUDED_GEOMS: &[(&str, &str)] = &[
+    (
+        "bracket",
+        "annotation with literal positions; use labels/annotate in Rust",
+    ),
+    (
+        "bracket_many",
+        "annotation with literal positions; use labels/annotate in Rust",
+    ),
+    ("bracket_table", "takes a second data table; Rust only"),
+    (
+        "hline_aes",
+        "data-driven hline; use a `segment` / `hline` layer in the spec",
+    ),
+    (
+        "vline_aes",
+        "data-driven vline; use a `segment` / `vline` layer in the spec",
+    ),
+    (
+        "abline_aes",
+        "data-driven abline; use an `abline` layer in the spec",
+    ),
+];
+
+/// Every geom name the spec accepts in this build: [`GEOMS`] plus the
+/// feature-gated ones (`quantile` with `regression`).
+pub fn geoms() -> Vec<&'static str> {
+    #[allow(unused_mut)]
+    let mut g = GEOMS.to_vec();
+    #[cfg(feature = "regression")]
+    g.push("quantile");
+    g
+}
+
+fn projection(p: &LayerParams) -> Result<SfProjection, String> {
+    p.projection
+        .as_deref()
+        .map(SfProjection::parse)
+        .transpose()
+        .map(Option::unwrap_or_default)
+}
+
+/// Add the layer `geom` (a spec geom name) to `plot`, configured by `p`.
+pub fn add_geom(plot: GGPlot, geom: &str, p: &LayerParams) -> Result<GGPlot, String> {
     let need = |v: Option<f64>, k: &str| v.ok_or(format!("geom '{geom}' needs params.{k}"));
+    let need_str =
+        |v: &Option<String>, k: &str| v.clone().ok_or(format!("geom '{geom}' needs params.{k}"));
+    let bullet = || {
+        let mut g = crate::geom::bullet::GeomBullet::default();
+        if let Some(t) = &p.target {
+            g = g.with_target(t);
+        }
+        if let Some(r) = &p.ranges {
+            g = g.with_ranges(r.clone());
+        }
+        g
+    };
     Ok(match geom {
         "point" => plot.geom_point(),
         "jitter" => plot.geom_jitter(),
@@ -572,14 +777,32 @@ fn add_geom(plot: GGPlot, geom: &str, p: &LayerParams) -> Result<GGPlot, String>
         "step" => plot.geom_step(),
         "area" => plot.geom_area(),
         "ribbon" => plot.geom_ribbon(),
+        "stepribbon" => plot.geom_stepribbon(),
         "col" => plot.geom_col(),
         "bar" => plot.geom_bar(),
+        "segment" => plot.geom_segment(),
+        "curve" => plot.geom_curve(),
+        "spoke" => plot.geom_spoke(),
+        "rect" => plot.geom_rect(),
+        "tile" => plot.geom_tile(),
+        "raster" => plot.geom_raster(),
+        "polygon" => plot.geom_polygon(),
+        "text" => plot.geom_text(),
+        "label" => plot.geom_label(),
+        "text_repel" => plot.geom_text_repel(),
+        "label_repel" => plot.geom_label_repel(),
+        "rug" => plot.geom_rug(),
+        "blank" => plot.geom_blank(),
+        "hline" => plot.geom_hline(need(p.yintercept, "yintercept")?),
+        "vline" => plot.geom_vline(need(p.xintercept, "xintercept")?),
+        "abline" => plot.geom_abline(need(p.slope, "slope")?, p.intercept.unwrap_or(0.0)),
         "histogram" => match p.bins {
             Some(b) => plot.geom_histogram_with(GeomHistogram::default().with_bins(b.max(1))),
             None => plot.geom_histogram(),
         },
         "freqpoly" => plot.geom_freqpoly(),
         "density" => plot.geom_density(),
+        "density_ridges" => plot.geom_density_ridges(),
         "boxplot" => plot.geom_boxplot(),
         "violin" => plot.geom_violin(),
         "dotplot" => plot.geom_dotplot(),
@@ -595,33 +818,61 @@ fn add_geom(plot: GGPlot, geom: &str, p: &LayerParams) -> Result<GGPlot, String>
             }
             plot.geom_smooth_with(g)
         }
-        "text" => plot.geom_text(),
-        "label" => plot.geom_label(),
-        "errorbar" => plot.geom_errorbar(),
-        "linerange" => plot.geom_linerange(),
-        "pointrange" => plot.geom_pointrange(),
-        "crossbar" => plot.geom_crossbar(),
-        "segment" => plot.geom_segment(),
-        "rect" => plot.geom_rect(),
-        "tile" => plot.geom_tile(),
-        "raster" => plot.geom_raster(),
-        "polygon" => plot.geom_polygon(),
-        "rug" => plot.geom_rug(),
         "count" => plot.geom_count(),
         "bin2d" => plot.geom_bin2d(),
         "hex" => plot.geom_hex(),
         "density2d" => plot.geom_density2d(),
         "contour" => plot.geom_contour(),
+        "contour_filled" => plot.geom_contour_filled(),
         "qq" => plot.geom_qq(),
         "qq_line" => plot.geom_qq_line(),
-        "hline" => plot.geom_hline(need(p.yintercept, "yintercept")?),
-        "vline" => plot.geom_vline(need(p.xintercept, "xintercept")?),
-        "abline" => plot.geom_abline(need(p.slope, "slope")?, p.intercept.unwrap_or(0.0)),
-        "blank" => plot.geom_blank(),
+        "qq_band" => plot.geom_qq_band(),
+        "censor_marks" => plot.geom_censor_marks(&need_str(&p.censor, "censor")?),
+        #[cfg(feature = "regression")]
+        "quantile" => plot.geom_quantile(),
+        "errorbar" => plot.geom_errorbar(),
+        "errorbarh" => plot.geom_errorbarh(),
+        "linerange" => plot.geom_linerange(),
+        "pointrange" => plot.geom_pointrange(),
+        "crossbar" => plot.geom_crossbar(),
+        "xrange" => plot.geom_xrange(),
         "waterfall" => plot.geom_waterfall(),
         "pareto" => plot.geom_pareto(),
-        "sankey" => plot.geom_sankey(),
-        "chord" => plot.geom_chord(),
+        "funnel" => plot.geom_funnel(),
+        "pyramid" => plot.geom_pyramid(),
+        "lollipop" => plot.geom_lollipop(),
+        "dumbbell" => plot.geom_dumbbell(),
+        "bullet" => plot.geom_bullet(bullet()),
+        "bullet_vertical" => plot.geom_bullet_vertical(bullet()),
+        "marimekko" => plot.geom_marimekko(),
+        "variwide" => plot.geom_variwide(),
+        "waffle" => plot.geom_waffle(p.rows.unwrap_or(10).max(1)),
+        "parliament" => plot.geom_parliament(p.rows.unwrap_or(6).max(1)),
+        "tilemap" => {
+            use crate::geom::tilemap::TileShape;
+            plot.geom_tilemap(match p.shape.as_deref() {
+                None | Some("square") => TileShape::Square,
+                Some("hexagon") => TileShape::Hexagon,
+                Some("circle") => TileShape::Circle,
+                Some("diamond") => TileShape::Diamond,
+                Some(o) => {
+                    return Err(format!(
+                        "unknown tilemap shape '{o}' (expected square, hexagon, circle, diamond)"
+                    ))
+                }
+            })
+        }
+        "packed_bubble" => plot.geom_packed_bubble(),
+        "variable_pie" => plot.geom_variable_pie(),
+        "wordcloud" => plot.geom_wordcloud(),
+        "venn" => plot.geom_venn(),
+        "timeline" => plot.geom_timeline(),
+        "calendar" => plot.geom_calendar(),
+        "flags" => plot.geom_flags(),
+        "windbarb" => plot.geom_windbarb(crate::geom::windbarb::GeomWindbarb::new(
+            need_str(&p.speed, "speed")?,
+            need_str(&p.direction, "direction")?,
+        )),
         "treemap" => plot.geom_treemap(),
         "sunburst" | "icicle" => {
             let levels = p.levels.clone().filter(|l| !l.is_empty()).ok_or(format!(
@@ -633,24 +884,40 @@ fn add_geom(plot: GGPlot, geom: &str, p: &LayerParams) -> Result<GGPlot, String>
                 plot.geom_icicle(levels)
             }
         }
-        "funnel" => plot.geom_funnel(),
+        "dendrogram" => plot.geom_dendrogram(),
+        "tree" => plot.geom_tree(),
+        "sankey" => plot.geom_sankey(),
+        "chord" => plot.geom_chord(),
+        "arcdiagram" => plot.geom_arcdiagram(),
+        "network" => plot.geom_network(),
         "stream" => plot.geom_stream(),
-        "lollipop" => plot.geom_lollipop(),
-        "dumbbell" => plot.geom_dumbbell(),
         "candlestick" => plot.geom_candlestick(),
         "ohlc" => plot.geom_ohlc(),
-        "calendar" => plot.geom_calendar(),
+        "hlc" => plot.geom_hlc(),
+        "heikin_ashi" => plot.geom_heikin_ashi(),
+        "renko" => plot.geom_renko(need(p.box_size, "box_size")?),
+        "point_figure" => {
+            plot.geom_point_figure(need(p.box_size, "box_size")?, p.reversal.unwrap_or(3))
+        }
+        "sf" => plot.geom_sf_with(crate::geom::sf::GeomSf::default().project(projection(p)?)),
+        "sf_text" => plot
+            .geom_sf_text_with(crate::geom::sf_text::GeomSfText::default().project(projection(p)?)),
+        "sf_label" => plot.geom_sf_label_with(
+            crate::geom::sf_text::GeomSfLabel::default().project(projection(p)?),
+        ),
+        "flow" => plot.geom_flow(crate::geom::flow::GeomFlow::default().project(projection(p)?)),
         other => {
             return Err(format!(
                 "unknown geom '{other}' (expected one of: {})",
-                GEOMS.join(", ")
+                geoms().join(", ")
             ))
         }
     })
 }
 
-fn apply_position(plot: GGPlot, p: &PositionSpec) -> Result<GGPlot, String> {
-    use ggplot_rs::position as pos;
+/// Apply a spec position to the last-added layer.
+pub fn apply_position(plot: GGPlot, p: &PositionSpec) -> Result<GGPlot, String> {
+    use crate::position as pos;
     let (kind, full) = match p {
         PositionSpec::Name(n) => (n.as_str(), None),
         PositionSpec::Full(f) => (f.kind.as_str(), Some(f)),
@@ -829,9 +1096,10 @@ fn apply_coord(plot: GGPlot, c: &CoordSpec) -> Result<GGPlot, String> {
         "polar" => plot.coord_polar(),
         "fixed" | "equal" => plot.coord_fixed(full.and_then(|f| f.ratio).unwrap_or(1.0)),
         "radar" => plot.coord_radar(),
+        "sf" => plot.coord_sf(),
         other => {
             return Err(format!(
-                "unknown coord '{other}' (expected cartesian, flip, polar, fixed, radar)"
+                "unknown coord '{other}' (expected cartesian, flip, polar, fixed, radar, sf)"
             ))
         }
     })
@@ -908,12 +1176,211 @@ mod tests {
             xintercept: Some(1.0),
             slope: Some(1.0),
             levels: Some(vec!["g".into()]),
+            box_size: Some(1.0),
+            speed: Some("x".into()),
+            direction: Some("x".into()),
+            censor: Some("x".into()),
             ..Default::default()
         };
-        for g in GEOMS {
+        for g in geoms() {
             let plot = GGPlot::new(vec![("x".to_string(), vec![Value::Float(1.0)])]);
             assert!(add_geom(plot, g, &p).is_ok(), "{g}");
         }
+    }
+
+    /// Every `pub fn geom_*` builder in the crate (minus `*_with` variants)
+    /// must be a spec geom or an explained exclusion — so a new geom can't
+    /// land in Rust without reaching the CLI and the npm package.
+    #[test]
+    fn every_builder_geom_is_in_the_spec() {
+        fn walk(dir: &std::path::Path, out: &mut Vec<std::path::PathBuf>) {
+            for e in std::fs::read_dir(dir).unwrap().flatten() {
+                let p = e.path();
+                if p.is_dir() {
+                    walk(&p, out);
+                } else if p.extension().is_some_and(|x| x == "rs") {
+                    out.push(p);
+                }
+            }
+        }
+        let mut files = Vec::new();
+        walk(
+            &std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("src"),
+            &mut files,
+        );
+        let mut builders = std::collections::BTreeSet::new();
+        for f in files {
+            let text = std::fs::read_to_string(&f).unwrap();
+            for line in text.lines() {
+                let Some(rest) = line.trim_start().strip_prefix("pub fn geom_") else {
+                    continue;
+                };
+                let name: String = rest
+                    .chars()
+                    .take_while(|c| c.is_ascii_alphanumeric() || *c == '_')
+                    .collect();
+                if !name.ends_with("_with") {
+                    builders.insert(name);
+                }
+            }
+        }
+        assert!(
+            builders.len() > 50,
+            "scan found too few builders: {builders:?}"
+        );
+        let excluded: Vec<&str> = EXCLUDED_GEOMS.iter().map(|(g, _)| *g).collect();
+        let feature_gated = ["quantile"];
+        let missing: Vec<&String> = builders
+            .iter()
+            .filter(|b| {
+                !GEOMS.contains(&b.as_str())
+                    && !excluded.contains(&b.as_str())
+                    && !feature_gated.contains(&b.as_str())
+            })
+            .collect();
+        assert!(
+            missing.is_empty(),
+            "GGPlot::geom_* builders missing from spec::GEOMS (add them to add_geom, or to \
+             EXCLUDED_GEOMS with a reason): {missing:?}"
+        );
+        // Aliases of other geoms (icicle → sunburst-family) are fine; but no
+        // spec geom may also be excluded, and no duplicates.
+        for g in GEOMS {
+            assert!(
+                !excluded.contains(g),
+                "{g} is both a spec geom and excluded"
+            );
+        }
+        let uniq: std::collections::BTreeSet<_> = GEOMS.iter().collect();
+        assert_eq!(uniq.len(), GEOMS.len(), "duplicate entry in GEOMS");
+    }
+
+    #[test]
+    fn projection_names_parse() {
+        for ok in [
+            "platecarree",
+            "plate",
+            "mercator",
+            "equal-earth",
+            "equalearth",
+            "albers-usa",
+            "albers-europe",
+            "utm:33",
+            "utm:33s",
+        ] {
+            assert!(SfProjection::parse(ok).is_ok(), "{ok}");
+        }
+        assert_eq!(
+            SfProjection::parse("utm:33s"),
+            Ok(SfProjection::utm(33, true))
+        );
+        for (bad, msg) in [
+            ("utm:0", "1-60"),
+            ("utm:abc", "bad UTM zone"),
+            ("robinson", "unknown projection"),
+        ] {
+            let e = SfProjection::parse(bad).unwrap_err();
+            assert!(e.contains(msg), "{bad}: {e}");
+        }
+    }
+
+    #[test]
+    fn overlay_copies_only_set_params() {
+        let mut base = LayerParams {
+            bins: Some(5),
+            method: Some("lm".into()),
+            ..Default::default()
+        };
+        base.overlay(LayerParams {
+            method: Some("loess".into()),
+            rows: Some(3),
+            ranges: Some(vec![1.0]),
+            ..Default::default()
+        });
+        assert_eq!(base.bins, Some(5));
+        assert_eq!(base.method.as_deref(), Some("loess"));
+        assert_eq!(base.rows, Some(3));
+        assert_eq!(base.ranges, Some(vec![1.0]));
+    }
+
+    #[test]
+    fn build_with_caller_data_and_spatial_geoms() {
+        let spec = parse(
+            r#"{"aes": {"fill": "v"},
+                "layers": [{"geom": "sf", "params": {"projection": "mercator"}},
+                           {"geom": "sf_text", "aes": {"label": "n"}},
+                           {"geom": "sf_label", "aes": {"label": "n"}}],
+                "coord": "sf"}"#,
+        )
+        .unwrap();
+        let data = vec![
+            (
+                "geometry".to_string(),
+                vec![Value::Str("POLYGON ((0 0, 10 0, 10 10, 0 10, 0 0))".into())],
+            ),
+            ("v".to_string(), vec![Value::Float(1.0)]),
+            ("n".to_string(), vec![Value::Str("a".into())]),
+        ];
+        let svg = build_plot_with_data(&spec, data)
+            .unwrap()
+            .render_svg_native_with_size(300, 200)
+            .unwrap();
+        assert!(svg.starts_with("<svg"));
+        let e = render(
+            r#"{"data": {"geometry": ["POINT (1 1)"]},
+                "layers": [{"geom": "sf", "params": {"projection": "robinson"}}]}"#,
+        )
+        .unwrap_err();
+        assert!(e.contains("unknown projection"), "{e}");
+    }
+
+    #[test]
+    fn parameterised_geoms_validate_params() {
+        let plot = || GGPlot::new(vec![("x".to_string(), vec![Value::Float(1.0)])]);
+        for shape in ["square", "hexagon", "circle", "diamond"] {
+            let p = LayerParams {
+                shape: Some(shape.into()),
+                ..Default::default()
+            };
+            assert!(add_geom(plot(), "tilemap", &p).is_ok(), "{shape}");
+        }
+        let p = LayerParams {
+            shape: Some("star".into()),
+            ..Default::default()
+        };
+        assert!(add_geom(plot(), "tilemap", &p).is_err());
+        let p = LayerParams {
+            target: Some("x".into()),
+            ranges: Some(vec![1.0, 2.0]),
+            ..Default::default()
+        };
+        assert!(add_geom(plot(), "bullet", &p).is_ok());
+        assert!(add_geom(plot(), "bullet_vertical", &p).is_ok());
+        for (g, need) in [
+            ("renko", "box_size"),
+            ("point_figure", "box_size"),
+            ("windbarb", "speed"),
+            ("censor_marks", "censor"),
+            ("hline", "yintercept"),
+        ] {
+            let Err(e) = add_geom(plot(), g, &LayerParams::default()) else {
+                panic!("{g} should need {need}");
+            };
+            assert!(e.contains(need), "{g}: {e}");
+        }
+        let p = LayerParams {
+            method: Some("gam".into()),
+            ..Default::default()
+        };
+        assert!(add_geom(plot(), "smooth", &p).is_err());
+    }
+
+    #[test]
+    fn size_and_empty_layers_are_validated() {
+        let e = render(&format!(r#"{{ {DATA}, "layers": [], "width": 0 }}"#)).unwrap_err();
+        assert!(e.contains("positive"), "{e}");
+        let e = render(&format!(r#"{{ {DATA}, "layers": [] }}"#)).unwrap_err();
+        assert!(e.contains("at least one layer"), "{e}");
     }
 
     #[test]

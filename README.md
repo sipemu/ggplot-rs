@@ -590,7 +590,11 @@ A `ggplot-rs` CLI (behind the `cli` feature) plots **parquet**/**CSV** files or
 **DuckDB SQL** straight from the shell — DuckDB is the query engine:
 
 ```sh
-cargo install ggplot-rs --features cli
+# prebuilt binary (Linux x86_64/arm64, macOS arm64/x86_64, Windows) from the
+# GitHub release — same version as the crate and the npm package:
+curl -L https://github.com/sipemu/ggplot-rs/releases/latest/download/ggplot-rs-x86_64-unknown-linux-gnu.tar.gz | tar xz
+cargo binstall ggplot-rs                 # the same binary, via cargo-binstall
+cargo install ggplot-rs --features cli   # or build from source (bundles DuckDB)
 
 # discover columns first, then plot
 ggplot-rs --parquet sales.parquet --describe
@@ -601,9 +605,18 @@ ggplot-rs --sql "SELECT region, sum(qty) q FROM 'orders/*.parquet' GROUP BY 1" \
   --x region --y q --geom col --facet-wrap region --theme minimal -o orders.svg
 ```
 
-Flags: `--x/--y/--color/--fill/--size/--shape/--group`, `--geom`, `--facet-wrap/--facet-grid`,
-`--log-x/--log-y/--flip`, `--title/--subtitle/--xlab/--ylab/--caption`, `-o FILE`/`--stdout`,
+Flags: `--x/--y/--color/--fill/--size/--shape/--group/--label`, any aesthetic
+via `--aes NAME=COL`, `--geom` (repeatable — one layer each; `--list-geoms`),
+`--param KEY=VALUE` (geom parameters such as `bins=30`, `method=loess`,
+`yintercept=0`), `--position`, `--facet-wrap/--facet-grid/--facet-scales`,
+`--log-x/--log-y/--flip/--coord`, `--legend`,
+`--title/--subtitle/--xlab/--ylab/--caption`, `-o FILE`/`--stdout`,
 `--width/--height`. Run `--describe` to list a source's columns and types.
+
+The flags compile to the same JSON plot spec the npm package renders
+(`ggplot_rs::spec`, feature `spec`), so the CLI, npm and Rust reach the same
+geoms — every `geom_*` builder, enforced by a test. `--spec chart.json` takes a
+spec directly (its `data`, or the `--parquet`/`--csv`/`--sql` input).
 
 **Maps from the CLI (`--spatial`, `--geom sf`).** DuckDB's
 [`spatial`](https://duckdb.org/docs/extensions/spatial) extension reads
@@ -650,9 +663,13 @@ x = 0.9
 y = 0.9
 ```
 
-**AI-ready:** the repo ships a Claude Code skill at `.claude/skills/plot-data/` that
-teaches an agent the describe-then-map-then-render workflow, so "plot this parquet"
-just works.
+**AI-ready:** agent skills (for Claude Code and other agents) live in
+[`skills/`](skills/): `ggplot-rs` (the Rust crate), `ggplot-rs-cli` (this
+CLI's describe-then-map-then-render workflow) and `ggplot-rs-js` (the npm
+package, which also ships its skill at `skills/ggplot-rs-js/`). This repo's
+`.claude/skills/` links to them. Tests fail when a skill drifts from the code:
+geoms, params and CLI flags must match, and the examples are compiled (Rust) or
+run (JS).
 
 ## In the browser (WASM)
 
@@ -860,6 +877,7 @@ GGPlot::new(data)
 | `geojson`    |   no    | read GeoJSON into a plot-ready frame (`spatial::geojson`); adds `serde_json` |
 | `canvas`     |   no    | self-contained RGBA raster backend for large-N (`render_rgba`/`render_png_raster`); wasm-ok |
 | `wasm`       |   no    | **deprecated** alias for `sf` (the browser bindings moved to the `crates/ggplot-rs-wasm` crate) |
+| `spec`       |   no    | `ggplot_rs::spec` — the declarative JSON plot spec behind the CLI and the npm package (adds `serde`, `serde_json`; implies `sf`) |
 | `cli`        |   no    | the `ggplot-rs` command-line tool (parquet/CSV/DuckDB → SVG/PNG), via clap + bundled DuckDB |
 
 To skip the heavy polars and plotters dependencies (e.g. an Arrow-only service

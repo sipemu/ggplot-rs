@@ -5,6 +5,43 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.39.0] — 2026-11-04
+
+### Added
+- Feature `spec`: `ggplot_rs::spec`, the declarative JSON plot spec (moved
+  from the wasm crate into the library) — `render_json`, `parse`,
+  `build_plot`, `build_plot_with_data`, `geoms()`. It is now the single engine
+  behind the npm package's `render()` and the CLI, so the two stay on par.
+- The spec reaches every `GGPlot::geom_*` builder (91 geoms, up from 53):
+  new `stepribbon`, `curve`, `spoke`, `text_repel`, `label_repel`,
+  `density_ridges`, `contour_filled`, `qq_band`, `censor_marks`, `errorbarh`,
+  `xrange`, `pyramid`, `bullet`, `bullet_vertical`, `marimekko`, `variwide`,
+  `waffle`, `parliament`, `tilemap`, `packed_bubble`, `variable_pie`,
+  `wordcloud`, `venn`, `timeline`, `flags`, `windbarb`, `dendrogram`, `tree`,
+  `arcdiagram`, `network`, `hlc`, `heikin_ashi`, `renko`, `point_figure`,
+  `sf`, `sf_text`, `sf_label`, `flow` (+ `quantile` with `regression`), new
+  layer params (`rows`, `box_size`, `reversal`, `shape`, `speed`,
+  `direction`, `censor`, `projection`, `target`, `ranges`) and `coord: "sf"`.
+  A test fails when a new builder isn't added to the spec (or excluded with
+  a reason).
+- CLI: built on the spec — every spec geom; `--geom` repeatable (layers);
+  `--aes NAME=COL`; `--param KEY=VALUE`; `--position`; `--coord`;
+  `--legend`; `--facet-scales`; `--spec FILE`; `--list-geoms`.
+- Prebuilt CLI binaries on every GitHub release (Linux x86_64/arm64, macOS
+  arm64/x86_64, Windows; `cli-binaries.yml`), installable with
+  `cargo binstall ggplot-rs`.
+- Agent skills in `skills/` — `ggplot-rs` (Rust), `ggplot-rs-cli`,
+  `ggplot-rs-js` (also shipped in the npm package). Tests keep them in step
+  with the code (geoms, params, CLI flags, version pin; Rust examples are
+  doctests, JS examples run under vitest).
+- `SfProjection::parse` — the projection names shared by the CLI, spec and
+  `render_geo`.
+
+### Changed
+- CLI `--palette` now applies to categorical color/fill mappings only (a
+  numeric mapping keeps its gradient), as in the npm package.
+- `.claude/skills/plot-data` is replaced by `ggplot-rs-cli`.
+
 ## [0.38.0] — 2026-11-03
 
 ### Added

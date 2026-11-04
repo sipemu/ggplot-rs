@@ -85,7 +85,7 @@ const spec: PlotSpec = {
     color: { palette: 'Dark2' },            // or { values: { OJ: '#e69f00', VC: '#56b4e9' } }
   },
   facet: { wrap: 'supp' },                  // or { rows: 'a', cols: 'b', scales: 'free_y' }
-  coord: 'cartesian',                       // 'flip' | 'polar' | 'fixed' | 'radar' | { type, xlim, ylim, ratio }
+  coord: 'cartesian',                       // 'flip' | 'polar' | 'fixed' | 'radar' | 'sf' | { type, xlim, ylim, ratio }
   labels: { title: 'Tooth growth', subtitle: 'by supplement', y: 'Length' },
   theme: { base: 'bw', title: { size: 16, face: 'bold' } }, // or just 'classic'
   legend: 'bottom',                         // 'none' | 'inside' | [x, y] …
@@ -96,10 +96,10 @@ const spec: PlotSpec = {
 
 | Field | What it does |
 |---|---|
-| `layers[].geom` | One of `geoms()`. That covers point, line, path, step, area, ribbon, col, bar, histogram, freqpoly, density, boxplot, violin, dotplot, smooth, text, label, errorbar, linerange, pointrange, crossbar, segment, rect, tile, raster, polygon, rug, count, bin2d, hex, density2d, contour, qq, qq_line, hline, vline, abline and blank, plus the chart types waterfall, pareto, sankey, chord, treemap, sunburst, icicle, funnel, stream, lollipop, dumbbell, candlestick, ohlc and calendar. |
+| `layers[].geom` | One of `geoms()` — every `geom_*` of the Rust crate (a test enforces this): the basic geoms (point, line, path, step, area, ribbon, col, bar, segment, curve, rect, tile, raster, polygon, text, label, text_repel, …), reference lines (hline, vline, abline), distributions (histogram, freqpoly, density, density_ridges, boxplot, violin, dotplot, smooth, count, bin2d, hex, density2d, contour, contour_filled, qq, qq_line, qq_band), intervals (errorbar, errorbarh, linerange, pointrange, crossbar, xrange), business charts (waterfall, pareto, funnel, pyramid, lollipop, dumbbell, bullet, marimekko, waffle, parliament, tilemap, wordcloud, venn, timeline, calendar, …), hierarchies and networks (treemap, sunburst, icicle, dendrogram, sankey, chord, arcdiagram, network, stream), finance (candlestick, ohlc, hlc, heikin_ashi, renko, point_figure) and spatial (sf, sf_text, sf_label, flow). |
 | `layers[].aes` | A layer-level mapping, merged over the plot `aes`. |
 | `layers[].data` | Layer-specific data. |
-| `layers[].params` | `bins` (histogram), `method`/`span`/`se` (smooth), `yintercept`/`xintercept`/`slope`/`intercept` (reference lines), `levels` (sunburst/icicle). |
+| `layers[].params` | `bins` (histogram), `method`/`span`/`se` (smooth), `yintercept`/`xintercept`/`slope`/`intercept` (reference lines), `levels` (sunburst/icicle), `rows` (waffle/parliament), `box_size`/`reversal` (renko/point_figure), `shape` (tilemap), `speed`/`direction` (windbarb), `censor` (censor_marks), `projection` (sf, sf_text, sf_label, flow), `target`/`ranges` (bullet). |
 | `layers[].position` | `identity`, `stack`, `fill`, `dodge`, `dodge2`, `jitter` or `nudge`. Use an object such as `{ type: 'dodge', width: 0.8 }` to set parameters. |
 | `layers[].stat` | `'identity'`, which plots values as given (e.g. `bar` with precomputed heights). |
 | `theme` | A preset name (`gray`, `bw`, `minimal`, `classic`, `dark`, `light`, `void`, `linedraw`) or a partial overlay. The overlay uses the same schema as the ggplot-rs CLI's `--theme-config` (`base`, `primary`, `palette`, per-element `title`/`axis_text_x`/`panel_grid_major` …). The default is `minimal`. |
@@ -128,6 +128,22 @@ no data.
 the package was built from. The lower-level functions used by the live demo
 (`render_plot`, `render_geo`, `geo_bounds`, `render_bar`, `render_hist` and
 `scatter_frame`) are exported too.
+
+### Same spec as the CLI and Rust
+
+The spec is the crate's `ggplot_rs::spec` module, so the `ggplot-rs` CLI
+accepts the same JSON (`ggplot-rs --spec chart.json --parquet data.parquet`)
+and Rust code can call `ggplot_rs::spec::render_json` (feature `spec`).
+
+### Agent skill
+
+The package ships an agent skill at `skills/ggplot-rs-js/SKILL.md`, a
+how-to for LLM coding agents (Claude Code and others). To use it with Claude
+Code, copy or link it into your project:
+
+```sh
+mkdir -p .claude/skills && cp -r node_modules/@sipemu/ggplot-rs/skills/ggplot-rs-js .claude/skills/
+```
 
 ## Fidelity to ggplot2
 

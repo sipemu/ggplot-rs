@@ -1,6 +1,6 @@
 {
   "name": "@sipemu/ggplot-rs",
-  "version": "0.38.0",
+  "version": "0.39.0",
   "description": "Grammar-of-graphics charts (ggplot2-style) rendered to SVG — WebAssembly build of the ggplot-rs Rust crate, no runtime dependencies",
   "type": "module",
   "main": "./dist/ggplot_rs.js",
@@ -19,6 +19,7 @@
     "dist/ggplot_rs.d.ts",
     "dist/ggplot_rs_bg.wasm",
     "dist/ggplot_rs_bg.wasm.d.ts",
+    "skills/",
     "README.md",
     "LICENSE-MIT",
     "LICENSE-APACHE"

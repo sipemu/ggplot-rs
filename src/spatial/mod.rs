@@ -95,6 +95,40 @@ pub enum SfProjection {
 }
 
 impl SfProjection {
+    /// Parse a projection name, as the CLI's `--projection`, the plot spec's
+    /// `params.projection` and the npm package accept: `platecarree`/`plate`,
+    /// `mercator`, `equal-earth`, `albers-usa`, `albers-europe`, or
+    /// `utm:<zone>` / `utm:<zone>s` (south, zone 1–60).
+    pub fn parse(s: &str) -> Result<Self, String> {
+        Ok(match s {
+            "platecarree" | "plate" => SfProjection::PlateCarree,
+            "mercator" => SfProjection::Mercator,
+            "equal-earth" | "equalearth" => SfProjection::equal_earth(0.0),
+            "albers-usa" => SfProjection::albers_usa(),
+            "albers-europe" => SfProjection::albers_europe(),
+            utm if utm.starts_with("utm:") => {
+                let rest = &utm[4..];
+                let (zone_str, south) = match rest.strip_suffix(['s', 'S']) {
+                    Some(z) => (z, true),
+                    None => (rest, false),
+                };
+                let zone: u8 = zone_str
+                    .parse()
+                    .map_err(|_| format!("bad UTM zone in projection '{utm}'"))?;
+                if !(1..=60).contains(&zone) {
+                    return Err(format!("UTM zone must be 1-60, got {zone}"));
+                }
+                SfProjection::utm(zone, south)
+            }
+            other => {
+                return Err(format!(
+                    "unknown projection '{other}' (expected platecarree, mercator, equal-earth, \
+                     albers-usa, albers-europe, utm:<zone>[s])"
+                ))
+            }
+        })
+    }
+
     /// Equal Earth centred on `lon0` (degrees) — the usual choice for a
     /// whole-world map is `lon0 = 0.0`.
     pub fn equal_earth(lon0: f64) -> Self {

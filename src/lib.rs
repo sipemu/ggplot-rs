@@ -18,8 +18,16 @@ pub(crate) mod rng;
 pub mod scale;
 #[cfg(feature = "sf")]
 pub mod spatial;
+#[cfg(feature = "spec")]
+pub mod spec;
 pub mod stat;
 pub mod theme;
 
 pub use locale::Locale;
+
+/// Compiles the code blocks of the agent skill shipped in `skills/ggplot-rs/`
+/// as doctests, so the skill's examples can't drift from the API.
+#[cfg(doctest)]
+#[doc = include_str!("../skills/ggplot-rs/SKILL.md")]
+pub struct RustSkillExamples;
 pub use plot::{GGError, GGPlot};
