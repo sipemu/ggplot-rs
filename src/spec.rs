@@ -1256,6 +1256,134 @@ mod tests {
     }
 
     #[test]
+    fn projection_names_parse() {
+        for ok in [
+            "platecarree",
+            "plate",
+            "mercator",
+            "equal-earth",
+            "equalearth",
+            "albers-usa",
+            "albers-europe",
+            "utm:33",
+            "utm:33s",
+        ] {
+            assert!(SfProjection::parse(ok).is_ok(), "{ok}");
+        }
+        assert_eq!(
+            SfProjection::parse("utm:33s"),
+            Ok(SfProjection::utm(33, true))
+        );
+        for (bad, msg) in [
+            ("utm:0", "1-60"),
+            ("utm:abc", "bad UTM zone"),
+            ("robinson", "unknown projection"),
+        ] {
+            let e = SfProjection::parse(bad).unwrap_err();
+            assert!(e.contains(msg), "{bad}: {e}");
+        }
+    }
+
+    #[test]
+    fn overlay_copies_only_set_params() {
+        let mut base = LayerParams {
+            bins: Some(5),
+            method: Some("lm".into()),
+            ..Default::default()
+        };
+        base.overlay(LayerParams {
+            method: Some("loess".into()),
+            rows: Some(3),
+            ranges: Some(vec![1.0]),
+            ..Default::default()
+        });
+        assert_eq!(base.bins, Some(5));
+        assert_eq!(base.method.as_deref(), Some("loess"));
+        assert_eq!(base.rows, Some(3));
+        assert_eq!(base.ranges, Some(vec![1.0]));
+    }
+
+    #[test]
+    fn build_with_caller_data_and_spatial_geoms() {
+        let spec = parse(
+            r#"{"aes": {"fill": "v"},
+                "layers": [{"geom": "sf", "params": {"projection": "mercator"}},
+                           {"geom": "sf_text", "aes": {"label": "n"}},
+                           {"geom": "sf_label", "aes": {"label": "n"}}],
+                "coord": "sf"}"#,
+        )
+        .unwrap();
+        let data = vec![
+            (
+                "geometry".to_string(),
+                vec![Value::Str("POLYGON ((0 0, 10 0, 10 10, 0 10, 0 0))".into())],
+            ),
+            ("v".to_string(), vec![Value::Float(1.0)]),
+            ("n".to_string(), vec![Value::Str("a".into())]),
+        ];
+        let svg = build_plot_with_data(&spec, data)
+            .unwrap()
+            .render_svg_native_with_size(300, 200)
+            .unwrap();
+        assert!(svg.starts_with("<svg"));
+        let e = render(
+            r#"{"data": {"geometry": ["POINT (1 1)"]},
+                "layers": [{"geom": "sf", "params": {"projection": "robinson"}}]}"#,
+        )
+        .unwrap_err();
+        assert!(e.contains("unknown projection"), "{e}");
+    }
+
+    #[test]
+    fn parameterised_geoms_validate_params() {
+        let plot = || GGPlot::new(vec![("x".to_string(), vec![Value::Float(1.0)])]);
+        for shape in ["square", "hexagon", "circle", "diamond"] {
+            let p = LayerParams {
+                shape: Some(shape.into()),
+                ..Default::default()
+            };
+            assert!(add_geom(plot(), "tilemap", &p).is_ok(), "{shape}");
+        }
+        let p = LayerParams {
+            shape: Some("star".into()),
+            ..Default::default()
+        };
+        assert!(add_geom(plot(), "tilemap", &p).is_err());
+        let p = LayerParams {
+            target: Some("x".into()),
+            ranges: Some(vec![1.0, 2.0]),
+            ..Default::default()
+        };
+        assert!(add_geom(plot(), "bullet", &p).is_ok());
+        assert!(add_geom(plot(), "bullet_vertical", &p).is_ok());
+        for (g, need) in [
+            ("renko", "box_size"),
+            ("point_figure", "box_size"),
+            ("windbarb", "speed"),
+            ("censor_marks", "censor"),
+            ("hline", "yintercept"),
+        ] {
+            let Err(e) = add_geom(plot(), g, &LayerParams::default()) else {
+                panic!("{g} should need {need}");
+            };
+            assert!(e.contains(need), "{g}: {e}");
+        }
+        let p = LayerParams {
+            method: Some("gam".into()),
+            ..Default::default()
+        };
+        assert!(add_geom(plot(), "smooth", &p).is_err());
+    }
+
+    #[test]
+    fn size_and_empty_layers_are_validated() {
+        let e = render(&format!(r#"{{ {DATA}, "layers": [], "width": 0 }}"#)).unwrap_err();
+        assert!(e.contains("positive"), "{e}");
+        let e = render(&format!(r#"{{ {DATA}, "layers": [] }}"#)).unwrap_err();
+        assert!(e.contains("at least one layer"), "{e}");
+    }
+
+    #[test]
     fn treemap_and_sankey_render() {
         let svg = render(
             r#"{"data": {"k": ["a", "b", "c"], "v": [3, 2, 1]},
