@@ -305,7 +305,7 @@ fn expected() -> Vec<(&'static str, u64)> {
         ("density", 0x055db381e3b7d8e5),
         ("tile", 0x873b1d2d936ab090),
         ("smooth", SMOOTH_HASH),
-        ("polar", 0xe35758d04bde28b5),
+        ("polar", 0x9a387dba9658531e), // #411 polar guides (rings / spokes / labels)
         ("facet", 0xfd878f16570d2b78),
         ("facet_stack", 0x913030cad2700d64), // #410 key glyph
         ("flip", 0x94fdd6d55d9a7be1),

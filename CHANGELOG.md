@@ -29,6 +29,10 @@ All notable changes to this project are documented here. The format follows
   shape / linetype per bin, a `lo–hi` legend key each. New
   `Scale::bin_positions` hook. Spec / npm: `scales.x/y.binned`,
   `scales.{size,alpha,linewidth,shape}.binned`.
+- Radial options (#411): `CoordPolar::r_axis_inside`, `rotate_angle`,
+  `reverse(theta, r)` — ggplot2's `coord_radial(r.axis.inside =,
+  rotate.angle =, reverse =)`. Spec / npm: `coord: { type: "radial",
+  r_axis_inside, rotate_angle, reverse: "theta" | "r" | "thetar" }`.
 - Theme (#413): `axis_text_x_top` / `axis_text_y_right` (ggplot2's
   `axis.text.x.top` / `axis.text.y.right`) for a top x axis and the
   secondary y axis; `theme_test()` (`theme_bw` without gridlines; preset
@@ -99,6 +103,12 @@ All notable changes to this project are documented here. The format follows
 - `facet_wrap` with a free scale (#412): only the outer panels had axes,
   so the other panels' own (different) ranges had no labels. As in
   ggplot2, a free axis is now drawn — labelled — on every panel.
+- Polar / radial guides (#411): `coord_polar` / `coord_radial` drew
+  cartesian axes (all theta labels on one spot under the panel). They now
+  draw ggplot2-style rings at the r breaks, spokes and labels at the theta
+  breaks around the circle, and r labels at the left (or along the start
+  spoke for partial arcs); a continuous theta scale is no longer padded, so
+  a full circle closes. **Visible change** for every polar plot.
 - `facet_grid` strips (#412): the row labels were never drawn and every
   panel repeated its column strip. Now, as in ggplot2, column strips run
   once along the top of the grid and row strips once down its right side

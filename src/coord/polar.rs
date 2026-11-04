@@ -23,6 +23,14 @@ pub struct CoordPolar {
     /// `false`, `width = 1` bars fill their band edge to edge, so a
     /// `theta = "y"` pie reaches the centre (ggplot2's `coord_radial(expand =)`).
     pub expand: bool,
+    /// The r axis along the start spoke (`r.axis.inside = TRUE`) or at the
+    /// panel's left edge (`FALSE`); `None` = inside for a partial arc,
+    /// outside for a full circle (#411).
+    pub r_axis_inside: Option<bool>,
+    /// Theta labels follow the circle (`rotate.angle = TRUE`, #411).
+    pub rotate_angle: bool,
+    /// Radius runs outside-in (`coord_radial(reverse = "r")`, #411).
+    pub reverse_r: bool,
 }
 
 impl CoordPolar {
@@ -34,7 +42,42 @@ impl CoordPolar {
             inner_radius: 0.0,
             span: std::f64::consts::TAU,
             expand: true,
+            r_axis_inside: None,
+            rotate_angle: false,
+            reverse_r: false,
         }
+    }
+
+    /// ggplot2's `coord_radial(r.axis.inside =)` (#411).
+    pub fn r_axis_inside(mut self, inside: bool) -> Self {
+        self.r_axis_inside = Some(inside);
+        self
+    }
+
+    /// ggplot2's `coord_radial(rotate.angle = TRUE)` (#411).
+    pub fn rotate_angle(mut self, rotate: bool) -> Self {
+        self.rotate_angle = rotate;
+        self
+    }
+
+    /// ggplot2's `coord_radial(reverse = "theta" | "r" | "thetar")` (#411):
+    /// theta runs anticlockwise and / or r outside-in.
+    pub fn reverse(mut self, theta: bool, r: bool) -> Self {
+        if theta {
+            self.direction = -self.direction.signum();
+        }
+        self.reverse_r = r;
+        self
+    }
+
+    /// The pole and outer radius in pixels for `plot_area`.
+    fn frame(&self, plot_area: &Rect) -> ((f64, f64), f64) {
+        let (bx0, bx1, by0, by1) = self.unit_bbox();
+        let (bw, bh) = ((bx1 - bx0).max(1e-9), (by1 - by0).max(1e-9));
+        let max_radius = (plot_area.width / bw).min(plot_area.height / bh);
+        let cx = plot_area.x + plot_area.width / 2.0 - max_radius * (bx0 + bx1) / 2.0;
+        let cy = plot_area.y + plot_area.height / 2.0 - max_radius * (by0 + by1) / 2.0;
+        ((cx, cy), max_radius)
     }
 
     /// Sweep the theta range over `[start, end]` (radians, 0 = 12 o'clock,
@@ -140,15 +183,14 @@ impl Coord for CoordPolar {
         // Fit the swept sector's bounding box into the panel: a full circle
         // gets radius = half the smaller side, centred; a partial arc (gauge)
         // is scaled up and shifted so it fills the panel.
-        let (bx0, bx1, by0, by1) = self.unit_bbox();
-        let (bw, bh) = ((bx1 - bx0).max(1e-9), (by1 - by0).max(1e-9));
-        let max_radius = (plot_area.width / bw).min(plot_area.height / bh);
+        let ((cx, cy), max_radius) = self.frame(plot_area);
+        let radius_norm = if self.reverse_r {
+            1.0 - radius_norm
+        } else {
+            radius_norm
+        };
         // Map [0,1] into [inner_radius, 1] so a donut leaves a centre hole.
         let radius = (self.inner_radius + radius_norm * (1.0 - self.inner_radius)) * max_radius;
-
-        // Center of the polar plot
-        let cx = plot_area.x + plot_area.width / 2.0 - max_radius * (bx0 + bx1) / 2.0;
-        let cy = plot_area.y + plot_area.height / 2.0 - max_radius * (by0 + by1) / 2.0;
 
         // Convert polar to Cartesian pixel coordinates
         // angle=0 points up (12 o'clock), increases clockwise
@@ -176,5 +218,28 @@ impl Coord for CoordPolar {
 
     fn polar_theta_is_x(&self) -> bool {
         self.theta == "x"
+    }
+
+    /// A continuous theta scale isn't padded (ggplot2's `coord_polar`): the
+    /// data spans the whole sweep, and a full circle closes (#411).
+    fn train_scales(&mut self, scales: &mut crate::scale::ScaleSet) {
+        let aes = if self.theta == "x" {
+            crate::aes::Aesthetic::X
+        } else {
+            crate::aes::Aesthetic::Y
+        };
+        if let Some(s) = scales.get_mut(&aes).filter(|s| !s.is_discrete()) {
+            s.set_expand(0.0, 0.0);
+        }
+    }
+
+    fn polar_guide(&self, plot_area: &Rect) -> Option<super::PolarGuide> {
+        let full = self.span >= std::f64::consts::TAU - 1e-9;
+        Some(super::PolarGuide {
+            centre: self.frame(plot_area).0,
+            full_circle: full,
+            r_axis_inside: self.r_axis_inside.unwrap_or(!full),
+            rotate_labels: self.rotate_angle,
+        })
     }
 }
