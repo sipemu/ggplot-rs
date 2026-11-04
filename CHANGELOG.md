@@ -6,6 +6,8 @@ All notable changes to this project are documented here. The format follows
 ## [Unreleased]
 
 ### Added
+- `Theme.tag_location_panel` (#413, ggplot2's `plot.tag.location =
+  "panel"`; config key `tag_location`): the tag sits in the panel's corner.
 - `Theme.axis_ticks_length_x` / `_y` (#413, ggplot2's `axis.ticks.length.x`
   / `.y`; config keys of the same names), with `Theme::ticks_len_x/_y()`.
 - `Theme.legend_location_plot` (#413, ggplot2's `legend.location =

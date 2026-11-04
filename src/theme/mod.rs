@@ -227,6 +227,9 @@ pub struct Theme {
     /// #413); `None` = `axis_ticks_length`.
     pub axis_ticks_length_x: Option<f64>,
     pub axis_ticks_length_y: Option<f64>,
+    /// Place the tag in the panel's corner (ggplot2's `plot.tag.location =
+    /// "panel"`, #413); default the plot's.
+    pub tag_location_panel: bool,
     /// Facet strips below / left of a panel sit outside its axis
     /// (ggplot2's `strip.placement = "outside"`, #412); default inside.
     pub strip_placement_outside: bool,
