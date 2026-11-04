@@ -247,12 +247,14 @@ export type Coord =
   | CoordName
   | {
       type: CoordName; ratio?: number; xlim?: [number, number]; ylim?: [number, number];
-      /** cartesian: mirror the panel. */
-      reverse?: "x" | "y" | "xy" | "none";
+      /** cartesian: mirror the panel; radial: "theta" | "r" | "thetar". */
+      reverse?: "x" | "y" | "xy" | "theta" | "r" | "thetar" | "none";
       /** cartesian: keep the scale padding — `false`, or `[top, right, bottom, left]`. */
       expand?: boolean | [boolean, boolean, boolean, boolean];
       /** radial: theta start / end in radians (clockwise from 12 o'clock) and a donut hole (0–1). */
       start?: number; end?: number; inner_radius?: number;
+      /** radial: r axis along the start spoke; theta labels follow the circle. */
+      r_axis_inside?: boolean; rotate_angle?: boolean;
     };
 
 export interface Labels {

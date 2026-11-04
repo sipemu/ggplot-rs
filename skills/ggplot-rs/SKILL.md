@@ -122,7 +122,8 @@ With polars (default feature): `GGPlot::new(df!{ "x" => [1.0, 2.0], "y" => [3.0,
 - **Coords:** `coord_flip()`, `coord_polar()`, `coord_radial(start, end,
   inner_radius)`, `coord_fixed(ratio)`, `coord_cartesian_zoom(Some((lo, hi)), None)`,
   `coord_reverse(x, y)`, `coord_cartesian_with(CoordCartesian::new().expand(t, r, b, l))`
-  (`expand = FALSE` per side), `coord_trans`/`coord_transform(x, y)`, `coord_quickmap()`,
+  (`expand = FALSE` per side), `coord_polar_with(CoordPolar::new().reverse(theta, r)
+  .rotate_angle(true).r_axis_inside(true))`, `coord_trans`/`coord_transform(x, y)`, `coord_quickmap()`,
   `coord_map()` (Mercator, plain lon/lat), `coord_radar()`, `coord_sf()`.
 - **Annotations:** `annotate_text/rect/segment`, `annotation_logticks("bl")`
   (with `scale_*_log10()`), `annotation_raster(png_bytes, xmin, xmax, ymin, ymax)`,

@@ -139,6 +139,20 @@ impl PlotRenderer {
                 &plot_area,
                 backend,
             )?;
+        } else if let (true, Some(xs), Some(ys)) = (built.coord.is_polar(), x_scale, y_scale) {
+            // Polar / radial (#411): rings, spokes and labels around the
+            // circle; the axis titles stay at the bottom / left.
+            crate::guide::polar::draw_polar_guides(
+                xs,
+                ys,
+                built.coord.as_ref(),
+                theme,
+                &plot_area,
+                backend,
+            )?;
+            axis::draw_x_axis_title(xs, theme, &plot_area, backend)?;
+            let reserve = axis::y_label_reserve(theme, &ys.breaks());
+            axis::draw_y_axis_title(ys, theme, &plot_area, reserve, backend)?;
         } else if let (Some(hs), Some(vs)) = (h_scale, v_scale) {
             // Gridlines under the data, unless panel.ontop draws them over it.
             if built.coord.gridlines() && !theme.panel_ontop {
@@ -939,7 +953,21 @@ impl PlotRenderer {
             let x_scale = panel_scale_set.get(&Aesthetic::X);
             let y_scale = panel_scale_set.get(&Aesthetic::Y);
 
-            if let (Some(xs), Some(ys)) = (x_scale, y_scale) {
+            if let (true, Some(xs), Some(ys)) = (
+                built.coord.is_polar() && !built.coord.is_radar(),
+                x_scale,
+                y_scale,
+            ) {
+                // Polar facets (#411): each panel its own rings / spokes.
+                crate::guide::polar::draw_polar_guides(
+                    xs,
+                    ys,
+                    built.coord.as_ref(),
+                    theme,
+                    &panel_rect,
+                    backend,
+                )?;
+            } else if let (Some(xs), Some(ys)) = (x_scale, y_scale) {
                 if built.coord.gridlines() {
                     axis::draw_gridlines(
                         xs,

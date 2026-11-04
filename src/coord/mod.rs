@@ -64,6 +64,11 @@ pub trait Coord: Send + Sync {
         true
     }
 
+    /// A polar coord's guide geometry (#411): `None` for every other coord.
+    fn polar_guide(&self, _plot_area: &crate::render::Rect) -> Option<PolarGuide> {
+        None
+    }
+
     /// Zoom limits for x-axis (data coordinates). Clips viewport without filtering data.
     fn zoom_x(&self) -> Option<(f64, f64)> {
         None
@@ -106,4 +111,19 @@ pub trait Coord: Send + Sync {
     fn supports_axis_reserve(&self) -> bool {
         true
     }
+}
+
+/// What [`draw_polar_guides`](crate::guide::polar::draw_polar_guides) needs
+/// from a polar coord (#411).
+#[derive(Clone, Copy, Debug)]
+pub struct PolarGuide {
+    /// The pole, in pixels.
+    pub centre: (f64, f64),
+    /// The swept angle covers the whole circle.
+    pub full_circle: bool,
+    /// Put the r axis along the start spoke instead of the panel's left
+    /// edge (`r.axis.inside`).
+    pub r_axis_inside: bool,
+    /// Turn theta labels to follow the circle (`rotate.angle`).
+    pub rotate_labels: bool,
 }

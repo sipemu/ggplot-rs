@@ -406,6 +406,10 @@ pub struct CoordFull {
     pub end: Option<f64>,
     /// `radial`: inner radius as a fraction of the outer (a donut).
     pub inner_radius: Option<f64>,
+    /// `radial`: r axis along the start spoke (`r.axis.inside`, #411).
+    pub r_axis_inside: Option<bool>,
+    /// `radial`: theta labels follow the circle (`rotate.angle`, #411).
+    pub rotate_angle: Option<bool>,
 }
 
 #[derive(Deserialize, Clone, Copy)]
@@ -1796,7 +1800,28 @@ fn apply_coord(plot: GGPlot, c: &CoordSpec) -> Result<GGPlot, String> {
             let end = full
                 .and_then(|f| f.end)
                 .unwrap_or(start + 2.0 * std::f64::consts::PI);
-            plot.coord_radial(start, end, full.and_then(|f| f.inner_radius).unwrap_or(0.0))
+            let mut c = CoordPolar::new();
+            c.start = start;
+            c.span = end - start;
+            c.inner_radius = full.and_then(|f| f.inner_radius).unwrap_or(0.0).clamp(0.0, 0.99);
+            let (rev_t, rev_r) = match full.and_then(|f| f.reverse.as_deref()) {
+                None | Some("none") => (false, false),
+                Some("theta") => (true, false),
+                Some("r") => (false, true),
+                Some("thetar") => (true, true),
+                Some(o) => {
+                    return Err(format!(
+                        "unknown reverse '{o}' for radial (expected theta, r, thetar, none)"
+                    ))
+                }
+            };
+            c = c
+                .reverse(rev_t, rev_r)
+                .rotate_angle(full.and_then(|f| f.rotate_angle).unwrap_or(false));
+            if let Some(i) = full.and_then(|f| f.r_axis_inside) {
+                c = c.r_axis_inside(i);
+            }
+            plot.coord_polar_with(c)
         }
         "flip" => plot.coord_flip(),
         "polar" => plot.coord_polar(),
@@ -2447,6 +2472,23 @@ mod tests {
         )
         .unwrap_err();
         assert!(e.contains("binned takes only range"), "{e}");
+    }
+
+    #[test]
+    fn radial_options_spec() {
+        let d = r#""data": {"x": ["a", "b", "c"], "y": [1, 2, 3]}, "aes": {"x": "x", "y": "y"},
+               "layers": [{"geom": "col"}]"#;
+        let svg = render(&format!(
+            r#"{{ {d}, "coord": {{"type": "radial", "reverse": "thetar", "rotate_angle": true,
+               "r_axis_inside": false}} }}"#
+        ))
+        .unwrap();
+        assert!(svg.contains("rotate("), "{svg}");
+        let e = render(&format!(
+            r#"{{ {d}, "coord": {{"type": "radial", "reverse": "x"}} }}"#
+        ))
+        .unwrap_err();
+        assert!(e.contains("for radial"), "{e}");
     }
 
     #[test]
