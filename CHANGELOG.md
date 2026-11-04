@@ -6,6 +6,11 @@ All notable changes to this project are documented here. The format follows
 ## [Unreleased]
 
 ### Added
+- `ScaleContinuous::with_n_breaks(n)` (#408): ggplot2's `n.breaks` — about
+  `n` round breaks instead of 5. `scale_x_time()` / `scale_y_time()`
+  (`ScaleContinuous::time()`): seconds on the axis, breaks on round time
+  steps, `HH:MM:SS` labels. Spec / npm: `scales.x/y.n_breaks`,
+  `scales.x/y.time`.
 - Theme (#413): `axis_text_x_top` / `axis_text_y_right` (ggplot2's
   `axis.text.x.top` / `axis.text.y.right`) for a top x axis and the
   secondary y axis; `theme_test()` (`theme_bw` without gridlines; preset

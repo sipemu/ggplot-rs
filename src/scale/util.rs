@@ -25,6 +25,44 @@ pub fn stepped_breaks(start: f64, end: f64, step: f64) -> Vec<f64> {
     (0..=n as usize).map(|i| start + i as f64 * step).collect()
 }
 
+/// Round time-of-day breaks over `[dmin, dmax]` seconds (#408): the step is
+/// the smallest of 1/2/5/10/15/30 s, 1/2/5/10/15/30 min, 1/2/3/6/12 h, 1 day
+/// (or whole days) giving at most about `m` intervals.
+pub fn time_breaks(dmin: f64, dmax: f64, m: usize) -> Vec<f64> {
+    if !(dmin.is_finite() && dmax.is_finite()) || dmax <= dmin {
+        return vec![];
+    }
+    const STEPS: [f64; 18] = [
+        1.0, 2.0, 5.0, 10.0, 15.0, 30.0, 60.0, 120.0, 300.0, 600.0, 900.0, 1800.0, 3600.0, 7200.0,
+        10800.0, 21600.0, 43200.0, 86400.0,
+    ];
+    let span = dmax - dmin;
+    let m = m.max(2) as f64;
+    let step = STEPS
+        .iter()
+        .copied()
+        .find(|s| span / s <= m)
+        .unwrap_or_else(|| (span / m / 86400.0).ceil() * 86400.0);
+    let mut v = (dmin / step).ceil() * step;
+    let mut out = Vec::new();
+    while v <= dmax + step * 1e-9 {
+        out.push(v);
+        v += step;
+    }
+    out
+}
+
+/// Seconds as `HH:MM:SS` (`hms`; hours may exceed 24, negatives get a
+/// leading `-`). Fractional seconds are rounded.
+pub fn format_hms(secs: f64) -> String {
+    if !secs.is_finite() {
+        return "NA".into();
+    }
+    let sign = if secs < 0.0 { "-" } else { "" };
+    let t = secs.abs().round() as u64;
+    format!("{sign}{:02}:{:02}:{:02}", t / 3600, (t / 60) % 60, t % 60)
+}
+
 /// Extended-Wilkinson tick locations (Talbot, Lin & Hanrahan 2010), matching R's
 /// `scales::extended_breaks()` / `labeling::extended()`. Returns "nice" break
 /// values covering `[dmin, dmax]` with roughly `m` labels.

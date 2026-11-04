@@ -2941,6 +2941,17 @@ impl GGPlot {
     }
 
     /// Box–Cox x axis with the given lambda (x > 0).
+    /// ggplot2's `scale_x_time()`: seconds of day on x, `HH:MM:SS` labels at
+    /// round time steps (#408).
+    pub fn scale_x_time(self) -> Self {
+        self.scale_x_continuous(ScaleContinuous::time())
+    }
+
+    /// ggplot2's `scale_y_time()` — see [`scale_x_time`](Self::scale_x_time).
+    pub fn scale_y_time(self) -> Self {
+        self.scale_y_continuous(ScaleContinuous::time())
+    }
+
     pub fn scale_x_boxcox(self, lambda: f64) -> Self {
         self.scale_x_continuous(
             ScaleContinuous::new().with_transform(ScaleTransform::BoxCox(lambda)),
