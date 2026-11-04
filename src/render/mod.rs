@@ -1,6 +1,7 @@
 pub mod backend;
 pub mod corner_layout;
 pub mod layout;
+pub(crate) mod offset;
 pub(crate) mod probe;
 #[cfg(feature = "png")]
 pub(crate) mod raster;

@@ -24,6 +24,13 @@ All notable changes to this project are documented here. The format follows
   `position_dodge` / `position_dodge2` on a discrete axis.
 
 ### Added
+- Annotations (#407): `annotation_logticks(sides)` (long / mid / short log-10
+  ticks on any of `trbl`; `Annotation::logticks(..).outside()`),
+  `annotation_raster(png, xmin, xmax, ymin, ymax)` /
+  `annotation_raster_rgba((w, h), rgba, bounds)` (feature `png`), and
+  `annotation_custom(inset, xmin, xmax, ymin, ymax)` — a whole `GGPlot`
+  drawn into a data rectangle (an inset), in SVG, PNG and raster output.
+  `±INFINITY` bounds mean the panel edges, as in ggplot2.
 - Missing ggplot2 layers (#406): `geom_function(f)` / `geom_function_xlim(f,
   lo, hi)` (plot a function, with or without data; `StatFunction::with_xlim`),
   `stat_connect(Connection::{Hv, Vh, Mid, Linear})` (ggplot2 4.0),

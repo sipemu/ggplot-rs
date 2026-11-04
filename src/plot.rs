@@ -3287,6 +3287,59 @@ impl GGPlot {
         self.annotate(Annotation::segment(x, y, xend, yend))
     }
 
+    /// Log-10 tick marks on the panel `sides` (`"bl"`, `"trbl"`, …) —
+    /// ggplot2's `annotation_logticks()`; pair with `scale_x_log10()` etc.
+    pub fn annotation_logticks(self, sides: &str) -> Self {
+        self.annotate(Annotation::logticks(sides))
+    }
+
+    /// An encoded PNG / JPEG image over a data rectangle (`annotation_raster`);
+    /// `f64::INFINITY` / `NEG_INFINITY` bounds mean the panel edges.
+    pub fn annotation_raster(
+        self,
+        image: Vec<u8>,
+        xmin: f64,
+        xmax: f64,
+        ymin: f64,
+        ymax: f64,
+    ) -> Self {
+        self.annotate(Annotation::raster(image, xmin, xmax, ymin, ymax))
+    }
+
+    /// An RGBA pixel buffer (`width × height × 4`, row-major) over a data
+    /// rectangle (`annotation_raster` with a colour matrix; feature `png`).
+    #[cfg(feature = "png")]
+    pub fn annotation_raster_rgba(
+        self,
+        (width, height): (u32, u32),
+        rgba: &[u8],
+        (xmin, xmax, ymin, ymax): (f64, f64, f64, f64),
+    ) -> Self {
+        use image::ImageEncoder;
+        let mut png = Vec::new();
+        let ok = image::codecs::png::PngEncoder::new(&mut png)
+            .write_image(rgba, width, height, image::ColorType::Rgba8)
+            .is_ok();
+        if !ok {
+            return self;
+        }
+        self.annotation_raster(png, xmin, xmax, ymin, ymax)
+    }
+
+    /// Draw another plot as an inset into a data rectangle — ggplot2's
+    /// `annotation_custom(ggplotGrob(p), xmin, xmax, ymin, ymax)`.
+    /// `f64::INFINITY` / `NEG_INFINITY` bounds mean the panel edges.
+    pub fn annotation_custom(
+        self,
+        inset: GGPlot,
+        xmin: f64,
+        xmax: f64,
+        ymin: f64,
+        ymax: f64,
+    ) -> Self {
+        self.annotate(Annotation::inset(inset, xmin, xmax, ymin, ymax))
+    }
+
     /// Default [`Locale`](crate::locale::Locale) for the plot's axis and
     /// legend labels: every continuous position / colour / size / alpha scale
     /// labels its default breaks with the locale's decimal and thousands marks

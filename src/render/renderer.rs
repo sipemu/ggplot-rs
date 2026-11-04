@@ -1100,9 +1100,159 @@ impl PlotRenderer {
                         },
                     )?;
                 }
+                Annotation::LogTicks {
+                    sides,
+                    outside,
+                    lengths,
+                    color,
+                    width,
+                } => {
+                    let style = LineStyle {
+                        color: annotation_ink(*color, theme),
+                        alpha: 1.0,
+                        width: *width,
+                        linetype: Linetype::Solid,
+                        ..Default::default()
+                    };
+                    let dir = if *outside { -1.0 } else { 1.0 };
+                    for side in sides.chars() {
+                        let horizontal = matches!(side, 'b' | 't');
+                        let scale = if horizontal { x_scale } else { y_scale };
+                        let Some((lo, hi)) = scale.and_then(|s| s.expanded_domain()) else {
+                            continue;
+                        };
+                        for (t, kind) in log_ticks(lo, hi) {
+                            let n = scale.map(|s| s.map(&Value::Float(t))).unwrap_or(0.0);
+                            let len = dir
+                                * match kind {
+                                    0 => lengths.2,
+                                    1 => lengths.1,
+                                    _ => lengths.0,
+                                };
+                            // The tick's anchor on the panel edge, then inward.
+                            let (edge, step) = match side {
+                                'b' => ((n, 0.0), (0.0, -len)),
+                                't' => ((n, 1.0), (0.0, len)),
+                                'l' => ((0.0, n), (len, 0.0)),
+                                'r' => ((1.0, n), (-len, 0.0)),
+                                _ => continue,
+                            };
+                            let p0 = coord.transform(edge, plot_area);
+                            let p1 = (p0.0 + step.0, p0.1 + step.1);
+                            backend.draw_line(&[p0, p1], &style)?;
+                        }
+                    }
+                }
+                Annotation::Raster {
+                    image,
+                    xmin,
+                    xmax,
+                    ymin,
+                    ymax,
+                    alpha,
+                } => {
+                    let rect = data_rect(
+                        x_scale,
+                        y_scale,
+                        coord,
+                        plot_area,
+                        [*xmin, *xmax, *ymin, *ymax],
+                    );
+                    backend.draw_image(image, &rect, plot_area, *alpha)?;
+                }
+                Annotation::Inset {
+                    plot,
+                    xmin,
+                    xmax,
+                    ymin,
+                    ymax,
+                } => {
+                    let rect = data_rect(
+                        x_scale,
+                        y_scale,
+                        coord,
+                        plot_area,
+                        [*xmin, *xmax, *ymin, *ymax],
+                    );
+                    let (w, h) = (rect.width.round().max(1.0), rect.height.round().max(1.0));
+                    let mut guard = plot.0.lock().unwrap_or_else(|e| e.into_inner());
+                    match &mut *guard {
+                        Ok((built, meta)) => {
+                            let layout =
+                                crate::GGPlot::layout_built(built, meta, w as u32, h as u32);
+                            let mut off = crate::render::offset::OffsetBackend::new(
+                                backend,
+                                rect.x,
+                                rect.y,
+                                layout.plot_area.clone(),
+                                layout.total.clone(),
+                            );
+                            Self::render(built, &mut off)?;
+                        }
+                        Err(e) => {
+                            backend.warn(format!("annotation_custom: inset plot failed: {e}"))
+                        }
+                    }
+                }
             }
         }
         Ok(())
+    }
+}
+
+/// Log-10 tick positions inside `[lo, hi]` (log10 units): `(position, kind)`
+/// with kind 0 = a power of ten (long), 1 = 5× (mid), 2 = the rest (short).
+fn log_ticks(lo: f64, hi: f64) -> Vec<(f64, u8)> {
+    let mut out = Vec::new();
+    if !(lo.is_finite() && hi.is_finite()) || hi - lo > 300.0 {
+        return out;
+    }
+    for k in (lo.floor() as i64)..=(hi.ceil() as i64) {
+        for m in 1..=9 {
+            let t = k as f64 + (m as f64).log10();
+            if t >= lo - 1e-9 && t <= hi + 1e-9 {
+                out.push((
+                    t,
+                    if m == 1 {
+                        0
+                    } else if m == 5 {
+                        1
+                    } else {
+                        2
+                    },
+                ));
+            }
+        }
+    }
+    out
+}
+
+/// The pixel rectangle of a data-space `[xmin, xmax, ymin, ymax]`
+/// (non-finite bounds = the panel edges, as in ggplot2).
+fn data_rect(
+    x_scale: Option<&dyn crate::scale::Scale>,
+    y_scale: Option<&dyn crate::scale::Scale>,
+    coord: &dyn crate::coord::Coord,
+    plot_area: &crate::render::Rect,
+    [xmin, xmax, ymin, ymax]: [f64; 4],
+) -> crate::render::Rect {
+    use crate::data::Value;
+    let m = |s: Option<&dyn crate::scale::Scale>, v: f64, edge: f64| {
+        if v.is_finite() {
+            s.map(|s| s.map(&Value::Float(v))).unwrap_or(edge)
+        } else if v > 0.0 {
+            1.0
+        } else {
+            0.0
+        }
+    };
+    let a = coord.transform((m(x_scale, xmin, 0.0), m(y_scale, ymax, 1.0)), plot_area);
+    let b = coord.transform((m(x_scale, xmax, 1.0), m(y_scale, ymin, 0.0)), plot_area);
+    crate::render::Rect {
+        x: a.0.min(b.0),
+        y: a.1.min(b.1),
+        width: (a.0 - b.0).abs(),
+        height: (a.1 - b.1).abs(),
     }
 }
 
