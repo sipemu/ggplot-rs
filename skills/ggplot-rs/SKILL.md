@@ -104,8 +104,10 @@ With polars (default feature): `GGPlot::new(df!{ "x" => [1.0, 2.0], "y" => [3.0,
   `scale_color_distiller(PaletteName::Blues, -1)`; `expand_limits(&[], &[0.0])`.
 - **Facets:** `facet_wrap("col", Some(ncol))`, `facet_grid(Some("row"), Some("col"))`,
   `facet_wrap_free(col, ncol, FacetScales::FreeY)`.
-- **Coords:** `coord_flip()`, `coord_polar()`, `coord_fixed(ratio)`,
-  `coord_cartesian_zoom(Some((lo, hi)), None)`, `coord_radar()`, `coord_sf()`.
+- **Coords:** `coord_flip()`, `coord_polar()`, `coord_radial(start, end,
+  inner_radius)`, `coord_fixed(ratio)`, `coord_cartesian_zoom(Some((lo, hi)), None)`,
+  `coord_reverse(x, y)`, `coord_trans`/`coord_transform(x, y)`, `coord_quickmap()`,
+  `coord_map()` (Mercator, plain lon/lat), `coord_radar()`, `coord_sf()`.
 - **Annotations:** `annotate_text/rect/segment`, `annotation_logticks("bl")`
   (with `scale_*_log10()`), `annotation_raster(png_bytes, xmin, xmax, ymin, ymax)`,
   `annotation_custom(inset_plot, xmin, xmax, ymin, ymax)` (a plot inside a

@@ -328,6 +328,13 @@ pub struct CoordFull {
     /// `cartesian`: zoom window.
     pub xlim: Option<[f64; 2]>,
     pub ylim: Option<[f64; 2]>,
+    /// `cartesian`: mirror the panel — `"x"`, `"y"` or `"xy"`.
+    pub reverse: Option<String>,
+    /// `radial`: theta start / end in radians (clockwise from 12 o'clock).
+    pub start: Option<f64>,
+    pub end: Option<f64>,
+    /// `radial`: inner radius as a fraction of the outer (a donut).
+    pub inner_radius: Option<f64>,
 }
 
 #[derive(Deserialize, Default)]
@@ -1333,11 +1340,36 @@ fn apply_coord(plot: GGPlot, c: &CoordSpec) -> Result<GGPlot, String> {
         "cartesian" => {
             let xl = full.and_then(|f| f.xlim).map(|[a, b]| (a, b));
             let yl = full.and_then(|f| f.ylim).map(|[a, b]| (a, b));
-            if xl.is_some() || yl.is_some() {
+            let rev = match full.and_then(|f| f.reverse.as_deref()) {
+                None | Some("none") => (false, false),
+                Some("x") => (true, false),
+                Some("y") => (false, true),
+                Some("xy") => (true, true),
+                Some(o) => return Err(format!("unknown reverse '{o}' (expected x, y, xy, none)")),
+            };
+            if rev != (false, false) {
+                let mut c = crate::coord::cartesian::CoordCartesian::new().reverse(rev.0, rev.1);
+                if let Some((a, b)) = xl {
+                    c = c.xlim(a, b);
+                }
+                if let Some((a, b)) = yl {
+                    c = c.ylim(a, b);
+                }
+                plot.coord_cartesian_with(c)
+            } else if xl.is_some() || yl.is_some() {
                 plot.coord_cartesian_zoom(xl, yl)
             } else {
                 plot
             }
+        }
+        "quickmap" => plot.coord_quickmap(),
+        "map" => plot.coord_map(),
+        "radial" => {
+            let start = full.and_then(|f| f.start).unwrap_or(0.0);
+            let end = full
+                .and_then(|f| f.end)
+                .unwrap_or(start + 2.0 * std::f64::consts::PI);
+            plot.coord_radial(start, end, full.and_then(|f| f.inner_radius).unwrap_or(0.0))
         }
         "flip" => plot.coord_flip(),
         "polar" => plot.coord_polar(),
@@ -1346,7 +1378,7 @@ fn apply_coord(plot: GGPlot, c: &CoordSpec) -> Result<GGPlot, String> {
         "sf" => plot.coord_sf(),
         other => {
             return Err(format!(
-                "unknown coord '{other}' (expected cartesian, flip, polar, fixed, radar, sf)"
+                "unknown coord '{other}' (expected cartesian, flip, polar, radial, fixed, radar, quickmap, map, sf)"
             ))
         }
     })
@@ -1709,6 +1741,23 @@ mod tests {
         ))
         .unwrap_err();
         assert!(e.contains("unknown glyph"), "{e}");
+    }
+
+    #[test]
+    fn new_coords_render() {
+        for coord in [
+            r#""quickmap""#,
+            r#""map""#,
+            r#"{"type": "radial", "start": -1.2, "end": 1.2, "inner_radius": 0.3}"#,
+            r#"{"type": "cartesian", "reverse": "xy"}"#,
+        ] {
+            let svg = render(&format!(
+                r#"{{ {DATA}, "aes": {{"x": "x", "y": "y"}}, "layers": [{{"geom": "point"}}],
+                   "coord": {coord} }}"#
+            ))
+            .unwrap_or_else(|e| panic!("{coord}: {e}"));
+            assert!(svg.contains("<circle"), "{coord}");
+        }
     }
 
     #[test]

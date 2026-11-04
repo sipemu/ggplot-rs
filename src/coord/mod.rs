@@ -1,6 +1,7 @@
 pub mod cartesian;
 pub mod fixed;
 pub mod flip;
+pub mod map;
 pub mod polar;
 pub mod radar;
 #[cfg(feature = "sf")]

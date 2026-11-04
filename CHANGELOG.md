@@ -14,6 +14,13 @@ All notable changes to this project are documented here. The format follows
   9-class tables), `expand_limits(x, y)`. `ScaleColorDiscrete::with_generated`.
   Spec / npm palettes: `"hue"`, `"viridis:A"`…, and a Brewer name on a
   numeric column (a distiller; was an error).
+- Coordinates (#411): `coord_quickmap()` and `coord_map()` (Mercator) for
+  plain longitude / latitude data (`coord::map::CoordMap`),
+  `coord_reverse(x, y)` / `CoordCartesian::reverse` (ggplot2 4.0's
+  `coord_cartesian(reverse =)`), `coord_transform` (4.0's name for
+  `coord_trans`) and `coord_radial(start, end, inner_radius)` (partial
+  circles / donuts on `CoordPolar`). Spec / CLI / npm coords: `quickmap`,
+  `map`, `radial` (`start`, `end`, `inner_radius`), cartesian `reverse`.
 
 ## [0.40.0] — 2026-11-04
 
