@@ -3100,6 +3100,17 @@ impl GGPlot {
         self
     }
 
+    /// Set the strip labeller of the current `facet_wrap` / `facet_grid`
+    /// (ggplot2's `labeller =`, #412), e.g. `FacetLabeller::Template("n =
+    /// {value}".into())` or `FacetLabeller::per_var(..)`.
+    pub fn facet_labeller(mut self, l: FacetLabeller) -> Self {
+        match &mut self.facet {
+            Facet::Wrap { labeller, .. } | Facet::Grid { labeller, .. } => *labeller = l,
+            Facet::None => {}
+        }
+        self
+    }
+
     /// Put each `facet_wrap` panel's strip on another side (ggplot2's
     /// `strip.position = "bottom" | "left" | "right"`). Call after
     /// `facet_wrap*` (#412).
