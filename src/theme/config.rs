@@ -68,6 +68,13 @@ pub struct ThemeConfig {
     pub plot_background: Option<RectCfg>,
     pub legend_background: Option<RectCfg>,
     pub strip_background: Option<RectCfg>,
+    /// Horizontal / vertical strips only (`strip.text.x`,
+    /// `strip.background.y`, …; #413) — on top of `strip_text` /
+    /// `strip_background`.
+    pub strip_text_x: Option<TextCfg>,
+    pub strip_text_y: Option<TextCfg>,
+    pub strip_background_x: Option<RectCfg>,
+    pub strip_background_y: Option<RectCfg>,
 
     pub legend: Option<LegendCfg>,
 
@@ -183,6 +190,26 @@ impl ThemeConfig {
         rect(&self.plot_background, &mut t.plot_background);
         rect(&self.legend_background, &mut t.legend_background);
         rect(&self.strip_background, &mut t.strip_background);
+        for (cfg, el) in [
+            (&self.strip_text_x, &mut t.strip_text_x),
+            (&self.strip_text_y, &mut t.strip_text_y),
+        ] {
+            if cfg.is_some() {
+                let mut e = el.clone().unwrap_or_else(|| t.strip_text.clone());
+                text(cfg, &mut e)?;
+                *el = Some(e);
+            }
+        }
+        for (cfg, el) in [
+            (&self.strip_background_x, &mut t.strip_background_x),
+            (&self.strip_background_y, &mut t.strip_background_y),
+        ] {
+            if cfg.is_some() {
+                let mut e = el.clone().unwrap_or_else(|| t.strip_background.clone());
+                rect(cfg, &mut e);
+                *el = Some(e);
+            }
+        }
 
         if let Some([r, g, b]) = self.primary {
             t.primary = Some((r, g, b));

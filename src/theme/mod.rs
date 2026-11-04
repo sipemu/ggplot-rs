@@ -262,6 +262,15 @@ pub struct Theme {
     /// The labels of a right-hand (secondary) y axis (`axis.text.y.right`,
     /// #413); `None` = `axis_text_y`.
     pub axis_text_y_right: Option<ElementText>,
+    /// Horizontal (top / bottom) strips' text and background (ggplot2's
+    /// `strip.text.x` / `strip.background.x`, #413); `None` = `strip_text`
+    /// / `strip_background`.
+    pub strip_text_x: Option<ElementText>,
+    pub strip_background_x: Option<ElementRect>,
+    /// Vertical (left / right) strips' (`strip.text.y` /
+    /// `strip.background.y`).
+    pub strip_text_y: Option<ElementText>,
+    pub strip_background_y: Option<ElementRect>,
 }
 
 impl Theme {

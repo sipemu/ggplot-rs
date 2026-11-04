@@ -479,8 +479,19 @@ impl PlotRenderer {
                 .unwrap_or(1)
                 .max(1)
         };
-        let thickness =
-            |lines: usize| theme.strip_text.size * (1.0 + 1.2 * (lines - 1) as f64) + 8.0;
+        // #413: horizontal strips size to `strip_text_x`, turned ones to
+        // `strip_text_y` (each falling back to `strip_text`).
+        let size_x = theme
+            .strip_text_x
+            .as_ref()
+            .unwrap_or(&theme.strip_text)
+            .size;
+        let size_y = theme
+            .strip_text_y
+            .as_ref()
+            .unwrap_or(&theme.strip_text)
+            .size;
+        let thickness = |lines: usize, size: f64| size * (1.0 + 1.2 * (lines - 1) as f64) + 8.0;
         // #412: `facet_grid` draws its column strips once (top, or bottom
         // when switched) and its row strips once (right, or left); a
         // `facet_wrap` panel carries its own strip on `strip_position`.
@@ -499,8 +510,7 @@ impl PlotRenderer {
                 None
             }
         };
-        let strip_height = thickness(strip_lines(&col_strip));
-        let row_strip_width = thickness(strip_lines(&row_strip));
+        let row_strip_width = thickness(strip_lines(&row_strip), size_y);
         let (wrap_side, switch) = match &built.facet {
             Facet::Wrap { strip_position, .. } => {
                 (*strip_position, crate::facet::FacetSwitch::None)
@@ -574,6 +584,10 @@ impl PlotRenderer {
             } else {
                 0.0
             };
+        let strip_height = thickness(
+            strip_lines(&col_strip),
+            if wrap_vertical { size_y } else { size_x },
+        );
 
         // Figure-level layers (`GeomAttribution::figure`): one band under
         // the whole grid, which shrinks by its height.
@@ -1410,32 +1424,41 @@ fn draw_strip(
     label: &str,
     angle: f64,
 ) -> Result<(), RenderError> {
-    if theme.strip_background.visible {
+    // #413: a horizontal strip uses `strip_*_x`, a turned one `strip_*_y`.
+    let horizontal = angle == 0.0;
+    let (bg, text) = if horizontal {
+        (&theme.strip_background_x, &theme.strip_text_x)
+    } else {
+        (&theme.strip_background_y, &theme.strip_text_y)
+    };
+    let bg = bg.as_ref().unwrap_or(&theme.strip_background);
+    let text = text.as_ref().unwrap_or(&theme.strip_text);
+    if bg.visible {
         backend.draw_rect(
             (x, y),
             (x + w, y + h),
             &RectStyle {
-                fill: theme.strip_background.fill,
-                stroke: theme.strip_background.color,
-                stroke_width: theme.strip_background.width,
+                fill: bg.fill,
+                stroke: bg.color,
+                stroke_width: bg.width,
                 alpha: 1.0,
                 clip: false,
                 corner_radius: 0.0,
             },
         )?;
     }
-    if !theme.strip_text.visible {
+    if !text.visible {
         return Ok(());
     }
-    let family = if theme.strip_text.family.is_empty() {
+    let family = if text.family.is_empty() {
         None
     } else {
-        Some(theme.strip_text.family.clone())
+        Some(text.family.clone())
     };
     let lines: Vec<&str> = label.lines().collect();
     let n = lines.len().max(1) as f64;
     for (k, line) in lines.iter().enumerate() {
-        let d = (k as f64 - (n - 1.0) / 2.0) * theme.strip_text.size * 1.2;
+        let d = (k as f64 - (n - 1.0) / 2.0) * text.size * 1.2;
         // Successive lines stack downwards when horizontal, and away from
         // the panel's reading direction when turned.
         let (dx, dy) = if angle == 90.0 {
@@ -1449,12 +1472,12 @@ fn draw_strip(
             line,
             (x + w / 2.0 + dx, y + h / 2.0 + dy),
             &TextStyle {
-                color: theme.strip_text.color,
-                size: theme.strip_text.size,
+                color: text.color,
+                size: text.size,
                 anchor: TextAnchor::Middle,
                 angle,
                 family: family.clone(),
-                face: theme.strip_text.face,
+                face: text.face,
                 bg_colour: None,
                 bg_r: 0.0,
             },
