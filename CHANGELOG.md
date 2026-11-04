@@ -20,6 +20,13 @@ All notable changes to this project are documented here. The format follows
   label per key (still available via `guide_legend_keys`).
 
 ### Added
+- Vector PDF export (#467, feature `pdf`, via krilla):
+  `GGPlot::render_pdf_with_size(w, h)` / `render_pdf()` → bytes, and
+  `save("plot.pdf")` / `ggsave` dispatch on the extension; the CLI writes
+  `-o plot.pdf`. One page, 1 px = 1 pt; real, selectable text in the
+  bundled DejaVu fonts (embedded subsets, kerned anchors), dashed lines,
+  even-odd polygon holes, rounded rects, clip groups (panels, #411) and
+  raster map tiles (`render::pdf_backend::PdfBackend`).
 - `GGPlot::svg_semantic_classes(true)` (#465; spec / npm `svg_classes:
   true`): the SVG's non-data elements carry a stable class vocabulary —
   `gg-plot-background`, `gg-panel-background`, `gg-panel-border`,

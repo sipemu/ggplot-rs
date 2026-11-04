@@ -12,6 +12,9 @@ pub mod pixel_backend;
 // (no bitmap/font-registration API there); the browser uses `svg_backend`.
 #[cfg(all(feature = "plotters", not(target_arch = "wasm32")))]
 pub mod plotters_backend;
+// Vector PDF with embedded fonts (feature `pdf`, #467).
+#[cfg(feature = "pdf")]
+pub mod pdf_backend;
 pub mod renderer;
 pub mod svg_backend;
 pub mod text;

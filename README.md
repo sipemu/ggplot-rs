@@ -868,6 +868,7 @@ GGPlot::new(data)
 | `serde`      |   no    | `theme::config::ThemeConfig` — a serde-deserialisable partial theme overlay (TOML/JSON) |
 | `sf`         |   no    | `geom_sf` / `coord_sf` — render simple-features (WKT) geometry with projections; no extra deps |
 | `geojson`    |   no    | read GeoJSON into a plot-ready frame (`spatial::geojson`); adds `serde_json` |
+| `pdf`        |   no    | vector PDF export (`render_pdf_with_size`, `save("x.pdf")`) with embedded fonts, via krilla |
 | `canvas`     |   no    | self-contained RGBA raster backend for large-N (`render_rgba`/`render_png_raster`); wasm-ok |
 | `wasm`       |   no    | **deprecated** alias for `sf` (the browser bindings moved to the `crates/ggplot-rs-wasm` crate) |
 | `spec`       |   no    | `ggplot_rs::spec` — the declarative JSON plot spec behind the CLI and the npm package (adds `serde`, `serde_json`; implies `sf`) |

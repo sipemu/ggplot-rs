@@ -68,6 +68,8 @@ duckdb = { version = "1", features = ["bundled"], optional = true }
 serde = { version = "1", features = ["derive"], optional = true }
 toml = { version = "0.8", optional = true }
 serde_json = { version = "1", optional = true }
+# Vector PDF export (#467).
+krilla = { version = "0.8", optional = true, default-features = false, features = ["simple-text", "raster-images"] }
 # Pure-Rust glyph rasterisation for the `canvas` (raster) backend.
 ab_glyph = { version = "0.2", optional = true }
 
@@ -93,6 +95,8 @@ regression = ["dep:anofox-regression", "dep:faer"]
 ggpubr = ["dep:anofox-statistics"]
 # Serde-deserialisable theme config (theme::config::ThemeConfig).
 serde = ["dep:serde"]
+# Vector PDF export with embedded fonts (#467): `render_pdf*`, `save("x.pdf")`.
+pdf = ["dep:krilla", "dep:ab_glyph"]
 # Raster (canvas) backend: a self-contained RGBA rasteriser for large-N — fast,
 # wasm-compatible, no DOM. Renders to a pixel buffer / PNG.
 canvas = ["dep:ab_glyph", "png"]
@@ -115,7 +119,7 @@ wasm = ["sf"]
 spec = ["serde", "dep:serde_json", "sf"]
 # `ggplot-rs` command-line tool: plot parquet files and DuckDB SQL from the shell.
 # Includes `sf` so `--geom sf` can plot geometry from the DuckDB spatial extension.
-cli = ["dep:clap", "dep:duckdb", "spec", "dep:toml", "plotters"]
+cli = ["dep:clap", "dep:duckdb", "spec", "dep:toml", "plotters", "pdf"]
 
 # `cargo binstall ggplot-rs` downloads the CLI archive cli-binaries.yml attaches
 # to each GitHub release instead of compiling the bundled DuckDB.
