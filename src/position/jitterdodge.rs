@@ -2,22 +2,37 @@ use crate::data::{DataFrame, Value};
 
 use super::{Position, PositionParams};
 
-/// Combined jitter and dodge position adjustment.
-/// Useful for showing individual points within dodged groups (e.g., over boxplots).
+/// Combined jitter and dodge position adjustment (ggplot2's
+/// `position_jitterdodge()`): useful for showing individual points within
+/// dodged groups (e.g. over boxplots).
+///
+/// As in ggplot2, points are first dodged like [`PositionDodge`]
+/// (groups in legend order, counted per x slot), then jittered by
+/// `jitter_width / (ndodge + 2)` either side, where `ndodge` is the most
+/// groups any x slot holds, so each group's points stay inside its own
+/// slot (#429). [`Default`] uses ggplot2's `jitter.width = NULL`: 40 % of
+/// the x resolution (0.4 on a discrete axis).
+///
+/// [`PositionDodge`]: super::dodge::PositionDodge
 pub struct PositionJitterDodge {
     pub jitter_width: f64,
     pub jitter_height: f64,
     pub dodge_width: f64,
     seed: u64,
+    /// `jitter.width = NULL`: 0.4 × the x resolution, set by [`Default`].
+    auto_width: bool,
 }
 
 impl PositionJitterDodge {
+    /// Explicit `jitter.width` (x data units, before the `ndodge + 2`
+    /// division) and `jitter.height` (the y spread).
     pub fn new(jitter_width: f64, jitter_height: f64) -> Self {
         PositionJitterDodge {
             jitter_width,
             jitter_height,
             dodge_width: 0.9,
             seed: 42,
+            auto_width: false,
         }
     }
 
@@ -45,97 +60,77 @@ impl PositionJitterDodge {
 
 impl Default for PositionJitterDodge {
     fn default() -> Self {
-        PositionJitterDodge::new(0.4, 0.0)
+        PositionJitterDodge {
+            auto_width: true,
+            ..PositionJitterDodge::new(0.4, 0.0)
+        }
     }
 }
 
+/// ggplot2's `resolution(x, zero = FALSE)`: the smallest gap between
+/// distinct x values (1 for a discrete or single-valued x).
+fn resolution(x: &[Value]) -> f64 {
+    if super::is_discrete_x(x) {
+        return 1.0;
+    }
+    let mut v: Vec<f64> = x
+        .iter()
+        .filter_map(Value::as_f64)
+        .filter(|f| f.is_finite())
+        .collect();
+    v.sort_by(f64::total_cmp);
+    v.dedup();
+    v.windows(2)
+        .map(|w| w[1] - w[0])
+        .fold(None, |m: Option<f64>, d| Some(m.map_or(d, |m| m.min(d))))
+        .unwrap_or(1.0)
+}
+
 impl Position for PositionJitterDodge {
-    fn compute(&self, data: &mut DataFrame, _params: &PositionParams) {
+    fn compute(&self, data: &mut DataFrame, params: &PositionParams) {
         let x_col = match data.column("x") {
             Some(c) => c.to_vec(),
             None => return,
         };
-
-        let group_col = data
-            .column("fill")
-            .or_else(|| data.column("color"))
-            .or_else(|| data.column("group"));
-
-        let group_keys: Vec<String> = match group_col {
-            Some(col) => col.iter().map(|v| v.to_group_key()).collect(),
-            None => {
-                // No groups — just jitter
-                if super::is_discrete_x(&x_col) {
-                    let (seed, w) = (self.seed, self.jitter_width);
-                    super::add_x_offsets(data, |i| Self::pseudo_random(seed, i) * w);
-                    return;
+        // ndodge: the most dodge groups sharing one x slot (1 without groups).
+        let keys = super::dodge::group_keys(data);
+        let mut slots: indexmap::IndexMap<String, indexmap::IndexSet<&str>> =
+            indexmap::IndexMap::new();
+        if let Some(keys) = &keys {
+            for (x, k) in x_col.iter().zip(keys) {
+                if !x.is_na() {
+                    slots.entry(x.to_group_key()).or_default().insert(k);
                 }
-                let mut new_x = x_col;
-                for (i, v) in new_x.iter_mut().enumerate() {
-                    if let Some(f) = v.as_f64() {
-                        *v =
-                            Value::Float(f + Self::pseudo_random(self.seed, i) * self.jitter_width);
-                    }
-                }
-                if let Some(col) = data.column_mut("x") {
-                    *col = new_x;
-                }
-                return;
-            }
-        };
-
-        let mut unique_groups: Vec<String> = Vec::new();
-        for g in &group_keys {
-            if !unique_groups.contains(g) {
-                unique_groups.push(g.clone());
             }
         }
-
-        let n_groups = unique_groups.len() as f64;
-        let group_width = if n_groups > 1.0 {
-            self.dodge_width / n_groups
+        let ndodge = slots.values().map(|s| s.len()).max().unwrap_or(1).max(1) as f64;
+        let width = if self.auto_width {
+            0.4 * resolution(&x_col)
         } else {
-            0.0
+            self.jitter_width
         };
+        // ggplot2 jitters ±(width / (ndodge + 2)); `pseudo_random` is ±0.5.
+        let amount = 2.0 * width / (ndodge + 2.0);
 
+        super::dodge::dodge_rows(
+            data,
+            self.dodge_width,
+            None,
+            false,
+            false,
+            params.group_order.as_deref(),
+        );
+
+        let seed = self.seed;
         if super::is_discrete_x(&x_col) {
-            // Categories can't move: dodge + jitter go to the offset column.
-            let offsets: Vec<f64> = group_keys
-                .iter()
-                .enumerate()
-                .map(|(i, group)| {
-                    let dodge = if n_groups > 1.0 {
-                        let k = unique_groups.iter().position(|g| g == group).unwrap() as f64;
-                        (k - (n_groups - 1.0) / 2.0) * group_width
-                    } else {
-                        0.0
-                    };
-                    dodge + Self::pseudo_random(self.seed, i) * self.jitter_width
-                })
-                .collect();
-            super::add_x_offsets(data, |i| offsets[i]);
-        }
-
-        let mut new_x = x_col.clone();
-        for (i, (x, group)) in x_col.iter().zip(group_keys.iter()).enumerate() {
-            if let Some(x_val) = x.as_f64() {
-                // Dodge offset
-                let dodge_offset = if n_groups > 1.0 {
-                    let group_idx = unique_groups.iter().position(|g| g == group).unwrap() as f64;
-                    (group_idx - (n_groups - 1.0) / 2.0) * group_width
-                } else {
-                    0.0
-                };
-
-                // Jitter offset
-                let jitter_x = Self::pseudo_random(self.seed, i) * self.jitter_width;
-
-                new_x[i] = Value::Float(x_val + dodge_offset + jitter_x);
+            // Categories can't move: the jitter joins the dodge offset.
+            super::add_x_offsets(data, |i| Self::pseudo_random(seed, i) * amount);
+        } else if let Some(col) = data.column_mut("x") {
+            for (i, v) in col.iter_mut().enumerate() {
+                if let Some(f) = v.as_f64() {
+                    *v = Value::Float(f + Self::pseudo_random(seed, i) * amount);
+                }
             }
-        }
-
-        if let Some(col) = data.column_mut("x") {
-            *col = new_x;
         }
 
         // Y jitter
@@ -151,6 +146,12 @@ impl Position for PositionJitterDodge {
                 }
             }
         }
+    }
+
+    /// Dodge groups ranked like `PositionDodge` (legend order, #428), so
+    /// the points line up with dodged boxes / violins.
+    fn group_order(&self, data: &DataFrame) -> Option<Vec<String>> {
+        super::dodge::group_keys(data).map(|keys| super::dodge::dedup_order(&keys))
     }
 
     fn name(&self) -> &str {

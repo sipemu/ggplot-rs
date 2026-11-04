@@ -31,6 +31,14 @@ All notable changes to this project are documented here. The format follows
   `map`, `radial` (`start`, `end`, `inner_radius`), cartesian `reverse`.
 
 ### Fixed
+- `position_jitterdodge` (#429): the jitter is scaled by the dodge group
+  count as in ggplot2 — ±`jitter_width / (ndodge + 2)`, `ndodge` = the most
+  groups in one x slot — and `PositionJitterDodge::default()` uses ggplot2's
+  `jitter.width = NULL` (0.4 × x resolution). Points are dodged like
+  `position_dodge` (per-slot count, legend order), so they sit over their own
+  dodged box / violin. **Behaviour change:** an explicit `new(w, h)` width is
+  now divided by `ndodge + 2` (callers passing a pre-divided width should
+  drop the division).
 - Dodge order (#428): `position_dodge` / `position_dodge2` rank groups by the
   `group` / `fill` / `colour` scale's level order — the legend's — instead of
   by which row comes first. Precomputed `stat = "identity"` boxplots (one row
