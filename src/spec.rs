@@ -456,7 +456,12 @@ fn labeller_spec(l: &LabellerSpec) -> Result<crate::facet::FacetLabeller, String
         LabellerSpec::Name(n) => match n.as_str() {
             "value" => L::Value,
             "both" => L::Both,
-            o => return Err(format!("unknown labeller '{o}' (expected value, both)")),
+            "multi_line" => L::MultiLine,
+            o => {
+                return Err(format!(
+                    "unknown labeller '{o}' (expected value, both, multi_line)"
+                ))
+            }
         },
         LabellerSpec::Full(f) => match (&f.template, &f.values, f.wrap, &f.vars) {
             (Some(t), None, None, None) => L::Template(t.clone()),

@@ -220,6 +220,9 @@ pub struct Theme {
     /// What the caption aligns to (ggplot2's `plot.caption.position`,
     /// #413); `None` follows `title_position`.
     pub caption_position: Option<TitlePosition>,
+    /// Align an outside legend with the whole plot instead of the panel
+    /// (ggplot2's `legend.location = "plot"`, #413).
+    pub legend_location_plot: bool,
     /// Facet strips below / left of a panel sit outside its axis
     /// (ggplot2's `strip.placement = "outside"`, #412); default inside.
     pub strip_placement_outside: bool,

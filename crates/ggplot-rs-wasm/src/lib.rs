@@ -221,7 +221,7 @@ export interface ValueScale {
 
 /** A facet strip labeller (#412). */
 export type Labeller =
-  | "value" | "both"
+  | "value" | "both" | "multi_line"
   | { template: string } | { values: Record<string, string> } | { wrap: number }
   | { vars: Record<string, Labeller> };
 
@@ -321,6 +321,7 @@ export interface ThemeConfig {
   /** Strips below / left of a panel outside its axis (#412), and the gap. */
   strip_placement?: "inside" | "outside"; strip_switch_pad?: number;
   caption_position?: "panel" | "plot";
+  legend_location?: "panel" | "plot";
   legend_ticks_length?: number;
   legend_title?: TextElement; legend_text?: TextElement; strip_text?: TextElement;
   axis_line?: LineElement; axis_ticks?: LineElement;
