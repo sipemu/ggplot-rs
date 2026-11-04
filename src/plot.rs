@@ -162,6 +162,28 @@ impl GGPlot {
     /// have different lengths is padded with `NA` and reported as a
     /// [`GGError::ValidationError`] by [`try_build`](Self::try_build) and the
     /// `render_*`/`save*` methods.
+    /// One-call quick plot (ggplot2's `qplot()` / `quickplot()`): points for
+    /// `x` + `y`; with only `x`, a histogram (numeric) or bar chart (text).
+    pub fn qplot(data: impl GGData, x: &str, y: Option<&str>) -> Self {
+        let plot = GGPlot::new(data);
+        match y {
+            Some(y) => plot.aes(Aes::new().x(x).y(y)).geom_point(),
+            None => {
+                let text = plot
+                    .data
+                    .column(x)
+                    .and_then(|c| c.iter().find(|v| !v.is_na()))
+                    .is_some_and(|v| matches!(v, Value::Str(_) | Value::Bool(_)));
+                let plot = plot.aes(Aes::new().x(x));
+                if text {
+                    plot.geom_bar()
+                } else {
+                    plot.geom_histogram()
+                }
+            }
+        }
+    }
+
     pub fn new(data: impl GGData) -> Self {
         GGPlot {
             data: data.into_dataframe(),

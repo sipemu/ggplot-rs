@@ -9,6 +9,7 @@ pub mod format;
 pub mod geom;
 pub mod ggpubr;
 pub mod guide;
+pub mod helpers;
 pub mod locale;
 pub mod plot;
 pub mod position;

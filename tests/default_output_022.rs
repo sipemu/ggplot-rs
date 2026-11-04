@@ -270,20 +270,12 @@ fn big_legend_data() -> Cols {
     ]
 }
 
-/// Pre-existing (not a 0.22 change — verified against `origin/main`, which
-/// this test file's own baseline was recorded from): with the `regression`
-/// feature enabled, `geom_smooth`'s default `Lm` fit renders a handful of
-/// different pixels (likely a numerical-precision difference somewhere
-/// shared with the feature's `faer`-backed paths). `--features regression`
-/// isn't part of any `cargo test` invocation in this file's own "Tests
-/// (sf)"/"Tests (default)" CI lines, but it is part of the "coverage" job's
-/// `--features polars,arrow,regression,serde,sf,geojson,ggpubr --workspace`
-/// — so this constant exists to keep that job from hard-failing on an
-/// unrelated, pre-0.22 divergence.
-#[cfg(feature = "regression")]
+/// `geom_smooth`'s CI ribbon uses the Student-t quantile. Until #414 a build
+/// without the `regression` feature fell back to the normal 1.96 (hash
+/// `0xf2498f530195746b`), which is why this used to differ by feature; the
+/// self-contained `qt` now matches the `regression` (statrs) value, so every
+/// build renders the R-faithful ribbon. Documented in CHANGELOG (#414).
 const SMOOTH_HASH: u64 = 0x3f3fa8247902368d;
-#[cfg(not(feature = "regression"))]
-const SMOOTH_HASH: u64 = 0xf2498f530195746b;
 
 /// `(name, expected FNV-1a hash)`. Recorded at v0.21.0 (f5fc31e).
 /// To re-bless an entry: confirm it is in plan §4's allowed list, change it
