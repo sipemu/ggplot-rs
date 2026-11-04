@@ -48,6 +48,10 @@ pub(crate) struct LayoutExtras {
     /// `0.0` (the default) when there's no continuous color/fill legend
     /// drawn horizontally, or its own band already fits in `key_h`.
     pub continuous_horizontal_legend_extra_height: f64,
+    /// Sides (right, left, top, bottom) holding a legend moved off the
+    /// theme's `legend_position` by `guide_position` (#409): each reserves
+    /// its own band too.
+    pub extra_legend_sides: [bool; 4],
 }
 
 impl PlotLayout {
@@ -211,7 +215,7 @@ impl PlotLayout {
             0.0
         };
         // Determine legend space allocation per position
-        let (legend_right, legend_left, legend_top, legend_bottom) = if has_legend {
+        let (mut legend_right, mut legend_left, mut legend_top, mut legend_bottom) = if has_legend {
             match theme.legend_position {
                 LegendPosition::Right => (legend_size, 0.0, 0.0, 0.0),
                 LegendPosition::Left => (0.0, legend_size, 0.0, 0.0),
@@ -223,6 +227,22 @@ impl PlotLayout {
         } else {
             (0.0, 0.0, 0.0, 0.0)
         };
+        // #409: bands for legends moved to another side.
+        if has_legend {
+            let [r, l, t, b] = extras.extra_legend_sides;
+            if r && legend_right == 0.0 {
+                legend_right = legend_size;
+            }
+            if l && legend_left == 0.0 {
+                legend_left = legend_size;
+            }
+            if t && legend_top == 0.0 {
+                legend_top = legend_band;
+            }
+            if b && legend_bottom == 0.0 {
+                legend_bottom = legend_band;
+            }
+        }
 
         let plot_x = margin.left + y_axis_width + legend_left + extras.left;
         // A top x-axis reserves its space above the panel instead of below.

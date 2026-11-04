@@ -20,6 +20,10 @@ All notable changes to this project are documented here. The format follows
   label per key (still available via `guide_legend_keys`).
 
 ### Added
+- `GGPlot::guide_position(aes, LegendPosition)` (#409, ggplot2 3.5's
+  `guide_legend(position =)`; spec / npm `guides.<aes>.position`): draw one
+  legend at its own side; the layout reserves a band there too, and a
+  legend moved to the top lifts the titles.
 - `GuideCustom` + `GGPlot::guide_custom` (#409, ggplot2's `guide_custom()`):
   a `width` × `height` legend entry painted by your own `DrawBackend`
   closure, drawn after the scales' legends; the legend band grows to fit it
@@ -188,6 +192,8 @@ All notable changes to this project are documented here. The format follows
   `map`, `radial` (`start`, `end`, `inner_radius`), cartesian `reverse`.
 
 ### Fixed
+- A horizontal (top / bottom) discrete legend's background box was sized
+  for a vertical one and covered the panel; it now spans its one row.
 - The native SVG renderer clips layers to the panel when they reach past
   it (#411, ggplot2's default `clip = "on"`): a zoomed `coord_cartesian`
   no longer draws data over the axes and margins. Plots whose data fits

@@ -312,7 +312,13 @@ pub(crate) fn top_legend_lift(
     guide: &GuideLegend,
 ) -> f64 {
     if !matches!(theme.legend_position, LegendPosition::Top) {
-        return 0.0;
+        // #409: a legend moved to the top by `guide_position` lifts the
+        // titles by its one-row band.
+        return if extra_legend_sides(scales, suppressed, guide, &theme.legend_position)[2] {
+            legend_band_height(theme, 0)
+        } else {
+            0.0
+        };
     }
     let legend_scales = legend_scales_for(scales, suppressed);
     if legend_scales.is_empty() {
@@ -738,10 +744,28 @@ fn draw_discrete_legend_at(
     let gap_y = theme.legend_key_gap_y();
     let keys_height = breaks.len() as f64 * item_height + (breaks.len() - 1) as f64 * gap_y;
 
-    // Draw legend background
+    // Draw legend background — one row of keys when horizontal, advancing
+    // exactly as the keys below do.
     if theme.legend_background.visible {
-        let total_height = keys_height;
-        let total_width = swatch_size + theme.legend_spacing + theme.legend_text.size * 6.0;
+        let (total_width, total_height) = if is_horizontal {
+            let row: f64 = breaks
+                .iter()
+                .map(|(_, label)| {
+                    swatch_size
+                        + theme.legend_spacing
+                        + (label.chars().count() as f64) * theme.legend_text.size * 0.62
+                        + theme
+                            .legend_key_spacing_x
+                            .unwrap_or(theme.legend_spacing * 3.0)
+                })
+                .sum();
+            (row, item_height)
+        } else {
+            (
+                swatch_size + theme.legend_spacing + theme.legend_text.size * 6.0,
+                keys_height,
+            )
+        };
         if let Some(fill) = theme.legend_background.fill {
             backend.draw_rect(
                 (legend_x - 2.0, items_y - 2.0),
@@ -2032,8 +2056,115 @@ pub(crate) fn inside_legend_box(
     })
 }
 
+/// The sides (right, left, top, bottom) a `guide_position` (#409) moved a
+/// drawn legend to, away from `main` — each needs its own band.
+pub(crate) fn extra_legend_sides(
+    scales: &ScaleSet,
+    suppressed: &std::collections::HashSet<Aesthetic>,
+    guide: &GuideLegend,
+    main: &LegendPosition,
+) -> [bool; 4] {
+    let mut sides = [false; 4];
+    if guide.positions.is_empty() || matches!(main, LegendPosition::None) {
+        return sides;
+    }
+    for aes in legend_scales_for(scales, suppressed) {
+        match guide.position_for(&aes, main) {
+            p if p == main => {}
+            LegendPosition::Right => sides[0] = true,
+            LegendPosition::Left => sides[1] = true,
+            LegendPosition::Top => sides[2] = true,
+            LegendPosition::Bottom => sides[3] = true,
+            LegendPosition::None | LegendPosition::Inside(..) => {}
+        }
+    }
+    sides
+}
+
+/// Draw every legend: those at the theme's `legend_position`, then each
+/// group a `guide_position` (#409) moved to another side, drawn as if the
+/// theme put the legend there.
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn draw_legend_planned(
+    scales: &ScaleSet,
+    theme: &Theme,
+    plot_area: &Rect,
+    legend_avail_width: f64,
+    backend: &mut dyn DrawBackend,
+    guide: &GuideLegend,
+    suppressed: &std::collections::HashSet<Aesthetic>,
+    legend_plans: &std::collections::HashMap<Aesthetic, LegendPlan>,
+) -> Result<(), RenderError> {
+    let main = &theme.legend_position;
+    let drawn = legend_scales_for(scales, suppressed);
+    let mut others: Vec<LegendPosition> = Vec::new();
+    if !matches!(main, LegendPosition::None) {
+        for aes in &drawn {
+            let p = guide.position_for(aes, main);
+            if p != main && !matches!(p, LegendPosition::None) && !others.contains(p) {
+                others.push(p.clone());
+            }
+        }
+    }
+    if others.is_empty() {
+        return draw_legend_side(
+            scales,
+            theme,
+            plot_area,
+            legend_avail_width,
+            backend,
+            guide,
+            suppressed,
+            legend_plans,
+        );
+    }
+    // Everything not at `at` joins the suppressed set for that pass.
+    let without = |at: &LegendPosition| -> std::collections::HashSet<Aesthetic> {
+        let mut s = suppressed.clone();
+        s.extend(
+            drawn
+                .iter()
+                .filter(|a| guide.position_for(a, main) != at)
+                .cloned(),
+        );
+        s
+    };
+    draw_legend_side(
+        scales,
+        theme,
+        plot_area,
+        legend_avail_width,
+        backend,
+        guide,
+        &without(main),
+        legend_plans,
+    )?;
+    let moved_guide = GuideLegend {
+        custom: Vec::new(),
+        ..guide.clone()
+    };
+    for at in &others {
+        let side_theme = Theme {
+            legend_position: at.clone(),
+            ..theme.clone()
+        };
+        draw_legend_side(
+            scales,
+            &side_theme,
+            plot_area,
+            legend_avail_width,
+            backend,
+            &moved_guide,
+            &without(at),
+            legend_plans,
+        )?;
+    }
+    Ok(())
+}
+
+/// One side's legends (see [`draw_legend_planned`]).
+#[allow(clippy::too_many_arguments)]
+fn draw_legend_side(
     scales: &ScaleSet,
     theme: &Theme,
     plot_area: &Rect,

@@ -529,6 +529,9 @@ pub struct GuideFull {
     pub show_limits: Option<bool>,
     /// `"bins"` guides: draw the axis line and ticks (default `true`).
     pub axis: Option<bool>,
+    /// Draw this legend at its own side: `"right"`, `"left"`, `"top"`,
+    /// `"bottom"` (ggplot2 3.5's `position`, #409).
+    pub position: Option<String>,
     /// Fixed key appearance (`override.aes`, #409).
     pub override_aes: Option<OverrideSpec>,
 }
@@ -842,6 +845,21 @@ pub fn build_plot_with_data(
                 }
                 if let Some(r) = g.reverse {
                     plot = plot.guide_reverse(aes.clone(), r);
+                }
+                if let Some(p) = &g.position {
+                    let p = match p.as_str() {
+                        "right" => LegendPosition::Right,
+                        "left" => LegendPosition::Left,
+                        "top" => LegendPosition::Top,
+                        "bottom" => LegendPosition::Bottom,
+                        o => {
+                            return Err(format!(
+                                "guides.{name}.position: unknown '{o}' (expected right, left, \
+                                 top, bottom)"
+                            ))
+                        }
+                    };
+                    plot = plot.guide_position(aes.clone(), p);
                 }
                 if let Some(o) = &g.override_aes {
                     let mut k = crate::guide::config::KeyOverride::new();
@@ -2361,6 +2379,28 @@ mod tests {
         ))
         .unwrap_err();
         assert!(e.contains("not a legend aesthetic"), "{e}");
+    }
+
+    #[test]
+    fn guides_position_moves_one_legend() {
+        let svg = render(&format!(
+            r#"{{ {DATA}, "aes": {{"x": "x", "y": "y", "color": "g"}},
+               "layers": [{{"geom": "point"}}],
+               "guides": {{"color": {{"position": "bottom"}}}} }}"#
+        ))
+        .unwrap();
+        let right = render(&format!(
+            r#"{{ {DATA}, "aes": {{"x": "x", "y": "y", "color": "g"}},
+               "layers": [{{"geom": "point"}}] }}"#
+        ))
+        .unwrap();
+        assert_ne!(svg, right);
+        let e = render(&format!(
+            r#"{{ {DATA}, "aes": {{"x": "x", "y": "y", "color": "g"}},
+               "layers": [{{"geom": "point"}}], "guides": {{"color": {{"position": "inside"}}}} }}"#
+        ))
+        .unwrap_err();
+        assert!(e.contains("guides.color.position"), "{e}");
     }
 
     #[test]

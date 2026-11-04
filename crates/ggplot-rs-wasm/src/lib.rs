@@ -147,6 +147,8 @@ export type GuideSpec =
       show_limits?: boolean;
       /** bins: draw the axis line and ticks (default true). */
       axis?: boolean;
+      /** Draw this legend at its own side (the others stay at `legend`). */
+      position?: "right" | "left" | "top" | "bottom";
       /** Fixed key appearance (ggplot2's override.aes). */
       override_aes?: {
         color?: string; fill?: string; shape?: string | number; linetype?: string;
