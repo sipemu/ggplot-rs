@@ -221,7 +221,7 @@ export interface ValueScale {
 
 /** A facet strip labeller (#412). */
 export type Labeller =
-  | "value" | "both" | "multi_line"
+  | "value" | "both" | "multi_line" | "parsed"
   | { template: string } | { values: Record<string, string> } | { wrap: number }
   | { vars: Record<string, Labeller> };
 

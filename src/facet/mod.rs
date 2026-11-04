@@ -139,6 +139,155 @@ pub enum FacetLabeller {
     /// A combined multi-variable value (`facet_grid_multi`'s `"a . b"`) on
     /// one line per variable (ggplot2's `multi_line = TRUE`, #412).
     MultiLine,
+    /// The value read as a plotmath expression (ggplot2's `label_parsed`,
+    /// #412), drawn as Unicode text: Greek names (`alpha` → α), `x^2` →
+    /// x², `x[i]` → xᵢ, `==` → =, `%*%` → ×, `*` (juxtaposition) dropped.
+    Parsed,
+}
+
+/// A practical subset of plotmath as Unicode (see [`FacetLabeller::Parsed`]).
+pub fn plotmath_to_unicode(expr: &str) -> String {
+    const GREEK: [(&str, &str); 24] = [
+        ("alpha", "α"),
+        ("beta", "β"),
+        ("gamma", "γ"),
+        ("delta", "δ"),
+        ("epsilon", "ε"),
+        ("zeta", "ζ"),
+        ("eta", "η"),
+        ("theta", "θ"),
+        ("iota", "ι"),
+        ("kappa", "κ"),
+        ("lambda", "λ"),
+        ("mu", "μ"),
+        ("nu", "ν"),
+        ("xi", "ξ"),
+        ("pi", "π"),
+        ("rho", "ρ"),
+        ("sigma", "σ"),
+        ("tau", "τ"),
+        ("upsilon", "υ"),
+        ("phi", "φ"),
+        ("chi", "χ"),
+        ("psi", "ψ"),
+        ("omega", "ω"),
+        ("Delta", "Δ"),
+    ];
+    let sup = |c: char| -> Option<char> {
+        Some(match c {
+            '0' => '⁰',
+            '1' => '¹',
+            '2' => '²',
+            '3' => '³',
+            '4' => '⁴',
+            '5' => '⁵',
+            '6' => '⁶',
+            '7' => '⁷',
+            '8' => '⁸',
+            '9' => '⁹',
+            '+' => '⁺',
+            '-' => '⁻',
+            'n' => 'ⁿ',
+            'i' => 'ⁱ',
+            _ => return None,
+        })
+    };
+    let sub = |c: char| -> Option<char> {
+        Some(match c {
+            '0' => '₀',
+            '1' => '₁',
+            '2' => '₂',
+            '3' => '₃',
+            '4' => '₄',
+            '5' => '₅',
+            '6' => '₆',
+            '7' => '₇',
+            '8' => '₈',
+            '9' => '₉',
+            '+' => '₊',
+            '-' => '₋',
+            'a' => 'ₐ',
+            'e' => 'ₑ',
+            'i' => 'ᵢ',
+            'j' => 'ⱼ',
+            'n' => 'ₙ',
+            'o' => 'ₒ',
+            'x' => 'ₓ',
+            'k' => 'ₖ',
+            'm' => 'ₘ',
+            't' => 'ₜ',
+            _ => return None,
+        })
+    };
+    let s = expr
+        .replace("%*%", "×")
+        .replace("==", "=")
+        .replace("%+-%", "±");
+    let chars: Vec<char> = s.chars().collect();
+    let mut out = String::new();
+    let mut i = 0;
+    while i < chars.len() {
+        let c = chars[i];
+        if c.is_ascii_alphabetic() {
+            let start = i;
+            while i < chars.len() && chars[i].is_ascii_alphanumeric() {
+                i += 1;
+            }
+            let word: String = chars[start..i].iter().collect();
+            match GREEK.iter().find(|(n, _)| *n == word) {
+                Some((_, g)) => out.push_str(g),
+                None => out.push_str(&word),
+            }
+            continue;
+        }
+        if c == '^' || c == '[' {
+            let (close, map): (Option<char>, &dyn Fn(char) -> Option<char>) = if c == '^' {
+                (None, &sup)
+            } else {
+                (Some(']'), &sub)
+            };
+            i += 1;
+            let braced = c == '^' && chars.get(i) == Some(&'{');
+            if braced {
+                i += 1;
+            }
+            let mut buf = String::new();
+            while i < chars.len() {
+                let d = chars[i];
+                if Some(d) == close || (braced && d == '}') {
+                    i += 1;
+                    break;
+                }
+                if close.is_none()
+                    && !braced
+                    && !(d.is_ascii_alphanumeric() || d == '-' || d == '+')
+                {
+                    break;
+                }
+                buf.push(d);
+                i += 1;
+            }
+            let mapped: Option<String> = buf.chars().map(map).collect();
+            match mapped {
+                Some(m) => out.push_str(&m),
+                None => {
+                    out.push(if c == '^' { '^' } else { '_' });
+                    out.push_str(&buf);
+                }
+            }
+            continue;
+        }
+        if c == '*' || c == '~' {
+            if c == '~' {
+                out.push(' ');
+            }
+            i += 1;
+            continue;
+        }
+        out.push(c);
+        i += 1;
+    }
+    out
 }
 
 /// Greedy word wrap at `width` characters (`strwrap`), lines joined by `\n`.
@@ -183,6 +332,7 @@ impl FacetLabeller {
                 .find(|(v, _)| v == var)
                 .map_or_else(|| value.to_string(), |(_, l)| l.format(var, value)),
             FacetLabeller::MultiLine => value.replace(" . ", "\n"),
+            FacetLabeller::Parsed => plotmath_to_unicode(value),
             FacetLabeller::Lookup(map) => map
                 .iter()
                 .find(|(k, _)| k == value)
@@ -284,5 +434,10 @@ mod labeller_tests {
         assert_eq!(l.format("am", "2"), "2");
         assert_eq!(l.format("gear", "3"), "3");
         assert_eq!(FacetLabeller::MultiLine.format("v", "a . b"), "a\nb");
+        let p = |e: &str| FacetLabeller::Parsed.format("v", e);
+        assert_eq!(p("alpha^2"), "α²");
+        assert_eq!(p("x[i] == beta"), "xᵢ = β");
+        assert_eq!(p("10^{-3}~mu*g"), "10⁻³ μg");
+        assert_eq!(p("a %*% b"), "a × b");
     }
 }
