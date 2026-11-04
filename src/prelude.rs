@@ -84,7 +84,7 @@ pub use crate::ggpubr::{
 #[cfg(all(feature = "plotters", not(target_arch = "wasm32")))]
 pub use crate::ggpubr::{ggarrange_png, ggarrange_save_png};
 pub use crate::guide::config::{
-    ColourbarDisplay, GuideBins, GuideColourbar, GuideLegend, KeyOverride,
+    ColourbarDisplay, GuideBins, GuideColourbar, GuideCustom, GuideLegend, KeyOverride,
 };
 pub use crate::locale::{CurrencyPosition, Locale};
 pub use crate::plot::{GGError, GGPlot, Labels};

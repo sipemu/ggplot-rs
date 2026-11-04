@@ -34,6 +34,9 @@ pub struct GuideLegend {
     pub colourbars: Vec<(crate::aes::Aesthetic, GuideColourbar)>,
     /// Per-aesthetic `guide_bins()` options (#409) for a binned scale.
     pub bins: Vec<(crate::aes::Aesthetic, GuideBins)>,
+    /// Custom legend entries (`guide_custom()`, #409), drawn after the
+    /// scales' own legends.
+    pub custom: Vec<GuideCustom>,
     /// Binned-scale aesthetics drawn as a plain key-per-bin legend
     /// (`guides(size = "legend")`) instead of their default `guide_bins()`.
     pub plain_keys: Vec<crate::aes::Aesthetic>,
@@ -146,6 +149,74 @@ impl GuideLegend {
             out.max_rows = Some(1);
         }
         out
+    }
+}
+
+/// The drawing callback of a [`GuideCustom`]: paints into the given box.
+pub type CustomGuideDraw = std::sync::Arc<
+    dyn Fn(
+            &mut dyn crate::render::backend::DrawBackend,
+            &crate::render::Rect,
+        ) -> Result<(), crate::render::RenderError>
+        + Send
+        + Sync,
+>;
+
+/// A legend entry drawn by your own code — ggplot2's `guide_custom(grob,
+/// width, height, title)` (#409): a `width` × `height` px box in the legend
+/// stack (under `title`, if any), handed to `draw` to paint with the usual
+/// [`DrawBackend`](crate::render::backend::DrawBackend) calls. Add with
+/// [`GGPlot::guide_custom`](crate::GGPlot::guide_custom).
+#[derive(Clone)]
+pub struct GuideCustom {
+    pub title: Option<String>,
+    pub width: f64,
+    pub height: f64,
+    pub draw: CustomGuideDraw,
+}
+
+impl GuideCustom {
+    /// A `width` × `height` px box painted by `draw`.
+    pub fn new<F>(width: f64, height: f64, draw: F) -> Self
+    where
+        F: Fn(
+                &mut dyn crate::render::backend::DrawBackend,
+                &crate::render::Rect,
+            ) -> Result<(), crate::render::RenderError>
+            + Send
+            + Sync
+            + 'static,
+    {
+        GuideCustom {
+            title: None,
+            width: width.max(0.0),
+            height: height.max(0.0),
+            draw: std::sync::Arc::new(draw),
+        }
+    }
+
+    /// A title above the box, styled like the other legend titles.
+    pub fn with_title(mut self, title: &str) -> Self {
+        self.title = Some(title.to_string());
+        self
+    }
+
+    /// Height of the title line above the box (0 without a title).
+    pub(crate) fn title_offset(&self, theme: &crate::theme::Theme) -> f64 {
+        match &self.title {
+            Some(t) if !t.is_empty() => theme.legend_title.size + 4.0,
+            _ => 0.0,
+        }
+    }
+}
+
+impl std::fmt::Debug for GuideCustom {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("GuideCustom")
+            .field("title", &self.title)
+            .field("width", &self.width)
+            .field("height", &self.height)
+            .finish_non_exhaustive()
     }
 }
 

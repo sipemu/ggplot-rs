@@ -2154,6 +2154,13 @@ impl GGPlot {
         self
     }
 
+    /// Add a legend entry drawn by your own code — ggplot2's
+    /// `guide_custom()` (#409): see [`GuideCustom`](crate::guide::config::GuideCustom).
+    pub fn guide_custom(mut self, guide: crate::guide::config::GuideCustom) -> Self {
+        self.guide_legend.custom.push(guide);
+        self
+    }
+
     /// Draw a binned scale's legend as plain keys, one labelled `lo–hi`
     /// per bin (`guides(size = "legend")`), instead of `guide_bins()`.
     pub fn guide_legend_keys(mut self, aes: crate::aes::Aesthetic) -> Self {
@@ -3862,6 +3869,9 @@ impl GGPlot {
         if guide.plain_keys.is_empty() {
             guide.plain_keys = std::mem::take(&mut self.guide_legend.plain_keys);
         }
+        if guide.custom.is_empty() {
+            guide.custom = std::mem::take(&mut self.guide_legend.custom);
+        }
         self.guide_legend = guide;
         self
     }
@@ -5262,6 +5272,15 @@ impl GGPlot {
                     .map(|w| (w - key_w).max(0.0))
                     .fold(0.0_f64, f64::max);
             extras.legend_extra_width = extras.legend_extra_width.max(extra);
+            // #409: a custom guide wider than a key + its label column.
+            let text_col = key_w + built.theme.legend_spacing + built.theme.legend_text.size * 6.0;
+            let custom = built
+                .guide_legend
+                .custom
+                .iter()
+                .map(|g| (g.width - text_col).max(0.0))
+                .fold(0.0_f64, f64::max);
+            extras.legend_extra_width = extras.legend_extra_width.max(custom);
         }
 
         // #211: a continuous colourbar at `Top`/`Bottom` (or
@@ -5321,6 +5340,19 @@ impl GGPlot {
                     extras.continuous_horizontal_legend_extra_height =
                         (bar_height - key_h).max(0.0);
                 }
+                // #409: a custom guide taller than a key row.
+                let key_h = built
+                    .theme
+                    .legend_key_height
+                    .max(extras.legend_max_key_size);
+                let custom = built
+                    .guide_legend
+                    .custom
+                    .iter()
+                    .map(|g| (g.title_offset(&built.theme) + g.height - key_h).max(0.0))
+                    .fold(0.0_f64, f64::max);
+                extras.continuous_horizontal_legend_extra_height =
+                    extras.continuous_horizontal_legend_extra_height.max(custom);
             }
         }
 
@@ -5400,7 +5432,9 @@ impl GGPlot {
             .mappings
             .iter()
             .any(|m| is_legend_aesthetic(&m.aesthetic));
-        plot_level
+        // #409: a custom guide needs the legend band even with no mapping.
+        !self.guide_legend.custom.is_empty()
+            || plot_level
             || self.layers.iter().any(|layer| {
                 if layer.show_legend == Some(false) {
                     return false;

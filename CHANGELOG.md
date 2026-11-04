@@ -20,6 +20,10 @@ All notable changes to this project are documented here. The format follows
   label per key (still available via `guide_legend_keys`).
 
 ### Added
+- `GuideCustom` + `GGPlot::guide_custom` (#409, ggplot2's `guide_custom()`):
+  a `width` × `height` legend entry painted by your own `DrawBackend`
+  closure, drawn after the scales' legends; the legend band grows to fit it
+  (also when no aesthetic is mapped).
 - `Theme.legend_box_just` (#413, ggplot2's `legend.box.just`; config / npm
   key `legend_box_just`: `"left"`/`"top"`, `"center"`, `"right"`/`"bottom"`
   or a fraction): line several legends up along the stack's cross axis.
