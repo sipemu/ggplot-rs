@@ -31,7 +31,10 @@ fn hue_scale_is_ggplot2s_palette_for_any_n() {
         .aes(Aes::new().x("x").y("y").color("g"))
         .geom_point()
         .scale_color_hue(HuePalette::default()));
-    assert!(s.contains("#F8766D") && s.contains("#00BFC4"), "2-level hues");
+    assert!(
+        s.contains("#F8766D") && s.contains("#00BFC4"),
+        "2-level hues"
+    );
     let s = svg(GGPlot::new(data(&["a", "b", "c", "d", "e"]))
         .aes(Aes::new().x("x").y("y").fill("g"))
         .geom_col()
@@ -48,7 +51,10 @@ fn viridis_d_and_distiller() {
         .geom_point()
         .scale_color_viridis_d('D', 0.0, 1.0, 1));
     // R: viridis_pal()(4) ends — first and last match exactly.
-    assert!(s.contains("#440154") && s.contains("#FDE725"), "viridis ends");
+    assert!(
+        s.contains("#440154") && s.contains("#FDE725"),
+        "viridis ends"
+    );
     let s = svg(GGPlot::new(data(&["a", "b", "c"]))
         .aes(Aes::new().x("x").y("y").color("y"))
         .geom_point()
@@ -56,7 +62,10 @@ fn viridis_d_and_distiller() {
     // direction = -1: the lowest value gets Blues' darkest. (ggplot2 uses the
     // 7-class Brewer table, darkest #084594; ggplot-rs ships the 9-class one,
     // darkest #08306B.)
-    assert!(s.contains("fill=\"#08306B\""), "darkest blue at the low end");
+    assert!(
+        s.contains("fill=\"#08306B\""),
+        "darkest blue at the low end"
+    );
 }
 
 #[test]
