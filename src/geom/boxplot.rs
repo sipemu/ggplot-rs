@@ -12,12 +12,37 @@ use crate::theme::Theme;
 
 use super::{Geom, GeomParams};
 
-/// Boxplot geometry.
+/// Boxplot geometry (ggplot2's `geom_boxplot`).
+#[derive(Clone, Debug)]
 pub struct GeomBoxplot {
     pub fill: (u8, u8, u8),
     pub color: (u8, u8, u8),
     pub width: f64,
     pub alpha: f64,
+    /// Notched box: the sides pinch in to `notch_width` of the box at the
+    /// median, spanning median ± 1.58·IQR/√n (`notch = TRUE`).
+    pub notch: bool,
+    /// Box width at the notch, relative to the box (`notchwidth`, 0.5).
+    pub notch_width: f64,
+    /// Box width ∝ √n of the group (`varwidth = TRUE`).
+    pub varwidth: bool,
+    /// Whisker reach in IQRs passed to the default stat (`coef`, 1.5).
+    pub coef: f64,
+    /// Draw the outlier points (`outliers = FALSE` hides them).
+    pub outliers: bool,
+    /// Outlier point colour; `None` = the box outline colour.
+    pub outlier_color: Option<(u8, u8, u8)>,
+    /// Outlier point shape (`outlier.shape`; default an open circle).
+    pub outlier_shape: PointShape,
+    /// Fill outlier points (`outlier.shape = 19`-like) instead of outlining.
+    pub outlier_filled: bool,
+    /// Outlier point radius in px (`outlier.size`).
+    pub outlier_size: f64,
+    /// Outlier point opacity (`outlier.alpha`).
+    pub outlier_alpha: f64,
+    /// Whisker end-cap width relative to the box (`staplewidth`; 0 = none).
+    /// ggplot2's default is 0; ggplot-rs keeps its historical 0.5 caps.
+    pub staple_width: f64,
 }
 
 impl Default for GeomBoxplot {
@@ -27,7 +52,50 @@ impl Default for GeomBoxplot {
             color: (50, 50, 50),
             width: 0.75,
             alpha: 1.0,
+            notch: false,
+            notch_width: 0.5,
+            varwidth: false,
+            coef: 1.5,
+            outliers: true,
+            outlier_color: None,
+            outlier_shape: PointShape::Circle,
+            outlier_filled: false,
+            outlier_size: 2.0,
+            outlier_alpha: 1.0,
+            staple_width: 0.5,
         }
+    }
+}
+
+impl GeomBoxplot {
+    /// `notch = TRUE`.
+    pub fn notched(mut self) -> Self {
+        self.notch = true;
+        self
+    }
+
+    /// `varwidth = TRUE`.
+    pub fn varwidth(mut self) -> Self {
+        self.varwidth = true;
+        self
+    }
+
+    /// `coef` — whisker reach in IQRs.
+    pub fn with_coef(mut self, coef: f64) -> Self {
+        self.coef = coef;
+        self
+    }
+
+    /// `outliers = FALSE`: no outlier points, and they don't widen the y scale.
+    pub fn hide_outliers(mut self) -> Self {
+        self.outliers = false;
+        self
+    }
+
+    /// `staplewidth` — whisker cap width relative to the box (0 = none).
+    pub fn with_staple_width(mut self, w: f64) -> Self {
+        self.staple_width = w;
+        self
     }
 }
 
@@ -85,6 +153,18 @@ impl Geom for GeomBoxplot {
         // A dodge (the default `position_dodge2`) shifts each box within its
         // x slot and shares the slot's width between the groups there (#404).
         let x_mapper = super::support::XMapper::new(data, scales);
+        // `varwidth`: box width ∝ √n relative to the largest group.
+        let n_col = data.column("n");
+        let max_sqrt_n = n_col
+            .map(|c| {
+                c.iter()
+                    .filter_map(|v| v.as_f64())
+                    .fold(0.0_f64, f64::max)
+                    .sqrt()
+            })
+            .unwrap_or(0.0);
+        let notch_lo_col = data.column("notchlower");
+        let notch_hi_col = data.column("notchupper");
 
         for i in 0..data.nrows() {
             let nx = if x_scale.is_some() {
@@ -98,6 +178,10 @@ impl Geom for GeomBoxplot {
                 self.width / (n.max(1) as f64 * 2.5) / x_mapper.slot_n(i)
             } else {
                 0.03
+            };
+            let half_width = match n_col.and_then(|c| c[i].as_f64()) {
+                Some(n) if self.varwidth && max_sqrt_n > 0.0 => half_width * n.sqrt() / max_sqrt_n,
+                _ => half_width,
             };
 
             // Get boxplot values
@@ -144,22 +228,55 @@ impl Geom for GeomBoxplot {
             let (box_left, box_top) = coord.transform((nx - half_width, map_y(upper)), &plot_area);
             let (box_right, box_bottom) =
                 coord.transform((nx + half_width, map_y(lower)), &plot_area);
-            backend.draw_rect(
-                (box_left, box_top),
-                (box_right, box_bottom),
-                &RectStyle {
-                    fill: Some(box_fill),
-                    stroke: Some(self.color),
-                    stroke_width: 1.0,
-                    alpha: self.alpha,
-                    clip: true,
-                    corner_radius: 0.0,
-                },
-            )?;
+            let box_style = RectStyle {
+                fill: Some(box_fill),
+                stroke: Some(self.color),
+                stroke_width: 1.0,
+                alpha: self.alpha,
+                clip: true,
+                corner_radius: 0.0,
+            };
+            // Notch: the sides pinch in at the median (median ± 1.58·IQR/√n).
+            let notch = match (notch_lo_col, notch_hi_col) {
+                (Some(lo), Some(hi)) if self.notch => {
+                    lo[i].as_f64().zip(hi[i].as_f64()).map(|(lo, hi)| {
+                        // Never wider than the box itself (as ggplot2 warns).
+                        (lo.max(lower), hi.min(upper))
+                    })
+                }
+                _ => None,
+            };
+            let inset = half_width * (1.0 - self.notch_width.clamp(0.0, 1.0));
+            if let Some((nlo, nhi)) = notch {
+                let pts = [
+                    (nx - half_width, upper),
+                    (nx + half_width, upper),
+                    (nx + half_width, nhi),
+                    (nx + half_width - inset, middle),
+                    (nx + half_width, nlo),
+                    (nx + half_width, lower),
+                    (nx - half_width, lower),
+                    (nx - half_width, nlo),
+                    (nx - half_width + inset, middle),
+                    (nx - half_width, nhi),
+                ];
+                let poly: Vec<(f64, f64)> = pts
+                    .iter()
+                    .map(|&(x, y)| coord.transform((x, map_y(y)), &plot_area))
+                    .collect();
+                backend.draw_polygon(&poly, &box_style)?;
+            } else {
+                backend.draw_rect((box_left, box_top), (box_right, box_bottom), &box_style)?;
+            }
 
-            // Median line
-            let (med_left, med_y) = coord.transform((nx - half_width, map_y(middle)), &plot_area);
-            let (med_right, _) = coord.transform((nx + half_width, map_y(middle)), &plot_area);
+            // Median line (inset to the notch's waist when notched)
+            let med_half = if notch.is_some() {
+                half_width - inset
+            } else {
+                half_width
+            };
+            let (med_left, med_y) = coord.transform((nx - med_half, map_y(middle)), &plot_area);
+            let (med_right, _) = coord.transform((nx + med_half, map_y(middle)), &plot_area);
             backend.draw_line(
                 &[(med_left, med_y), (med_right, med_y)],
                 &LineStyle {
@@ -184,19 +301,22 @@ impl Geom for GeomBoxplot {
                     ..Default::default()
                 },
             )?;
-            // Lower whisker cap
-            let (wl, _) = coord.transform((nx - half_width * 0.5, map_y(ymin)), &plot_area);
-            let (wr, _) = coord.transform((nx + half_width * 0.5, map_y(ymin)), &plot_area);
-            backend.draw_line(
-                &[(wl, whisker_bottom), (wr, whisker_bottom)],
-                &LineStyle {
-                    color: self.color,
-                    width: 1.0,
-                    alpha: 1.0,
-                    linetype: Linetype::Solid,
-                    ..Default::default()
-                },
-            )?;
+            // Lower whisker cap (staple)
+            let staple = half_width * self.staple_width.max(0.0);
+            if staple > 0.0 {
+                let (wl, _) = coord.transform((nx - staple, map_y(ymin)), &plot_area);
+                let (wr, _) = coord.transform((nx + staple, map_y(ymin)), &plot_area);
+                backend.draw_line(
+                    &[(wl, whisker_bottom), (wr, whisker_bottom)],
+                    &LineStyle {
+                        color: self.color,
+                        width: 1.0,
+                        alpha: 1.0,
+                        linetype: Linetype::Solid,
+                        ..Default::default()
+                    },
+                )?;
+            }
 
             // Upper whisker
             let (_, whisker_top) = coord.transform((nx, map_y(ymax)), &plot_area);
@@ -210,24 +330,26 @@ impl Geom for GeomBoxplot {
                     ..Default::default()
                 },
             )?;
-            // Upper whisker cap
-            let (wl, _) = coord.transform((nx - half_width * 0.5, map_y(ymax)), &plot_area);
-            let (wr, _) = coord.transform((nx + half_width * 0.5, map_y(ymax)), &plot_area);
-            backend.draw_line(
-                &[(wl, whisker_top), (wr, whisker_top)],
-                &LineStyle {
-                    color: self.color,
-                    width: 1.0,
-                    alpha: 1.0,
-                    linetype: Linetype::Solid,
-                    ..Default::default()
-                },
-            )?;
+            // Upper whisker cap (staple)
+            if staple > 0.0 {
+                let (wl, _) = coord.transform((nx - staple, map_y(ymax)), &plot_area);
+                let (wr, _) = coord.transform((nx + staple, map_y(ymax)), &plot_area);
+                backend.draw_line(
+                    &[(wl, whisker_top), (wr, whisker_top)],
+                    &LineStyle {
+                        color: self.color,
+                        width: 1.0,
+                        alpha: 1.0,
+                        linetype: Linetype::Solid,
+                        ..Default::default()
+                    },
+                )?;
+            }
 
             // Outliers — `setup_data` has already normalised this cell to a
             // clean, bracket-free "v1, v2" list (any unparsable part was
             // warned on and dropped there), so a plain split/parse suffices.
-            if let Some(oc) = outliers_col {
+            if let Some(oc) = outliers_col.filter(|_| self.outliers) {
                 if let Value::Str(s) = &oc[i] {
                     for part in s.split(',') {
                         if let Ok(val) = part.trim().parse::<f64>() {
@@ -235,12 +357,12 @@ impl Geom for GeomBoxplot {
                             let (ox, oy) = coord.transform((nx, ny), &plot_area);
                             backend.draw_circle(
                                 (ox, oy),
-                                2.0,
+                                self.outlier_size,
                                 &PointStyle {
-                                    color: self.color,
-                                    alpha: 1.0,
-                                    filled: false,
-                                    shape: PointShape::Circle,
+                                    color: self.outlier_color.unwrap_or(self.color),
+                                    alpha: self.outlier_alpha,
+                                    filled: self.outlier_filled,
+                                    shape: self.outlier_shape,
                                 },
                             )?;
                         }
@@ -263,7 +385,7 @@ impl Geom for GeomBoxplot {
     }
 
     fn default_stat(&self) -> Box<dyn Stat> {
-        Box::new(StatBoxplot)
+        Box::new(StatBoxplot::with_coef(self.coef))
     }
 
     /// ggplot2's default: grouped boxes sit side by side in their x slot.
@@ -339,6 +461,13 @@ impl Geom for GeomBoxplot {
     /// outside the whiskers.
     fn setup_data(&self, data: &mut DataFrame, warnings: &mut Vec<String>) {
         if !data.has_column("outliers") {
+            return;
+        }
+        // `outliers = FALSE`: drop them — not drawn, and (as in ggplot2) not
+        // part of the y scale either.
+        if !self.outliers {
+            let n = data.nrows();
+            data.add_column("outliers".to_string(), vec![Value::Na; n]);
             return;
         }
         let n = data.nrows();

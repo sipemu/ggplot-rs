@@ -87,6 +87,26 @@ export interface LayerParams {
   target?: string;
   /** bullet / bullet_vertical: qualitative range band upper bounds. */
   ranges?: number[];
+  /** boxplot: notched box (`notch = TRUE`). */
+  notch?: boolean;
+  /** boxplot: box width ∝ √n. */
+  varwidth?: boolean;
+  /** boxplot: whisker reach in IQRs (default 1.5). */
+  coef?: number;
+  /** boxplot: draw outliers (default true; false also drops them from the scale). */
+  outliers?: boolean;
+  /** boxplot: whisker cap width relative to the box (0 = none). */
+  staplewidth?: number;
+  /** violin: trim to the data range (default true). */
+  trim?: boolean;
+  /** violin: `"area"` (default), `"count"`, `"width"`. */
+  scale?: "area" | "count" | "width";
+  /** violin: draw lines at these sample quantiles. */
+  quantiles?: number[];
+  /** violin: fixed kernel bandwidth (default `bw.nrd0`). */
+  bw?: number;
+  /** violin: bandwidth multiplier. */
+  adjust?: number;
 }
 
 export type PositionName = "identity" | "stack" | "fill" | "dodge" | "dodge2" | "jitter" | "nudge";

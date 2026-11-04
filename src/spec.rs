@@ -121,6 +121,26 @@ pub struct LayerParams {
     pub target: Option<String>,
     /// bullet / bullet_vertical: qualitative range band upper bounds.
     pub ranges: Option<Vec<f64>>,
+    /// boxplot: notched box (`notch = TRUE`).
+    pub notch: Option<bool>,
+    /// boxplot: box width ∝ √n.
+    pub varwidth: Option<bool>,
+    /// boxplot: whisker reach in IQRs (default 1.5).
+    pub coef: Option<f64>,
+    /// boxplot: draw outliers (default true; false also drops them from the scale).
+    pub outliers: Option<bool>,
+    /// boxplot: whisker cap width relative to the box (0 = none).
+    pub staplewidth: Option<f64>,
+    /// violin: trim to the data range (default true).
+    pub trim: Option<bool>,
+    /// violin: `"area"` (default), `"count"`, `"width"`.
+    pub scale: Option<String>,
+    /// violin: draw lines at these sample quantiles.
+    pub quantiles: Option<Vec<f64>>,
+    /// violin: fixed kernel bandwidth (default `bw.nrd0`).
+    pub bw: Option<f64>,
+    /// violin: bandwidth multiplier.
+    pub adjust: Option<f64>,
 }
 
 impl LayerParams {
@@ -148,13 +168,50 @@ impl LayerParams {
             projection,
             target,
             ranges,
+            notch,
+            varwidth,
+            coef,
+            outliers,
+            staplewidth,
+            trim,
+            scale,
+            quantiles,
+            bw,
+            adjust,
         } = other;
         macro_rules! set {
             ($($f:ident),*) => { $( if $f.is_some() { self.$f = $f; } )* };
         }
         set!(
-            bins, method, span, se, yintercept, xintercept, slope, intercept, levels, rows,
-            box_size, reversal, shape, speed, direction, censor, projection, target, ranges
+            bins,
+            method,
+            span,
+            se,
+            yintercept,
+            xintercept,
+            slope,
+            intercept,
+            levels,
+            rows,
+            box_size,
+            reversal,
+            shape,
+            speed,
+            direction,
+            censor,
+            projection,
+            target,
+            ranges,
+            notch,
+            varwidth,
+            coef,
+            outliers,
+            staplewidth,
+            trim,
+            scale,
+            quantiles,
+            bw,
+            adjust
         );
     }
 }
@@ -806,8 +863,38 @@ pub fn add_geom(plot: GGPlot, geom: &str, p: &LayerParams) -> Result<GGPlot, Str
         "freqpoly" => plot.geom_freqpoly(),
         "density" => plot.geom_density(),
         "density_ridges" => plot.geom_density_ridges(),
-        "boxplot" => plot.geom_boxplot(),
-        "violin" => plot.geom_violin(),
+        "boxplot" => {
+            let d = crate::geom::boxplot::GeomBoxplot::default();
+            plot.geom_boxplot_with(crate::geom::boxplot::GeomBoxplot {
+                notch: p.notch.unwrap_or(false),
+                varwidth: p.varwidth.unwrap_or(false),
+                coef: p.coef.unwrap_or(1.5),
+                outliers: p.outliers.unwrap_or(true),
+                staple_width: p.staplewidth.unwrap_or(d.staple_width),
+                ..d
+            })
+        }
+        "violin" => {
+            use crate::geom::violin::{GeomViolin, ViolinScale};
+            let mut g = GeomViolin {
+                trim: p.trim.unwrap_or(true),
+                bw: p.bw,
+                adjust: p.adjust.unwrap_or(1.0),
+                quantiles: p.quantiles.clone().unwrap_or_default(),
+                ..Default::default()
+            };
+            g.scale = match p.scale.as_deref() {
+                None | Some("area") => ViolinScale::Area,
+                Some("count") => ViolinScale::Count,
+                Some("width") => ViolinScale::Width,
+                Some(o) => {
+                    return Err(format!(
+                        "unknown violin scale '{o}' (expected area, count, width)"
+                    ))
+                }
+            };
+            plot.geom_violin_with(g)
+        }
         "dotplot" => plot.geom_dotplot(),
         "smooth" => {
             let mut g = GeomSmooth::default();
@@ -1405,6 +1492,25 @@ mod tests {
         ))
         .unwrap_err();
         assert!(e.contains("unknown preserve"), "{e}");
+    }
+
+    #[test]
+    fn boxplot_and_violin_params() {
+        let svg = render(&format!(
+            r#"{{ {DATA}, "aes": {{"x": "g", "y": "y"}},
+               "layers": [{{"geom": "violin", "params": {{"scale": "count", "trim": false,
+                            "quantiles": [0.25, 0.5, 0.75], "adjust": 1.5, "bw": 0.5}}}},
+                          {{"geom": "boxplot", "params": {{"notch": true, "varwidth": true,
+                            "coef": 1.0, "outliers": false, "staplewidth": 0}}}}] }}"#
+        ))
+        .unwrap();
+        assert!(svg.contains("<polygon"));
+        let e = render(&format!(
+            r#"{{ {DATA}, "aes": {{"x": "g", "y": "y"}},
+               "layers": [{{"geom": "violin", "params": {{"scale": "big"}}}}] }}"#
+        ))
+        .unwrap_err();
+        assert!(e.contains("unknown violin scale"), "{e}");
     }
 
     #[test]

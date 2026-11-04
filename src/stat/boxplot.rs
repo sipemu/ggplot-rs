@@ -4,8 +4,32 @@ use crate::scale::ScaleSet;
 
 use super::Stat;
 
-/// Computes boxplot statistics: quartiles, whiskers, outliers.
-pub struct StatBoxplot;
+/// Computes boxplot statistics: quartiles, whiskers, outliers, and `n` (the
+/// group's observation count, for `varwidth`).
+#[derive(Clone, Debug, PartialEq)]
+pub struct StatBoxplot {
+    /// Whisker reach in IQRs (ggplot2's `coef`, default 1.5): points beyond
+    /// `[Q1 − coef·IQR, Q3 + coef·IQR]` are outliers.
+    pub coef: f64,
+}
+
+/// The default stat (`coef = 1.5`): keeps `.stat(StatBoxplot)` compiling now
+/// that the type has a field.
+#[allow(non_upper_case_globals)]
+pub const StatBoxplot: StatBoxplot = StatBoxplot { coef: 1.5 };
+
+impl Default for StatBoxplot {
+    fn default() -> Self {
+        StatBoxplot
+    }
+}
+
+impl StatBoxplot {
+    /// `stat_boxplot(coef = …)`.
+    pub fn with_coef(coef: f64) -> Self {
+        StatBoxplot { coef }
+    }
+}
 
 impl Stat for StatBoxplot {
     fn compute_group(&self, data: &DataFrame, _scales: &ScaleSet) -> DataFrame {
@@ -27,8 +51,13 @@ impl Stat for StatBoxplot {
         let q3 = percentile(&values, 75.0);
         let iqr = q3 - q1;
 
-        let lower_fence = q1 - 1.5 * iqr;
-        let upper_fence = q3 + 1.5 * iqr;
+        let coef = if self.coef.is_finite() && self.coef >= 0.0 {
+            self.coef
+        } else {
+            1.5
+        };
+        let lower_fence = q1 - coef * iqr;
+        let upper_fence = q3 + coef * iqr;
 
         // Whiskers extend to most extreme non-outlier
         let ymin = values
@@ -72,6 +101,7 @@ impl Stat for StatBoxplot {
             "notchlower".to_string(),
             vec![Value::Float(median - 1.58 * iqr / (n as f64).sqrt())],
         );
+        result.add_column("n".to_string(), vec![Value::Float(n as f64)]);
 
         // Store outliers as separate rows in a companion column
         if !outliers.is_empty() {

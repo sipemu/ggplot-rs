@@ -7,14 +7,41 @@ use super::Stat;
 /// Kernel density estimation on Y per group (for violin plots).
 /// Outputs: x (group value), y (eval points), violinwidth (density normalized to
 /// [0, 1]). The geom mirrors `violinwidth` around the group's x slot.
+///
+/// Also emits `density` (the raw estimate), `n` (the group's count) — which
+/// the geom's `scale = "area" | "count"` need — and, when `quantiles` is set,
+/// a `quantiles` cell with the group's sample quantiles (`"q1,q2,…"`).
+#[derive(Clone, Debug, PartialEq)]
 pub struct StatYDensity {
     pub n_points: usize,
+    /// Evaluate over the data range only (`trim = TRUE`, default); `false`
+    /// extends ±3 bandwidths into the tails.
+    pub trim: bool,
+    /// Fixed kernel bandwidth; `None` = R's `bw.nrd0`.
+    pub bw: Option<f64>,
+    /// Bandwidth multiplier (`adjust`, default 1).
+    pub adjust: f64,
+    /// Sample quantiles to report (`quantiles`, e.g. `[0.25, 0.5, 0.75]`).
+    pub quantiles: Vec<f64>,
 }
 
 impl Default for StatYDensity {
     fn default() -> Self {
-        StatYDensity { n_points: 512 }
+        StatYDensity {
+            n_points: 512,
+            trim: true,
+            bw: None,
+            adjust: 1.0,
+            quantiles: Vec::new(),
+        }
     }
+}
+
+/// R's default (type 7) sample quantile of sorted `v`.
+fn quantile7(v: &[f64], p: f64) -> f64 {
+    let h = (v.len() - 1) as f64 * p.clamp(0.0, 1.0);
+    let (lo, hi) = (h.floor() as usize, h.ceil() as usize);
+    v[lo] + (h - lo as f64) * (v[hi] - v[lo])
 }
 
 impl Stat for StatYDensity {
@@ -39,13 +66,24 @@ impl Stat for StatYDensity {
             .unwrap_or(Value::Float(0.0));
 
         let n = values.len() as f64;
-        // R's bw.nrd0 (positive even for zero-spread data).
-        let bandwidth = super::bw_nrd0(&values);
+        // R's bw.nrd0 (positive even for zero-spread data), or a fixed `bw`,
+        // times `adjust`.
+        let adjust = if self.adjust.is_finite() && self.adjust > 0.0 {
+            self.adjust
+        } else {
+            1.0
+        };
+        let bandwidth = self
+            .bw
+            .filter(|b| b.is_finite() && *b > 0.0)
+            .unwrap_or_else(|| super::bw_nrd0(&values))
+            * adjust;
 
         // ggplot2's geom_violin defaults to trim = TRUE: evaluate the density
-        // over the observed data range, not extended by ±3 bandwidths.
-        let y_min = values.iter().cloned().fold(f64::INFINITY, f64::min);
-        let y_max = values.iter().cloned().fold(f64::NEG_INFINITY, f64::max);
+        // over the observed data range; trim = FALSE extends ±3 bandwidths.
+        let tail = if self.trim { 0.0 } else { 3.0 * bandwidth };
+        let y_min = values.iter().cloned().fold(f64::INFINITY, f64::min) - tail;
+        let y_max = values.iter().cloned().fold(f64::NEG_INFINITY, f64::max) + tail;
         let step = (y_max - y_min) / (self.n_points - 1) as f64;
 
         let mut x_vals = Vec::with_capacity(self.n_points);
@@ -76,16 +114,31 @@ impl Stat for StatYDensity {
         };
 
         let mut width_vals = Vec::with_capacity(self.n_points);
+        let mut density_vals = Vec::with_capacity(self.n_points);
         for (y, density) in &densities {
             x_vals.push(group_x.clone());
             y_vals.push(Value::Float(*y));
             width_vals.push(Value::Float(density * scale));
+            density_vals.push(Value::Float(*density));
         }
 
         let mut result = DataFrame::new();
         result.add_column("x".to_string(), x_vals);
         result.add_column("y".to_string(), y_vals);
         result.add_column("violinwidth".to_string(), width_vals);
+        result.add_column("density".to_string(), density_vals);
+        result.add_column("n".to_string(), vec![Value::Float(n); self.n_points]);
+        if !self.quantiles.is_empty() {
+            let mut sorted = values.clone();
+            sorted.sort_by(f64::total_cmp);
+            let q = self
+                .quantiles
+                .iter()
+                .map(|&p| quantile7(&sorted, p).to_string())
+                .collect::<Vec<_>>()
+                .join(",");
+            result.add_column("quantiles".to_string(), vec![Value::Str(q); self.n_points]);
+        }
 
         // Carry over grouping columns
         for col_name in &["color", "fill", "group"] {
