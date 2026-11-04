@@ -17,9 +17,9 @@ the crate's test suite, so it matches the published API.
 
 ```toml
 [dependencies]
-ggplot-rs = "0.40"            # defaults: polars input + plotters PNG/SVG files
+ggplot-rs = "0.41"            # defaults: polars input + plotters PNG/SVG files
 # Lean, no polars/plotters (self-contained SVG only, also builds for wasm32):
-# ggplot-rs = { version = "0.40", default-features = false, features = ["sf"] }
+# ggplot-rs = { version = "0.41", default-features = false, features = ["sf"] }
 ```
 
 | Feature | Adds |
