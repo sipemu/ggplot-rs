@@ -21,6 +21,10 @@ All notable changes to this project are documented here. The format follows
   [.margin_labels()])` — ggplot2's `axes = "all"` / `axis.labels =
   "margins"`; the panel gaps grow to hold the inner axes. Spec / npm:
   `facet.axes`, `facet.axis_labels`.
+- Secondary x axis (#409): `sec.axis` on an x scale draws along the top of
+  the panel (ticks, transformed labels, title; the panel and the plot title
+  make room); `SecAxis::dup()` is ggplot2's `dup_axis()`. Spec / npm:
+  `scales.x/y.sec_axis: true | { name, scale, offset }`.
 - Colourbar guides (#409): `guide_colourbar(aes, GuideColourbar)` —
   `bar_width` / `bar_height` (px), `nbin`, `display` (`Gradient` /
   `Rectangles`), `frame`, `ticks` — and `guide_coloursteps(aes)`

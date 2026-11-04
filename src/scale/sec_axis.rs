@@ -42,6 +42,12 @@ impl SecAxis {
         }
     }
 
+    /// ggplot2's `dup_axis()`: the primary axis repeated on the other side
+    /// (same breaks and labels). Name it with [`with_name`](Self::with_name).
+    pub fn dup() -> Self {
+        SecAxis::new(|v| v)
+    }
+
     /// A 0–100 % axis relative to the primary scale's trained data maximum
     /// (the value drawn at the right axis' 100 % tick) — e.g. a Pareto
     /// chart's cumulative share, where the maximum is the grand total. The

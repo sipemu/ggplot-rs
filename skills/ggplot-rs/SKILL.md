@@ -106,6 +106,9 @@ With polars (default feature): `GGPlot::new(df!{ "x" => [1.0, 2.0], "y" => [3.0,
   2.0)])` / `scale_alpha_manual` / `scale_linewidth_manual`, `scale_size_identity()` /
   `_alpha_` / `_linewidth_` / `scale_shape_identity()` (pch codes), `scale_radius(1.0, 8.0)`;
   `expand_limits(&[], &[0.0])`.
+- **Secondary axes:** `scale_x_continuous(ScaleContinuous::new().with_sec_axis(SecAxis::new(|c|
+  c * 1.8 + 32.0).with_name("°F")))` (x: on top, y: on the right; `SecAxis::dup()` =
+  `dup_axis()`, `SecAxis::linear(scale, offset)` own nice ticks).
 - **Facets:** `facet_wrap("col", Some(ncol))`, `facet_grid(Some("row"), Some("col"))`,
   `facet_wrap_free(col, ncol, FacetScales::FreeY)`, `.facet_wrap_dir(vertical,
   as_table)` (ggplot2's `dir = "v"`, `as.table`),

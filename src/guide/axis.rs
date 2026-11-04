@@ -674,6 +674,123 @@ pub fn draw_sec_y_axis(
     Ok(())
 }
 
+/// The labels a secondary axis draws at `breaks` (its own ticks, or the
+/// primary labels run through the transform).
+fn sec_labels(
+    primary_scale: &dyn Scale,
+    sec_axis: &crate::scale::sec_axis::SecAxis,
+    breaks: &[(f64, String)],
+    own: bool,
+) -> Vec<String> {
+    let locale = primary_scale.locale();
+    breaks
+        .iter()
+        .map(|(_, label)| {
+            if own {
+                return label.clone();
+            }
+            let parsed = match locale {
+                Some(l) => l.parse_number(label),
+                None => label.parse::<f64>().ok(),
+            };
+            match parsed {
+                Some(v) => sec_axis.label(sec_axis.transform_value(v), locale),
+                None => label.clone(),
+            }
+        })
+        .collect()
+}
+
+/// The height a secondary x axis takes above the panel: ticks, one line of
+/// labels and its title (#409). Shared by the layout reservation and
+/// [`draw_sec_x_axis`].
+pub(crate) fn sec_x_axis_height(theme: &Theme, sec_axis: &crate::scale::sec_axis::SecAxis) -> f64 {
+    theme.axis_ticks_length
+        + if theme.axis_text_x.visible {
+            theme.axis_text_x.size + 4.0
+        } else {
+            0.0
+        }
+        + if !sec_axis.name.is_empty() && theme.axis_title_x.visible {
+            theme.axis_title_x.size + 6.0
+        } else {
+            0.0
+        }
+}
+
+/// Draw a secondary x axis along the top of the panel (ggplot2's
+/// `scale_x_continuous(sec.axis = …)` / `dup_axis()`, #409).
+pub fn draw_sec_x_axis(
+    primary_scale: &dyn Scale,
+    sec_axis: &crate::scale::sec_axis::SecAxis,
+    coord: &dyn Coord,
+    theme: &Theme,
+    plot_area: &Rect,
+    backend: &mut dyn DrawBackend,
+) -> Result<(), RenderError> {
+    let own_ticks = sec_axis.own_ticks(primary_scale);
+    let breaks = own_ticks.clone().unwrap_or_else(|| primary_scale.breaks());
+    let labels = sec_labels(primary_scale, sec_axis, &breaks, own_ticks.is_some());
+    let tick_len = theme.axis_ticks_length;
+    let axis_line = theme.get_axis_line_x();
+    let axis_ticks = theme.get_axis_ticks_x();
+    let top_y = plot_area.y;
+    let line = |el: &crate::theme::elements::ElementLine| LineStyle {
+        color: el.color,
+        width: el.width,
+        alpha: 1.0,
+        linetype: el.linetype.clone(),
+        ..Default::default()
+    };
+    if axis_line.visible {
+        backend.draw_line(
+            &[(plot_area.x, top_y), (plot_area.x + plot_area.width, top_y)],
+            &line(axis_line),
+        )?;
+    }
+    let family = |f: &str| (!f.is_empty()).then(|| f.to_string());
+    for ((pos, _), label) in breaks.iter().zip(&labels) {
+        let px = along_x(coord, *pos, plot_area);
+        if axis_ticks.visible {
+            backend.draw_line(&[(px, top_y), (px, top_y - tick_len)], &line(axis_ticks))?;
+        }
+        if theme.axis_text_x.visible {
+            backend.draw_text(
+                label,
+                (px, top_y - tick_len - 2.0 - theme.axis_text_x.size / 2.0),
+                &TextStyle {
+                    color: theme.axis_text_x.color,
+                    size: theme.axis_text_x.size,
+                    anchor: TextAnchor::Middle,
+                    angle: 0.0,
+                    family: family(&theme.axis_text_x.family),
+                    face: theme.axis_text_x.face,
+                    bg_colour: None,
+                    bg_r: 0.0,
+                },
+            )?;
+        }
+    }
+    if !sec_axis.name.is_empty() && theme.axis_title_x.visible {
+        let y = top_y - sec_x_axis_height(theme, sec_axis) + theme.axis_title_x.size / 2.0;
+        backend.draw_text(
+            &sec_axis.name,
+            (plot_area.x + plot_area.width / 2.0, y),
+            &TextStyle {
+                color: theme.axis_title_x.color,
+                size: theme.axis_title_x.size,
+                anchor: TextAnchor::Middle,
+                angle: 0.0,
+                family: family(&theme.axis_title_x.family),
+                face: theme.axis_title_x.face,
+                bg_colour: None,
+                bg_r: 0.0,
+            },
+        )?;
+    }
+    Ok(())
+}
+
 /// Compute minor break positions as midpoints between major breaks.
 fn minor_breaks(major: &[(f64, String)]) -> Vec<f64> {
     if major.len() < 2 {
