@@ -433,7 +433,7 @@ pub enum ThemeSpec {
 pub enum GuideSpec {
     /// `"none"` drops the legend.
     Name(String),
-    Full(GuideFull),
+    Full(Box<GuideFull>),
 }
 
 #[derive(Deserialize)]
@@ -801,7 +801,7 @@ pub fn build_plot_with_data(
                     }
                     plot = plot.guide_override(aes.clone(), k);
                 }
-                match colourbar_spec(name, g.kind.as_deref(), Some(g))? {
+                match colourbar_spec(name, g.kind.as_deref(), Some(g.as_ref()))? {
                     Some(bar) => plot.guide_colourbar(aes, bar),
                     None => plot,
                 }
