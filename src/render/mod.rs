@@ -16,6 +16,7 @@ pub mod plotters_backend;
 #[cfg(feature = "pdf")]
 pub mod pdf_backend;
 pub mod renderer;
+pub mod rich;
 pub mod svg_backend;
 pub mod text;
 

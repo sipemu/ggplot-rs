@@ -138,6 +138,15 @@ impl DrawBackend for OffsetBackend<'_> {
         let p = self.p(pos);
         self.inner.draw_text_runs(runs, p, style)
     }
+    fn draw_rich_text(
+        &mut self,
+        runs: &[crate::render::rich::RichRun],
+        pos: (f64, f64),
+        style: &TextStyle,
+    ) -> Result<(), RenderError> {
+        let p = self.p(pos);
+        self.inner.draw_rich_text(runs, p, style)
+    }
     fn draw_polygon(
         &mut self,
         points: &[(f64, f64)],

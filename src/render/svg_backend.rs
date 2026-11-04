@@ -1694,6 +1694,77 @@ impl DrawBackend for SvgBackend {
     /// `window.opener`); a plain run is a bare `<tspan>`. All runs sit
     /// inside one `<text>`, so `style.anchor` aligns their combined width
     /// exactly as it would a single run's.
+    /// Rich text (#413) as one `<text>` of styled `<tspan>`s — the anchor
+    /// aligns the whole label, super / subscripts use `baseline-shift`.
+    fn draw_rich_text(
+        &mut self,
+        runs: &[crate::render::rich::RichRun],
+        (x, y): (f64, f64),
+        style: &TextStyle,
+    ) -> Result<(), RenderError> {
+        if !(x.is_finite() && y.is_finite()) {
+            return Ok(());
+        }
+        let anchor = match style.anchor {
+            TextAnchor::Start => "start",
+            TextAnchor::Middle => "middle",
+            TextAnchor::End => "end",
+        };
+        let family = escape_attr(style.family.as_deref().unwrap_or("sans-serif"));
+        let weight = if style.face == FontFace::Bold {
+            " font-weight=\"bold\""
+        } else {
+            ""
+        };
+        let fstyle = if style.face == FontFace::Italic {
+            " font-style=\"italic\""
+        } else {
+            ""
+        };
+        let halo = text_halo_attrs(style);
+        let angle = finite_or(style.angle, 0.0);
+        let transform = if angle.abs() > 0.01 {
+            format!(" transform=\"rotate({angle:.1} {x:.2} {y:.2})\"")
+        } else {
+            String::new()
+        };
+        let class = format!(
+            "{}{}{}",
+            self.text_data_attrs(),
+            self.layer_flag_attrs(false),
+            self.mark_class("text")
+        );
+        let size = finite_or(style.size, 12.0);
+        let mut inner = String::new();
+        for run in runs {
+            let mut attrs = String::new();
+            if run.bold && style.face != FontFace::Bold {
+                attrs.push_str(" font-weight=\"bold\"");
+            }
+            if run.italic && style.face != FontFace::Italic {
+                attrs.push_str(" font-style=\"italic\"");
+            }
+            if let Some(c) = run.color {
+                attrs.push_str(&format!(" fill=\"{}\"", rgb(c)));
+            }
+            if run.shift != 0 {
+                attrs.push_str(&format!(
+                    " baseline-shift=\"{}\" font-size=\"{:.2}\"",
+                    if run.shift > 0 { "super" } else { "sub" },
+                    crate::render::rich::run_size(size, run.shift)
+                ));
+            }
+            inner.push_str(&format!("<tspan{attrs}>{}</tspan>", escape(&run.text)));
+        }
+        let markup = format!(
+            "<text x=\"{x:.2}\" y=\"{y:.2}\" font-size=\"{size:.2}\" text-anchor=\"{anchor}\" \
+             dominant-baseline=\"middle\" font-family=\"{family}\"{weight}{fstyle}{halo} fill=\"{}\"{transform}{class} xml:space=\"preserve\">{inner}</text>",
+            rgb(style.color),
+        );
+        self.emit(&markup);
+        Ok(())
+    }
+
     fn draw_text_runs(
         &mut self,
         runs: &[(&str, Option<&str>)],

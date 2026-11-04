@@ -20,6 +20,14 @@ All notable changes to this project are documented here. The format follows
   label per key (still available via `guide_legend_keys`).
 
 ### Added
+- Rich text (#413, ggtext's `element_markdown()`): with `Theme.rich_text`
+  (theme config / npm `rich_text: true`) titles, subtitle, caption, axis
+  titles, strip and legend text read a Markdown / HTML subset —
+  `**bold**`, `*italic*`, `^sup^`, `~sub~`, `<b>`, `<i>`, `<sup>`, `<sub>`,
+  `<span style='color:…'>`, `\*` escapes (`render::rich`). SVG writes
+  styled `<tspan>`s, PDF lays runs out with real advances, other backends
+  fall back to estimated widths (`DrawBackend::draw_rich_text`). Labels
+  without markup are drawn exactly as before.
 - `from_polars!(&df)` (#466): converts a polars `DataFrame` with **your**
   crate's polars — the macro expands in the caller, so it works on polars
   0.46 … 0.53+ (checked against 0.46 and 0.53) without ggplot-rs's own

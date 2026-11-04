@@ -155,6 +155,7 @@ With polars (default feature): `GGPlot::new(df!{ "x" => [1.0, 2.0], "y" => [3.0,
   or get one `lo–hi` key per bin with `.guide_legend_keys(Aesthetic::Size)`.
   One legend at its own side: `.guide_position(Aesthetic::Shape, LegendPosition::Bottom)`.
   polars other than 0.46: disable default features and use `GGPlot::new(ggplot_rs::from_polars!(&df)?)`.
+  Rich labels: `.theme_with(|t| t.rich_text = true)` then `"**bold** *it* CO~2~ x^2^ <span style='color:red'>…</span>"` in titles / axis titles / strips / legends.
   Vector PDF (feature `pdf`): `.render_pdf_with_size(w, h)` → bytes, or `.save("plot.pdf")`.
   CSS hooks on axes / grid / legend / strips / titles: `.svg_semantic_classes(true)` (`gg-axis-text`, `gg-legend-key`, …).
   Your own legend entry: `.guide_custom(GuideCustom::new(w, h, |backend, rect| { … }).with_title("…"))`.
