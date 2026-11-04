@@ -282,9 +282,10 @@ fn legend_rows_beyond_first(
 /// — exactly what `PlotLayout::compute_with_extras` reserves for it
 /// (#233).
 pub(crate) fn legend_band_height(theme: &Theme, legend_extra_rows: usize) -> f64 {
-    theme.legend_margin.top
+    let m = theme.legend_margin_outer();
+    m.top
         + (1.0 + legend_extra_rows as f64) * (theme.legend_key_height + theme.legend_spacing)
-        + theme.legend_margin.bottom
+        + m.bottom
 }
 
 /// #233: how much `renderer.rs`'s title/subtitle drawing must additionally
@@ -415,11 +416,16 @@ fn estimate_legend_box(
             } else {
                 single_col_width
             };
-            (w, title_offset + plan.rows as f64 * key_height)
+            let gap = theme.legend_key_gap_y();
+            (
+                w,
+                title_offset + plan.rows as f64 * (key_height + gap) - gap,
+            )
         } else {
+            let gap = theme.legend_key_gap_y();
             (
                 single_col_width,
-                title_offset + breaks.len() as f64 * key_height,
+                title_offset + breaks.len() as f64 * (key_height + gap) - gap,
             )
         };
         total_h += h;
@@ -493,30 +499,28 @@ pub(crate) fn legend_position(
     } else {
         (plot_area.x, plot_area.y)
     };
+    // #413: `legend_box_spacing` replaces the panel-facing margin side.
+    let om = theme.legend_margin_outer();
     match theme.legend_position {
         LegendPosition::Right => (
-            plot_area.x + plot_area.width + theme.legend_margin.left,
-            ref_y + theme.legend_margin.top,
+            plot_area.x + plot_area.width + om.left,
+            ref_y + om.top,
             false,
         ),
-        LegendPosition::Left => (
-            theme.legend_margin.left,
-            ref_y + theme.legend_margin.top,
-            false,
-        ),
+        LegendPosition::Left => (om.left, ref_y + om.top, false),
         LegendPosition::Top => (
-            ref_x + theme.legend_margin.left,
-            plot_area.y - legend_band_height(theme, legend_extra_rows) + theme.legend_margin.top,
+            ref_x + om.left,
+            plot_area.y - legend_band_height(theme, legend_extra_rows) + om.top,
             true,
         ),
         LegendPosition::Bottom => (
-            ref_x + theme.legend_margin.left,
+            ref_x + om.left,
             // Below the x axis — at most the 30px it used to assume, so an
             // axis-less theme (`theme_void`) keeps the legend inside the band
             // the layout reserved rather than off the canvas (#341).
             plot_area.y
                 + plot_area.height
-                + theme.legend_margin.top
+                + om.top
                 + crate::render::layout::PlotLayout::x_axis_band(theme, None).min(30.0),
             true,
         ),
@@ -675,9 +679,13 @@ fn draw_discrete_legend_at(
 
     let items_y = legend_y + title_offset;
 
+    // #413: `legend.key.spacing.y` between rows of keys.
+    let gap_y = theme.legend_key_gap_y();
+    let keys_height = breaks.len() as f64 * item_height + (breaks.len() - 1) as f64 * gap_y;
+
     // Draw legend background
     if theme.legend_background.visible {
-        let total_height = breaks.len() as f64 * item_height;
+        let total_height = keys_height;
         let total_width = swatch_size + theme.legend_spacing + theme.legend_text.size * 6.0;
         if let Some(fill) = theme.legend_background.fill {
             backend.draw_rect(
@@ -734,7 +742,7 @@ fn draw_discrete_legend_at(
         let y = if is_horizontal {
             items_y
         } else {
-            items_y + i as f64 * item_height
+            items_y + i as f64 * (item_height + gap_y)
         };
         let center_x = x + swatch_size / 2.0;
         let center_y = y + swatch_size / 2.0;
@@ -798,14 +806,16 @@ fn draw_discrete_legend_at(
                 + swatch_size
                 + theme.legend_spacing
                 + (label.chars().count() as f64) * theme.legend_text.size * 0.62
-                + theme.legend_spacing * 3.0;
+                + theme
+                    .legend_key_spacing_x
+                    .unwrap_or(theme.legend_spacing * 3.0);
         }
     }
 
     if is_horizontal {
         Ok(cur_x - legend_x) // width used
     } else {
-        Ok(title_offset + breaks.len() as f64 * item_height)
+        Ok(title_offset + keys_height)
     }
 }
 
@@ -1620,9 +1630,14 @@ fn legend_pitch(label: &str, theme: &Theme) -> f64 {
     let swatch = theme.legend_key_width;
     let spacing = theme.legend_spacing;
     let text_size = theme.legend_text.size;
-    let legacy =
-        swatch + spacing + (label.chars().count() as f64) * text_size * 0.62 + spacing * 3.0;
-    let measured = swatch + spacing + crate::render::text::text_width(label, text_size) + 8.0;
+    // #413: `legend.key.spacing.x` replaces the gaps after the label.
+    let gap = theme.legend_key_spacing_x;
+    let legacy = swatch
+        + spacing
+        + (label.chars().count() as f64) * text_size * 0.62
+        + gap.unwrap_or(spacing * 3.0);
+    let measured =
+        swatch + spacing + crate::render::text::text_width(label, text_size) + gap.unwrap_or(8.0);
     legacy.max(measured)
 }
 
@@ -2218,6 +2233,9 @@ fn draw_discrete_legend_grid(
         .fold(0.0_f64, f64::max);
     let swatch_size = theme.legend_key_width.max(diameter);
     let item_height = theme.legend_key_height.max(swatch_size);
+    // #413: `legend.key.spacing.y` between rows; `row_pitch` steps them.
+    let gap_y = theme.legend_key_gap_y();
+    let row_pitch = item_height + gap_y;
 
     let title = guide.title.as_deref().unwrap_or_else(|| scale.name());
     let legend_family = if theme.legend_title.family.is_empty() {
@@ -2249,7 +2267,7 @@ fn draw_discrete_legend_grid(
     for entry in &plan.entries {
         let (pos, label) = &breaks[entry.break_idx];
         let x = legend_x + entry.x_offset;
-        let y = items_y + entry.row as f64 * item_height;
+        let y = items_y + entry.row as f64 * row_pitch;
         let center_x = x + swatch_size / 2.0;
         let center_y = y + swatch_size / 2.0;
 
@@ -2311,7 +2329,7 @@ fn draw_discrete_legend_grid(
     // The overflow marker is text only — not a mark, no swatch.
     if let Some(ov) = &plan.overflow {
         let x = legend_x + ov.x_offset;
-        let y = items_y + ov.row as f64 * item_height + swatch_size / 2.0;
+        let y = items_y + ov.row as f64 * row_pitch + swatch_size / 2.0;
         let label_family = if theme.legend_text.family.is_empty() {
             None
         } else {
@@ -2333,7 +2351,7 @@ fn draw_discrete_legend_grid(
         )?;
     }
 
-    Ok(title_offset + plan.rows as f64 * item_height)
+    Ok(title_offset + plan.rows as f64 * row_pitch - gap_y)
 }
 
 #[cfg(test)]

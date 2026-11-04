@@ -17,6 +17,11 @@ All notable changes to this project are documented here. The format follows
   label per key (still available via `guide_legend_keys`).
 
 ### Added
+- `Theme.legend_key_spacing_x` / `_y` (#413, ggplot2's
+  `legend.key.spacing.x` / `.y`) — gaps between legend keys — and
+  `Theme.legend_box_spacing` (`legend.box.spacing`) — the panel-to-legend
+  gap, replacing `legend_margin`'s panel-facing side
+  (`Theme::legend_margin_outer`). Theme config / npm keys of the same names.
 - `GuideBins` + `GGPlot::guide_bins(aes, ..)` (#409, ggplot2's
   `guide_bins(show.limits =, axis =)`; `show_limits` closes #408's last
   item) and `GGPlot::guide_legend_keys(aes)` (`guides(size = "legend")`).

@@ -227,6 +227,15 @@ pub struct Theme {
     /// #413); `None` = `axis_ticks_length`.
     pub axis_ticks_length_x: Option<f64>,
     pub axis_ticks_length_y: Option<f64>,
+    /// Extra gap between legend keys (ggplot2's `legend.key.spacing.x` /
+    /// `.y`, #413): `x` between the keys of a horizontal legend (default
+    /// `3 × legend_spacing`), `y` between rows (default none).
+    pub legend_key_spacing_x: Option<f64>,
+    pub legend_key_spacing_y: Option<f64>,
+    /// Gap between the panel and an outside legend (ggplot2's
+    /// `legend.box.spacing`, #413) — replaces `legend_margin`'s side that
+    /// faces the panel; `None` keeps it.
+    pub legend_box_spacing: Option<f64>,
     /// Place the tag in the panel's corner (ggplot2's `plot.tag.location =
     /// "panel"`, #413); default the plot's.
     pub tag_location_panel: bool,
@@ -294,6 +303,28 @@ pub struct Theme {
 }
 
 impl Theme {
+    /// The gap between two rows of legend keys (`legend_key_spacing_y`).
+    pub fn legend_key_gap_y(&self) -> f64 {
+        self.legend_key_spacing_y.unwrap_or(0.0).max(0.0)
+    }
+
+    /// `legend_margin` with its panel-facing side replaced by
+    /// `legend_box_spacing` (#413) for the outside legend positions.
+    pub fn legend_margin_outer(&self) -> Margin {
+        let mut m = self.legend_margin.clone();
+        if let Some(g) = self.legend_box_spacing {
+            let g = g.max(0.0);
+            match self.legend_position {
+                LegendPosition::Right => m.left = g,
+                LegendPosition::Left => m.right = g,
+                LegendPosition::Top => m.bottom = g,
+                LegendPosition::Bottom => m.top = g,
+                LegendPosition::None | LegendPosition::Inside(..) => {}
+            }
+        }
+        m
+    }
+
     /// The x axis's tick length (`axis_ticks_length_x`, else the shared one).
     pub fn ticks_len_x(&self) -> f64 {
         self.axis_ticks_length_x.unwrap_or(self.axis_ticks_length)

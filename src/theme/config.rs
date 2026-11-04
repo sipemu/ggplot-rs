@@ -39,6 +39,11 @@ pub struct ThemeConfig {
     /// Per-axis tick lengths in px (R's `axis.ticks.length.x` / `.y`).
     pub axis_ticks_length_x: Option<f64>,
     pub axis_ticks_length_y: Option<f64>,
+    /// Gaps between legend keys in px (R's `legend.key.spacing.x` / `.y`).
+    pub legend_key_spacing_x: Option<f64>,
+    pub legend_key_spacing_y: Option<f64>,
+    /// Gap between the panel and the legend in px (R's `legend.box.spacing`).
+    pub legend_box_spacing: Option<f64>,
     /// "plot" (default) or "panel" (R's `plot.tag.location`, #413).
     pub tag_location: Option<String>,
     /// "inside" (default) or "outside" (R's `strip.placement`, #412).
@@ -255,6 +260,15 @@ impl ThemeConfig {
         }
         if let Some(v) = self.axis_ticks_length_y {
             t.axis_ticks_length_y = Some(v.max(0.0));
+        }
+        if let Some(v) = self.legend_key_spacing_x {
+            t.legend_key_spacing_x = Some(v.max(0.0));
+        }
+        if let Some(v) = self.legend_key_spacing_y {
+            t.legend_key_spacing_y = Some(v.max(0.0));
+        }
+        if let Some(v) = self.legend_box_spacing {
+            t.legend_box_spacing = Some(v.max(0.0));
         }
         match self.tag_location.as_deref() {
             None => {}
