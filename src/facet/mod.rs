@@ -197,6 +197,14 @@ pub enum Facet {
         /// Column strips on top and row strips on the right, unless
         /// switched (`switch`, #412).
         switch: FacetSwitch,
+        /// Fixed row / column level order: every level gets its row /
+        /// column, even with no data (`drop = FALSE`); unlisted values are
+        /// dropped (#412). `None` = values in first-appearance order.
+        row_levels: Option<Vec<String>>,
+        col_levels: Option<Vec<String>>,
+        /// An extra "(all)" row and column pooling every row / column
+        /// (ggplot2's `margins = TRUE`, #412).
+        margins: bool,
     },
 }
 

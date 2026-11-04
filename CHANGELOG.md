@@ -33,6 +33,13 @@ All notable changes to this project are documented here. The format follows
   `reverse(theta, r)` — ggplot2's `coord_radial(r.axis.inside =,
   rotate.angle =, reverse =)`. Spec / npm: `coord: { type: "radial",
   r_axis_inside, rotate_angle, reverse: "theta" | "r" | "thetar" }`.
+- `facet_grid` levels and margins (#412): `facet_grid_levels(rows, cols)`
+  fixes the row / column order and keeps levels without data (`drop =
+  FALSE`); `facet_margins(true)` adds "(all)" rows / columns pooling the
+  others, with stats computed on the pooled data (ggplot2's `margins =
+  TRUE`). `Facet::Grid` gains `row_levels` / `col_levels` / `margins`.
+  Spec / npm: `facet.levels` (wrap), `facet.row_levels` / `col_levels` /
+  `margins` (grid).
 - Theme (#413): `axis_text_x_top` / `axis_text_y_right` (ggplot2's
   `axis.text.x.top` / `axis.text.y.right`) for a top x axis and the
   secondary y axis; `theme_test()` (`theme_bw` without gridlines; preset
