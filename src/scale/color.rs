@@ -36,7 +36,9 @@ impl RGBAColor {
     }
 }
 
-/// Default discrete color palette (8 colors, similar to ggplot2 default).
+/// Fixed 8-colour fallback palette (the first 3 match ggplot2's defaults).
+/// Discrete colour scales default to [`HuePalette::default()`] instead —
+/// ggplot2's `hue_pal()`, spread over the number of levels (#408).
 pub const DEFAULT_PALETTE: &[RGBAColor] = &[
     RGBAColor {
         r: 248,
@@ -149,6 +151,27 @@ pub enum GeneratedPalette {
 }
 
 impl GeneratedPalette {
+    /// Colour `i` of the palette for `n` levels — the same as
+    /// `colors(n)[i]`, without building the whole palette (this runs per
+    /// mapped value).
+    pub fn color_at(&self, i: usize, n: usize) -> RGBAColor {
+        match self {
+            GeneratedPalette::Hue(p) => {
+                let n = n.max(1);
+                let i = if p.direction == -1 {
+                    n - 1 - i % n
+                } else {
+                    i % n
+                };
+                hue_color(i, n, p)
+            }
+            _ => {
+                let pal = self.colors(n);
+                pal[i % pal.len()]
+            }
+        }
+    }
+
     /// The palette for `n` levels.
     pub fn colors(&self, n: usize) -> Vec<RGBAColor> {
         let n = n.max(1);
@@ -236,24 +259,25 @@ pub fn hcl_color(h: f64, c: f64, l: f64) -> RGBAColor {
 /// `scales::hue_pal(h, c, l, h.start, direction)(n)`.
 pub fn hue_palette(n: usize, p: &HuePalette) -> Vec<RGBAColor> {
     let n = n.max(1);
-    let (h0, mut h1) = p.h;
-    if (h1 - h0).rem_euclid(360.0) < 1.0 {
-        h1 -= 360.0 / n as f64;
-    }
-    let mut out: Vec<RGBAColor> = (0..n)
-        .map(|i| {
-            let h = if n == 1 {
-                h0
-            } else {
-                h0 + (h1 - h0) * i as f64 / (n - 1) as f64
-            };
-            hcl_color((h + p.h_start).rem_euclid(360.0), p.c, p.l)
-        })
-        .collect();
+    let mut out: Vec<RGBAColor> = (0..n).map(|i| hue_color(i, n, p)).collect();
     if p.direction == -1 {
         out.reverse();
     }
     out
+}
+
+/// Hue `i` of `n` (before any `direction` reversal).
+fn hue_color(i: usize, n: usize, p: &HuePalette) -> RGBAColor {
+    let (h0, mut h1) = p.h;
+    if (h1 - h0).rem_euclid(360.0) < 1.0 {
+        h1 -= 360.0 / n as f64;
+    }
+    let h = if n == 1 {
+        h0
+    } else {
+        h0 + (h1 - h0) * i as f64 / (n - 1) as f64
+    };
+    hcl_color((h + p.h_start).rem_euclid(360.0), p.c, p.l)
 }
 
 impl ScaleColorDiscrete {
@@ -265,7 +289,8 @@ impl ScaleColorDiscrete {
             level_index: HashMap::new(),
             palette: DEFAULT_PALETTE.to_vec(),
             sorted: false,
-            generated: None,
+            // ggplot2's default: `hue_pal()` over the number of levels.
+            generated: Some(GeneratedPalette::Hue(HuePalette::default())),
         }
     }
 
@@ -339,8 +364,7 @@ impl ScaleColorDiscrete {
     /// Get color for a given level index.
     pub fn color_for_index(&self, idx: usize) -> RGBAColor {
         if let Some(g) = &self.generated {
-            let pal = g.colors(self.levels.len().max(idx + 1));
-            return pal[idx % pal.len()];
+            return g.color_at(idx, self.levels.len().max(idx + 1));
         }
         if self.palette.is_empty() {
             return DEFAULT_PALETTE[idx % DEFAULT_PALETTE.len()];
@@ -760,6 +784,23 @@ mod hue_tests {
         };
         let got: Vec<String> = hue_palette(4, &p).into_iter().map(hex).collect();
         assert_eq!(got, ["#70D5E7", "#7BD9AD", "#C6CC82", "#F7B8A1"]);
+    }
+
+    #[test]
+    fn default_discrete_scale_is_hue_pal() {
+        // #408: the default discrete colour scale spreads ggplot2's
+        // hue_pal() over the trained number of levels.
+        let mut s = ScaleColorDiscrete::new(Aesthetic::Color);
+        s = s.with_levels(["a", "b", "c", "d", "e"].map(String::from).to_vec());
+        let got: Vec<String> = (0..5).map(|i| hex(s.color_for_index(i))).collect();
+        assert_eq!(got, ["#F8766D", "#A3A500", "#00BF7D", "#00B0F6", "#E76BF3"]);
+        // color_at agrees with colors() for a reversed palette.
+        let g = GeneratedPalette::Hue(HuePalette {
+            direction: -1,
+            ..HuePalette::default()
+        });
+        let all = g.colors(4);
+        assert!((0..4).all(|i| hex(g.color_at(i, 4)) == hex(all[i])));
     }
 
     #[test]

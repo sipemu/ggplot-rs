@@ -45,7 +45,7 @@ fn sunburst_renders_rings_with_hover_and_hole() {
     );
     assert!(svg.contains(">Asia<"));
     // Branches are coloured by their top-level ancestor (discrete fill).
-    assert!(svg.contains(r##"fill="#F8766D""##) && svg.contains(r##"fill="#00BA38""##));
+    assert!(svg.contains(r##"fill="#F8766D""##) && svg.contains(r##"fill="#00BFC4""##));
     assert!(!svg.contains("NaN"));
 }
 

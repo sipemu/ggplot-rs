@@ -197,11 +197,11 @@ fn expected() -> Vec<(&'static str, u64)> {
         ("jitter_facet", 0x2041b5e10e321c52),
         (
             "stack_mixed_sign",
-            0x9d2a94b32db3f30e, /* #410 key glyph */
+            0x84daebb8e1b5454e, /* #408 hue_pal default palette */
         ),
         (
             "fill_mixed_sign",
-            0x1d59471fe2efe9c6, /* #410 key glyph */
+            0x94ed5f9eb9e8cb9a, /* #408 hue_pal default palette */
         ),
         // #169 (0.24): geom_col()'s default position changed from
         // PositionIdentity to PositionStack (ggplot2 parity) — two
@@ -210,7 +210,7 @@ fn expected() -> Vec<(&'static str, u64)> {
         // [0.24.0].
         (
             "all_positive_stack",
-            0x04e52e096d576ed1, /* #410 key glyph */
+            0x163333c19ef9ac07, /* #408 hue_pal default palette */
         ),
         // #237 (fix/size-legend-keys-236): the `shape` legend's key glyph
         // has no mapped colour of its own, so it now falls back to
@@ -219,17 +219,23 @@ fn expected() -> Vec<(&'static str, u64)> {
         // follow-up, not a regression. See CHANGELOG [Unreleased].
         (
             "two_discrete_guides",
-            0x50bf6af9c02df153, /* #410 key glyph */
+            0x4871608568ce1129, /* #408 hue_pal default palette */
         ),
         (
             "one_discrete_guide",
-            0x4e850bf7c2f2b04a, /* #410 key glyph */
+            0x1b2706db5996f622, /* #408 hue_pal default palette */
         ),
-        ("ncol_fits", 0x8f9e5996f4e43947 /* #410 key glyph */),
-        ("ncol_reduces", 0xff8d33778189e9c9 /* #410 key glyph */),
+        (
+            "ncol_fits",
+            0xe86073a13cc9e567, /* #408 hue_pal default palette */
+        ),
+        (
+            "ncol_reduces",
+            0xf474a06f9417bc71, /* #408 hue_pal default palette */
+        ),
         (
             "ncol_truncates",
-            0xc5f81a10bda3d754, /* #410 key glyph */
+            0xd36c11a01854beae, /* #408 hue_pal default palette */
         ),
     ]
 }
