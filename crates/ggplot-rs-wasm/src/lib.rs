@@ -316,6 +316,9 @@ export interface ThemeConfig {
   /** Horizontal (x) / turned (y) facet strips only (#413). */
   strip_text_x?: TextElement; strip_text_y?: TextElement;
   strip_background_x?: RectElement; strip_background_y?: RectElement;
+  /** Strips below / left of a panel outside its axis (#412), and the gap. */
+  strip_placement?: "inside" | "outside"; strip_switch_pad?: number;
+  legend_ticks_length?: number;
   legend_title?: TextElement; legend_text?: TextElement; strip_text?: TextElement;
   axis_line?: LineElement; axis_ticks?: LineElement;
   panel_grid_major?: LineElement; panel_grid_minor?: LineElement; panel_border?: LineElement;

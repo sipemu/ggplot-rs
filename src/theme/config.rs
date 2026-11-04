@@ -31,6 +31,10 @@ pub struct ThemeConfig {
     pub panel_ontop: Option<bool>,
     /// A colourbar's tick length in px (R's `legend.ticks.length`, #413).
     pub legend_ticks_length: Option<f64>,
+    /// "inside" (default) or "outside" (R's `strip.placement`, #412).
+    pub strip_placement: Option<String>,
+    /// Gap between an axis and an outside strip, px (`strip.switch.pad.*`).
+    pub strip_switch_pad: Option<f64>,
     /// Draw minor tick marks (R's `axis.minor.ticks`).
     pub axis_minor_ticks: Option<bool>,
     /// Title alignment reference: "panel" or "plot" (R's `plot.title.position`).
@@ -221,6 +225,19 @@ impl ThemeConfig {
         }
         if let Some(l) = self.legend_ticks_length {
             t.legend_ticks_length = l.max(0.0);
+        }
+        match self.strip_placement.as_deref() {
+            None => {}
+            Some("inside") => t.strip_placement_outside = false,
+            Some("outside") => t.strip_placement_outside = true,
+            Some(o) => {
+                return Err(format!(
+                    "strip_placement: unknown '{o}' (expected inside, outside)"
+                ))
+            }
+        }
+        if let Some(p) = self.strip_switch_pad {
+            t.strip_switch_pad = p.max(0.0);
         }
         if let Some(b) = self.panel_ontop {
             t.panel_ontop = b;

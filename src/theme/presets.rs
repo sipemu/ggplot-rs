@@ -167,6 +167,8 @@ pub fn theme_gray_base(base_size: f64) -> Theme {
         legend_key_height: 18.0,
         legend_spacing: 4.0,
         legend_ticks_length: 3.0,
+        strip_placement_outside: false,
+        strip_switch_pad: 2.75,
         legend_margin: Margin {
             top: 10.0,
             right: 15.0,
@@ -609,6 +611,8 @@ pub fn theme_void_base(base_size: f64) -> Theme {
         legend_key_height: 18.0,
         legend_spacing: 4.0,
         legend_ticks_length: 3.0,
+        strip_placement_outside: false,
+        strip_switch_pad: 2.75,
         legend_margin: Margin {
             top: 0.0,
             right: 0.0,

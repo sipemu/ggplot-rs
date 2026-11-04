@@ -217,6 +217,11 @@ pub struct Theme {
     pub legend_spacing: f64,
     /// A colourbar's tick length (ggplot2's `legend.ticks.length`, #413).
     pub legend_ticks_length: f64,
+    /// Facet strips below / left of a panel sit outside its axis
+    /// (ggplot2's `strip.placement = "outside"`, #412); default inside.
+    pub strip_placement_outside: bool,
+    /// Gap between an axis and an outside strip (`strip.switch.pad.*`).
+    pub strip_switch_pad: f64,
     pub legend_margin: Margin,
     pub panel_spacing: f64,
     pub panel_spacing_x: Option<f64>,
