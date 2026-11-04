@@ -44,6 +44,11 @@ pub struct ScaleContinuous {
     /// A time-of-day axis (`scale_x_time`, #408): values are seconds, breaks
     /// fall on round time steps.
     time: bool,
+    /// `scale_x_binned(n.breaks)` (#408): bins between about this many breaks.
+    binned: Option<usize>,
+    /// The bin edges, fixed by the first layer binned (later layers share
+    /// them); also the axis breaks.
+    bin_edges: Vec<f64>,
 }
 
 impl ScaleContinuous {
@@ -57,6 +62,8 @@ impl ScaleContinuous {
             filter_oob: false,
             n_breaks: 5,
             time: false,
+            binned: None,
+            bin_edges: Vec::new(),
             expand: (0.05, 0.0, 0.05, 0.0),
             position_opposite: false,
             scale_transform: ScaleTransform::Identity,
@@ -107,6 +114,17 @@ impl ScaleContinuous {
     pub fn time() -> Self {
         let mut s = ScaleContinuous::new().with_label_formatter(super::util::format_hms);
         s.time = true;
+        s
+    }
+
+    /// ggplot2's `scale_x_binned(n.breaks = n)` (#408): positions are cut
+    /// into round bins between about `n` breaks (right-closed, like ggplot2) and every value
+    /// sits at its bin's midpoint before the stat runs — so `geom_bar()`
+    /// draws a histogram. The axis breaks are the bin edges. Explicit
+    /// `with_limits` set the binned range.
+    pub fn binned(n: usize) -> Self {
+        let mut s = ScaleContinuous::new();
+        s.binned = Some(n.max(1));
         s
     }
 
@@ -360,6 +378,23 @@ impl Scale for ScaleContinuous {
         // scales::extended_breaks), keeping those within the expanded (visible)
         // range. Labels show the original (inverse-transformed) value.
         let (emin, emax) = self.expanded_range();
+        if !self.bin_edges.is_empty() {
+            let shown: Vec<f64> = self
+                .bin_edges
+                .iter()
+                .map(|&v| self.scale_transform.inverse(v))
+                .collect();
+            let labels: Vec<String> = match &self.label_formatter {
+                Some(f) => shown.iter().map(|&v| f(v)).collect(),
+                None => super::util::format_numbers_opt(&shown, self.locale.as_ref()),
+            };
+            return self
+                .bin_edges
+                .iter()
+                .zip(labels)
+                .map(|(&v, l)| (self.map(&Value::Float(v)), l))
+                .collect();
+        }
         let tol = (emax - emin).abs() * 1e-9;
         let breaks: Vec<f64> = if self.scale_transform.uses_data_space_breaks() {
             // Log/sqrt axes: pick round ticks in *data* space, then forward-
@@ -417,6 +452,63 @@ impl Scale for ScaleContinuous {
 
     fn transform(&self, value: &Value) -> Value {
         self.scale_transform.transform_value(value)
+    }
+
+    fn bin_positions(&mut self, values: &[Value]) -> Option<Vec<Value>> {
+        let n = self.binned?;
+        if self.bin_edges.is_empty() {
+            let (lo, hi) = match self.filter_limits() {
+                Some(l) => l,
+                None => {
+                    let fin = values
+                        .iter()
+                        .filter_map(Value::as_f64)
+                        .filter(|f| f.is_finite());
+                    let (lo, hi) = fin.fold((f64::INFINITY, f64::NEG_INFINITY), |(a, b), f| {
+                        (a.min(f), b.max(f))
+                    });
+                    if lo > hi {
+                        return None;
+                    }
+                    (lo, hi)
+                }
+            };
+            let (lo, hi) = if hi > lo {
+                (lo, hi)
+            } else {
+                (lo - 0.5, hi + 0.5)
+            };
+            let mut e = super::util::extended_breaks(lo, hi, n);
+            if e.len() < 2 {
+                e = vec![lo, hi];
+            }
+            let step = e[1] - e[0];
+            while e[0] > lo + step * 1e-9 {
+                e.insert(0, e[0] - step);
+            }
+            while *e.last().unwrap() < hi - step * 1e-9 {
+                e.push(e.last().unwrap() + step);
+            }
+            // The axis spans whole bins.
+            self.min = self.min.min(e[0]);
+            self.max = self.max.max(*e.last().unwrap());
+            self.trained = true;
+            self.bin_edges = e;
+        }
+        let e = &self.bin_edges;
+        Some(
+            values
+                .iter()
+                .map(|v| match v.as_f64().filter(|f| f.is_finite()) {
+                    Some(f) => {
+                        // Right-closed bins (lo, hi]; the first includes lo.
+                        let k = e.windows(2).position(|w| f <= w[1]).unwrap_or(e.len() - 2);
+                        Value::Float((e[k] + e[k + 1]) / 2.0)
+                    }
+                    None => v.clone(),
+                })
+                .collect(),
+        )
     }
 
     fn sec_axis(&self) -> Option<&SecAxis> {

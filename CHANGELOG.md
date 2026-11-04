@@ -20,6 +20,15 @@ All notable changes to this project are documented here. The format follows
   …) style horizontal and turned facet strips separately (and size their
   bands); `None` falls back to `strip_text` / `strip_background`. Theme
   config keys of the same names. `Theme` gains four fields.
+- Binned scales (#408): `scale_x_binned(n)` / `scale_y_binned(n)`
+  (`ScaleContinuous::binned`) bin positions before the stat — each value at
+  its right-closed bin's midpoint, axis breaks at the edges — so
+  `geom_bar()` draws a histogram; `scale_size_binned` / `scale_alpha_binned`
+  / `scale_linewidth_binned` / `scale_shape_binned` /
+  `scale_linetype_binned` (`ScaleValueBinned`): one size / alpha / width /
+  shape / linetype per bin, a `lo–hi` legend key each. New
+  `Scale::bin_positions` hook. Spec / npm: `scales.x/y.binned`,
+  `scales.{size,alpha,linewidth,shape}.binned`.
 - Theme (#413): `axis_text_x_top` / `axis_text_y_right` (ggplot2's
   `axis.text.x.top` / `axis.text.y.right`) for a top x axis and the
   secondary y axis; `theme_test()` (`theme_bw` without gridlines; preset
