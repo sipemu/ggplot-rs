@@ -13,6 +13,9 @@
 //! own data-fn comment below and CHANGELOG's `[0.24.0]` entry — a
 //! documented follow-up, not a regression.
 //!
+//! Cases marked `#410 key glyph` changed when legend keys started drawing
+//! each layer's own glyph (ggplot2's `draw_key_*`) — documented in CHANGELOG.
+//!
 //! Runs in every feature configuration (no polars/plotters/sf-only API), so
 //! it is part of every `cargo test` job, including `--no-default-features`
 //! and `--no-default-features --features sf`.
@@ -186,27 +189,48 @@ fn ncol_truncates_data() -> Cols {
 
 fn expected() -> Vec<(&'static str, u64)> {
     vec![
-        ("dodge_facet", 0x87ca741c10e5d81f),
-        ("dodge_single_panel", 0x60eede539d041c9f),
+        ("dodge_facet", 0x5f9798007ee79e15 /* #410 key glyph */),
+        (
+            "dodge_single_panel",
+            0xf59966d3baecc8d5, /* #410 key glyph */
+        ),
         ("jitter_facet", 0x2041b5e10e321c52),
-        ("stack_mixed_sign", 0xd89d244ba7f70ae2),
-        ("fill_mixed_sign", 0xf1c8fa0e2df7203a),
+        (
+            "stack_mixed_sign",
+            0x9d2a94b32db3f30e, /* #410 key glyph */
+        ),
+        (
+            "fill_mixed_sign",
+            0x1d59471fe2efe9c6, /* #410 key glyph */
+        ),
         // #169 (0.24): geom_col()'s default position changed from
         // PositionIdentity to PositionStack (ggplot2 parity) — two
         // groups at a shared x now stack instead of overlapping from
         // y=0. See this case's data-fn comment above and CHANGELOG
         // [0.24.0].
-        ("all_positive_stack", 0x236f799c5fa67957),
+        (
+            "all_positive_stack",
+            0x04e52e096d576ed1, /* #410 key glyph */
+        ),
         // #237 (fix/size-legend-keys-236): the `shape` legend's key glyph
         // has no mapped colour of its own, so it now falls back to
         // `theme.geom.ink`, then `theme.legend_text.color` (pure black in
         // the base theme) instead of a fixed dark grey — a documented
         // follow-up, not a regression. See CHANGELOG [Unreleased].
-        ("two_discrete_guides", 0xa2c3eed5edc8e2e2),
-        ("one_discrete_guide", 0x98da47e69ace53db),
-        ("ncol_fits", 0x4bbbea598fcaaceb),
-        ("ncol_reduces", 0xfb022ae18760d3b7),
-        ("ncol_truncates", 0x74f922dad5ba6460),
+        (
+            "two_discrete_guides",
+            0x50bf6af9c02df153, /* #410 key glyph */
+        ),
+        (
+            "one_discrete_guide",
+            0x4e850bf7c2f2b04a, /* #410 key glyph */
+        ),
+        ("ncol_fits", 0x8f9e5996f4e43947 /* #410 key glyph */),
+        ("ncol_reduces", 0xff8d33778189e9c9 /* #410 key glyph */),
+        (
+            "ncol_truncates",
+            0xc5f81a10bda3d754, /* #410 key glyph */
+        ),
     ]
 }
 

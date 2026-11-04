@@ -29,6 +29,14 @@ All notable changes to this project are documented here. The format follows
   `position_dodge` / `position_dodge2` on a discrete axis.
 
 ### Added
+- Legend key glyphs (#410): each layer draws its own key — ggplot2's
+  `draw_key_*` (`KeyGlyph::{Point, Path, Rect, Polygon, Boxplot, Crossbar,
+  Pointrange, Linerange, Smooth, Text, Label, Vline, Vpath, Abline,
+  Timeseries, Dotplot, Blank}`), with the ggplot2 default per geom
+  (`Geom::key_glyph`) and a per-layer override (`.key_glyph(..)`; spec
+  `layers[].key_glyph`). Layers on one mapping overlay into one key (a line
+  and its points). `.show_legend_for(aes, bool)` (spec `show_legend: {fill:
+  false}`) is `show.legend` per aesthetic.
 - Helpers (#414, `ggplot_rs::helpers`, in the prelude): `cut_interval`,
   `cut_interval_length`, `cut_number`, `cut_width` (+ `CutWidth { center,
   boundary, closed_left }`) returning `Cut { values, levels }` with R's
@@ -74,6 +82,14 @@ All notable changes to this project are documented here. The format follows
   npm: `position: { type: "dodge", preserve: "single" }`.
 
 ### Changed
+- Legend keys follow the layer's geom (#410): a colour legend of a point
+  layer shows points, of a line layer lines, of bars outlined squares, of a
+  boxplot a little boxplot — instead of a filled square per aesthetic. The
+  `default_output_022/023` snapshot hashes of plots with legends change
+  accordingly. A collected `PlotGrid` legend still appears once per
+  grouping even when the sub-plots draw it with different geoms.
+- PNG / plotters: legend keys drawn with lines or points (shape, linetype,
+  size keys) are no longer clipped away outside the panel.
 - `geom_smooth`'s confidence ribbon without the `regression` feature is
   now the exact Student-t interval (as R and the `regression` build), a
   little wider than the old normal-approximation one for small samples

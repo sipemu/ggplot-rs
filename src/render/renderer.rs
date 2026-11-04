@@ -1275,6 +1275,9 @@ struct PanelBackendAdapter<'a> {
 }
 
 impl<'a> DrawBackend for PanelBackendAdapter<'a> {
+    fn set_clipping(&mut self, on: bool) {
+        self.inner.set_clipping(on)
+    }
     fn draw_image(
         &mut self,
         bytes: &[u8],

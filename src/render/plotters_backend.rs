@@ -81,6 +81,9 @@ pub struct PlottersAdapter<'a, DB: DrawingBackend> {
     /// #273: panel-corner boxes claimed so far this render pass — see
     /// [`DrawBackend::corner_claims`]/[`DrawBackend::claim_corner_box`].
     corner_claims: Vec<Rect>,
+    /// Clip lines / points / clip-flagged rects to the panel (data marks);
+    /// off while legends draw (#410), whose keys sit outside it.
+    clip: bool,
 }
 
 impl<'a, DB: DrawingBackend> PlottersAdapter<'a, DB> {
@@ -96,6 +99,7 @@ impl<'a, DB: DrawingBackend> PlottersAdapter<'a, DB> {
                 height: h as f64,
             },
             corner_claims: Vec::new(),
+            clip: true,
         }
     }
 }
@@ -267,7 +271,22 @@ fn segment_dashed(points: &[(f64, f64)], pattern: &[(f64, f64)]) -> Vec<Vec<(f64
     segments
 }
 
+impl<DB: DrawingBackend> PlottersAdapter<'_, DB> {
+    /// The rect marks are clipped to: the panel, or the canvas when off.
+    fn clip_area(&self) -> Rect {
+        if self.clip {
+            self.plot_area.clone()
+        } else {
+            self.total_area.clone()
+        }
+    }
+}
+
 impl<'a, DB: DrawingBackend> DrawBackend for PlottersAdapter<'a, DB> {
+    fn set_clipping(&mut self, on: bool) {
+        self.clip = on;
+    }
+
     fn draw_circle(
         &mut self,
         center: (f64, f64),
@@ -275,7 +294,7 @@ impl<'a, DB: DrawingBackend> DrawBackend for PlottersAdapter<'a, DB> {
         style: &PointStyle,
     ) -> Result<(), RenderError> {
         // Clip: skip points entirely outside the plot area
-        if !point_in_rect(center.0, center.1, &self.plot_area) {
+        if !point_in_rect(center.0, center.1, &self.clip_area()) {
             return Ok(());
         }
         let color = to_rgba(style.color, style.alpha);
@@ -325,7 +344,7 @@ impl<'a, DB: DrawingBackend> DrawBackend for PlottersAdapter<'a, DB> {
                     window[0].1,
                     window[1].0,
                     window[1].1,
-                    &self.plot_area,
+                    &self.clip_area(),
                 ) {
                     self.area
                         .draw(&PathElement::new(
@@ -347,8 +366,9 @@ impl<'a, DB: DrawingBackend> DrawBackend for PlottersAdapter<'a, DB> {
     ) -> Result<(), RenderError> {
         let (tl, br) = if style.clip {
             // Clamp rect to plot area (data elements only)
-            let clamped_tl = clip_point(top_left.0, top_left.1, &self.plot_area);
-            let clamped_br = clip_point(bottom_right.0, bottom_right.1, &self.plot_area);
+            let area = self.clip_area();
+            let clamped_tl = clip_point(top_left.0, top_left.1, &area);
+            let clamped_br = clip_point(bottom_right.0, bottom_right.1, &area);
 
             // Skip if fully collapsed after clamping
             if (clamped_tl.0 - clamped_br.0).abs() < 0.5
@@ -618,7 +638,7 @@ impl<'a, DB: DrawingBackend> DrawBackend for PlottersAdapter<'a, DB> {
         style: &PointStyle,
     ) -> Result<(), RenderError> {
         // Clip: skip shapes entirely outside the plot area
-        if !point_in_rect(center.0, center.1, &self.plot_area) {
+        if !point_in_rect(center.0, center.1, &self.clip_area()) {
             return Ok(());
         }
         let color = to_rgba(style.color, style.alpha);

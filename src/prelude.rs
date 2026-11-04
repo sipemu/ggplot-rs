@@ -175,6 +175,7 @@ pub use crate::geom::cooks::GeomCooksContour;
 pub use crate::geom::errorbarh::GeomErrorbarh;
 pub use crate::geom::qq::GeomQQBand;
 pub use crate::geom::ribbon::GeomStepribbon;
+pub use crate::guide::key::KeyGlyph;
 pub use crate::helpers::{
     cut_interval, cut_interval_length, cut_number, cut_width, mean_cl_boot, mean_cl_normal,
     mean_sdl, mean_se, median_hilow, resolution, Cut, CutWidth,

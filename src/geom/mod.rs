@@ -208,6 +208,34 @@ pub trait Geom: Send + Sync {
         false
     }
 
+    /// The legend key this geom draws (ggplot2's per-geom `draw_key`, #410).
+    /// `None` = the plain per-aesthetic swatch (fill square, point shape,
+    /// line type …), which is also what a key falls back to for a geom not
+    /// listed here. Overridable per layer with
+    /// [`GGPlot::key_glyph`](crate::plot::GGPlot::key_glyph).
+    fn key_glyph(&self) -> Option<crate::guide::key::KeyGlyph> {
+        use crate::guide::key::KeyGlyph as K;
+        Some(match self.name() {
+            "point" | "jitter" | "count" | "qq" | "sf_point" => K::Point,
+            "line" | "path" | "step" | "freqpoly" | "qq_line" | "segment" | "curve" | "spoke"
+            | "errorbar" | "errorbarh" | "hline" | "density_2d" | "contour" | "rug" => K::Path,
+            "smooth" => K::Smooth,
+            "boxplot" => K::Boxplot,
+            "crossbar" => K::Crossbar,
+            "pointrange" => K::Pointrange,
+            "linerange" => K::Linerange,
+            "vline" => K::Vline,
+            "abline" => K::Abline,
+            "text" | "text_repel" => K::Text,
+            "label" | "label_repel" => K::Label,
+            "dotplot" => K::Dotplot,
+            "bar" | "col" | "histogram" | "area" | "ribbon" | "density" | "violin" | "polygon"
+            | "rect" | "tile" | "stepribbon" | "density_ridges" => K::Polygon,
+            "raster" | "hex" | "bin2d" => K::Rect,
+            _ => return None,
+        })
+    }
+
     /// Geom-specific data preparation after the stat and position steps but
     /// before scale training (ggplot2's `GeomX$setup_data`) — e.g. a tile adds
     /// its `xmin`/`xmax`/`ymin`/`ymax` extents so continuous scales train on

@@ -9,7 +9,7 @@ use crate::scale::ScaleSet;
 use crate::theme::{LegendPosition, Theme};
 
 /// Which aesthetics should generate legends.
-const LEGEND_AESTHETICS: &[Aesthetic] = &[
+pub(crate) const LEGEND_AESTHETICS: &[Aesthetic] = &[
     Aesthetic::Color,
     Aesthetic::Fill,
     Aesthetic::Shape,
@@ -710,22 +710,17 @@ fn draw_discrete_legend_at(
         // Draw every group member's own glyph, overlaid at the same
         // position (#239) — a single swatch for the common, unmerged
         // case (`group.len() == 1`).
-        for (member_aes, member_scale) in group {
-            draw_legend_swatch(
-                backend,
-                scales,
-                member_aes,
-                *member_scale,
-                theme,
-                label,
-                *pos,
-                x,
-                y,
-                center_x,
-                center_y,
-                swatch_size,
-            )?;
-        }
+        draw_group_keys(
+            backend,
+            scales,
+            group,
+            theme,
+            guide,
+            label,
+            *pos,
+            (x, y, center_x, center_y),
+            swatch_size,
+        )?;
 
         // Label
         let label_family = if theme.legend_text.family.is_empty() {
@@ -1166,6 +1161,91 @@ fn draw_legend_swatch(
     Ok(())
 }
 
+/// Draw one legend key for `group` (#410): every layer that shows one of the
+/// group's aesthetics draws its own glyph ([`crate::guide::key::draw_key`]),
+/// overlaid in layer order — a line layer and a point layer on one colour
+/// mapping share one key. Layers without a glyph (and plots with no layer
+/// info) draw the per-aesthetic swatch as before.
+#[allow(clippy::too_many_arguments)]
+fn draw_group_keys(
+    backend: &mut dyn DrawBackend,
+    scales: &ScaleSet,
+    group: &[(Aesthetic, &dyn crate::scale::Scale)],
+    theme: &Theme,
+    guide: &GuideLegend,
+    label: &str,
+    pos: f64,
+    (x, y, center_x, center_y): (f64, f64, f64, f64),
+    swatch_size: f64,
+) -> Result<(), RenderError> {
+    use crate::guide::key::{draw_key, KeyProps};
+    let in_group = |a: &Aesthetic| group.iter().any(|(g, _)| g == a);
+    let layers: Vec<_> = guide
+        .layer_keys
+        .iter()
+        .filter(|k| k.aesthetics.iter().any(in_group))
+        .collect();
+    let legacy = |backend: &mut dyn DrawBackend, only: Option<&[Aesthetic]>| {
+        for (member_aes, member_scale) in group {
+            if only.is_some_and(|o| !o.contains(member_aes)) {
+                continue;
+            }
+            draw_legend_swatch(
+                backend,
+                scales,
+                member_aes,
+                *member_scale,
+                theme,
+                label,
+                pos,
+                x,
+                y,
+                center_x,
+                center_y,
+                swatch_size,
+            )?;
+        }
+        Ok::<(), RenderError>(())
+    };
+    if layers.iter().all(|k| k.glyph.is_none()) {
+        return legacy(backend, None);
+    }
+    let value = Value::Str(label.to_string());
+    let ink = theme.geom.ink.unwrap_or(theme.legend_text.color);
+    for k in layers {
+        let Some(glyph) = k.glyph else {
+            legacy(backend, Some(&k.aesthetics))?;
+            continue;
+        };
+        let mut props = KeyProps::default();
+        for (aes, scale) in group {
+            if !k.aesthetics.contains(aes) {
+                continue;
+            }
+            match aes {
+                Aesthetic::Color => props.color = scales.map_color(aes, &value),
+                Aesthetic::Fill => props.fill = scales.map_color(aes, &value),
+                Aesthetic::Shape => props.shape = scales.map_shape(&value),
+                Aesthetic::Linetype => props.linetype = scales.map_linetype(&value),
+                Aesthetic::Size => {
+                    props.size = scale
+                        .map_fraction_to_size(pos)
+                        .or_else(|| scales.map_size(&value))
+                }
+                Aesthetic::Alpha => {
+                    props.alpha = scale
+                        .map_fraction_to_alpha(pos)
+                        .or_else(|| scales.map_alpha(&value))
+                }
+                Aesthetic::Linewidth => props.linewidth = scale.map_fraction_to_size(pos),
+                _ => {}
+            }
+        }
+        draw_key(backend, glyph, &props, ink, (x, y, swatch_size))?;
+    }
+    Ok(())
+}
+
 // ─── B3-2: nrow/ncol/byrow, auto-wrap, "+N more" ───────────────────────────
 
 /// One legend key's grid placement, in the planner's own pixel space
@@ -1588,7 +1668,33 @@ pub(crate) fn draw_legend_planned(
     if legend_scales.is_empty() {
         return Ok(());
     }
+    // #410: key glyphs are lines / points outside the panel.
+    backend.set_clipping(false);
+    let drawn = draw_legend_planned_inner(
+        scales,
+        theme,
+        plot_area,
+        legend_avail_width,
+        backend,
+        guide,
+        legend_plans,
+        legend_scales,
+    );
+    backend.set_clipping(true);
+    drawn
+}
 
+#[allow(clippy::too_many_arguments)]
+fn draw_legend_planned_inner(
+    scales: &ScaleSet,
+    theme: &Theme,
+    plot_area: &Rect,
+    legend_avail_width: f64,
+    backend: &mut dyn DrawBackend,
+    guide: &GuideLegend,
+    legend_plans: &std::collections::HashMap<Aesthetic, LegendPlan>,
+    legend_scales: Vec<Aesthetic>,
+) -> Result<(), RenderError> {
     // #239: group aesthetics whose legend would be visually identical
     // (same title, breaks, discrete/continuous-ness) into one combined
     // guide, rather than drawing one per aesthetic. Everything below that
@@ -1837,22 +1943,17 @@ fn draw_discrete_legend_grid(
             }
         }
 
-        for (member_aes, member_scale) in group {
-            draw_legend_swatch(
-                backend,
-                scales,
-                member_aes,
-                *member_scale,
-                theme,
-                label,
-                *pos,
-                x,
-                y,
-                center_x,
-                center_y,
-                swatch_size,
-            )?;
-        }
+        draw_group_keys(
+            backend,
+            scales,
+            group,
+            theme,
+            guide,
+            label,
+            *pos,
+            (x, y, center_x, center_y),
+            swatch_size,
+        )?;
 
         let label_family = if theme.legend_text.family.is_empty() {
             None

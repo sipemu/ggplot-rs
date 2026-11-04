@@ -542,6 +542,7 @@ impl PlotGrid {
             collect: collect.then_some(legend_pos),
             collect_alt: alt_pos.map(|(_, p)| p),
             legends: Vec::new(),
+            legend_sigs: Vec::new(),
             page_w: w as f64,
             page_h: h as f64,
             legend_warnings: Vec::new(),
@@ -679,6 +680,10 @@ struct PrepCtx {
     collect_alt: Option<GridLegendPosition>,
     /// Collected legends, each with its `collect_alt` layout.
     legends: Vec<(Legend, Option<Legend>)>,
+    /// Each collected legend's key-independent signature (#410): the legend
+    /// drawn without layer glyphs, so one grouping drawn by different geoms
+    /// (point keys here, line keys there) still collapses to one legend.
+    legend_sigs: Vec<String>,
     /// The grid's overall page size (sipemu/ggplot-rs#155): a collected
     /// legend's available width/height for its own B3-2 wrap/grid plan,
     /// since a `PlotGrid`'s legend strip has no other natural bound —
@@ -843,7 +848,7 @@ fn prepare_plot(mut plot: GGPlot, ctx: &mut PrepCtx) -> Result<PreparedPlot, GGE
     }
     let svg_formatted_values = plot.svg_formatted_values;
     let root_attrs = plot.root_attrs.clone();
-    let (built, mut meta) = plot.build_for_render()?;
+    let (mut built, mut meta) = plot.build_for_render()?;
     if let Some(pos) = collect {
         meta.has_legend = false;
         if let Some(l) = capture_legend(
@@ -855,7 +860,14 @@ fn prepare_plot(mut plot: GGPlot, ctx: &mut PrepCtx) -> Result<PreparedPlot, GGE
         )
         .map_err(GGError::Render)?
         {
-            if !ctx.legends.iter().any(|(o, _)| o.body == l.body) {
+            let keys = std::mem::take(&mut built.guide_legend.layer_keys);
+            let sig = capture_legend(&built, pos, ctx.page_w, ctx.page_h, &mut Vec::new())
+                .map_err(GGError::Render)?
+                .map(|s| s.body)
+                .unwrap_or_default();
+            built.guide_legend.layer_keys = keys;
+            if !ctx.legend_sigs.contains(&sig) {
+                ctx.legend_sigs.push(sig);
                 let alt = match ctx.collect_alt {
                     Some(alt) => {
                         capture_legend(&built, alt, ctx.page_w, ctx.page_h, &mut Vec::new())

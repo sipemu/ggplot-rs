@@ -60,14 +60,18 @@ fn fill_and_colour_mapped_to_the_same_scale_merge_into_one_legend() {
         1,
         "fill and colour mapped to the same scale should merge into one legend: {svg}"
     );
-    // Both aesthetics' glyphs are still drawn, at each key: one pair of
-    // overlaid (fill, then colour) swatch rects per break (width 12,
-    // matching `theme.legend_key_width`), under each key's own key-bg rect.
+    // #410: each key is the point layer's own glyph (one point, coloured
+    // by both merged aesthetics) on the key-bg rect — not two overlaid
+    // swatch squares per aesthetic.
     assert_eq!(
         svg.matches("width=\"12.00\" height=\"12.00\"").count(),
-        // 2 breaks x (1 key-bg rect + 2 overlaid swatch rects) = 6
-        6,
+        2, // 2 breaks x 1 key-bg rect
         "{svg}"
+    );
+    assert_eq!(
+        svg.matches("<circle").count(),
+        4,
+        "2 data points + 2 key points"
     );
 }
 

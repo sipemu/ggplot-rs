@@ -68,6 +68,8 @@ if (!svg.startsWith("<svg")) throw new Error("render failed");
 | `layers[].position` | `identity stack fill dodge dodge2 jitter nudge`, or `{ type: "dodge", width: 0.8, preserve: "single" }`. boxplot dodges (`dodge2`) and violin (`dodge`) by default, so grouped boxes sit side by side |
 | `layers[].stat` | `"identity"` (plot precomputed values, e.g. bar heights), `"unique"` (drop duplicate rows), `"connect"` (steps; `params.connection` `hv`/`vh`/`mid`/`linear`), `"summary_hex"` (`params.fun` of a `z` column per hexagon), `"sf_coordinates"` (a point per WKT `geometry` — text on a map) |
 | `layers[].data` | layer-specific data |
+| `layers[].key_glyph` | legend key picture: `point path rect polygon boxplot crossbar pointrange linerange smooth text label vline vpath abline timeseries dotplot blank` (default per geom; layers on one mapping share a key) |
+| `layers[].show_legend` | `false` hides the layer from legends; `{ color: false }` per aesthetic |
 | `scales.x/y` | `{ trans, limits: [lo, hi], breaks: [...], name }`; trans `log10 log2 ln sqrt reverse logit probit pseudo_log reciprocal exp` |
 | `scales.color/fill` | `{ palette }` (`Set1 Dark2 Paired npg …` categorical; `viridis magma plasma inferno` numeric), `{ values: { level: "#rrggbb" } }`, `{ gradient: ["#lo", "#hi"] }`, `{ levels: [...] }` |
 | `facet` | `{ wrap, ncol?, scales? }` or `{ rows?, cols?, scales? }`; scales `fixed free free_x free_y` |

@@ -705,6 +705,10 @@ pub trait DrawBackend {
     /// Default: no-op.
     fn set_viewport(&mut self, _rect: &crate::render::Rect) {}
 
+    /// Turn panel clipping of lines / points / clip-flagged rects on or off
+    /// (backends that clip, i.e. plotters; #410: legends draw with it off).
+    fn set_clipping(&mut self, _on: bool) {}
+
     /// Attach a tooltip to subsequently-drawn marks until cleared with `None`.
     /// Backends that produce interactive output (SVG) emit it as a `<title>`
     /// for a native hover tooltip; others ignore it. Default: no-op.

@@ -76,6 +76,19 @@ pub struct LayerSpec {
     pub params: LayerParams,
     pub stat: Option<String>,
     pub position: Option<PositionSpec>,
+    /// Legend key picture (`"point"`, `"path"`, `"boxplot"`, …; ggplot2's
+    /// `key_glyph`).
+    pub key_glyph: Option<String>,
+    /// Show the layer in the legends (`true`/`false`), or per aesthetic
+    /// (`{"color": true, "fill": false}`).
+    pub show_legend: Option<ShowLegendSpec>,
+}
+
+#[derive(Deserialize)]
+#[serde(untagged)]
+pub enum ShowLegendSpec {
+    All(bool),
+    Per(BTreeMap<String, bool>),
 }
 
 /// Geom parameters. Each is read only by the geoms it applies to.
@@ -422,6 +435,37 @@ pub fn build_plot_with_data(
         }
         if let Some(p) = &layer.position {
             plot = apply_position(plot, p).map_err(|e| format!("layers[{i}].position: {e}"))?;
+        }
+        if let Some(k) = &layer.key_glyph {
+            let g = crate::guide::key::KeyGlyph::parse(k).ok_or(format!(
+                "layers[{i}].key_glyph: unknown glyph '{k}' (expected point, path, rect, polygon, \
+                 boxplot, crossbar, pointrange, linerange, smooth, text, label, vline, vpath, \
+                 abline, timeseries, dotplot, blank)"
+            ))?;
+            plot = plot.key_glyph(g);
+        }
+        match &layer.show_legend {
+            None => {}
+            Some(ShowLegendSpec::All(b)) => plot = plot.show_legend(*b),
+            Some(ShowLegendSpec::Per(m)) => {
+                for (aes, show) in m {
+                    let a = match aes.as_str() {
+                        "color" | "colour" => Aesthetic::Color,
+                        "fill" => Aesthetic::Fill,
+                        "shape" => Aesthetic::Shape,
+                        "size" => Aesthetic::Size,
+                        "alpha" => Aesthetic::Alpha,
+                        "linetype" => Aesthetic::Linetype,
+                        "linewidth" => Aesthetic::Linewidth,
+                        o => {
+                            return Err(format!(
+                                "layers[{i}].show_legend: '{o}' is not a legend aesthetic"
+                            ))
+                        }
+                    };
+                    plot = plot.show_legend_for(a, *show);
+                }
+            }
         }
     }
 
@@ -1611,6 +1655,23 @@ mod tests {
             .unwrap_err();
             assert!(e.contains(msg), "{stat}: {e}");
         }
+    }
+
+    #[test]
+    fn key_glyph_and_show_legend() {
+        let svg = render(&format!(
+            r#"{{ {DATA}, "aes": {{"x": "x", "y": "y", "color": "g"}},
+               "layers": [{{"geom": "line", "key_glyph": "timeseries"}},
+                          {{"geom": "point", "show_legend": {{"color": false}}}}] }}"#
+        ))
+        .unwrap();
+        assert!(svg.contains("<polyline"));
+        let e = render(&format!(
+            r#"{{ {DATA}, "aes": {{"x": "x", "y": "y"}},
+               "layers": [{{"geom": "line", "key_glyph": "zigzag"}}] }}"#
+        ))
+        .unwrap_err();
+        assert!(e.contains("unknown glyph"), "{e}");
     }
 
     #[test]

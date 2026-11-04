@@ -107,6 +107,9 @@ With polars (default feature): `GGPlot::new(df!{ "x" => [1.0, 2.0], "y" => [3.0,
   (with `scale_*_log10()`), `annotation_raster(png_bytes, xmin, xmax, ymin, ymax)`,
   `annotation_custom(inset_plot, xmin, xmax, ymin, ymax)` (a plot inside a
   plot; `f64::INFINITY` bounds = panel edges).
+- **Legend keys:** each layer draws its own glyph (points, lines, boxes …)
+  and layers on one mapping share a key; `.key_glyph(KeyGlyph::Timeseries)`
+  and `.show_legend_for(Aesthetic::Fill, false)` modify the last layer.
 - **Labels:** `title subtitle caption tag xlab ylab`. Axis titles are **not**
   taken from column names automatically — set `xlab`/`ylab` when you want them.
 - **Theme:** `.theme_minimal()` / `.theme_bw()` / `.theme_classic()` … or
