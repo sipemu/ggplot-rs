@@ -91,7 +91,12 @@ Keys: `bins` (histogram), `method` (`lm`/`loess`) `span` `se` (smooth),
 `direction` (windbarb columns), `censor` (censor_marks column), `projection`
 (spatial), `target` `ranges` (bullet), `notch` `varwidth` `coef` `outliers`
 `staplewidth` (boxplot), `trim` `scale` (`area`/`count`/`width`) `quantiles`
-`bw` `adjust` (violin).
+`bw` `adjust` (violin), `connection` (stat connect: `hv`/`vh`/`mid`/`linear`),
+`fun` (stat summary_hex: `mean`/`median`/`min`/`max`/`sum`).
+
+`--spec` layers can also set `"stat"`: `identity`, `unique` (drop duplicate
+rows), `connect` (steps), `summary_hex` (summary of a `z` column per hexagon),
+`sf_coordinates` (a point per WKT geometry, e.g. `geom: "text"` labels on a map).
 
 `--position NAME`: `identity stack fill dodge dodge2 jitter nudge`.
 

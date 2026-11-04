@@ -6,6 +6,11 @@ All notable changes to this project are documented here. The format follows
 ## [Unreleased]
 
 ### Fixed
+- `geom_hex` / `stat_binhex`: the hexagon lattice is anchored like ggplot2's
+  `hex_bounds` (the data minimum rounded down to a whole bin, less 1e-6),
+  not at the data minimum, so cells sit where ggplot2 puts them. The R
+  validation now compares every cell, not just the total count (its fixture
+  was stale and is regenerated from ggplot2 4.0.3).
 - Grouped `geom_boxplot` / `geom_violin` no longer draw every group's
   element on top of each other (#404): boxplot now defaults to
   `PositionDodge2` and violin to `PositionDodge`, as in ggplot2, and both
@@ -19,6 +24,16 @@ All notable changes to this project are documented here. The format follows
   `position_dodge` / `position_dodge2` on a discrete axis.
 
 ### Added
+- Missing ggplot2 layers (#406): `geom_function(f)` / `geom_function_xlim(f,
+  lo, hi)` (plot a function, with or without data; `StatFunction::with_xlim`),
+  `stat_connect(Connection::{Hv, Vh, Mid, Linear})` (ggplot2 4.0),
+  `stat_unique()` / `StatUnique`, `stat_manual(f)` / `StatManual` (ggplot2
+  4.0), `stat_summary_hex(fun)` / `StatSummaryHex` (summary of a raw `z`
+  column per hexagon), and `stat_sf_coordinates()` / `StatSfCoordinates`
+  (feature `sf`: a point inside each WKT geometry, for text/points on maps).
+  The JSON spec / CLI / npm gain `layers[].stat`: `unique`, `connect`
+  (`params.connection`), `summary_hex` (`params.fun`), `sf_coordinates`.
+  `geom_map` / `annotation_borders` are left out (sf covers them).
 - `geom_boxplot` parameters (#405): `notch` / `notch_width` (`.notched()`),
   `varwidth` (`.varwidth()`), `coef` (`.with_coef()`, also
   `StatBoxplot::with_coef`), `outliers = FALSE` (`.hide_outliers()` — not

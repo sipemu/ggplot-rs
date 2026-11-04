@@ -141,6 +141,11 @@ pub struct LayerParams {
     pub bw: Option<f64>,
     /// violin: bandwidth multiplier.
     pub adjust: Option<f64>,
+    /// stat `"connect"`: `"hv"` (default), `"vh"`, `"mid"`, `"linear"`.
+    pub connection: Option<String>,
+    /// stat `"summary_hex"`: `"mean"` (default), `"median"`, `"min"`, `"max"`,
+    /// `"sum"` of the raw `z` column.
+    pub fun: Option<String>,
 }
 
 impl LayerParams {
@@ -178,6 +183,8 @@ impl LayerParams {
             quantiles,
             bw,
             adjust,
+            connection,
+            fun,
         } = other;
         macro_rules! set {
             ($($f:ident),*) => { $( if $f.is_some() { self.$f = $f; } )* };
@@ -211,7 +218,9 @@ impl LayerParams {
             scale,
             quantiles,
             bw,
-            adjust
+            adjust,
+            connection,
+            fun
         );
     }
 }
@@ -408,15 +417,8 @@ pub fn build_plot_with_data(
             build_aes(&spec.aes, &names, &format!("layers[{i}] (inherited aes)"))?;
         }
         if let Some(s) = &layer.stat {
-            plot = match s.as_str() {
-                "identity" => plot.stat(crate::stat::identity::StatIdentity),
-                other => {
-                    return Err(format!(
-                        "layers[{i}].stat: unknown stat '{other}' (supported: \"identity\"; \
-                         other stats follow from the geom)"
-                    ))
-                }
-            };
+            plot =
+                apply_stat(plot, s, &layer.params).map_err(|e| format!("layers[{i}].stat: {e}"))?;
         }
         if let Some(p) = &layer.position {
             plot = apply_position(plot, p).map_err(|e| format!("layers[{i}].position: {e}"))?;
@@ -794,6 +796,14 @@ pub const EXCLUDED_GEOMS: &[(&str, &str)] = &[
         "abline_aes",
         "data-driven abline; use an `abline` layer in the spec",
     ),
+    (
+        "function",
+        "plots a Rust closure; send the evaluated points as data instead",
+    ),
+    (
+        "function_xlim",
+        "plots a Rust closure; send the evaluated points as data instead",
+    ),
 ];
 
 /// Every geom name the spec accepts in this build: [`GEOMS`] plus the
@@ -1000,6 +1010,59 @@ pub fn add_geom(plot: GGPlot, geom: &str, p: &LayerParams) -> Result<GGPlot, Str
             return Err(format!(
                 "unknown geom '{other}' (expected one of: {})",
                 geoms().join(", ")
+            ))
+        }
+    })
+}
+
+/// Stat names `layers[].stat` accepts (other stats follow from the geom).
+pub const STATS: &[&str] = &[
+    "identity",
+    "unique",
+    "connect",
+    "summary_hex",
+    "sf_coordinates",
+];
+
+/// Override the last-added layer's stat with the spec stat `name`.
+pub fn apply_stat(plot: GGPlot, name: &str, p: &LayerParams) -> Result<GGPlot, String> {
+    use crate::stat::connect::{Connection, StatConnect};
+    use crate::stat::summary::SummaryFun;
+    Ok(match name {
+        "identity" => plot.stat(crate::stat::identity::StatIdentity),
+        "unique" => plot.stat(crate::stat::unique::StatUnique),
+        "connect" => plot.stat(StatConnect::new(match p.connection.as_deref() {
+            None | Some("hv") => Connection::Hv,
+            Some("vh") => Connection::Vh,
+            Some("mid") => Connection::Mid,
+            Some("linear") => Connection::Linear,
+            Some(o) => {
+                return Err(format!(
+                    "unknown connection '{o}' (expected hv, vh, mid, linear)"
+                ))
+            }
+        })),
+        "summary_hex" => plot.stat(crate::stat::binhex::StatSummaryHex::new(
+            match p.fun.as_deref() {
+                None | Some("mean") => SummaryFun::Mean,
+                Some("median") => SummaryFun::Median,
+                Some("min") => SummaryFun::Min,
+                Some("max") => SummaryFun::Max,
+                Some("sum") => SummaryFun::Sum,
+                Some(o) => {
+                    return Err(format!(
+                        "unknown fun '{o}' (expected mean, median, min, max, sum)"
+                    ))
+                }
+            },
+        )),
+        "sf_coordinates" => plot.stat(
+            crate::stat::sf_coordinates::StatSfCoordinates::default().project(projection(p)?),
+        ),
+        other => {
+            return Err(format!(
+                "unknown stat '{other}' (expected one of: {}; other stats follow from the geom)",
+                STATS.join(", ")
             ))
         }
     })
@@ -1511,6 +1574,43 @@ mod tests {
         ))
         .unwrap_err();
         assert!(e.contains("unknown violin scale"), "{e}");
+    }
+
+    #[test]
+    fn spec_stats_unique_connect_summary_hex_sf_coordinates() {
+        let svg = render(&format!(
+            r#"{{ {DATA}, "aes": {{"x": "x", "y": "y"}},
+               "layers": [{{"geom": "point", "stat": "unique"}},
+                          {{"geom": "path", "stat": "connect", "params": {{"connection": "mid"}}}}] }}"#
+        ))
+        .unwrap();
+        assert!(svg.contains("<circle"));
+        let svg = render(
+            r#"{"data": {"x": [1, 2, 3, 1], "y": [1, 2, 3, 1], "z": [5, 6, 7, 8]},
+                "aes": {"x": "x", "y": "y"},
+                "layers": [{"geom": "hex", "stat": "summary_hex", "params": {"fun": "max"}}]}"#,
+        )
+        .unwrap();
+        assert!(svg.contains("<polygon") || svg.contains("<path"));
+        let svg = render(
+            r#"{"data": {"geometry": ["POLYGON ((0 0, 4 0, 4 4, 0 4, 0 0))"], "n": ["A"]},
+                "aes": {"label": "n"},
+                "layers": [{"geom": "sf"}, {"geom": "text", "stat": "sf_coordinates"}]}"#,
+        )
+        .unwrap();
+        assert!(svg.contains(">A<"), "label placed");
+        for (stat, params, msg) in [
+            ("connect", r#"{"connection": "zig"}"#, "unknown connection"),
+            ("summary_hex", r#"{"fun": "mode"}"#, "unknown fun"),
+            ("bin", "{}", "unknown stat"),
+        ] {
+            let e = render(&format!(
+                r#"{{ {DATA}, "aes": {{"x": "x", "y": "y"}},
+                   "layers": [{{"geom": "point", "stat": "{stat}", "params": {params}}}] }}"#
+            ))
+            .unwrap_err();
+            assert!(e.contains(msg), "{stat}: {e}");
+        }
     }
 
     #[test]

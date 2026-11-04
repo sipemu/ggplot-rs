@@ -9,6 +9,7 @@ pub mod calendar;
 pub mod chord;
 #[cfg(feature = "ggpubr")]
 pub mod compare_means;
+pub mod connect;
 pub mod contour;
 pub mod contour_filled;
 #[cfg(feature = "ggpubr")]
@@ -27,6 +28,7 @@ pub mod heikin_ashi;
 pub mod identity;
 pub mod indicator;
 pub mod loess;
+pub mod manual;
 pub mod marching_squares;
 pub mod marimekko;
 pub mod network;
@@ -38,6 +40,8 @@ pub mod qq;
 pub mod quantile;
 pub mod renko;
 pub mod sankey;
+#[cfg(feature = "sf")]
+pub mod sf_coordinates;
 pub mod smooth;
 pub mod sum;
 pub mod summary;
@@ -45,6 +49,7 @@ pub mod summary2d;
 pub mod summary_bin;
 pub mod tree;
 pub mod treemap;
+pub mod unique;
 pub mod venn;
 pub mod waffle;
 pub mod waterfall;

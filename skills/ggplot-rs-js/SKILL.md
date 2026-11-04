@@ -64,9 +64,9 @@ if (!svg.startsWith("<svg")) throw new Error("render failed");
 | `data` | `{ col: (number \| string \| boolean \| null)[] }` — numbers continuous, strings/booleans categorical |
 | `aes` / `layers[].aes` | aesthetic → column: `x y color fill size shape alpha group linetype linewidth label weight xmin xmax ymin ymax xend yend angle radius tooltip from to subgroup open high low close lower middle upper fontface class` |
 | `layers[].geom` | see Geoms |
-| `layers[].params` | `bins` · `method` (`"lm"`/`"loess"`) `span` `se` · `yintercept` `xintercept` `slope` `intercept` · `levels` · `rows` · `box_size` `reversal` · `shape` · `speed` `direction` · `censor` · `projection` · `target` `ranges` · boxplot `notch` `varwidth` `coef` `outliers` `staplewidth` · violin `trim` `scale` (`"area"`/`"count"`/`"width"`) `quantiles` `bw` `adjust` |
+| `layers[].params` | `bins` · `method` (`"lm"`/`"loess"`) `span` `se` · `yintercept` `xintercept` `slope` `intercept` · `levels` · `rows` · `box_size` `reversal` · `shape` · `speed` `direction` · `censor` · `projection` · `target` `ranges` · boxplot `notch` `varwidth` `coef` `outliers` `staplewidth` · violin `trim` `scale` (`"area"`/`"count"`/`"width"`) `quantiles` `bw` `adjust` · stat connect `connection` · stat summary_hex `fun` |
 | `layers[].position` | `identity stack fill dodge dodge2 jitter nudge`, or `{ type: "dodge", width: 0.8, preserve: "single" }`. boxplot dodges (`dodge2`) and violin (`dodge`) by default, so grouped boxes sit side by side |
-| `layers[].stat` | `"identity"` (plot precomputed values, e.g. bar heights) |
+| `layers[].stat` | `"identity"` (plot precomputed values, e.g. bar heights), `"unique"` (drop duplicate rows), `"connect"` (steps; `params.connection` `hv`/`vh`/`mid`/`linear`), `"summary_hex"` (`params.fun` of a `z` column per hexagon), `"sf_coordinates"` (a point per WKT `geometry` — text on a map) |
 | `layers[].data` | layer-specific data |
 | `scales.x/y` | `{ trans, limits: [lo, hi], breaks: [...], name }`; trans `log10 log2 ln sqrt reverse logit probit pseudo_log reciprocal exp` |
 | `scales.color/fill` | `{ palette }` (`Set1 Dark2 Paired npg …` categorical; `viridis magma plasma inferno` numeric), `{ values: { level: "#rrggbb" } }`, `{ gradient: ["#lo", "#hi"] }`, `{ levels: [...] }` |

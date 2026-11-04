@@ -141,7 +141,8 @@ impl StatBinHex {
     /// - `binwidth` and `origin` both given: the lattice is fixed exactly.
     /// - `binwidth` only: anchored at `(0, 0)`.
     /// - neither: `w, h` from the range and bin counts, anchored at the data
-    ///   minimum (ggplot2) — or at `origin`, if given without `binwidth`.
+    ///   minimum rounded down to a whole bin, less 1e-6 (ggplot2's
+    ///   `hex_bounds`) — or at `origin`, if given without `binwidth`.
     pub fn lattice(&self, xs: &[f64], ys: &[f64]) -> HexLattice {
         if let Some((w, h)) = self.binwidth {
             if w.is_finite() && w > 0.0 && h.is_finite() && h > 0.0 {
@@ -170,7 +171,12 @@ impl StatBinHex {
         };
         let w = x_range / self.bins_x.max(1) as f64;
         let h = y_range / self.bins_y.max(1) as f64;
-        let origin = self.origin.unwrap_or((x_min, y_min));
+        // ggplot2's `hex_bounds`: the lattice starts at the data minimum
+        // rounded down to a whole bin width, less 1e-6.
+        let origin = self.origin.unwrap_or((
+            (x_min / w).floor() * w - 1e-6,
+            (y_min / h).floor() * h - 1e-6,
+        ));
         HexLattice::new(w, h, origin)
     }
 
@@ -316,6 +322,80 @@ impl Stat for StatBinHex {
                 ));
             }
         }
+    }
+}
+
+/// Summary of `z` per hexagon (ggplot2's `stat_summary_hex`): bins x/y on
+/// [`StatBinHex`]'s lattice and applies `fun` to the `z` values of each cell,
+/// emitting `fill` (= `value`) for `geom_hex`.
+pub struct StatSummaryHex {
+    pub bins: StatBinHex,
+    pub fun: crate::stat::summary::SummaryFun,
+}
+
+impl StatSummaryHex {
+    pub fn new(fun: crate::stat::summary::SummaryFun) -> Self {
+        StatSummaryHex {
+            bins: StatBinHex::default(),
+            fun,
+        }
+    }
+
+    pub fn with_bins(mut self, bins_x: usize, bins_y: usize) -> Self {
+        self.bins.bins_x = bins_x.max(1);
+        self.bins.bins_y = bins_y.max(1);
+        self
+    }
+}
+
+impl Stat for StatSummaryHex {
+    fn compute_group(&self, data: &DataFrame, _scales: &ScaleSet) -> DataFrame {
+        let (Some(xc), Some(yc), Some(zc)) = (data.column("x"), data.column("y"), data.column("z"))
+        else {
+            return DataFrame::new();
+        };
+        let rows: Vec<(f64, f64, f64)> = (0..data.nrows())
+            .filter_map(|i| Some((xc[i].as_f64()?, yc[i].as_f64()?, zc[i].as_f64()?)))
+            .filter(|(x, y, z)| x.is_finite() && y.is_finite() && z.is_finite())
+            .collect();
+        if rows.is_empty() {
+            return DataFrame::new();
+        }
+        let xs: Vec<f64> = rows.iter().map(|r| r.0).collect();
+        let ys: Vec<f64> = rows.iter().map(|r| r.1).collect();
+        let lattice = self.bins.lattice(&xs, &ys);
+        let mut cells: std::collections::BTreeMap<(i64, i64), Vec<f64>> =
+            std::collections::BTreeMap::new();
+        for &(x, y, z) in &rows {
+            let (q, r) = lattice.locate(x, y);
+            cells.entry((r, q)).or_default().push(z);
+        }
+        let (mut x, mut y, mut value, mut w, mut h) =
+            (Vec::new(), Vec::new(), Vec::new(), Vec::new(), Vec::new());
+        for (&(r, q), zs) in &cells {
+            let (cx, cy) = lattice.centre(q, r);
+            x.push(Value::Float(cx));
+            y.push(Value::Float(cy));
+            value.push(Value::Float(self.fun.apply(zs)));
+            w.push(Value::Float(lattice.w));
+            h.push(Value::Float(lattice.h));
+        }
+        let mut out = DataFrame::new();
+        out.add_column("x".into(), x);
+        out.add_column("y".into(), y);
+        out.add_column("value".into(), value.clone());
+        out.add_column("fill".into(), value);
+        out.add_column("width".into(), w);
+        out.add_column("height".into(), h);
+        out
+    }
+
+    fn required_aes(&self) -> Vec<Aesthetic> {
+        vec![Aesthetic::X, Aesthetic::Y]
+    }
+
+    fn name(&self) -> &str {
+        "summary_hex"
     }
 }
 

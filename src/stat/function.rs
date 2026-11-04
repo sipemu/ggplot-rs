@@ -8,6 +8,8 @@ use super::Stat;
 pub struct StatFunction {
     pub fun: Box<dyn Fn(f64) -> f64 + Send + Sync>,
     pub n_points: usize,
+    /// Evaluate over this x range instead of the data's (ggplot2's `xlim`).
+    pub xlim: Option<(f64, f64)>,
 }
 
 impl StatFunction {
@@ -15,7 +17,14 @@ impl StatFunction {
         StatFunction {
             fun: Box::new(fun),
             n_points: 101,
+            xlim: None,
         }
+    }
+
+    /// Evaluate over `[lo, hi]` regardless of the layer's data.
+    pub fn with_xlim(mut self, lo: f64, hi: f64) -> Self {
+        self.xlim = Some((lo, hi));
+        self
     }
 
     pub fn with_n_points(mut self, n: usize) -> Self {
@@ -33,12 +42,14 @@ impl Stat for StatFunction {
         };
 
         let values: Vec<f64> = x_col.iter().filter_map(|v| v.as_f64()).collect();
-        if values.is_empty() {
-            return DataFrame::new();
-        }
-
-        let x_min = values.iter().cloned().fold(f64::INFINITY, f64::min);
-        let x_max = values.iter().cloned().fold(f64::NEG_INFINITY, f64::max);
+        let (x_min, x_max) = match self.xlim {
+            Some(lim) => lim,
+            None if values.is_empty() => return DataFrame::new(),
+            None => (
+                values.iter().cloned().fold(f64::INFINITY, f64::min),
+                values.iter().cloned().fold(f64::NEG_INFINITY, f64::max),
+            ),
+        };
 
         if (x_max - x_min).abs() < f64::EPSILON {
             return DataFrame::new();

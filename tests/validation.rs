@@ -418,6 +418,30 @@ fn test_stat_binhex_vs_r() {
         actual_total as u64, expected_total as u64,
         "stat_binhex: total count mismatch"
     );
+
+    // #406: the lattice is anchored like ggplot2's `hex_bounds`, so every
+    // cell centre and count matches too (this used to check only the total).
+    let cells = |df: &DataFrame| -> Vec<(f64, f64, f64)> {
+        let c = |n: &str| -> Vec<f64> {
+            df.column(n)
+                .unwrap()
+                .iter()
+                .map(|v| v.as_f64().unwrap())
+                .collect()
+        };
+        let (x, y, f) = (c("x"), c("y"), c("fill"));
+        let mut r: Vec<_> = (0..x.len()).map(|i| (x[i], y[i], f[i])).collect();
+        r.sort_by(|a, b| a.1.total_cmp(&b.1).then(a.0.total_cmp(&b.0)));
+        r
+    };
+    let (got, want) = (cells(&result), cells(&expected));
+    assert_eq!(got.len(), want.len(), "stat_binhex: cell count");
+    for (g, w) in got.iter().zip(&want) {
+        assert!(
+            (g.0 - w.0).abs() < 1e-6 && (g.1 - w.1).abs() < 1e-6 && g.2 == w.2,
+            "stat_binhex: got {g:?}, ggplot2 {w:?}"
+        );
+    }
 }
 
 #[test]
