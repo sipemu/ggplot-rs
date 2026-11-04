@@ -181,12 +181,14 @@ impl PlotLayout {
         let key_w = theme.legend_key_width.max(extras.legend_max_key_size);
         let key_h = theme.legend_key_height.max(key_w);
 
+        // #413: `legend_box_spacing` replaces the panel-facing margin side.
+        let lm = theme.legend_margin_outer();
         let legend_size = if has_legend {
-            theme.legend_margin.left
+            lm.left
                 + key_w
                 + theme.legend_spacing
                 + theme.legend_text.size * 6.0
-                + theme.legend_margin.right
+                + lm.right
                 + extras.legend_extra_width
         } else {
             0.0
@@ -195,7 +197,7 @@ impl PlotLayout {
         // A horizontal (top/bottom) legend only needs ONE row of height, not the
         // width-based `legend_size` — otherwise a big gap opens above the plot.
         let legend_band = if has_legend {
-            theme.legend_margin.top
+            lm.top
                 + key_h
                 // #211: a horizontally-drawn continuous colourbar's own
                 // title/bar/ticks/labels can need more than the flat
@@ -203,7 +205,7 @@ impl PlotLayout {
                 // row (a continuous colourbar never wraps rows).
                 + extras.continuous_horizontal_legend_extra_height
                 + theme.legend_spacing
-                + theme.legend_margin.bottom
+                + lm.bottom
                 + extras.legend_extra_rows as f64 * (key_h + theme.legend_spacing)
         } else {
             0.0

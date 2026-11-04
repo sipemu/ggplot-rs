@@ -328,6 +328,8 @@ export interface ThemeConfig {
   caption_position?: "panel" | "plot";
   legend_location?: "panel" | "plot";
   legend_ticks_length?: number;
+  /** Gaps between legend keys and between the panel and the legend, px (#413). */
+  legend_key_spacing_x?: number; legend_key_spacing_y?: number; legend_box_spacing?: number;
   legend_title?: TextElement; legend_text?: TextElement; strip_text?: TextElement;
   axis_line?: LineElement; axis_ticks?: LineElement;
   panel_grid_major?: LineElement; panel_grid_minor?: LineElement; panel_border?: LineElement;
