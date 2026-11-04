@@ -42,6 +42,24 @@ pub enum FacetLabeller {
     Both,
     /// Custom formatting function: fn(variable_name, value) -> label.
     Custom(fn(&str, &str) -> String),
+    /// The value, wrapped onto lines of at most this many characters
+    /// (ggplot2's `label_wrap_gen(width)`, #412).
+    Wrap(usize),
+}
+
+/// Greedy word wrap at `width` characters (`strwrap`), lines joined by `\n`.
+pub fn wrap_label(text: &str, width: usize) -> String {
+    let mut lines: Vec<String> = Vec::new();
+    for word in text.split_whitespace() {
+        match lines.last_mut() {
+            Some(l) if l.chars().count() + 1 + word.chars().count() <= width.max(1) => {
+                l.push(' ');
+                l.push_str(word);
+            }
+            _ => lines.push(word.to_string()),
+        }
+    }
+    lines.join("\n")
 }
 
 impl FacetLabeller {
@@ -50,6 +68,7 @@ impl FacetLabeller {
             FacetLabeller::Value => value.to_string(),
             FacetLabeller::Both => format!("{var}: {value}"),
             FacetLabeller::Custom(f) => f(var, value),
+            FacetLabeller::Wrap(w) => wrap_label(value, *w),
         }
     }
 }
@@ -80,6 +99,10 @@ pub enum Facet {
         /// isn't listed are dropped. `None` = values in first-appearance
         /// order. Set with [`GGPlot::facet_levels`](crate::GGPlot::facet_levels).
         levels: Option<Vec<String>>,
+        /// Fill panels column by column (ggplot2's `dir = "v"`, #412).
+        vertical: bool,
+        /// First row at the top (default; ggplot2's `as.table = TRUE`).
+        as_table: bool,
     },
     Grid {
         row_var: Option<String>,
