@@ -141,7 +141,7 @@ struct Args {
     /// Legend position: right, left, top, bottom, none, inside.
     #[arg(long, value_name = "POS")]
     legend: Option<String>,
-    /// Theme: gray (default), bw, minimal, classic, dark, light, void, linedraw.
+    /// Theme: gray (default), bw, minimal, classic, dark, light, void, linedraw, test.
     #[arg(long)]
     theme: Option<String>,
     /// Custom theme: a TOML/JSON file of element overrides on top of the preset.

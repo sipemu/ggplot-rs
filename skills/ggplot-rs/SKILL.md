@@ -125,7 +125,7 @@ With polars (default feature): `GGPlot::new(df!{ "x" => [1.0, 2.0], "y" => [3.0,
   and `.show_legend_for(Aesthetic::Fill, false)` modify the last layer.
 - **Labels:** `title subtitle caption tag xlab ylab`. Axis titles are **not**
   taken from column names automatically — set `xlab`/`ylab` when you want them.
-- **Theme:** `.theme_minimal()` / `.theme_bw()` / `.theme_classic()` … or
+- **Theme:** `.theme_minimal()` / `.theme_bw()` / `.theme_classic()` / `.theme_test()` … or
   `.theme(theme_minimal().with_primary((26, 153, 136)))`; legend via
   `.legend_position(LegendPosition::Bottom)` (call **after** a theme preset —
   presets replace the whole theme); per aesthetic `.guide_none(Aesthetic::Fill)`

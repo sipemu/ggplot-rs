@@ -56,13 +56,25 @@ pub(crate) fn draw_x_axis_with(
     with_title: bool,
     backend: &mut dyn DrawBackend,
 ) -> Result<(), RenderError> {
+    // Axis position: bottom (default) or top. `dir` points away from the panel.
+    let top = scale.axis_position_opposite();
+    // A top axis's labels follow `axis_text_x_top` when set (#413).
+    let top_theme;
+    let theme = match (&theme.axis_text_x_top, top) {
+        (Some(el), true) => {
+            top_theme = Theme {
+                axis_text_x: el.clone(),
+                ..theme.clone()
+            };
+            &top_theme
+        }
+        _ => theme,
+    };
     let breaks = scale.breaks();
     let tick_len = theme.axis_ticks_length;
     let axis_line = theme.get_axis_line_x();
     let axis_ticks = theme.get_axis_ticks_x();
 
-    // Axis position: bottom (default) or top. `dir` points away from the panel.
-    let top = scale.axis_position_opposite();
     let edge_y = if top {
         plot_area.y
     } else {
@@ -535,6 +547,18 @@ pub fn draw_sec_y_axis(
     plot_area: &Rect,
     backend: &mut dyn DrawBackend,
 ) -> Result<(), RenderError> {
+    // The right axis's labels follow `axis_text_y_right` when set (#413).
+    let right_theme;
+    let theme = match &theme.axis_text_y_right {
+        Some(el) => {
+            right_theme = Theme {
+                axis_text_y: el.clone(),
+                ..theme.clone()
+            };
+            &right_theme
+        }
+        None => theme,
+    };
     let own_ticks = sec_axis.own_ticks(primary_scale);
     let breaks = own_ticks.clone().unwrap_or_else(|| primary_scale.breaks());
     let tick_len = theme.axis_ticks_length;

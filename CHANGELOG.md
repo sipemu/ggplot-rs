@@ -6,6 +6,12 @@ All notable changes to this project are documented here. The format follows
 ## [Unreleased]
 
 ### Added
+- Theme (#413): `axis_text_x_top` / `axis_text_y_right` (ggplot2's
+  `axis.text.x.top` / `axis.text.y.right`) for a top x axis and the
+  secondary y axis; `theme_test()` (`theme_bw` without gridlines; preset
+  `"test"` in the spec / CLI); `Margin::auto(&[..])` (`margin_auto`, CSS
+  shorthand) and `Margin::part(..)` (`margin_part`). Theme config keys
+  `axis_text_x_top` / `axis_text_y_right`. `Theme` gains two fields.
 - Colourbar guides (#409): `guide_colourbar(aes, GuideColourbar)` —
   `bar_width` / `bar_height` (px), `nbin`, `display` (`Gradient` /
   `Rectangles`), `frame`, `ticks` — and `guide_coloursteps(aes)`

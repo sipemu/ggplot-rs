@@ -115,6 +115,45 @@ pub struct Margin {
     pub left: f64,
 }
 
+impl Margin {
+    /// ggplot2's `margin_auto(t, r, b, l)`: CSS-style shorthand — one value
+    /// for all sides, two for (vertical, horizontal), three for (top,
+    /// horizontal, bottom), four for (top, right, bottom, left) (#413).
+    /// An empty slice is all zeros.
+    pub fn auto(values: &[f64]) -> Margin {
+        let (t, r, b, l) = match *values {
+            [] => (0.0, 0.0, 0.0, 0.0),
+            [a] => (a, a, a, a),
+            [v, h] => (v, h, v, h),
+            [t, h, b] => (t, h, b, h),
+            [t, r, b, l, ..] => (t, r, b, l),
+        };
+        Margin {
+            top: t,
+            right: r,
+            bottom: b,
+            left: l,
+        }
+    }
+
+    /// ggplot2's `margin_part()`: replace only the given sides of `self`
+    /// (`None` keeps the current value) (#413).
+    pub fn part(
+        self,
+        top: Option<f64>,
+        right: Option<f64>,
+        bottom: Option<f64>,
+        left: Option<f64>,
+    ) -> Margin {
+        Margin {
+            top: top.unwrap_or(self.top),
+            right: right.unwrap_or(self.right),
+            bottom: bottom.unwrap_or(self.bottom),
+            left: left.unwrap_or(self.left),
+        }
+    }
+}
+
 impl Default for Margin {
     fn default() -> Self {
         Margin {
@@ -217,6 +256,12 @@ pub struct Theme {
     /// Thin crowded x-axis labels in ggplot2's `check.overlap` priority
     /// order (B3-1, D5): off by default, so default output is unaffected.
     pub axis_text_x_check_overlap: bool,
+    /// The labels of an x axis drawn on top (ggplot2's `axis.text.x.top`,
+    /// #413); `None` = `axis_text_x`.
+    pub axis_text_x_top: Option<ElementText>,
+    /// The labels of a right-hand (secondary) y axis (`axis.text.y.right`,
+    /// #413); `None` = `axis_text_y`.
+    pub axis_text_y_right: Option<ElementText>,
 }
 
 impl Theme {
