@@ -719,6 +719,7 @@ fn draw_discrete_legend_at(
         Some(theme.legend_title.family.clone())
     };
     let title_offset = if !title.is_empty() {
+        backend.set_element_class(Some("gg-legend gg-legend-title"));
         backend.draw_text(
             title,
             (legend_x, legend_y),
@@ -767,6 +768,7 @@ fn draw_discrete_legend_at(
             )
         };
         if let Some(fill) = theme.legend_background.fill {
+            backend.set_element_class(Some("gg-legend gg-legend-background"));
             backend.draw_rect(
                 (legend_x - 2.0, items_y - 2.0),
                 (legend_x + total_width + 2.0, items_y + total_height + 2.0),
@@ -829,6 +831,7 @@ fn draw_discrete_legend_at(
         // Draw legend key background
         if theme.legend_key.visible {
             if let Some(fill) = theme.legend_key.fill {
+                backend.set_element_class(Some("gg-legend gg-legend-key"));
                 backend.draw_rect(
                     (x, y),
                     (x + swatch_size, y + swatch_size),
@@ -847,6 +850,7 @@ fn draw_discrete_legend_at(
         // Draw every group member's own glyph, overlaid at the same
         // position (#239) — a single swatch for the common, unmerged
         // case (`group.len() == 1`).
+        backend.set_element_class(Some("gg-legend gg-legend-key"));
         draw_group_keys(
             backend,
             scales,
@@ -865,6 +869,7 @@ fn draw_discrete_legend_at(
         } else {
             Some(theme.legend_text.family.clone())
         };
+        backend.set_element_class(Some("gg-legend gg-legend-text"));
         backend.draw_text(
             label,
             (x + swatch_size + theme.legend_spacing, center_y),
@@ -945,6 +950,7 @@ fn draw_bins_keys(
         };
         if theme.legend_key.visible {
             if let Some(fill) = theme.legend_key.fill {
+                backend.set_element_class(Some("gg-legend gg-legend-key"));
                 backend.draw_rect(
                     (cell_x, cell_y),
                     (cell_x + cell_w, cell_y + cell_h),
@@ -962,6 +968,7 @@ fn draw_bins_keys(
         // The square key glyph, centred in its cell.
         let x = cell_x + (cell_w - swatch_size) / 2.0;
         let y = cell_y + (cell_h - swatch_size) / 2.0;
+        backend.set_element_class(Some("gg-legend gg-legend-key"));
         draw_group_keys(
             backend,
             scales,
@@ -992,6 +999,7 @@ fn draw_bins_keys(
             let ax = x0 + swatch_size;
             [(ax, y0), (ax, y0 + length)]
         };
+        backend.set_element_class(Some("gg-legend gg-legend-tick"));
         backend.draw_line(&axis, &line_style)?;
     }
     let family = if theme.legend_text.family.is_empty() {
@@ -1009,6 +1017,7 @@ fn draw_bins_keys(
                 let (ax, y) = (x0 + swatch_size, y0 + at);
                 [(ax, y), (ax - tick, y)]
             };
+            backend.set_element_class(Some("gg-legend gg-legend-tick"));
             backend.draw_line(&t, &line_style)?;
         }
         if (j == 0 || j == n) && !bins.show_limits {
@@ -1025,6 +1034,7 @@ fn draw_bins_keys(
                 TextAnchor::Start,
             )
         };
+        backend.set_element_class(Some("gg-legend gg-legend-text"));
         backend.draw_text(
             label,
             pos,
@@ -1125,6 +1135,7 @@ fn draw_continuous_legend_at(
         Some(theme.legend_title.family.clone())
     };
     let title_offset = if !title.is_empty() {
+        backend.set_element_class(Some("gg-legend gg-legend-title"));
         backend.draw_text(
             title,
             (legend_x, legend_y),
@@ -1159,6 +1170,7 @@ fn draw_continuous_legend_at(
             bar_height
         };
         if let Some(fill) = theme.legend_background.fill {
+            backend.set_element_class(Some("gg-legend gg-legend-background"));
             backend.draw_rect(
                 (legend_x - 2.0, bar_top - 2.0),
                 (legend_x + total_width + 2.0, bar_top + total_height + 2.0),
@@ -1194,6 +1206,7 @@ fn draw_continuous_legend_at(
                     .map_to_color(&Value::Float(at(t)))
                     .unwrap_or((127, 127, 127));
                 let sx = legend_x + i as f64 * slice_width;
+                backend.set_element_class(Some("gg-legend gg-legend-key gg-colourbar"));
                 backend.draw_rect(
                     (sx, bar_top),
                     (sx + slice_width + 0.5, bar_top + bar_height),
@@ -1215,6 +1228,7 @@ fn draw_continuous_legend_at(
                     .map_to_color(&Value::Float(at(t)))
                     .unwrap_or((127, 127, 127));
                 let sy = bar_top + i as f64 * slice_height;
+                backend.set_element_class(Some("gg-legend gg-legend-key gg-colourbar"));
                 backend.draw_rect(
                     (legend_x, sy),
                     (legend_x + bar_width, sy + slice_height + 0.5),
@@ -1294,6 +1308,7 @@ fn draw_continuous_legend_at(
                     (legend_x + bar_width, bar_top + (1.0 - t0) * bar_height),
                 )
             };
+            backend.set_element_class(Some("gg-legend gg-legend-key gg-colourbar"));
             backend.draw_rect(
                 p0,
                 p1,
@@ -1320,6 +1335,7 @@ fn draw_continuous_legend_at(
         ..Default::default()
     };
     if bar.frame.unwrap_or(border.visible) {
+        backend.set_element_class(Some("gg-legend gg-colourbar-frame"));
         backend.draw_line(
             &[
                 (legend_x, bar_top),
@@ -1346,6 +1362,7 @@ fn draw_continuous_legend_at(
         if is_horizontal {
             let tick_x = legend_x + bar_width * pos;
             if bar.ticks {
+                backend.set_element_class(Some("gg-legend gg-legend-tick"));
                 backend.draw_line(
                     &[
                         (tick_x, bar_top + bar_height),
@@ -1354,6 +1371,7 @@ fn draw_continuous_legend_at(
                     &border_style,
                 )?;
             }
+            backend.set_element_class(Some("gg-legend gg-legend-text"));
             backend.draw_text(
                 label,
                 (
@@ -1374,6 +1392,7 @@ fn draw_continuous_legend_at(
         } else {
             let tick_y = bar_top + bar_height * (1.0 - pos);
             if bar.ticks {
+                backend.set_element_class(Some("gg-legend gg-legend-tick"));
                 backend.draw_line(
                     &[
                         (legend_x + bar_width, tick_y),
@@ -1382,6 +1401,7 @@ fn draw_continuous_legend_at(
                     &border_style,
                 )?;
             }
+            backend.set_element_class(Some("gg-legend gg-legend-text"));
             backend.draw_text(
                 label,
                 (
@@ -2417,6 +2437,7 @@ fn draw_legend_planned_inner(
     for custom in &guide.custom {
         let title_offset = custom.title_offset(theme);
         if let Some(title) = custom.title.as_deref().filter(|t| !t.is_empty()) {
+            backend.set_element_class(Some("gg-legend gg-legend-title"));
             backend.draw_text(
                 title,
                 (offset_x, offset_y),
@@ -2438,6 +2459,7 @@ fn draw_legend_planned_inner(
             width: custom.width,
             height: custom.height,
         };
+        backend.set_element_class(Some("gg-legend gg-legend-custom"));
         (custom.draw)(backend, &rect)?;
         if is_horizontal {
             offset_x += custom.width + theme.legend_spacing * 2.0;
@@ -2491,6 +2513,7 @@ fn draw_discrete_legend_grid(
         Some(theme.legend_title.family.clone())
     };
     let title_offset = if !title.is_empty() {
+        backend.set_element_class(Some("gg-legend gg-legend-title"));
         backend.draw_text(
             title,
             (legend_x, legend_y),
@@ -2520,6 +2543,7 @@ fn draw_discrete_legend_grid(
 
         if theme.legend_key.visible {
             if let Some(fill) = theme.legend_key.fill {
+                backend.set_element_class(Some("gg-legend gg-legend-key"));
                 backend.draw_rect(
                     (x, y),
                     (x + swatch_size, y + swatch_size),
@@ -2535,6 +2559,7 @@ fn draw_discrete_legend_grid(
             }
         }
 
+        backend.set_element_class(Some("gg-legend gg-legend-key"));
         draw_group_keys(
             backend,
             scales,
@@ -2556,6 +2581,7 @@ fn draw_discrete_legend_grid(
         // still shows its full text via a `<title>` tooltip (backends
         // without tooltip support just render the truncated text).
         let display = entry.label_override.as_deref().unwrap_or(label.as_str());
+        backend.set_element_class(Some("gg-legend gg-legend-text"));
         backend.draw_text_with_title(
             display,
             (x + swatch_size + theme.legend_spacing, center_y),
@@ -2582,6 +2608,7 @@ fn draw_discrete_legend_grid(
         } else {
             Some(theme.legend_text.family.clone())
         };
+        backend.set_element_class(Some("gg-legend gg-legend-text"));
         backend.draw_text(
             &ov.text,
             (x, y),

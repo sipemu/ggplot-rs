@@ -89,6 +89,7 @@ pub(crate) fn draw_x_axis_with(
 
     // Axis line
     if axis_line.visible {
+        backend.set_element_class(Some("gg-axis gg-axis-x gg-axis-line"));
         backend.draw_line(
             &[
                 (plot_area.x, edge_y),
@@ -259,6 +260,7 @@ pub(crate) fn draw_x_axis_with(
         let px = along_x(coord, *pos, plot_area);
 
         if axis_ticks.visible {
+            backend.set_element_class(Some("gg-axis gg-axis-x gg-axis-tick"));
             backend.draw_line(
                 &[(px, edge_y), (px, edge_y + dir * tick_len)],
                 &LineStyle {
@@ -281,6 +283,7 @@ pub(crate) fn draw_x_axis_with(
                         + theme.axis_text_x.size / 2.0
                         + row_offset
                         + rotation_margin);
+            backend.set_element_class(Some("gg-axis gg-axis-x gg-axis-text"));
             backend.draw_text(
                 label,
                 (*lx, ly),
@@ -302,6 +305,7 @@ pub(crate) fn draw_x_axis_with(
     if theme.axis_minor_ticks && axis_ticks.visible {
         for pos in minor_breaks(&breaks) {
             let px = along_x(coord, pos, plot_area);
+            backend.set_element_class(Some("gg-axis gg-axis-x gg-axis-tick"));
             backend.draw_line(
                 &[(px, edge_y), (px, edge_y + dir * tick_len * 0.5)],
                 &LineStyle {
@@ -320,6 +324,7 @@ pub(crate) fn draw_x_axis_with(
         for (pos, kind) in scale.log_ticks() {
             let px = along_x(coord, pos, plot_area);
             let len = tick_len * [2.25, 1.5, 0.75][kind as usize];
+            backend.set_element_class(Some("gg-axis gg-axis-x gg-axis-tick"));
             backend.draw_line(
                 &[(px, edge_y), (px, edge_y + dir * len)],
                 &LineStyle {
@@ -375,6 +380,7 @@ pub(crate) fn draw_x_axis_title(
         } else {
             Some(theme.axis_title_x.family.clone())
         };
+        backend.set_element_class(Some("gg-axis-title gg-axis-title-x"));
         backend.draw_text(
             title,
             (center_x, title_y),
@@ -424,6 +430,7 @@ pub(crate) fn draw_y_axis_with(
     if axis_line.visible {
         let top = (plot_area.x, plot_area.y);
         let bottom = (plot_area.x, plot_area.y + plot_area.height);
+        backend.set_element_class(Some("gg-axis gg-axis-y gg-axis-line"));
         backend.draw_line(
             &[top, bottom],
             &LineStyle {
@@ -441,6 +448,7 @@ pub(crate) fn draw_y_axis_with(
         let py = along_y(coord, *pos, plot_area);
 
         if axis_ticks.visible {
+            backend.set_element_class(Some("gg-axis gg-axis-y gg-axis-tick"));
             backend.draw_line(
                 &[(plot_area.x - tick_len, py), (plot_area.x, py)],
                 &LineStyle {
@@ -459,6 +467,7 @@ pub(crate) fn draw_y_axis_with(
             } else {
                 Some(theme.axis_text_y.family.clone())
             };
+            backend.set_element_class(Some("gg-axis gg-axis-y gg-axis-text"));
             backend.draw_text(
                 label,
                 (plot_area.x - tick_len - theme.legend_spacing, py),
@@ -480,6 +489,7 @@ pub(crate) fn draw_y_axis_with(
     if theme.axis_minor_ticks && axis_ticks.visible {
         for pos in minor_breaks(&breaks) {
             let py = along_y(coord, pos, plot_area);
+            backend.set_element_class(Some("gg-axis gg-axis-y gg-axis-tick"));
             backend.draw_line(
                 &[(plot_area.x - tick_len * 0.5, py), (plot_area.x, py)],
                 &LineStyle {
@@ -498,6 +508,7 @@ pub(crate) fn draw_y_axis_with(
         for (pos, kind) in scale.log_ticks() {
             let py = along_y(coord, pos, plot_area);
             let len = tick_len * [2.25, 1.5, 0.75][kind as usize];
+            backend.set_element_class(Some("gg-axis gg-axis-y gg-axis-tick"));
             backend.draw_line(
                 &[(plot_area.x - len, py), (plot_area.x, py)],
                 &LineStyle {
@@ -560,6 +571,7 @@ pub(crate) fn draw_y_axis_title(
         } else {
             Some(theme.axis_title_y.family.clone())
         };
+        backend.set_element_class(Some("gg-axis-title gg-axis-title-y"));
         backend.draw_text(
             title,
             (title_x, center_y),
@@ -610,6 +622,7 @@ pub fn draw_sec_y_axis(
 
     // Axis line on right side
     if axis_line.visible {
+        backend.set_element_class(Some("gg-axis gg-axis-y gg-axis-line"));
         backend.draw_line(
             &[
                 (right_x, plot_area.y),
@@ -630,6 +643,7 @@ pub fn draw_sec_y_axis(
         let py = along_y(coord, *pos, plot_area);
 
         if axis_ticks.visible {
+            backend.set_element_class(Some("gg-axis gg-axis-y gg-axis-tick"));
             backend.draw_line(
                 &[(right_x, py), (right_x + tick_len, py)],
                 &LineStyle {
@@ -662,6 +676,7 @@ pub fn draw_sec_y_axis(
             } else {
                 Some(theme.axis_text_y.family.clone())
             };
+            backend.set_element_class(Some("gg-axis gg-axis-y gg-axis-text"));
             backend.draw_text(
                 &sec_label,
                 (right_x + tick_len + theme.legend_spacing, py),
@@ -696,6 +711,7 @@ pub fn draw_sec_y_axis(
         } else {
             Some(theme.axis_title_y.family.clone())
         };
+        backend.set_element_class(Some("gg-axis-title gg-axis-title-y"));
         backend.draw_text(
             &sec_axis.name,
             (title_x, center_y),
@@ -784,6 +800,7 @@ pub fn draw_sec_x_axis(
         ..Default::default()
     };
     if axis_line.visible {
+        backend.set_element_class(Some("gg-axis gg-axis-x gg-axis-line"));
         backend.draw_line(
             &[(plot_area.x, top_y), (plot_area.x + plot_area.width, top_y)],
             &line(axis_line),
@@ -793,9 +810,11 @@ pub fn draw_sec_x_axis(
     for ((pos, _), label) in breaks.iter().zip(&labels) {
         let px = along_x(coord, *pos, plot_area);
         if axis_ticks.visible {
+            backend.set_element_class(Some("gg-axis gg-axis-x gg-axis-tick"));
             backend.draw_line(&[(px, top_y), (px, top_y - tick_len)], &line(axis_ticks))?;
         }
         if theme.axis_text_x.visible {
+            backend.set_element_class(Some("gg-axis gg-axis-x gg-axis-text"));
             backend.draw_text(
                 label,
                 (px, top_y - tick_len - 2.0 - theme.axis_text_x.size / 2.0),
@@ -814,6 +833,7 @@ pub fn draw_sec_x_axis(
     }
     if !sec_axis.name.is_empty() && theme.axis_title_x.visible {
         let y = top_y - sec_x_axis_height(theme, sec_axis) + theme.axis_title_x.size / 2.0;
+        backend.set_element_class(Some("gg-axis-title gg-axis-title-x"));
         backend.draw_text(
             &sec_axis.name,
             (plot_area.x + plot_area.width / 2.0, y),
@@ -865,6 +885,7 @@ pub fn draw_gridlines(
     if minor_x.visible {
         for pos in minor_breaks(&x_breaks) {
             let px = along_x(coord, pos, plot_area);
+            backend.set_element_class(Some("gg-grid gg-grid-minor gg-grid-x"));
             backend.draw_line(
                 &[(px, plot_area.y), (px, plot_area.y + plot_area.height)],
                 &LineStyle {
@@ -882,6 +903,7 @@ pub fn draw_gridlines(
     if minor_y.visible {
         for pos in minor_breaks(&y_breaks) {
             let py = along_y(coord, pos, plot_area);
+            backend.set_element_class(Some("gg-grid gg-grid-minor gg-grid-y"));
             backend.draw_line(
                 &[(plot_area.x, py), (plot_area.x + plot_area.width, py)],
                 &LineStyle {
@@ -899,6 +921,7 @@ pub fn draw_gridlines(
     if major_x.visible {
         for (pos, _) in &x_breaks {
             let px = along_x(coord, *pos, plot_area);
+            backend.set_element_class(Some("gg-grid gg-grid-major gg-grid-x"));
             backend.draw_line(
                 &[(px, plot_area.y), (px, plot_area.y + plot_area.height)],
                 &LineStyle {
@@ -916,6 +939,7 @@ pub fn draw_gridlines(
     if major_y.visible {
         for (pos, _) in &y_breaks {
             let py = along_y(coord, *pos, plot_area);
+            backend.set_element_class(Some("gg-grid gg-grid-major gg-grid-y"));
             backend.draw_line(
                 &[(plot_area.x, py), (plot_area.x + plot_area.width, py)],
                 &LineStyle {

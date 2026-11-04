@@ -67,6 +67,9 @@ pub struct PlotSpec {
     pub guides: BTreeMap<String, GuideSpec>,
     pub width: Option<u32>,
     pub height: Option<u32>,
+    /// Tag axes, grid, legend, strips and titles with semantic CSS classes
+    /// (`gg-axis-text`, `gg-legend-key`, …; #465).
+    pub svg_classes: Option<bool>,
 }
 
 #[derive(Deserialize, Default)]
@@ -923,6 +926,9 @@ pub fn build_plot_with_data(
                 }
             }
         };
+    }
+    if spec.svg_classes == Some(true) {
+        plot = plot.svg_semantic_classes(true);
     }
     if let Some(l) = &spec.legend {
         plot = match l {

@@ -705,6 +705,17 @@ pub trait DrawBackend {
     /// Default: no-op.
     fn set_viewport(&mut self, _rect: &crate::render::Rect) {}
 
+    /// Turn on semantic element classes (#465): from now on
+    /// [`set_element_class`](Self::set_element_class) tags the non-data
+    /// elements drawn (axes, grid, legend, strips, titles). Default: no-op.
+    fn enable_element_classes(&mut self, _on: bool) {}
+
+    /// The semantic class (`"gg-axis gg-axis-x gg-axis-text"`, …) of the
+    /// non-data elements drawn until the next call; `None` clears it. Only
+    /// written once [`enable_element_classes`](Self::enable_element_classes)
+    /// is on. Default: no-op.
+    fn set_element_class(&mut self, _class: Option<&'static str>) {}
+
     /// Clip everything drawn until [`end_clip`](Self::end_clip) to `rect`
     /// (#411: a single panel's layers, when they reach past it). Default:
     /// no-op.

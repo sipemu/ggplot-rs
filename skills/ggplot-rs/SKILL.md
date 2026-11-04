@@ -154,6 +154,7 @@ With polars (default feature): `GGPlot::new(df!{ "x" => [1.0, 2.0], "y" => [3.0,
   bin edges — tune with `.guide_bins(Aesthetic::Size, GuideBins::new().with_show_limits(true))`
   or get one `lo–hi` key per bin with `.guide_legend_keys(Aesthetic::Size)`.
   One legend at its own side: `.guide_position(Aesthetic::Shape, LegendPosition::Bottom)`.
+  CSS hooks on axes / grid / legend / strips / titles: `.svg_semantic_classes(true)` (`gg-axis-text`, `gg-legend-key`, …).
   Your own legend entry: `.guide_custom(GuideCustom::new(w, h, |backend, rect| { … }).with_title("…"))`.
 
 ```rust

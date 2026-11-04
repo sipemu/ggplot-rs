@@ -372,6 +372,8 @@ export interface PlotSpec {
   /** Pixels (default 640 × 400). */
   width?: number;
   height?: number;
+  /** Tag axes, grid, legend, strips and titles with semantic CSS classes (gg-axis-text, gg-legend-key, …). */
+  svg_classes?: boolean;
 }
 "##;
 

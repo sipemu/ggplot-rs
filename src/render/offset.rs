@@ -222,6 +222,12 @@ impl DrawBackend for OffsetBackend<'_> {
     fn set_clipping(&mut self, on: bool) {
         self.inner.set_clipping(on)
     }
+    fn enable_element_classes(&mut self, on: bool) {
+        self.inner.enable_element_classes(on)
+    }
+    fn set_element_class(&mut self, class: Option<&'static str>) {
+        self.inner.set_element_class(class)
+    }
     fn begin_clip(&mut self, rect: &Rect) {
         let r = self.r(rect);
         self.inner.begin_clip(&r)

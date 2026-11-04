@@ -20,6 +20,15 @@ All notable changes to this project are documented here. The format follows
   label per key (still available via `guide_legend_keys`).
 
 ### Added
+- `GGPlot::svg_semantic_classes(true)` (#465; spec / npm `svg_classes:
+  true`): the SVG's non-data elements carry a stable class vocabulary —
+  `gg-plot-background`, `gg-panel-background`, `gg-panel-border`,
+  `gg-grid` (`-major`/`-minor`, `-x`/`-y`), `gg-axis` (`-x`/`-y`,
+  `-line`/`-tick`/`-text`), `gg-axis-title(-x|-y)`, `gg-legend`
+  (`-title`/`-key`/`-text`/`-background`/`-tick`, `gg-colourbar`),
+  `gg-strip` (`-background`/`-text`), `gg-title`, `gg-subtitle`,
+  `gg-caption`, `gg-tag` — so a page stylesheet can restyle a chart. New
+  `DrawBackend::enable_element_classes` / `set_element_class`.
 - `GGPlot::guide_position(aes, LegendPosition)` (#409, ggplot2 3.5's
   `guide_legend(position =)`; spec / npm `guides.<aes>.position`): draw one
   legend at its own side; the layout reserves a band there too, and a
