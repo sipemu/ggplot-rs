@@ -14,6 +14,10 @@ impl CoordFixed {
 }
 
 impl Coord for CoordFixed {
+    fn fixed_aspect(&self) -> Option<f64> {
+        (self.ratio.is_finite() && self.ratio > 0.0).then_some(self.ratio)
+    }
+
     fn transform(&self, point: (f64, f64), plot_area: &Rect) -> (f64, f64) {
         // Compute the effective area that maintains the aspect ratio
         let data_aspect = self.ratio; // data units_y / units_x
