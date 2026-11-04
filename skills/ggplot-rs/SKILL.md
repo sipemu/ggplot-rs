@@ -120,7 +120,8 @@ With polars (default feature): `GGPlot::new(df!{ "x" => [1.0, 2.0], "y" => [3.0,
 - **Theme:** `.theme_minimal()` / `.theme_bw()` / `.theme_classic()` … or
   `.theme(theme_minimal().with_primary((26, 153, 136)))`; legend via
   `.legend_position(LegendPosition::Bottom)` (call **after** a theme preset —
-  presets replace the whole theme).
+  presets replace the whole theme); per aesthetic `.guide_none(Aesthetic::Fill)`
+  and `.guide_title(Aesthetic::Color, "Group")`.
 
 ```rust
 use ggplot_rs::prelude::*;

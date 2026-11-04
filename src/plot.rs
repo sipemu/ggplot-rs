@@ -2100,6 +2100,22 @@ impl GGPlot {
         self
     }
 
+    /// Drop one aesthetic's legend (ggplot2's `guides(fill = "none")`, #409).
+    pub fn guide_none(mut self, aes: crate::aes::Aesthetic) -> Self {
+        if !self.guide_legend.hidden.contains(&aes) {
+            self.guide_legend.hidden.push(aes);
+        }
+        self
+    }
+
+    /// Title one aesthetic's legend (`guides(colour = guide_legend(title =
+    /// "…"))` / `labs(colour = "…")`, #409).
+    pub fn guide_title(mut self, aes: crate::aes::Aesthetic, title: &str) -> Self {
+        self.guide_legend.titles.retain(|(a, _)| *a != aes);
+        self.guide_legend.titles.push((aes, title.to_string()));
+        self
+    }
+
     /// Show or hide the most recent layer in one aesthetic's legend only
     /// (ggplot2's `show.legend = c(colour = TRUE, fill = FALSE)`; #410).
     pub fn show_legend_for(mut self, aes: crate::aes::Aesthetic, show: bool) -> Self {
@@ -3387,7 +3403,15 @@ impl GGPlot {
     // ─── Guides ──────────────────────────────────────────────────
 
     /// Configure legend guide (title, ncol, reverse).
-    pub fn guides(mut self, guide: crate::guide::config::GuideLegend) -> Self {
+    pub fn guides(mut self, mut guide: crate::guide::config::GuideLegend) -> Self {
+        // Keep per-aesthetic settings made earlier (`guide_none` /
+        // `guide_title`) unless the new guide sets its own.
+        if guide.hidden.is_empty() {
+            guide.hidden = std::mem::take(&mut self.guide_legend.hidden);
+        }
+        if guide.titles.is_empty() {
+            guide.titles = std::mem::take(&mut self.guide_legend.titles);
+        }
         self.guide_legend = guide;
         self
     }
@@ -3859,8 +3883,16 @@ impl GGPlot {
         let legend_auto = plot.legend_auto;
         let x_label = plot.labels.x.clone();
         let y_label = plot.labels.y.clone();
+        let guide_titles = plot.guide_legend.titles.clone();
 
         let mut built = PlotBuilder::build(plot)?;
+
+        // #409: per-aesthetic legend titles name their scales.
+        for (aes, title) in &guide_titles {
+            if let Some(s) = built.scales.get_mut(aes) {
+                s.set_name(title);
+            }
+        }
 
         // Resolve R-style theme inheritance (root `text` → child text elements).
         built.theme.resolve_inheritance();

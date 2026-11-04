@@ -242,6 +242,8 @@ export interface PlotSpec {
   /** A preset name or a theme overlay (default "minimal"). */
   theme?: ThemePreset | ThemeConfig;
   legend?: Legend;
+  /** Per-aesthetic guides: `"none"` drops a legend, `{ title }` names it. */
+  guides?: Partial<Record<"color" | "colour" | "fill" | "shape" | "size" | "alpha" | "linetype" | "linewidth", "none" | { title?: string }>>;
   /** Pixels (default 640 × 400). */
   width?: number;
   height?: number;

@@ -416,7 +416,9 @@ impl PlotBuilder {
         let (panels, panels_data) = Self::compute_facets(&facet, &built_layers, &plot_data);
 
         // Compute suppressed aesthetics from show_legend flags.
-        let suppressed_aes = Self::compute_suppressed_aes(&built_layers);
+        let mut suppressed_aes = Self::compute_suppressed_aes(&built_layers);
+        // #409: `guides(<aes> = "none")`.
+        suppressed_aes.extend(guide_legend.hidden.iter().cloned());
         // #410: each layer's legend glyph and the legend aesthetics it shows.
         let mut guide_legend = guide_legend;
         guide_legend.layer_keys = built_layers

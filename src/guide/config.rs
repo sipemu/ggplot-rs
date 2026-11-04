@@ -19,6 +19,10 @@ pub struct GuideLegend {
     /// key_height)`. `Some(0)` is invalid (see `validated`, internal) and
     /// is treated as `Some(1)`.
     pub max_rows: Option<usize>,
+    /// Aesthetics whose legend is dropped (ggplot2's `guides(fill = "none")`, #409).
+    pub hidden: Vec<crate::aes::Aesthetic>,
+    /// Per-aesthetic legend titles (`guides(colour = guide_legend(title =))`, #409).
+    pub titles: Vec<(crate::aes::Aesthetic, String)>,
     /// Filled by the build (#410): every layer's legend glyph and the legend
     /// aesthetics it shows, so keys draw each layer's own picture.
     #[doc(hidden)]

@@ -6,6 +6,9 @@ All notable changes to this project are documented here. The format follows
 ## [Unreleased]
 
 ### Added
+- Guides per aesthetic (#409): `guide_none(aes)` (ggplot2's `guides(fill =
+  "none")`) and `guide_title(aes, title)`; `guides(..)` keeps them. Spec /
+  npm: `"guides": {"fill": "none", "color": {"title": "Group"}}`.
 - Scales (#408): `scale_color_hue` / `scale_fill_hue` (`HuePalette { h, c,
   l, h_start, direction }`; R's `hcl()` / `scales::hue_pal()` exactly —
   ggplot2's default colours for any number of levels),
