@@ -518,6 +518,20 @@ impl<'a, DB: DrawingBackend> DrawBackend for PlottersAdapter<'a, DB> {
                 .draw(&Polygon::new(int_points.clone(), fill_color.filled()))
                 .map_err(map_err)?;
         }
+        // Outline, as the native SVG backend draws it (it was never stroked
+        // here, so violins / polygons / notched boxes lost their border in
+        // PNG output).
+        if let (Some(stroke), true) = (style.stroke, style.stroke_width > 0.0) {
+            let mut pts = int_points;
+            pts.push(pts[0]);
+            let width = (style.stroke_width as u32).max(1);
+            self.area
+                .draw(&PathElement::new(
+                    pts,
+                    to_rgba(stroke, style.alpha).stroke_width(width),
+                ))
+                .map_err(map_err)?;
+        }
 
         Ok(())
     }

@@ -13,15 +13,40 @@ All notable changes to this project are documented here. The format follows
   and share the slot width. An explicit `.position(PositionDodge2…)` on a
   boxplot works too (it was ignored at draw time). Grouped violins at one x
   are separate polygons again (they were merged into one).
+- PNG / plotters output: polygons are outlined again (`draw_polygon` only
+  filled), so violins, `geom_polygon` and notched boxes keep their border.
 - `geom_crossbar`, `geom_dotplot` and the candlestick family honour
   `position_dodge` / `position_dodge2` on a discrete axis.
 
 ### Added
+- `geom_boxplot` parameters (#405): `notch` / `notch_width` (`.notched()`),
+  `varwidth` (`.varwidth()`), `coef` (`.with_coef()`, also
+  `StatBoxplot::with_coef`), `outliers = FALSE` (`.hide_outliers()` — not
+  drawn and not in the y scale), `outlier_color` / `outlier_shape` /
+  `outlier_filled` / `outlier_size` / `outlier_alpha`, `staple_width`
+  (`.with_staple_width()`; ggplot2's default is 0, ggplot-rs keeps 0.5).
+  `stat_boxplot` now also emits `n`.
+- `geom_violin` parameters (#405): `scale` (`ViolinScale::Area` — the new
+  default, as ggplot2 — `Count`, `Width`), `trim` (`.untrimmed()`), `bw`,
+  `adjust`, `quantiles` (`.with_quantiles([..])`, R type-7 sample quantiles
+  drawn across the violin) with `quantile_linetype` / `quantile_color`.
+  `stat_ydensity` gains `trim`/`bw`/`adjust`/`quantiles` and emits `density`
+  and `n`.
+- All of these in the JSON spec / CLI `--param` / npm `params`: `notch`,
+  `varwidth`, `coef`, `outliers`, `staplewidth`, `trim`, `scale`,
+  `quantiles`, `bw`, `adjust`.
 - `PositionDodge::with_preserve_single()` / `PositionDodge2::with_preserve_single()`
   (`preserve_single` field) — ggplot2's `preserve = "single"`; spec / CLI /
   npm: `position: { type: "dodge", preserve: "single" }`.
 
 ### Changed
+- `geom_violin` defaults to `scale = "area"` (ggplot2's default): violins
+  share one width scale, so a group with a flatter density draws narrower.
+  `GeomViolin::default().with_scale(ViolinScale::Width)` restores the old
+  look.
+- `GeomBoxplot`, `GeomViolin` and `StatBoxplot` gain fields (breaking for
+  full struct literals; use `..Default::default()`). `StatBoxplot` stays
+  usable as a value (`.stat(StatBoxplot)`).
 - `PositionDodge` and `PositionDodge2` gain a public `preserve_single`
   field (breaking for struct-literal construction; use the constructors).
 

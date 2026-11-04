@@ -70,7 +70,7 @@ pub use crate::geom::tree::{GeomTree, TreeLink, TreeNode};
 pub use crate::geom::treemap::GeomTreemap;
 pub use crate::geom::variablepie::GeomVariablePie;
 pub use crate::geom::venn::GeomVenn;
-pub use crate::geom::violin::GeomViolin;
+pub use crate::geom::violin::{GeomViolin, ViolinScale};
 pub use crate::geom::waffle::GeomWaffle;
 pub use crate::geom::waterfall::GeomWaterfall;
 pub use crate::geom::windbarb::{GeomWindbarb, WindUnit};

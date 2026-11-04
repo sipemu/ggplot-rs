@@ -89,7 +89,9 @@ Keys: `bins` (histogram), `method` (`lm`/`loess`) `span` `se` (smooth),
 (sunburst/icicle), `rows` (waffle/parliament), `box_size` `reversal`
 (renko/point_figure), `shape` (tilemap: square/hexagon/circle/diamond), `speed`
 `direction` (windbarb columns), `censor` (censor_marks column), `projection`
-(spatial), `target` `ranges` (bullet).
+(spatial), `target` `ranges` (bullet), `notch` `varwidth` `coef` `outliers`
+`staplewidth` (boxplot), `trim` `scale` (`area`/`count`/`width`) `quantiles`
+`bw` `adjust` (violin).
 
 `--position NAME`: `identity stack fill dodge dodge2 jitter nudge`.
 

@@ -82,7 +82,10 @@ With polars (default feature): `GGPlot::new(df!{ "x" => [1.0, 2.0], "y" => [3.0,
   (waterfall, sankey, treemap, sunburst(levels), candlestick, sf, …). Each has a
   `geom_*_with(GeomX::default()...)` form for parameters:
   `geom_histogram_with(GeomHistogram::default().with_bins(20))`,
-  `geom_smooth_with(GeomSmooth::default().loess(0.75))`.
+  `geom_smooth_with(GeomSmooth::default().loess(0.75))`,
+  `geom_boxplot_with(GeomBoxplot::default().notched().varwidth().with_coef(1.0))`,
+  `geom_violin_with(GeomViolin::default().with_scale(ViolinScale::Count)
+  .untrimmed().with_quantiles([0.25, 0.5, 0.75]))`.
 - **Stat / position overrides** apply to the last layer: `.stat(StatIdentity)`,
   `.position(PositionDodge::new(0.9))` (`.with_preserve_single()` keeps
   widths in partial slots), `PositionDodge2`, `PositionStack`, `PositionFill`,

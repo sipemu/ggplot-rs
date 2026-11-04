@@ -399,6 +399,7 @@ fn boxplot_and_violin() {
                 color: (0, 0, 0),
                 width: 0.5,
                 alpha: 0.8,
+                ..Default::default()
             }),
         "boxplot_with",
     );
@@ -416,6 +417,7 @@ fn boxplot_and_violin() {
                 color: (0, 0, 0),
                 alpha: 0.7,
                 line_width: 1.0,
+                ..Default::default()
             }),
         "violin_with",
     );
