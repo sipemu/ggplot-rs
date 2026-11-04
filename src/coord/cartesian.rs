@@ -12,6 +12,9 @@ pub struct CoordCartesian {
     ylim: Option<(f64, f64)>,
     reverse_x: bool,
     reverse_y: bool,
+    /// Keep the scales' expansion on each side: top, right, bottom, left
+    /// (ggplot2's `coord_cartesian(expand =)`, #411).
+    expand: [bool; 4],
 }
 
 impl CoordCartesian {
@@ -21,7 +24,18 @@ impl CoordCartesian {
             ylim: None,
             reverse_x: false,
             reverse_y: false,
+            expand: [true; 4],
         }
+    }
+
+    /// ggplot2's `coord_cartesian(expand = c(top, right, bottom, left))`
+    /// (#411): `false` on a side drops the continuous scale's padding there,
+    /// so the data (or the zoom limit) meets that panel edge. Sides are as
+    /// drawn, so they follow [`reverse`](Self::reverse). `expand(false,
+    /// false, false, false)` is `expand = FALSE`.
+    pub fn expand(mut self, top: bool, right: bool, bottom: bool, left: bool) -> Self {
+        self.expand = [top, right, bottom, left];
+        self
     }
 
     /// Reverse the x and / or y direction at draw time (ggplot2 4.0's
@@ -79,5 +93,27 @@ impl Coord for CoordCartesian {
 
     fn zoom_y(&self) -> Option<(f64, f64)> {
         self.ylim
+    }
+
+    fn train_scales(&mut self, scales: &mut crate::scale::ScaleSet) {
+        let [top, right, bottom, left] = self.expand.map(|e| !e);
+        // (lower, upper) data ends per axis, mirrored when reversed.
+        let x = if self.reverse_x {
+            (right, left)
+        } else {
+            (left, right)
+        };
+        let y = if self.reverse_y {
+            (top, bottom)
+        } else {
+            (bottom, top)
+        };
+        for (aes, (lo, hi)) in [(crate::aes::Aesthetic::X, x), (crate::aes::Aesthetic::Y, y)] {
+            if lo || hi {
+                if let Some(s) = scales.get_mut(&aes) {
+                    s.clear_expand(lo, hi);
+                }
+            }
+        }
     }
 }

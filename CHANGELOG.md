@@ -12,6 +12,11 @@ All notable changes to this project are documented here. The format follows
   `"test"` in the spec / CLI); `Margin::auto(&[..])` (`margin_auto`, CSS
   shorthand) and `Margin::part(..)` (`margin_part`). Theme config keys
   `axis_text_x_top` / `axis_text_y_right`. `Theme` gains two fields.
+- Coordinates (#411): `CoordCartesian::expand(top, right, bottom, left)`
+  (ggplot2's `coord_cartesian(expand =)`, per side, following `reverse`)
+  drops a continuous scale's padding on that side; new
+  `Scale::clear_expand` hook. Spec / npm: `coord: { type: "cartesian",
+  expand: false | [t, r, b, l] }`.
 - Colourbar guides (#409): `guide_colourbar(aes, GuideColourbar)` —
   `bar_width` / `bar_height` (px), `nbin`, `display` (`Gradient` /
   `Rectangles`), `frame`, `ticks` — and `guide_coloursteps(aes)`

@@ -242,6 +242,10 @@ pub trait Scale: Send + Sync {
     /// (discrete / non-position scales have no expansion to set).
     fn set_expand(&mut self, _mult: f64, _add: f64) {}
 
+    /// Drop the expansion at the lower and / or upper end (a coord's
+    /// `expand = FALSE` for one side, #411). Default: no-op.
+    fn clear_expand(&mut self, _lower: bool, _upper: bool) {}
+
     /// Map an already-computed `[0, 1]` scale fraction (as returned
     /// alongside each label by [`breaks`](Self::breaks)) directly to an
     /// output size, bypassing the round trip through [`map`](Self::map) — a
