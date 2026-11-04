@@ -10,6 +10,8 @@ use super::Coord;
 pub struct CoordCartesian {
     xlim: Option<(f64, f64)>,
     ylim: Option<(f64, f64)>,
+    reverse_x: bool,
+    reverse_y: bool,
 }
 
 impl CoordCartesian {
@@ -17,7 +19,18 @@ impl CoordCartesian {
         CoordCartesian {
             xlim: None,
             ylim: None,
+            reverse_x: false,
+            reverse_y: false,
         }
+    }
+
+    /// Reverse the x and / or y direction at draw time (ggplot2 4.0's
+    /// `coord_cartesian(reverse = "x" | "y" | "xy")`) — the scales and stats
+    /// are unchanged, the panel is mirrored.
+    pub fn reverse(mut self, x: bool, y: bool) -> Self {
+        self.reverse_x = x;
+        self.reverse_y = y;
+        self
     }
 
     /// Set x-axis zoom limits (data coordinates).
@@ -52,6 +65,8 @@ impl Default for CoordCartesian {
 impl Coord for CoordCartesian {
     fn transform(&self, point: (f64, f64), plot_area: &Rect) -> (f64, f64) {
         let (nx, ny) = point;
+        let nx = if self.reverse_x { 1.0 - nx } else { nx };
+        let ny = if self.reverse_y { 1.0 - ny } else { ny };
         let px = plot_area.x + nx * plot_area.width;
         // Y is flipped: 0 at bottom, 1 at top
         let py = plot_area.y + (1.0 - ny) * plot_area.height;

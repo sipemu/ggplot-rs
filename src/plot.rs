@@ -2977,6 +2977,55 @@ impl GGPlot {
         self
     }
 
+    /// ggplot2 4.0's name for [`coord_trans`](Self::coord_trans).
+    pub fn coord_transform(self, x: Option<ScaleTransform>, y: Option<ScaleTransform>) -> Self {
+        self.coord_trans(x, y)
+    }
+
+    /// Plain longitude (`x`) / latitude (`y`) data with the aspect ratio of
+    /// the middle latitude (ggplot2's `coord_quickmap()`).
+    pub fn coord_quickmap(mut self) -> Self {
+        self.coord = Box::new(crate::coord::map::CoordMap::new(
+            crate::coord::map::MapProjection::Quick,
+        ));
+        self
+    }
+
+    /// Plain longitude / latitude data on a Mercator map (ggplot2's
+    /// `coord_map("mercator")`); use `geom_sf` + `coord_sf` for other
+    /// projections.
+    pub fn coord_map(mut self) -> Self {
+        self.coord = Box::new(crate::coord::map::CoordMap::new(
+            crate::coord::map::MapProjection::Mercator,
+        ));
+        self
+    }
+
+    /// Use a configured [`CoordCartesian`] (zoom + reverse).
+    pub fn coord_cartesian_with(mut self, coord: CoordCartesian) -> Self {
+        self.coord = Box::new(coord);
+        self
+    }
+
+    /// Mirror the panel in x and / or y (`coord_cartesian(reverse = …)`).
+    pub fn coord_reverse(mut self, x: bool, y: bool) -> Self {
+        self.coord = Box::new(CoordCartesian::new().reverse(x, y));
+        self
+    }
+
+    /// ggplot2's `coord_radial(start, end, inner.radius)`: a polar coord
+    /// whose theta runs from `start` to `end` radians (clockwise from 12
+    /// o'clock) with a hole of `inner_radius` (0–1) — partial circles and
+    /// donuts.
+    pub fn coord_radial(mut self, start: f64, end: f64, inner_radius: f64) -> Self {
+        let mut c = CoordPolar::new();
+        c.start = start;
+        c.span = end - start;
+        c.inner_radius = inner_radius.clamp(0.0, 0.99);
+        self.coord = Box::new(c);
+        self
+    }
+
     /// `coord_trans` on the y-axis only.
     pub fn coord_trans_y(self, y: ScaleTransform) -> Self {
         self.coord_trans(None, Some(y))

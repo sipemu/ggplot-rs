@@ -5,6 +5,15 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Added
+- Coordinates (#411): `coord_quickmap()` and `coord_map()` (Mercator) for
+  plain longitude / latitude data (`coord::map::CoordMap`),
+  `coord_reverse(x, y)` / `CoordCartesian::reverse` (ggplot2 4.0's
+  `coord_cartesian(reverse =)`), `coord_transform` (4.0's name for
+  `coord_trans`) and `coord_radial(start, end, inner_radius)` (partial
+  circles / donuts on `CoordPolar`). Spec / CLI / npm coords: `quickmap`,
+  `map`, `radial` (`start`, `end`, `inner_radius`), cartesian `reverse`.
+
 ### Fixed
 - Student-t quantiles without the `regression` feature: `qt` returned the
   normal 1.96 for every probability and df, so `mean_cl_normal` (and other

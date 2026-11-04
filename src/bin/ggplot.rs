@@ -134,7 +134,8 @@ struct Args {
     /// Flip x and y (coord_flip).
     #[arg(long)]
     flip: bool,
-    /// Coordinate system: cartesian, flip, polar, fixed, radar, sf.
+    /// Coordinate system: cartesian, flip, polar, radial, fixed, radar,
+    /// quickmap, map, sf.
     #[arg(long, value_name = "NAME")]
     coord: Option<String>,
     /// Legend position: right, left, top, bottom, none, inside.
