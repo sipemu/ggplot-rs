@@ -291,6 +291,9 @@ export interface ThemeConfig {
   axis_text_x?: TextElement; axis_text_y?: TextElement;
   /** A top x axis's / right (secondary) y axis's labels (#413). */
   axis_text_x_top?: TextElement; axis_text_y_right?: TextElement;
+  /** Horizontal (x) / turned (y) facet strips only (#413). */
+  strip_text_x?: TextElement; strip_text_y?: TextElement;
+  strip_background_x?: RectElement; strip_background_y?: RectElement;
   legend_title?: TextElement; legend_text?: TextElement; strip_text?: TextElement;
   axis_line?: LineElement; axis_ticks?: LineElement;
   panel_grid_major?: LineElement; panel_grid_minor?: LineElement; panel_border?: LineElement;

@@ -194,6 +194,10 @@ pub fn theme_gray_base(base_size: f64) -> Theme {
         axis_text_x_check_overlap: false,
         axis_text_x_top: None,
         axis_text_y_right: None,
+        strip_text_x: None,
+        strip_background_x: None,
+        strip_text_y: None,
+        strip_background_y: None,
     }
 }
 
@@ -631,5 +635,9 @@ pub fn theme_void_base(base_size: f64) -> Theme {
         axis_text_x_check_overlap: false,
         axis_text_x_top: None,
         axis_text_y_right: None,
+        strip_text_x: None,
+        strip_background_x: None,
+        strip_text_y: None,
+        strip_background_y: None,
     }
 }

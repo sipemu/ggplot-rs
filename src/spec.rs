@@ -2388,6 +2388,19 @@ mod tests {
     }
 
     #[test]
+    fn theme_strip_text_x_y() {
+        let svg = render(
+            r#"{ "data": {"x": [1, 2], "y": [1, 2], "r": ["p", "q"], "c": ["a", "b"]},
+                 "aes": {"x": "x", "y": "y"}, "layers": [{"geom": "point"}],
+                 "facet": {"rows": "r", "cols": "c"},
+                 "theme": {"base": "gray", "strip_text_y": {"color": [200, 0, 0]},
+                           "strip_background_x": {"fill": [0, 0, 200]}}}"#,
+        )
+        .unwrap();
+        assert!(svg.contains("#C80000") && svg.contains("#0000C8"), "{svg}");
+    }
+
+    #[test]
     fn facet_wrap_dir_as_table_and_label_wrap() {
         let svg = render(&format!(
             r#"{{ {DATA}, "aes": {{"x": "x", "y": "y"}}, "layers": [{{"geom": "point"}}],
