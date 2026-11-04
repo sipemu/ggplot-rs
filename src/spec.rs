@@ -425,6 +425,9 @@ pub struct CoordFull {
     pub r_axis_inside: Option<bool>,
     /// `radial`: theta labels follow the circle (`rotate.angle`, #411).
     pub rotate_angle: Option<bool>,
+    /// Any coord: `"on"` (default) clips the layers to the panel, `"off"`
+    /// lets them draw past it (#411).
+    pub clip: Option<String>,
 }
 
 #[derive(Deserialize, Clone, Copy)]
@@ -1885,6 +1888,11 @@ fn apply_coord(plot: GGPlot, c: &CoordSpec) -> Result<GGPlot, String> {
         CoordSpec::Name(n) => (n.as_str(), None),
         CoordSpec::Full(f) => (f.kind.as_str(), Some(f)),
     };
+    let plot = match full.and_then(|f| f.clip.as_deref()) {
+        None | Some("on") => plot,
+        Some("off") => plot.coord_clip(false),
+        Some(o) => return Err(format!("coord.clip: unknown '{o}' (expected on, off)")),
+    };
     Ok(match kind {
         "cartesian" => {
             let xl = full.and_then(|f| f.xlim).map(|[a, b]| (a, b));
@@ -2353,6 +2361,20 @@ mod tests {
         ))
         .unwrap_err();
         assert!(e.contains("not a legend aesthetic"), "{e}");
+    }
+
+    #[test]
+    fn coord_clip_off_and_zoom_clipping() {
+        let zoom = |clip: &str| {
+            render(&format!(
+                r#"{{ {DATA}, "aes": {{"x": "x", "y": "y"}}, "layers": [{{"geom": "point"}}],
+                   "coord": {{"type": "cartesian", "xlim": [1.5, 2.5]{clip}}} }}"#
+            ))
+        };
+        assert!(zoom("").unwrap().contains("clip-path=\"url(#"));
+        assert!(!zoom(r#", "clip": "off""#).unwrap().contains("clip-path"));
+        let e = zoom(r#", "clip": "maybe""#).unwrap_err();
+        assert!(e.contains("coord.clip"), "{e}");
     }
 
     #[test]

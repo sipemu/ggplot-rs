@@ -89,6 +89,8 @@ pub struct SvgBackend {
     /// label, clip rect, data rect)`. Each clip becomes a `<clipPath>` in
     /// `<defs>`; the list is written as the root `data-panels`.
     panels: Vec<(usize, String, Rect, Rect)>,
+    /// `begin_clip` rects (#411), one `<clipPath>` each.
+    clips: Vec<Rect>,
 }
 
 /// Source for [`SvgBackend::id_prefix`] — process-wide, so every backend
@@ -134,6 +136,7 @@ impl SvgBackend {
             corner_claims: Vec::new(),
             viewport: None,
             panels: Vec::new(),
+            clips: Vec::new(),
         }
     }
 
@@ -244,10 +247,20 @@ impl SvgBackend {
     /// stripe's own cycle, rotated by `patternTransform`, a `bg`-filled
     /// tile with a narrower `fg` stripe at its edge (#206).
     fn pattern_defs(&self) -> String {
-        if self.patterns.is_empty() && self.panels.is_empty() {
+        if self.patterns.is_empty() && self.panels.is_empty() && self.clips.is_empty() {
             return String::new();
         }
         let mut defs = String::from("<defs>");
+        for (i, clip) in self.clips.iter().enumerate() {
+            defs.push_str(&format!(
+                "<clipPath id=\"{}-clip-{i}\"><rect x=\"{}\" y=\"{}\" width=\"{}\" height=\"{}\"/></clipPath>",
+                self.id_prefix,
+                num(clip.x),
+                num(clip.y),
+                num(clip.width),
+                num(clip.height),
+            ));
+        }
         for (i, _, clip, _) in &self.panels {
             defs.push_str(&format!(
                 "<clipPath id=\"{}-panel-{i}\"><rect x=\"{}\" y=\"{}\" width=\"{}\" height=\"{}\"/></clipPath>",
@@ -1203,6 +1216,21 @@ impl DrawBackend for SvgBackend {
     }
 
     fn end_panel(&mut self) {
+        self.flush_groups();
+        self.body.push_str("</g>");
+    }
+
+    fn begin_clip(&mut self, rect: &Rect) {
+        self.flush_groups();
+        self.body.push_str(&format!(
+            "<g clip-path=\"url(#{}-clip-{})\">",
+            self.id_prefix,
+            self.clips.len()
+        ));
+        self.clips.push(rect.clone());
+    }
+
+    fn end_clip(&mut self) {
         self.flush_groups();
         self.body.push_str("</g>");
     }

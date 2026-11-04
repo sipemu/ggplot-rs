@@ -705,6 +705,14 @@ pub trait DrawBackend {
     /// Default: no-op.
     fn set_viewport(&mut self, _rect: &crate::render::Rect) {}
 
+    /// Clip everything drawn until [`end_clip`](Self::end_clip) to `rect`
+    /// (#411: a single panel's layers, when they reach past it). Default:
+    /// no-op.
+    fn begin_clip(&mut self, _rect: &crate::render::Rect) {}
+
+    /// End the group started by [`begin_clip`](Self::begin_clip).
+    fn end_clip(&mut self) {}
+
     /// Turn panel clipping of lines / points / clip-flagged rects on or off
     /// (backends that clip, i.e. plotters; #410: legends draw with it off).
     fn set_clipping(&mut self, _on: bool) {}

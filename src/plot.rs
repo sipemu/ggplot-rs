@@ -117,6 +117,9 @@ pub struct GGPlot {
     pub(crate) warnings: Vec<String>,
     /// [`GGPlot::legend_bottom_when_narrow`]'s share, if set (#287).
     pub(crate) legend_bottom_share: Option<f64>,
+    /// Clip the data layers to the panel (ggplot2's `coord_*(clip = "on")`,
+    /// the default; #411).
+    pub(crate) clip: bool,
     /// [`GGPlot::legend_inside_auto`]'s settings, if set (#332).
     pub(crate) legend_auto: Option<LegendAuto>,
     /// Panel aspect ratio used when the theme sets none (helpers such as
@@ -205,6 +208,7 @@ impl GGPlot {
             guide_legend: crate::guide::config::GuideLegend::default(),
             warnings: Vec::new(),
             legend_bottom_share: None,
+            clip: true,
             legend_auto: None,
             default_aspect_ratio: None,
             hide_position_guides: false,
@@ -3508,6 +3512,14 @@ impl GGPlot {
     /// Use a configured [`CoordCartesian`] (zoom + reverse).
     pub fn coord_cartesian_with(mut self, coord: CoordCartesian) -> Self {
         self.coord = Box::new(coord);
+        self
+    }
+
+    /// Whether the data layers are clipped to the panel — ggplot2's
+    /// `coord_*(clip = "on")` (the default) or `clip = "off"` (`false`),
+    /// which lets marks and labels at the edge draw past it (#411).
+    pub fn coord_clip(mut self, on: bool) -> Self {
+        self.clip = on;
         self
     }
 

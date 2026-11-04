@@ -6,6 +6,9 @@ All notable changes to this project are documented here. The format follows
 ## [Unreleased]
 
 ### Changed
+- `xend` / `yend` now train the x / y scales, as in ggplot2 (#411): a
+  segment / curve ending beyond the other data no longer runs off the
+  panel.
 - The default discrete colour/fill scale is now ggplot2's `hue_pal()`
   spread over the number of levels (#408), so default colours match
   ggplot2 exactly for any group count (before, a fixed 8-colour list that
@@ -17,6 +20,8 @@ All notable changes to this project are documented here. The format follows
   label per key (still available via `guide_legend_keys`).
 
 ### Added
+- `GGPlot::coord_clip(bool)` (#411, ggplot2's `coord_*(clip = "off")`;
+  spec / npm `coord: { clip: "off" }`): let layers draw past the panel.
 - Per-side axis lines / ticks (#413, ggplot2's `axis.line.x.top`,
   `axis.ticks.y.right`, …): `Theme.axis_line_{x_top,x_bottom,y_left,
   y_right}` / `axis_ticks_*`, resolved by `Theme::axis_line_at` /
@@ -176,6 +181,10 @@ All notable changes to this project are documented here. The format follows
   `map`, `radial` (`start`, `end`, `inner_radius`), cartesian `reverse`.
 
 ### Fixed
+- The native SVG renderer clips layers to the panel when they reach past
+  it (#411, ggplot2's default `clip = "on"`): a zoomed `coord_cartesian`
+  no longer draws data over the axes and margins. Plots whose data fits
+  are unchanged (no clip group is emitted).
 - Fixed-aspect coords (#411): `coord_fixed` / `coord_sf` / `coord_map` /
   `coord_quickmap` letterboxed the data inside a full-size panel; now, as in
   ggplot2, a single panel itself takes the aspect (background, grid and axes

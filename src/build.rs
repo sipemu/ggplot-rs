@@ -70,6 +70,8 @@ pub struct BuiltPlot {
     /// Where `legend_inside_auto` put the legend (`inside-bottom-right`,
     /// `top`, …), written as the root `data-legend-at` attribute (#332).
     pub(crate) legend_at: Option<String>,
+    /// Clip the data layers to the panel (`clip = "on"`, #411).
+    pub clip: bool,
 }
 
 impl BuiltPlot {
@@ -251,6 +253,7 @@ impl PlotBuilder {
             hide_position_guides,
             hide_y_guides,
             legend_bottom_share: _,
+            clip,
             legend_auto: _,
             locale,
             svg_root_data: _,
@@ -486,6 +489,7 @@ impl PlotBuilder {
             warnings,
             legend_plans: std::collections::HashMap::new(),
             legend_at: None,
+            clip,
         })
     }
 
@@ -1190,6 +1194,10 @@ impl PlotBuilder {
             ("xmax", Aesthetic::X),
             ("ymin", Aesthetic::Y),
             ("ymax", Aesthetic::Y),
+            // Segment / curve ends are positions too (ggplot2 trains them;
+            // #411's clip audit found segments running off the panel).
+            ("xend", Aesthetic::X),
+            ("yend", Aesthetic::Y),
             // Boxplot stat="identity" hinges (B3-5): live on the y scale.
             ("lower", Aesthetic::Y),
             ("middle", Aesthetic::Y),
@@ -1435,8 +1443,8 @@ impl PlotBuilder {
                 for layer_data in panel_layers {
                     panel_set.train_layer(layer_data);
                     for (cols, aes) in [
-                        (["xmin", "xmax", "xintercept"], Aesthetic::X),
-                        (["ymin", "ymax", "yintercept"], Aesthetic::Y),
+                        (["xmin", "xmax", "xend", "xintercept"], Aesthetic::X),
+                        (["ymin", "ymax", "yend", "yintercept"], Aesthetic::Y),
                     ] {
                         let freed = match aes {
                             Aesthetic::X => free_x,
