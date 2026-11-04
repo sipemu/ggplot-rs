@@ -789,6 +789,19 @@ let df = df! {
 GGPlot::new(df)
 ```
 
+**Any polars version** — the `polars` feature pins polars 0.46. On another
+polars (0.47 … 0.53+), turn the feature off and convert with
+`from_polars!`, which expands against *your* polars:
+
+```toml
+ggplot-rs = { version = "…", default-features = false, features = ["plotters"] }
+polars = "0.53"
+```
+
+```rust
+GGPlot::new(ggplot_rs::from_polars!(&df)?)
+```
+
 ## Rendering
 
 **Without plotters** (`default-features = false`) — the self-contained SVG

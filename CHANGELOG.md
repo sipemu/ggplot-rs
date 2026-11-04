@@ -20,6 +20,12 @@ All notable changes to this project are documented here. The format follows
   label per key (still available via `guide_legend_keys`).
 
 ### Added
+- `from_polars!(&df)` (#466): converts a polars `DataFrame` with **your**
+  crate's polars — the macro expands in the caller, so it works on polars
+  0.46 … 0.53+ (checked against 0.46 and 0.53) without ggplot-rs's own
+  `polars` feature, avoiding a second polars build / type mismatch. Bool,
+  string, int, float, `Date` and `Datetime` (any unit) convert natively;
+  other dtypes as strings.
 - Vector PDF export (#467, feature `pdf`, via krilla):
   `GGPlot::render_pdf_with_size(w, h)` / `render_pdf()` → bytes, and
   `save("plot.pdf")` / `ggsave` dispatch on the extension; the CLI writes
