@@ -126,6 +126,16 @@ pub enum FacetLabeller {
     /// The value, wrapped onto lines of at most this many characters
     /// (ggplot2's `label_wrap_gen(width)`, #412).
     Wrap(usize),
+    /// A template with `{var}` and `{value}` placeholders, e.g.
+    /// `"n = {value}"` (ggplot2's `label_bquote(cols = n == .(n))` /
+    /// `as_labeller` glue strings, #412).
+    Template(String),
+    /// A labeller per facet variable (ggplot2's `labeller(var1 = …, var2 =
+    /// …)`, #412); variables not listed use [`Value`](Self::Value).
+    PerVar(Vec<(String, FacetLabeller)>),
+    /// Fixed `value → label` lookups (ggplot2's `as_labeller(c(a = "…"))`,
+    /// #412); values not listed show as they are.
+    Lookup(Vec<(String, String)>),
 }
 
 /// Greedy word wrap at `width` characters (`strwrap`), lines joined by `\n`.
@@ -144,12 +154,35 @@ pub fn wrap_label(text: &str, width: usize) -> String {
 }
 
 impl FacetLabeller {
+    /// `labeller(var = …)` builder: one labeller per variable (#412).
+    pub fn per_var(per: Vec<(&str, FacetLabeller)>) -> Self {
+        FacetLabeller::PerVar(per.into_iter().map(|(v, l)| (v.to_string(), l)).collect())
+    }
+
+    /// `as_labeller(c(value = "label"))` (#412).
+    pub fn lookup(map: Vec<(&str, &str)>) -> Self {
+        FacetLabeller::Lookup(
+            map.into_iter()
+                .map(|(k, v)| (k.to_string(), v.to_string()))
+                .collect(),
+        )
+    }
+
     pub fn format(&self, var: &str, value: &str) -> String {
         match self {
             FacetLabeller::Value => value.to_string(),
             FacetLabeller::Both => format!("{var}: {value}"),
             FacetLabeller::Custom(f) => f(var, value),
             FacetLabeller::Wrap(w) => wrap_label(value, *w),
+            FacetLabeller::Template(t) => t.replace("{var}", var).replace("{value}", value),
+            FacetLabeller::PerVar(per) => per
+                .iter()
+                .find(|(v, _)| v == var)
+                .map_or_else(|| value.to_string(), |(_, l)| l.format(var, value)),
+            FacetLabeller::Lookup(map) => map
+                .iter()
+                .find(|(k, _)| k == value)
+                .map_or_else(|| value.to_string(), |(_, l)| l.clone()),
         }
     }
 }
@@ -219,5 +252,29 @@ impl Facet {
             Facet::Wrap { labeller, .. } => labeller,
             Facet::Grid { labeller, .. } => labeller,
         }
+    }
+}
+
+#[cfg(test)]
+mod labeller_tests {
+    use super::FacetLabeller;
+
+    #[test]
+    fn template_per_var_and_lookup() {
+        assert_eq!(
+            FacetLabeller::Template("{var} = {value}".into()).format("cyl", "4"),
+            "cyl = 4"
+        );
+        let l = FacetLabeller::per_var(vec![
+            ("cyl", FacetLabeller::Both),
+            (
+                "am",
+                FacetLabeller::lookup(vec![("0", "automatic"), ("1", "manual")]),
+            ),
+        ]);
+        assert_eq!(l.format("cyl", "6"), "cyl: 6");
+        assert_eq!(l.format("am", "1"), "manual");
+        assert_eq!(l.format("am", "2"), "2");
+        assert_eq!(l.format("gear", "3"), "3");
     }
 }

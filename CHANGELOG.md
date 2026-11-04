@@ -47,6 +47,11 @@ All notable changes to this project are documented here. The format follows
   (ggplot2's merging `+ theme()`); `Theme.legend_ticks_length`
   (`legend.ticks.length`, config key of the same name). `ThemeUpdate` gains
   `axis_line_x/_y`, `axis_ticks_x/_y`; `Theme` gains one field.
+- Facet labellers (#412): `FacetLabeller::Template("{var} = {value}")`
+  (`label_bquote` / glue), `FacetLabeller::Lookup` / `lookup(..)`
+  (`as_labeller(c(...))`), `FacetLabeller::PerVar` / `per_var(..)`
+  (`labeller(var = …)`), and `GGPlot::facet_labeller(..)` to set one on the
+  current facet. Spec / npm: `facet.labeller`.
 - Theme (#413): `axis_text_x_top` / `axis_text_y_right` (ggplot2's
   `axis.text.x.top` / `axis.text.y.right`) for a top x axis and the
   secondary y axis; `theme_test()` (`theme_bw` without gridlines; preset

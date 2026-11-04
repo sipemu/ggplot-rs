@@ -217,6 +217,12 @@ export interface ValueScale {
   binned?: number;
 }
 
+/** A facet strip labeller (#412). */
+export type Labeller =
+  | "value" | "both"
+  | { template: string } | { values: Record<string, string> } | { wrap: number }
+  | { vars: Record<string, Labeller> };
+
 /** Which panels get axes, and whether inner axes are labelled (#412). */
 export interface FacetAxesSpec {
   axes?: "margins" | "all" | "all_x" | "all_y";
@@ -232,6 +238,7 @@ export type Facet = FacetAxesSpec & (
       as_table?: boolean;
       /** Wrap strip labels at this many characters (label_wrap_gen). */
       label_wrap?: number;
+      labeller?: Labeller;
       /** The side of each panel its strip sits on (default "top"). */
       strip_position?: "top" | "bottom" | "left" | "right";
       /** Fixed panel order; listed levels without data still get a panel. */
@@ -239,6 +246,7 @@ export type Facet = FacetAxesSpec & (
     }
   | {
       rows?: string; cols?: string; scales?: "fixed" | "free" | "free_x" | "free_y";
+      labeller?: Labeller;
       /** Column strips below ("x"), row strips left ("y"), or both. */
       switch?: "x" | "y" | "both";
       /** Fixed row / column order, empty ones kept (drop = FALSE). */

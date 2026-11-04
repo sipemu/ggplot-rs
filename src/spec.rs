@@ -367,6 +367,9 @@ pub struct FacetSpec {
     pub as_table: Option<bool>,
     /// Wrap strip labels at this many characters (`label_wrap_gen(width)`).
     pub label_wrap: Option<usize>,
+    /// Strip labeller (#412): `"value"`, `"both"`, or `{ template }`,
+    /// `{ values: {value: label} }`, `{ wrap: n }`, `{ vars: {var: labeller} }`.
+    pub labeller: Option<LabellerSpec>,
     /// wrap: `"top"` (default), `"bottom"`, `"left"`, `"right"` (#412).
     pub strip_position: Option<String>,
     /// grid: `"x"`, `"y"` or `"both"` — column strips below, row strips
@@ -424,6 +427,46 @@ pub struct CoordFull {
 pub enum ExpandSpec {
     All(bool),
     Sides([bool; 4]),
+}
+
+#[derive(Deserialize)]
+#[serde(untagged)]
+pub enum LabellerSpec {
+    Name(String),
+    Full(LabellerFull),
+}
+
+#[derive(Deserialize, Default)]
+#[serde(deny_unknown_fields)]
+pub struct LabellerFull {
+    pub template: Option<String>,
+    pub values: Option<BTreeMap<String, String>>,
+    pub wrap: Option<usize>,
+    pub vars: Option<BTreeMap<String, LabellerSpec>>,
+}
+
+fn labeller_spec(l: &LabellerSpec) -> Result<crate::facet::FacetLabeller, String> {
+    use crate::facet::FacetLabeller as L;
+    Ok(match l {
+        LabellerSpec::Name(n) => match n.as_str() {
+            "value" => L::Value,
+            "both" => L::Both,
+            o => return Err(format!("unknown labeller '{o}' (expected value, both)")),
+        },
+        LabellerSpec::Full(f) => match (&f.template, &f.values, f.wrap, &f.vars) {
+            (Some(t), None, None, None) => L::Template(t.clone()),
+            (None, Some(v), None, None) => {
+                L::Lookup(v.iter().map(|(a, b)| (a.clone(), b.clone())).collect())
+            }
+            (None, None, Some(w), None) => L::Wrap(w),
+            (None, None, None, Some(vars)) => L::PerVar(
+                vars.iter()
+                    .map(|(k, v)| labeller_spec(v).map(|l| (k.clone(), l)))
+                    .collect::<Result<_, _>>()?,
+            ),
+            _ => return Err("a labeller takes exactly one of template, values, wrap, vars".into()),
+        },
+    })
 }
 
 #[derive(Deserialize, Default)]
@@ -1711,7 +1754,8 @@ fn apply_facet(plot: GGPlot, f: &FacetSpec) -> Result<GGPlot, String> {
             ))
         }
     };
-    match (&f.wrap, &f.rows, &f.cols) {
+    let labeller = f.labeller.as_ref().map(labeller_spec).transpose()?;
+    let plot: Result<GGPlot, String> = match (&f.wrap, &f.rows, &f.cols) {
         (Some(w), None, None) => {
             let vertical = match f.dir.as_deref() {
                 None | Some("h") => false,
@@ -1770,7 +1814,12 @@ fn apply_facet(plot: GGPlot, f: &FacetSpec) -> Result<GGPlot, String> {
                 .facet_margins(f.margins.unwrap_or(false)))
         }
         _ => Err("set either `wrap` or `rows`/`cols`".into()),
-    }
+    };
+    let plot = plot?;
+    Ok(match labeller {
+        Some(l) => plot.facet_labeller(l),
+        None => plot,
+    })
 }
 
 fn apply_coord(plot: GGPlot, c: &CoordSpec) -> Result<GGPlot, String> {
@@ -2529,6 +2578,31 @@ mod tests {
         ))
         .unwrap_err();
         assert!(e.contains("for radial"), "{e}");
+    }
+
+    #[test]
+    fn facet_labellers_spec() {
+        let d = r#""data": {"x": [1, 2], "y": [1, 2], "r": ["p", "q"], "c": ["a", "b"]},
+               "aes": {"x": "x", "y": "y"}, "layers": [{"geom": "point"}]"#;
+        let svg = render(&format!(
+            r#"{{ {d}, "facet": {{"rows": "r", "cols": "c", "labeller": {{"vars": {{
+               "r": {{"template": "row {{value}}"}}, "c": {{"values": {{"a": "Alpha"}}}}}}}}}} }}"#
+        ))
+        .unwrap();
+        assert!(
+            svg.contains(">row p<") && svg.contains(">Alpha<") && svg.contains(">b<"),
+            "{svg}"
+        );
+        let svg = render(&format!(
+            r#"{{ {d}, "facet": {{"wrap": "c", "labeller": "both"}} }}"#
+        ))
+        .unwrap();
+        assert!(svg.contains(">c: a<"), "{svg}");
+        let e = render(&format!(
+            r#"{{ {d}, "facet": {{"wrap": "c", "labeller": {{"template": "x", "wrap": 3}}}} }}"#
+        ))
+        .unwrap_err();
+        assert!(e.contains("exactly one"), "{e}");
     }
 
     #[test]

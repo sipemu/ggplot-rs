@@ -115,6 +115,8 @@ With polars (default feature): `GGPlot::new(df!{ "x" => [1.0, 2.0], "y" => [3.0,
   `facet_wrap_free(col, ncol, FacetScales::FreeY)`, `.facet_wrap_dir(vertical,
   as_table)` (ggplot2's `dir = "v"`, `as.table`),
   `facet_wrap_labeller(col, ncol, FacetLabeller::Wrap(12))` (`label_wrap_gen`),
+  `.facet_labeller(FacetLabeller::per_var(vec![("am", FacetLabeller::lookup(vec![("0", "auto")]))]))`
+  / `FacetLabeller::Template("n = {value}".into())`,
   `.facet_strip_position(StripPosition::Bottom)` (wrap), `.facet_switch(FacetSwitch::Y)`
   (grid: row strips on the left; by default column strips are on top, row strips right).
   `.facet_axes(FacetAxes::all().margin_labels())` (axes on every panel; ggplot2's
