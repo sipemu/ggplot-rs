@@ -39,6 +39,8 @@ pub struct BuiltPlot {
     pub theme: Theme,
     pub labels: Labels,
     pub facet: Facet,
+    /// Which facet panels get axes (#412).
+    pub facet_axes: crate::facet::FacetAxes,
     pub panels: Vec<Panel>,
     /// Per-panel layer data. panels_data[panel_idx][layer_idx] = data for that panel+layer.
     pub panels_data: Vec<Vec<DataFrame>>,
@@ -241,6 +243,7 @@ impl PlotBuilder {
             theme,
             labels,
             facet,
+            facet_axes,
             annotations,
             guide_legend,
             warnings: plot_warnings,
@@ -449,6 +452,7 @@ impl PlotBuilder {
             theme,
             labels,
             facet,
+            facet_axes,
             panels,
             panels_data,
             annotations,
