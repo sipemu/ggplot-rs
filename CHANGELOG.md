@@ -6,6 +6,14 @@ All notable changes to this project are documented here. The format follows
 ## [Unreleased]
 
 ### Added
+- Colourbar guides (#409): `guide_colourbar(aes, GuideColourbar)` —
+  `bar_width` / `bar_height` (px), `nbin`, `display` (`Gradient` /
+  `Rectangles`), `frame`, `ticks` — and `guide_coloursteps(aes)`
+  (`GuideColourbar::steps()`: one block per interval between breaks,
+  `even_steps`, `show_limits`); a wider bar widens the side legend band.
+  `guide_reverse(aes, bool)` reverses one aesthetic's legend. Spec / npm:
+  `"guides": {"fill": "coloursteps", "color": {"type": "colourbar",
+  "barheight": 150, "nbin": 10, "display": "rectangles", "reverse": true}}`.
 - Guides per aesthetic (#409): `guide_none(aes)` (ggplot2's `guides(fill =
   "none")`) and `guide_title(aes, title)`; `guides(..)` keeps them. Spec /
   npm: `"guides": {"fill": "none", "color": {"title": "Group"}}`.

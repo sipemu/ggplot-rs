@@ -376,6 +376,91 @@ pub enum GuideSpec {
 #[serde(deny_unknown_fields)]
 pub struct GuideFull {
     pub title: Option<String>,
+    /// `"legend"` (default), `"colourbar"` / `"colorbar"`,
+    /// `"coloursteps"` / `"colorsteps"` (#409).
+    #[serde(rename = "type")]
+    pub kind: Option<String>,
+    pub reverse: Option<bool>,
+    pub barwidth: Option<f64>,
+    pub barheight: Option<f64>,
+    pub nbin: Option<usize>,
+    /// `"gradient"` or `"rectangles"`.
+    pub display: Option<String>,
+    pub frame: Option<bool>,
+    pub ticks: Option<bool>,
+    pub even_steps: Option<bool>,
+    pub show_limits: Option<bool>,
+}
+
+/// The `GuideColourbar` a `"colourbar"` / `"coloursteps"` guide spec means
+/// (`None` for a plain legend with no colourbar option set).
+fn colourbar_spec(
+    name: &str,
+    kind: Option<&str>,
+    g: Option<&GuideFull>,
+) -> Result<Option<crate::guide::config::GuideColourbar>, String> {
+    use crate::guide::config::{ColourbarDisplay, GuideColourbar};
+    let mut bar = match kind {
+        None | Some("legend") => {
+            let has_bar_opt = g.is_some_and(|g| {
+                g.barwidth.is_some()
+                    || g.barheight.is_some()
+                    || g.nbin.is_some()
+                    || g.display.is_some()
+                    || g.frame.is_some()
+                    || g.ticks.is_some()
+                    || g.even_steps.is_some()
+                    || g.show_limits.is_some()
+            });
+            if !has_bar_opt {
+                return Ok(None);
+            }
+            GuideColourbar::new()
+        }
+        Some("colourbar" | "colorbar") => GuideColourbar::new(),
+        Some("coloursteps" | "colorsteps") => GuideColourbar::steps(),
+        Some(o) => {
+            return Err(format!(
+                "guides.{name}: unknown guide '{o}' (expected none, legend, colourbar, coloursteps)"
+            ))
+        }
+    };
+    let Some(g) = g else {
+        return Ok(Some(bar));
+    };
+    if let Some(w) = g.barwidth {
+        bar = bar.with_bar_width(w);
+    }
+    if let Some(h) = g.barheight {
+        bar = bar.with_bar_height(h);
+    }
+    if let Some(n) = g.nbin {
+        bar = bar.with_nbin(n);
+    }
+    if let Some(d) = &g.display {
+        bar = bar.with_display(match d.as_str() {
+            "gradient" => ColourbarDisplay::Gradient,
+            "rectangles" => ColourbarDisplay::Rectangles,
+            o => {
+                return Err(format!(
+                    "guides.{name}.display: unknown '{o}' (expected gradient, rectangles)"
+                ))
+            }
+        });
+    }
+    if let Some(f) = g.frame {
+        bar = bar.with_frame(f);
+    }
+    if let Some(t) = g.ticks {
+        bar = bar.with_ticks(t);
+    }
+    if let Some(e) = g.even_steps {
+        bar = bar.with_even_steps(e);
+    }
+    if let Some(l) = g.show_limits {
+        bar = bar.with_show_limits(l);
+    }
+    Ok(Some(bar))
 }
 
 #[derive(Deserialize)]
@@ -578,13 +663,22 @@ pub fn build_plot_with_data(
         };
         plot = match g {
             GuideSpec::Name(n) if n == "none" => plot.guide_none(aes),
-            GuideSpec::Name(n) => {
-                return Err(format!(
-                    "guides.{name}: unknown guide '{n}' (expected \"none\")"
-                ))
+            GuideSpec::Name(n) => match colourbar_spec(name, Some(n), None)? {
+                Some(bar) => plot.guide_colourbar(aes, bar),
+                None => plot,
+            },
+            GuideSpec::Full(g) => {
+                if let Some(t) = &g.title {
+                    plot = plot.guide_title(aes.clone(), t);
+                }
+                if let Some(r) = g.reverse {
+                    plot = plot.guide_reverse(aes.clone(), r);
+                }
+                match colourbar_spec(name, g.kind.as_deref(), Some(g))? {
+                    Some(bar) => plot.guide_colourbar(aes, bar),
+                    None => plot,
+                }
             }
-            GuideSpec::Full(GuideFull { title: Some(t) }) => plot.guide_title(aes, t),
-            GuideSpec::Full(_) => plot,
         };
     }
     if let Some(l) = &spec.legend {
@@ -1833,6 +1927,36 @@ mod tests {
         ))
         .unwrap_err();
         assert!(e.contains("not a legend aesthetic"), "{e}");
+    }
+
+    #[test]
+    fn guides_colourbar_and_coloursteps() {
+        let cont = r#""data": {"x": [1, 2, 3], "y": [1, 2, 3], "z": [0, 50, 100]},
+               "aes": {"x": "x", "y": "y", "color": "z"}, "layers": [{"geom": "point"}]"#;
+        let base = render(&format!("{{ {cont} }}")).unwrap();
+        let steps = render(&format!(
+            r#"{{ {cont}, "guides": {{"color": "coloursteps"}} }}"#
+        ))
+        .unwrap();
+        assert!(steps.matches("<rect").count() < base.matches("<rect").count());
+        let bar = render(&format!(
+            r#"{{ {cont}, "guides": {{"color": {{"type": "colourbar", "nbin": 5,
+               "display": "rectangles", "barheight": 120, "ticks": false, "frame": false}}}} }}"#
+        ))
+        .unwrap();
+        assert_ne!(bar, base);
+        let e = render(&format!(r#"{{ {cont}, "guides": {{"color": "bins"}} }}"#)).unwrap_err();
+        assert!(e.contains("unknown guide 'bins'"), "{e}");
+        let e = render(&format!(
+            r#"{{ {cont}, "guides": {{"color": {{"display": "raster"}}}} }}"#
+        ))
+        .unwrap_err();
+        assert!(e.contains("unknown 'raster'"), "{e}");
+        render(&format!(
+            r#"{{ {DATA}, "aes": {{"x": "x", "y": "y", "color": "g"}}, "layers": [{{"geom": "point"}}],
+               "guides": {{"color": {{"reverse": true}}}} }}"#
+        ))
+        .unwrap();
     }
 
     #[test]

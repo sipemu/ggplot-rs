@@ -122,6 +122,28 @@ export type Position =
       preserve?: "total" | "single";
     };
 
+/** A per-aesthetic guide: `"none"`, a colourbar kind, or its options (#409). */
+export type GuideSpec =
+  | "none"
+  | "colourbar"
+  | "colorbar"
+  | "coloursteps"
+  | "colorsteps"
+  | {
+      title?: string;
+      reverse?: boolean;
+      type?: "legend" | "colourbar" | "colorbar" | "coloursteps" | "colorsteps";
+      /** Bar width / height in px. */
+      barwidth?: number;
+      barheight?: number;
+      nbin?: number;
+      display?: "gradient" | "rectangles";
+      frame?: boolean;
+      ticks?: boolean;
+      even_steps?: boolean;
+      show_limits?: boolean;
+    };
+
 export interface Layer {
   geom: GeomName;
   /** Merged over the plot-level `aes` (layer wins). */
@@ -251,7 +273,7 @@ export interface PlotSpec {
   theme?: ThemePreset | ThemeConfig;
   legend?: Legend;
   /** Per-aesthetic guides: `"none"` drops a legend, `{ title }` names it. */
-  guides?: Partial<Record<"color" | "colour" | "fill" | "shape" | "size" | "alpha" | "linetype" | "linewidth", "none" | { title?: string }>>;
+  guides?: Partial<Record<"color" | "colour" | "fill" | "shape" | "size" | "alpha" | "linetype" | "linewidth", GuideSpec>>;
   /** Pixels (default 640 × 400). */
   width?: number;
   height?: number;
