@@ -2062,7 +2062,7 @@ pub(crate) fn draw_legend_planned(
     }
 
     let legend_scales = legend_scales_for(scales, suppressed);
-    if legend_scales.is_empty() {
+    if legend_scales.is_empty() && guide.custom.is_empty() {
         return Ok(());
     }
     // #410: key glyphs are lines / points outside the panel.
@@ -2281,6 +2281,40 @@ fn draw_legend_planned_inner(
         }
     }
 
+
+    // #409: custom guides (`guide_custom()`), after the scales' own.
+    let family = (!theme.legend_title.family.is_empty()).then(|| theme.legend_title.family.clone());
+    for custom in &guide.custom {
+        let title_offset = custom.title_offset(theme);
+        if let Some(title) = custom.title.as_deref().filter(|t| !t.is_empty()) {
+            backend.draw_text(
+                title,
+                (offset_x, offset_y),
+                &TextStyle {
+                    color: theme.legend_title.color,
+                    size: theme.legend_title.size,
+                    anchor: TextAnchor::Start,
+                    angle: 0.0,
+                    family: family.clone(),
+                    face: theme.legend_title.face,
+                    bg_colour: None,
+                    bg_r: 0.0,
+                },
+            )?;
+        }
+        let rect = Rect {
+            x: offset_x,
+            y: offset_y + title_offset,
+            width: custom.width,
+            height: custom.height,
+        };
+        (custom.draw)(backend, &rect)?;
+        if is_horizontal {
+            offset_x += custom.width + theme.legend_spacing * 2.0;
+        } else {
+            offset_y += title_offset + custom.height + theme.legend_spacing * 2.0;
+        }
+    }
     Ok(())
 }
 
