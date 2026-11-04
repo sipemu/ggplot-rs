@@ -103,7 +103,9 @@ With polars (default feature): `GGPlot::new(df!{ "x" => [1.0, 2.0], "y" => [3.0,
   number of groups), `scale_color_viridis_d('D', 0.0, 1.0, 1)` (options A–H),
   `scale_color_distiller(PaletteName::Blues, -1)`; `expand_limits(&[], &[0.0])`.
 - **Facets:** `facet_wrap("col", Some(ncol))`, `facet_grid(Some("row"), Some("col"))`,
-  `facet_wrap_free(col, ncol, FacetScales::FreeY)`.
+  `facet_wrap_free(col, ncol, FacetScales::FreeY)`, `.facet_wrap_dir(vertical,
+  as_table)` (ggplot2's `dir = "v"`, `as.table`),
+  `facet_wrap_labeller(col, ncol, FacetLabeller::Wrap(12))` (`label_wrap_gen`).
 - **Coords:** `coord_flip()`, `coord_polar()`, `coord_radial(start, end,
   inner_radius)`, `coord_fixed(ratio)`, `coord_cartesian_zoom(Some((lo, hi)), None)`,
   `coord_reverse(x, y)`, `coord_trans`/`coord_transform(x, y)`, `coord_quickmap()`,

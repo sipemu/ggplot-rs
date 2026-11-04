@@ -2791,6 +2791,8 @@ impl GGPlot {
             scales: FacetScales::Fixed,
             labeller: FacetLabeller::default(),
             levels: None,
+            vertical: false,
+            as_table: true,
         };
         self
     }
@@ -2802,6 +2804,8 @@ impl GGPlot {
             scales,
             labeller: FacetLabeller::default(),
             levels: None,
+            vertical: false,
+            as_table: true,
         };
         self
     }
@@ -2818,7 +2822,25 @@ impl GGPlot {
             scales: FacetScales::Fixed,
             labeller,
             levels: None,
+            vertical: false,
+            as_table: true,
         };
+        self
+    }
+
+    /// Fill `facet_wrap` panels column by column (`vertical`, ggplot2's
+    /// `dir = "v"`) and / or bottom-up (`as_table = false`, ggplot2's
+    /// `as.table = FALSE`). Call after `facet_wrap*` (#412).
+    pub fn facet_wrap_dir(mut self, vertical: bool, as_table: bool) -> Self {
+        if let Facet::Wrap {
+            vertical: v,
+            as_table: a,
+            ..
+        } = &mut self.facet
+        {
+            *v = vertical;
+            *a = as_table;
+        }
         self
     }
 

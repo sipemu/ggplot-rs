@@ -325,6 +325,9 @@ fn apply_flags(spec: &mut PlotSpec, args: &Args) -> Result<(), String> {
             rows: None,
             cols: None,
             scales: None,
+            dir: None,
+            as_table: None,
+            label_wrap: None,
         });
     } else if let Some(g) = &args.facet_grid {
         let (row, col) = g.split_once(':').unwrap_or((g.as_str(), ""));
@@ -334,6 +337,9 @@ fn apply_flags(spec: &mut PlotSpec, args: &Args) -> Result<(), String> {
             rows: (!row.is_empty()).then(|| row.to_string()),
             cols: (!col.is_empty()).then(|| col.to_string()),
             scales: None,
+            dir: None,
+            as_table: None,
+            label_wrap: None,
         });
     }
     if let (Some(s), Some(f)) = (&args.facet_scales, spec.facet.as_mut()) {

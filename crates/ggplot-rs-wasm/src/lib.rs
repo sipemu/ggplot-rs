@@ -165,7 +165,15 @@ export interface ColorScale {
 }
 
 export type Facet =
-  | { wrap: string; ncol?: number; scales?: "fixed" | "free" | "free_x" | "free_y" }
+  | {
+      wrap: string; ncol?: number; scales?: "fixed" | "free" | "free_x" | "free_y";
+      /** "h" (row by row, default) or "v" (column by column). */
+      dir?: "h" | "v";
+      /** First row at the top (default true; ggplot2's as.table). */
+      as_table?: boolean;
+      /** Wrap strip labels at this many characters (label_wrap_gen). */
+      label_wrap?: number;
+    }
   | { rows?: string; cols?: string; scales?: "fixed" | "free" | "free_x" | "free_y" };
 
 export type CoordName =

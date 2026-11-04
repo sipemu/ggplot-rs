@@ -466,7 +466,16 @@ impl PlotRenderer {
         };
         let mut nrow = built.panels.len().div_ceil(ncol);
 
-        let strip_height = theme.strip_text.size + 8.0;
+        // #412: a wrapped label (`FacetLabeller::Wrap`) takes several lines;
+        // the strip grows to the tallest one.
+        let strip_lines = built
+            .panels
+            .iter()
+            .map(|p| p.col_label.as_deref().unwrap_or(&p.label).lines().count())
+            .max()
+            .unwrap_or(1)
+            .max(1);
+        let strip_height = theme.strip_text.size * (1.0 + 1.2 * (strip_lines - 1) as f64) + 8.0;
         let gap_x = theme.get_panel_spacing_x();
         let gap_y = theme.get_panel_spacing_y();
 
@@ -526,7 +535,18 @@ impl PlotRenderer {
             .enumerate()
             .map(|(i, p)| {
                 if fixed_grid.is_some() {
-                    (i / ncol, i % ncol)
+                    match &built.facet {
+                        Facet::Wrap {
+                            vertical, as_table, ..
+                        } => crate::facet::wrap::wrap_cell(
+                            i,
+                            built.panels.len(),
+                            ncol,
+                            *vertical,
+                            *as_table,
+                        ),
+                        _ => (i / ncol, i % ncol),
+                    }
                 } else {
                     (p.row, p.col)
                 }
@@ -686,20 +706,25 @@ impl PlotRenderer {
                 } else {
                     Some(theme.strip_text.family.clone())
                 };
-                backend.draw_text(
-                    label,
-                    (px + panel_width / 2.0, py + strip_height / 2.0),
-                    &TextStyle {
-                        color: theme.strip_text.color,
-                        size: theme.strip_text.size,
-                        anchor: TextAnchor::Middle,
-                        angle: 0.0,
-                        family,
-                        face: theme.strip_text.face,
-                        bg_colour: None,
-                        bg_r: 0.0,
-                    },
-                )?;
+                let lines: Vec<&str> = label.lines().collect();
+                let n = lines.len().max(1) as f64;
+                for (k, line) in lines.iter().enumerate() {
+                    let dy = (k as f64 - (n - 1.0) / 2.0) * theme.strip_text.size * 1.2;
+                    backend.draw_text(
+                        line,
+                        (px + panel_width / 2.0, py + strip_height / 2.0 + dy),
+                        &TextStyle {
+                            color: theme.strip_text.color,
+                            size: theme.strip_text.size,
+                            anchor: TextAnchor::Middle,
+                            angle: 0.0,
+                            family: family.clone(),
+                            face: theme.strip_text.face,
+                            bg_colour: None,
+                            bg_r: 0.0,
+                        },
+                    )?;
+                }
             }
 
             // Panel background

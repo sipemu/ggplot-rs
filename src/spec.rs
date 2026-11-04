@@ -309,6 +309,12 @@ pub struct FacetSpec {
     pub cols: Option<String>,
     /// `"fixed"` (default), `"free"`, `"free_x"`, `"free_y"`.
     pub scales: Option<String>,
+    /// wrap: `"h"` (default, row by row) or `"v"` (column by column).
+    pub dir: Option<String>,
+    /// wrap: first row at the top (default `true`; ggplot2's `as.table`).
+    pub as_table: Option<bool>,
+    /// Wrap strip labels at this many characters (`label_wrap_gen(width)`).
+    pub label_wrap: Option<usize>,
 }
 
 #[derive(Deserialize)]
@@ -1323,7 +1329,20 @@ fn apply_facet(plot: GGPlot, f: &FacetSpec) -> Result<GGPlot, String> {
         }
     };
     match (&f.wrap, &f.rows, &f.cols) {
-        (Some(w), None, None) => Ok(plot.facet_wrap_free(w, f.ncol, scales)),
+        (Some(w), None, None) => {
+            let vertical = match f.dir.as_deref() {
+                None | Some("h") => false,
+                Some("v") => true,
+                Some(o) => return Err(format!("unknown dir '{o}' (expected h, v)")),
+            };
+            let mut plot = plot.facet_wrap_free(w, f.ncol, scales);
+            if let Some(width) = f.label_wrap {
+                if let crate::facet::Facet::Wrap { labeller, .. } = &mut plot.facet {
+                    *labeller = crate::facet::FacetLabeller::Wrap(width);
+                }
+            }
+            Ok(plot.facet_wrap_dir(vertical, f.as_table.unwrap_or(true)))
+        }
         (None, r, c) if r.is_some() || c.is_some() => {
             Ok(plot.facet_grid_free(r.as_deref(), c.as_deref(), scales))
         }
@@ -1758,6 +1777,22 @@ mod tests {
             .unwrap_or_else(|e| panic!("{coord}: {e}"));
             assert!(svg.contains("<circle"), "{coord}");
         }
+    }
+
+    #[test]
+    fn facet_wrap_dir_as_table_and_label_wrap() {
+        let svg = render(&format!(
+            r#"{{ {DATA}, "aes": {{"x": "x", "y": "y"}}, "layers": [{{"geom": "point"}}],
+               "facet": {{"wrap": "g", "dir": "v", "as_table": false, "label_wrap": 3}} }}"#
+        ))
+        .unwrap();
+        assert!(svg.contains(">a<") && svg.contains(">b<"));
+        let e = render(&format!(
+            r#"{{ {DATA}, "aes": {{"x": "x", "y": "y"}}, "layers": [{{"geom": "point"}}],
+               "facet": {{"wrap": "g", "dir": "z"}} }}"#
+        ))
+        .unwrap_err();
+        assert!(e.contains("unknown dir"), "{e}");
     }
 
     #[test]

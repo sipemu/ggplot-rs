@@ -6,6 +6,11 @@ All notable changes to this project are documented here. The format follows
 ## [Unreleased]
 
 ### Added
+- Facets (#412): `facet_wrap_dir(vertical, as_table)` — ggplot2's `dir =
+  "v"` (column-major panels) and `as.table = FALSE` (first row at the
+  bottom); `FacetLabeller::Wrap(width)` (`label_wrap_gen`) with multi-line
+  strips. Spec / npm: `facet: { wrap, dir: "v", as_table: false,
+  label_wrap: 12 }`. `Facet::Wrap` gains `vertical` / `as_table` fields.
 - Scales (#408): `scale_color_hue` / `scale_fill_hue` (`HuePalette { h, c,
   l, h_start, direction }`; R's `hcl()` / `scales::hue_pal()` exactly —
   ggplot2's default colours for any number of levels),
