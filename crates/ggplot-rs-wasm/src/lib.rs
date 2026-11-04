@@ -240,7 +240,7 @@ export interface Labels {
   y?: string;
 }
 
-export type ThemePreset = "gray" | "grey" | "bw" | "minimal" | "classic" | "dark" | "light" | "void" | "linedraw";
+export type ThemePreset = "gray" | "grey" | "bw" | "minimal" | "classic" | "dark" | "light" | "void" | "linedraw" | "test";
 export interface TextElement {
   family?: string; size?: number; color?: [number, number, number];
   face?: "plain" | "bold" | "italic"; hjust?: number; vjust?: number; angle?: number; visible?: boolean;
@@ -269,6 +269,8 @@ export interface ThemeConfig {
   text?: TextElement; title?: TextElement; subtitle?: TextElement; caption?: TextElement;
   axis_title_x?: TextElement; axis_title_y?: TextElement;
   axis_text_x?: TextElement; axis_text_y?: TextElement;
+  /** A top x axis's / right (secondary) y axis's labels (#413). */
+  axis_text_x_top?: TextElement; axis_text_y_right?: TextElement;
   legend_title?: TextElement; legend_text?: TextElement; strip_text?: TextElement;
   axis_line?: LineElement; axis_ticks?: LineElement;
   panel_grid_major?: LineElement; panel_grid_minor?: LineElement; panel_border?: LineElement;

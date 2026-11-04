@@ -47,6 +47,11 @@ pub struct ThemeConfig {
     pub axis_title_y: Option<TextCfg>,
     pub axis_text_x: Option<TextCfg>,
     pub axis_text_y: Option<TextCfg>,
+    /// A top x axis's labels (`axis.text.x.top`, #413) — on top of
+    /// `axis_text_x`.
+    pub axis_text_x_top: Option<TextCfg>,
+    /// A right (secondary) y axis's labels (`axis.text.y.right`, #413).
+    pub axis_text_y_right: Option<TextCfg>,
     pub legend_title: Option<TextCfg>,
     pub legend_text: Option<TextCfg>,
     pub strip_text: Option<TextCfg>,
@@ -142,6 +147,22 @@ impl ThemeConfig {
         text(&self.axis_title_y, &mut t.axis_title_y)?;
         text(&self.axis_text_x, &mut t.axis_text_x)?;
         text(&self.axis_text_y, &mut t.axis_text_y)?;
+        if self.axis_text_x_top.is_some() {
+            let mut el = t
+                .axis_text_x_top
+                .clone()
+                .unwrap_or_else(|| t.axis_text_x.clone());
+            text(&self.axis_text_x_top, &mut el)?;
+            t.axis_text_x_top = Some(el);
+        }
+        if self.axis_text_y_right.is_some() {
+            let mut el = t
+                .axis_text_y_right
+                .clone()
+                .unwrap_or_else(|| t.axis_text_y.clone());
+            text(&self.axis_text_y_right, &mut el)?;
+            t.axis_text_y_right = Some(el);
+        }
         text(&self.legend_title, &mut t.legend_title)?;
         text(&self.legend_text, &mut t.legend_text)?;
         text(&self.strip_text, &mut t.strip_text)?;
@@ -230,6 +251,7 @@ pub fn preset(name: &str) -> Result<Theme, String> {
         "light" => theme_light(),
         "void" => theme_void(),
         "linedraw" => theme_linedraw(),
+        "test" => crate::theme::presets::theme_test(),
         other => return Err(format!("unknown theme preset '{other}'")),
     })
 }

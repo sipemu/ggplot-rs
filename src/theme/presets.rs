@@ -192,6 +192,8 @@ pub fn theme_gray_base(base_size: f64) -> Theme {
         geom: crate::theme::elements::ElementGeom::default(),
         axis_text_x_fit: crate::theme::AxisLabelFit::default(),
         axis_text_x_check_overlap: false,
+        axis_text_x_top: None,
+        axis_text_y_right: None,
     }
 }
 
@@ -245,6 +247,30 @@ pub fn theme_bw_base(base_size: f64) -> Theme {
             visible: true,
         },
         ..theme_gray_base(base_size)
+    }
+}
+
+// ─── theme_test ──────────────────────────────────────────────────
+
+/// ggplot2's `theme_test()` (#413): `theme_bw` without gridlines — a
+/// stable look for visual tests.
+pub fn theme_test() -> Theme {
+    theme_test_base(DEFAULT_BASE_SIZE)
+}
+
+/// [`theme_test`] with a custom base font size.
+pub fn theme_test_base(base_size: f64) -> Theme {
+    let bw = theme_bw_base(base_size);
+    Theme {
+        panel_grid_major: ElementLine {
+            visible: false,
+            ..bw.panel_grid_major.clone()
+        },
+        panel_grid_minor: ElementLine {
+            visible: false,
+            ..bw.panel_grid_minor.clone()
+        },
+        ..bw
     }
 }
 
@@ -603,5 +629,7 @@ pub fn theme_void_base(base_size: f64) -> Theme {
         geom: crate::theme::elements::ElementGeom::default(),
         axis_text_x_fit: crate::theme::AxisLabelFit::default(),
         axis_text_x_check_overlap: false,
+        axis_text_x_top: None,
+        axis_text_y_right: None,
     }
 }

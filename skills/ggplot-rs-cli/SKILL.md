@@ -115,7 +115,7 @@ rows), `connect` (steps), `summary_hex` (summary of a `z` column per hexagon),
 
 ## Theming
 
-- `--theme gray|bw|minimal|classic|dark|light|void|linedraw` (default `gray`).
+- `--theme gray|bw|minimal|classic|dark|light|void|linedraw|test` (default `gray`).
 - `--palette NAME` — discrete color/fill palette for categorical mappings:
   `Set1 Set2 Set3 Dark2 Paired Accent`, sequential (`Blues Greens Reds YlOrRd …`),
   diverging (`RdBu Spectral PiYG …`), perceptual (`viridis magma plasma inferno`).

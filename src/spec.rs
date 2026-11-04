@@ -679,7 +679,7 @@ pub fn build_plot_with_data(
     plot = match &spec.theme {
         None => plot.theme_minimal(),
         Some(ThemeSpec::Preset(name)) => plot.theme(preset(name).map_err(|e| {
-            format!("theme: {e} (expected gray, bw, minimal, classic, dark, light, void, linedraw)")
+            format!("theme: {e} (expected gray, bw, minimal, classic, dark, light, void, linedraw, test)")
         })?),
         Some(ThemeSpec::Config(cfg)) => plot.theme(
             cfg.apply(crate::theme::presets::theme_minimal())
@@ -2143,6 +2143,23 @@ mod tests {
             let e = render(&format!(r#"{{ {d}, "facet": {f} }}"#)).unwrap_err();
             assert!(e.contains(msg), "{f}: {e}");
         }
+    }
+
+    #[test]
+    fn theme_test_preset_and_per_side_axis_text() {
+        render(&format!(
+            r#"{{ {DATA}, "aes": {{"x": "x", "y": "y"}}, "layers": [{{"geom": "point"}}], "theme": "test" }}"#
+        ))
+        .unwrap();
+        let svg = render(&format!(
+            r##"{{ {DATA}, "aes": {{"x": "x", "y": "y"}}, "layers": [{{"geom": "point"}}],
+               "scales": {{"x": {{"name": "X"}}}},
+               "theme": {{"base": "gray", "axis_text_x_top": {{"color": [200, 0, 0]}},
+                          "axis_text_y_right": {{"size": 14}}}} }}"##
+        ))
+        .unwrap();
+        // A bottom axis: the top element doesn't apply.
+        assert!(!svg.contains("#C80000"), "{svg}");
     }
 
     #[test]

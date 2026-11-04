@@ -3554,6 +3554,12 @@ impl GGPlot {
         self
     }
 
+    /// ggplot2's `theme_test()`: `theme_bw` without gridlines (#413).
+    pub fn theme_test(mut self) -> Self {
+        self.apply_preset(crate::theme::presets::theme_test());
+        self
+    }
+
     pub fn theme_bw(mut self) -> Self {
         self.apply_preset(crate::theme::presets::theme_bw());
         self
