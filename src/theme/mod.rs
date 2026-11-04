@@ -215,6 +215,8 @@ pub struct Theme {
     pub legend_key_width: f64,
     pub legend_key_height: f64,
     pub legend_spacing: f64,
+    /// A colourbar's tick length (ggplot2's `legend.ticks.length`, #413).
+    pub legend_ticks_length: f64,
     pub legend_margin: Margin,
     pub panel_spacing: f64,
     pub panel_spacing_x: Option<f64>,
@@ -741,6 +743,16 @@ impl Theme {
         if let Some(v) = upd.geom {
             self.geom = v;
         }
+        for (v, slot) in [
+            (upd.axis_line_x, &mut self.axis_line_x),
+            (upd.axis_line_y, &mut self.axis_line_y),
+            (upd.axis_ticks_x, &mut self.axis_ticks_x),
+            (upd.axis_ticks_y, &mut self.axis_ticks_y),
+        ] {
+            if v.is_some() {
+                *slot = v;
+            }
+        }
         self
     }
 }
@@ -759,6 +771,11 @@ pub struct ThemeUpdate {
     pub axis_title_y: Option<ElementText>,
     pub axis_line: Option<ElementLine>,
     pub axis_ticks: Option<ElementLine>,
+    /// One axis's line / ticks only (`axis.line.x`, …; #413).
+    pub axis_line_x: Option<ElementLine>,
+    pub axis_line_y: Option<ElementLine>,
+    pub axis_ticks_x: Option<ElementLine>,
+    pub axis_ticks_y: Option<ElementLine>,
     pub panel_background: Option<ElementRect>,
     pub panel_grid_major: Option<ElementLine>,
     pub panel_grid_minor: Option<ElementLine>,
@@ -780,5 +797,100 @@ pub struct ThemeUpdate {
 impl Default for Theme {
     fn default() -> Self {
         presets::theme_gray()
+    }
+}
+
+/// ggplot2 4.0's `theme_sub_axis_x(text =, title =, line =, ticks =)` (#413):
+/// a [`ThemeUpdate`] for the x axis's elements only.
+pub fn theme_sub_axis_x(
+    text: Option<ElementText>,
+    title: Option<ElementText>,
+    line: Option<ElementLine>,
+    ticks: Option<ElementLine>,
+) -> ThemeUpdate {
+    ThemeUpdate {
+        axis_text_x: text,
+        axis_title_x: title,
+        axis_line_x: line,
+        axis_ticks_x: ticks,
+        ..Default::default()
+    }
+}
+
+/// ggplot2 4.0's `theme_sub_axis_y()` — see [`theme_sub_axis_x`].
+pub fn theme_sub_axis_y(
+    text: Option<ElementText>,
+    title: Option<ElementText>,
+    line: Option<ElementLine>,
+    ticks: Option<ElementLine>,
+) -> ThemeUpdate {
+    ThemeUpdate {
+        axis_text_y: text,
+        axis_title_y: title,
+        axis_line_y: line,
+        axis_ticks_y: ticks,
+        ..Default::default()
+    }
+}
+
+/// ggplot2 4.0's `theme_sub_legend(title =, text =, background =, position
+/// =)` (#413).
+pub fn theme_sub_legend(
+    title: Option<ElementText>,
+    text: Option<ElementText>,
+    background: Option<ElementRect>,
+    position: Option<LegendPosition>,
+) -> ThemeUpdate {
+    ThemeUpdate {
+        legend_title: title,
+        legend_text: text,
+        legend_background: background,
+        legend_position: position,
+        ..Default::default()
+    }
+}
+
+/// ggplot2 4.0's `theme_sub_panel(background =, border =, grid.major =,
+/// grid.minor =)` (#413).
+pub fn theme_sub_panel(
+    background: Option<ElementRect>,
+    border: Option<ElementLine>,
+    grid_major: Option<ElementLine>,
+    grid_minor: Option<ElementLine>,
+) -> ThemeUpdate {
+    ThemeUpdate {
+        panel_background: background,
+        panel_border: border,
+        panel_grid_major: grid_major,
+        panel_grid_minor: grid_minor,
+        ..Default::default()
+    }
+}
+
+/// ggplot2 4.0's `theme_sub_strip(text =, background =)` (#413).
+pub fn theme_sub_strip(text: Option<ElementText>, background: Option<ElementRect>) -> ThemeUpdate {
+    ThemeUpdate {
+        strip_text: text,
+        strip_background: background,
+        ..Default::default()
+    }
+}
+
+/// ggplot2 4.0's `theme_sub_plot(title =, subtitle =, caption =, background
+/// =, margin =)` (#413).
+pub fn theme_sub_plot(
+    title: Option<ElementText>,
+    subtitle: Option<ElementText>,
+    caption: Option<ElementText>,
+    background: Option<ElementRect>,
+    margin: Option<Margin>,
+) -> ThemeUpdate {
+    ThemeUpdate {
+        title,
+        subtitle,
+        caption,
+        plot_background: background,
+        plot_margin: margin,
+        ..Default::default()
     }
 }

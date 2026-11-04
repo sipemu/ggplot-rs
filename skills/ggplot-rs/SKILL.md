@@ -137,7 +137,9 @@ With polars (default feature): `GGPlot::new(df!{ "x" => [1.0, 2.0], "y" => [3.0,
 - **Labels:** `title subtitle caption tag xlab ylab`. Axis titles are **not**
   taken from column names automatically — set `xlab`/`ylab` when you want them.
 - **Theme:** `.theme_minimal()` / `.theme_bw()` / `.theme_classic()` / `.theme_test()` … or
-  `.theme(theme_minimal().with_primary((26, 153, 136)))`; legend via
+  `.theme(theme_minimal().with_primary((26, 153, 136)))`; tweak one property with
+  `.theme_with(|t| t.axis_text_x.size = 14.0)` (ggplot2's `+ theme()`), whole elements via
+  `.theme_update(theme_sub_axis_x(Some(el), None, None, None))` (`theme_sub_*`, `%+replace%`); legend via
   `.legend_position(LegendPosition::Bottom)` (call **after** a theme preset —
   presets replace the whole theme); per aesthetic `.guide_none(Aesthetic::Fill)`
   and `.guide_title(Aesthetic::Color, "Group")`, `.guide_reverse(Aesthetic::Color, true)`,

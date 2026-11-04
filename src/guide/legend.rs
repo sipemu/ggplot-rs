@@ -813,7 +813,7 @@ pub(crate) fn continuous_horizontal_bar_height(
         0.0
     };
     let (_, bar_thickness) = continuous_bar_dims(theme, true, bar);
-    let tick_len = 3.0;
+    let tick_len = theme.legend_ticks_length;
     let label_line = theme.legend_text.size + 4.0;
     title_offset + bar_thickness + tick_len + theme.legend_spacing + label_line
 }
@@ -1059,7 +1059,7 @@ fn draw_continuous_legend_at(
     // Draw tick marks and labels: to the bar's right (vertical, pos=1 at
     // the top) or below it (horizontal, pos=0 on the left), matching the
     // slice order drawn above.
-    let tick_len = 3.0;
+    let tick_len = theme.legend_ticks_length;
     let tick_family = if theme.legend_text.family.is_empty() {
         None
     } else {

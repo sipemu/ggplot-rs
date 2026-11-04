@@ -29,6 +29,8 @@ pub struct ThemeConfig {
     pub aspect_ratio: Option<f64>,
     /// Draw gridlines over the data (R's `panel.ontop`).
     pub panel_ontop: Option<bool>,
+    /// A colourbar's tick length in px (R's `legend.ticks.length`, #413).
+    pub legend_ticks_length: Option<f64>,
     /// Draw minor tick marks (R's `axis.minor.ticks`).
     pub axis_minor_ticks: Option<bool>,
     /// Title alignment reference: "panel" or "plot" (R's `plot.title.position`).
@@ -216,6 +218,9 @@ impl ThemeConfig {
         }
         if let Some(r) = self.aspect_ratio {
             t.aspect_ratio = Some(r);
+        }
+        if let Some(l) = self.legend_ticks_length {
+            t.legend_ticks_length = l.max(0.0);
         }
         if let Some(b) = self.panel_ontop {
             t.panel_ontop = b;
