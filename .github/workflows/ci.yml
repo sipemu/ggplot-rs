@@ -98,6 +98,12 @@ jobs:
       - name: Tests (canvas)
         run: cargo test --no-default-features --features canvas --lib --test canvas
 
+      - name: Clippy (pdf)
+        run: cargo clippy --no-default-features --features pdf --lib --tests -- -D warnings
+
+      - name: Tests (pdf)
+        run: cargo test --no-default-features --features pdf --lib --test pdf_467
+
       - name: Clippy (ggpubr)
         run: cargo clippy --all-targets --no-default-features --features ggpubr -- -D warnings
 

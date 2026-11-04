@@ -4095,10 +4095,14 @@ impl GGPlot {
     /// Build and save with custom dimensions. (Feature `plotters`; native only.)
     #[cfg(all(feature = "plotters", not(target_arch = "wasm32")))]
     pub fn save_with_size(self, path: &str, w: u32, h: u32) -> Result<(), GGError> {
-        let (built, layout) = self.prepare(w, h)?;
-
         // Determine backend from file extension
         let ext = path.rsplit('.').next().unwrap_or("svg").to_lowercase();
+        #[cfg(feature = "pdf")]
+        if ext == "pdf" {
+            let bytes = self.render_pdf_with_size(w, h)?;
+            return std::fs::write(path, bytes).map_err(|e| GGError::Render(e.into()));
+        }
+        let (built, layout) = self.prepare(w, h)?;
 
         match ext.as_str() {
             "svg" => {
@@ -4288,6 +4292,24 @@ impl GGPlot {
         PlotRenderer::render(&built, &mut backend).map_err(GGError::Render)?;
         let (ow, oh) = backend.dimensions();
         Ok((ow, oh, backend.into_rgba()))
+    }
+
+    /// Render to a vector PDF (feature `pdf`, #467): one page of `w` × `h`
+    /// points (1 px = 1 pt), real selectable text in the bundled DejaVu
+    /// fonts (embedded as subsets).
+    #[cfg(feature = "pdf")]
+    pub fn render_pdf_with_size(self, w: u32, h: u32) -> Result<Vec<u8>, GGError> {
+        let (built, layout) = self.prepare(w, h)?;
+        let mut backend =
+            crate::render::pdf_backend::PdfBackend::new(w, h, layout.plot_area.clone());
+        PlotRenderer::render(&built, &mut backend).map_err(GGError::Render)?;
+        backend.finish().map_err(GGError::Render)
+    }
+
+    /// [`render_pdf_with_size`](Self::render_pdf_with_size) at 800 × 600.
+    #[cfg(feature = "pdf")]
+    pub fn render_pdf(self) -> Result<Vec<u8>, GGError> {
+        self.render_pdf_with_size(800, 600)
     }
 
     /// Like [`render_rgba_with_size`](Self::render_rgba_with_size), but also

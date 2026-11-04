@@ -155,7 +155,7 @@ struct Args {
     primary: Option<String>,
 
     // ─── output ───────────────────────────────────────────────────
-    /// Output file; format from extension (.svg/.png/.jpg/...).
+    /// Output file; format from extension (.svg/.png/.jpg/.pdf/...).
     #[arg(short, long, value_name = "FILE")]
     output: Option<String>,
     /// Write SVG to stdout instead of a file.
