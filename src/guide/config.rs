@@ -34,6 +34,10 @@ pub struct GuideLegend {
     pub colourbars: Vec<(crate::aes::Aesthetic, GuideColourbar)>,
     /// Per-aesthetic `guide_bins()` options (#409) for a binned scale.
     pub bins: Vec<(crate::aes::Aesthetic, GuideBins)>,
+    /// Per-aesthetic legend positions (ggplot2 3.5's `guide_legend(position
+    /// =)`, #409): those legends draw at their own side instead of the
+    /// theme's `legend_position`.
+    pub positions: Vec<(crate::aes::Aesthetic, crate::theme::LegendPosition)>,
     /// Custom legend entries (`guide_custom()`, #409), drawn after the
     /// scales' own legends.
     pub custom: Vec<GuideCustom>,
@@ -79,6 +83,18 @@ impl GuideLegend {
                 .map(|(_, b)| b.clone())
                 .unwrap_or_default(),
         )
+    }
+
+    /// Where `aes`'s legend draws: its own position, else `main`.
+    pub(crate) fn position_for<'a>(
+        &'a self,
+        aes: &crate::aes::Aesthetic,
+        main: &'a crate::theme::LegendPosition,
+    ) -> &'a crate::theme::LegendPosition {
+        self.positions
+            .iter()
+            .find(|(a, _)| a == aes)
+            .map_or(main, |(_, p)| p)
     }
 
     /// Are `aes`'s legend keys reversed (globally or for `aes` alone)?

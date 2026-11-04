@@ -78,7 +78,7 @@ if (!svg.startsWith("<svg")) throw new Error("render failed");
 | `labels` | `title subtitle caption tag x y` (axis titles are not auto-filled from column names) |
 | `theme` | preset `gray bw minimal classic dark light void linedraw test` (default `minimal`), or an overlay `{ base, primary: [r,g,b], palette, title: {...}, panel_grid_major: {...}, axis_text_x_top: {...}, axis_text_y_right: {...}, strip_text_x/y: {...}, strip_background_x/y: {...}, strip_placement: "outside", … }` |
 | `legend` | `right left top bottom none inside` or `[x, y]` inside the panel |
-| `guides` | per aesthetic: `{ fill: "none", color: { title: "Group", reverse: true } }`; continuous colour/fill: `"coloursteps"` or `{ type: "colourbar", barwidth: 20, barheight: 150, nbin: 10, display: "rectangles", frame: false, ticks: false }` (`even_steps`, `show_limits` for steps); binned size/alpha/shape scales: `"bins"` (the default — keys labelled at bin edges) or `{ type: "bins", show_limits: true, axis: false }`, `"legend"` for one key per bin; fixed key looks: `{ override_aes: { size: 4, alpha: 1, shape: "square", color: "#rrggbb" } }` |
+| `guides` | per aesthetic: `{ fill: "none", color: { title: "Group", reverse: true } }`; continuous colour/fill: `"coloursteps"` or `{ type: "colourbar", barwidth: 20, barheight: 150, nbin: 10, display: "rectangles", frame: false, ticks: false }` (`even_steps`, `show_limits` for steps); binned size/alpha/shape scales: `"bins"` (the default — keys labelled at bin edges) or `{ type: "bins", show_limits: true, axis: false }`, `"legend"` for one key per bin; one legend at its own side: `{ position: "bottom" }`; fixed key looks: `{ override_aes: { size: 4, alpha: 1, shape: "square", color: "#rrggbb" } }` |
 
 ## Geoms
 

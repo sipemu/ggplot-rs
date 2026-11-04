@@ -15,7 +15,7 @@ pub enum AxisSide {
 }
 
 /// Position of the legend.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq)]
 pub enum LegendPosition {
     Right,
     Left,

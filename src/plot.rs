@@ -2154,6 +2154,19 @@ impl GGPlot {
         self
     }
 
+    /// Draw one aesthetic's legend at its own side (ggplot2 3.5's
+    /// `guides(colour = guide_legend(position = "bottom"))`, #409); the
+    /// others stay at the theme's `legend_position`.
+    pub fn guide_position(
+        mut self,
+        aes: crate::aes::Aesthetic,
+        position: crate::theme::LegendPosition,
+    ) -> Self {
+        self.guide_legend.positions.retain(|(a, _)| *a != aes);
+        self.guide_legend.positions.push((aes, position));
+        self
+    }
+
     /// Add a legend entry drawn by your own code — ggplot2's
     /// `guide_custom()` (#409): see [`GuideCustom`](crate::guide::config::GuideCustom).
     pub fn guide_custom(mut self, guide: crate::guide::config::GuideCustom) -> Self {
@@ -3872,6 +3885,9 @@ impl GGPlot {
         if guide.custom.is_empty() {
             guide.custom = std::mem::take(&mut self.guide_legend.custom);
         }
+        if guide.positions.is_empty() {
+            guide.positions = std::mem::take(&mut self.guide_legend.positions);
+        }
         self.guide_legend = guide;
         self
     }
@@ -4691,7 +4707,17 @@ impl GGPlot {
         // `Clip` (the 0.21 behaviour, no correction at all). A plot whose
         // outer labels already fit never grows `extras`, so it stays
         // byte-identical.
-        let mut extras = crate::render::layout::LayoutExtras::default();
+        // #409: legends moved to another side (`guide_position`) reserve
+        // that side's band too.
+        let mut extras = crate::render::layout::LayoutExtras {
+            extra_legend_sides: crate::guide::legend::extra_legend_sides(
+                &built.scales,
+                &built.suppressed_aes,
+                &built.guide_legend,
+                &built.theme.legend_position,
+            ),
+            ..Default::default()
+        };
         // A secondary y axis draws its ticks, labels and title right of the
         // panel: reserve that width so they stay on-canvas (and clear of a
         // right-hand legend).
