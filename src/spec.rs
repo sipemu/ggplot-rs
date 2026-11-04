@@ -365,11 +365,21 @@ pub struct CoordFull {
     pub ylim: Option<[f64; 2]>,
     /// `cartesian`: mirror the panel — `"x"`, `"y"` or `"xy"`.
     pub reverse: Option<String>,
+    /// `cartesian`: keep the scale padding — `false` for none, or per side
+    /// `[top, right, bottom, left]` (#411).
+    pub expand: Option<ExpandSpec>,
     /// `radial`: theta start / end in radians (clockwise from 12 o'clock).
     pub start: Option<f64>,
     pub end: Option<f64>,
     /// `radial`: inner radius as a fraction of the outer (a donut).
     pub inner_radius: Option<f64>,
+}
+
+#[derive(Deserialize, Clone, Copy)]
+#[serde(untagged)]
+pub enum ExpandSpec {
+    All(bool),
+    Sides([bool; 4]),
 }
 
 #[derive(Deserialize, Default)]
@@ -1620,8 +1630,16 @@ fn apply_coord(plot: GGPlot, c: &CoordSpec) -> Result<GGPlot, String> {
                 Some("xy") => (true, true),
                 Some(o) => return Err(format!("unknown reverse '{o}' (expected x, y, xy, none)")),
             };
-            if rev != (false, false) {
-                let mut c = crate::coord::cartesian::CoordCartesian::new().reverse(rev.0, rev.1);
+            let expand = match full.and_then(|f| f.expand) {
+                None => [true; 4],
+                Some(ExpandSpec::All(e)) => [e; 4],
+                Some(ExpandSpec::Sides(s)) => s,
+            };
+            if rev != (false, false) || expand != [true; 4] {
+                let [t, r, b, l] = expand;
+                let mut c = crate::coord::cartesian::CoordCartesian::new()
+                    .reverse(rev.0, rev.1)
+                    .expand(t, r, b, l);
                 if let Some((a, b)) = xl {
                     c = c.xlim(a, b);
                 }
@@ -2160,6 +2178,22 @@ mod tests {
         .unwrap();
         // A bottom axis: the top element doesn't apply.
         assert!(!svg.contains("#C80000"), "{svg}");
+    }
+
+    #[test]
+    fn coord_cartesian_expand() {
+        let base = render(&format!(
+            r#"{{ {DATA}, "aes": {{"x": "x", "y": "y"}}, "layers": [{{"geom": "point"}}] }}"#
+        ))
+        .unwrap();
+        for e in ["false", "[true, false, true, false]"] {
+            let svg = render(&format!(
+                r#"{{ {DATA}, "aes": {{"x": "x", "y": "y"}}, "layers": [{{"geom": "point"}}],
+                   "coord": {{"type": "cartesian", "expand": {e}}} }}"#
+            ))
+            .unwrap();
+            assert_ne!(svg, base, "{e}");
+        }
     }
 
     #[test]
