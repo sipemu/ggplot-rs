@@ -468,14 +468,52 @@ impl PlotRenderer {
 
         // #412: a wrapped label (`FacetLabeller::Wrap`) takes several lines;
         // the strip grows to the tallest one.
-        let strip_lines = built
-            .panels
-            .iter()
-            .map(|p| p.col_label.as_deref().unwrap_or(&p.label).lines().count())
-            .max()
-            .unwrap_or(1)
-            .max(1);
-        let strip_height = theme.strip_text.size * (1.0 + 1.2 * (strip_lines - 1) as f64) + 8.0;
+        let strip_lines = |label: &dyn Fn(&crate::facet::Panel) -> Option<String>| {
+            built
+                .panels
+                .iter()
+                .filter_map(|p| label(p).map(|l| l.lines().count()))
+                .max()
+                .unwrap_or(1)
+                .max(1)
+        };
+        let thickness =
+            |lines: usize| theme.strip_text.size * (1.0 + 1.2 * (lines - 1) as f64) + 8.0;
+        // #412: `facet_grid` draws its column strips once (top, or bottom
+        // when switched) and its row strips once (right, or left); a
+        // `facet_wrap` panel carries its own strip on `strip_position`.
+        let is_grid = matches!(built.facet, Facet::Grid { .. });
+        let col_strip = |p: &crate::facet::Panel| {
+            if is_grid {
+                p.col_label.clone()
+            } else {
+                Some(p.label.clone())
+            }
+        };
+        let row_strip = |p: &crate::facet::Panel| {
+            if is_grid {
+                p.row_label.clone()
+            } else {
+                None
+            }
+        };
+        let strip_height = thickness(strip_lines(&col_strip));
+        let row_strip_width = thickness(strip_lines(&row_strip));
+        let (wrap_side, switch) = match &built.facet {
+            Facet::Wrap { strip_position, .. } => {
+                (*strip_position, crate::facet::FacetSwitch::None)
+            }
+            Facet::Grid { switch, .. } => (crate::facet::StripPosition::Top, *switch),
+            Facet::None => (
+                crate::facet::StripPosition::Top,
+                crate::facet::FacetSwitch::None,
+            ),
+        };
+        // A wrap strip on the left / right is as thick as a top one is tall.
+        let wrap_vertical = matches!(
+            wrap_side,
+            crate::facet::StripPosition::Left | crate::facet::StripPosition::Right
+        );
         let gap_x = theme.get_panel_spacing_x();
         let gap_y = theme.get_panel_spacing_y();
 
@@ -513,9 +551,14 @@ impl PlotRenderer {
                 built.panels.len(),
                 *want,
                 aspect,
-                plot_area.width,
+                plot_area.width
+                    - if wrap_vertical {
+                        strip_height * want.unwrap_or(1) as f64
+                    } else {
+                        0.0
+                    },
                 plot_area.height,
-                strip_height,
+                if wrap_vertical { 0.0 } else { strip_height },
                 gap_x,
                 gap_y,
             )),
@@ -553,6 +596,65 @@ impl PlotRenderer {
             })
             .collect();
 
+        // Each panel's strips (#412): (side, label, thickness). The bands a
+        // row / column reserves for them are the thickest strip it carries
+        // on each side.
+        use crate::facet::StripPosition as Side;
+        let strips: Vec<Vec<(Side, String, f64)>> = built
+            .panels
+            .iter()
+            .enumerate()
+            .map(|(pi, p)| {
+                let (r, c) = cell[pi];
+                let mut v = Vec::new();
+                if is_grid {
+                    if let Some(l) = &p.col_label {
+                        if switch.x() && r == nrow - 1 {
+                            v.push((Side::Bottom, l.clone(), strip_height));
+                        } else if !switch.x() && r == 0 {
+                            v.push((Side::Top, l.clone(), strip_height));
+                        }
+                    }
+                    if let Some(l) = &p.row_label {
+                        if switch.y() && c == 0 {
+                            v.push((Side::Left, l.clone(), row_strip_width));
+                        } else if !switch.y() && c == ncol - 1 {
+                            v.push((Side::Right, l.clone(), row_strip_width));
+                        }
+                    }
+                } else {
+                    v.push((wrap_side, p.label.clone(), strip_height));
+                }
+                v
+            })
+            .collect();
+        let mut band_top = vec![0.0_f64; nrow.max(1)];
+        let mut band_bottom = vec![0.0_f64; nrow.max(1)];
+        let mut band_left = vec![0.0_f64; ncol.max(1)];
+        let mut band_right = vec![0.0_f64; ncol.max(1)];
+        for (pi, list) in strips.iter().enumerate() {
+            let (r, c) = cell[pi];
+            for (side, _, t) in list {
+                let b = match side {
+                    Side::Top => &mut band_top[r],
+                    Side::Bottom => &mut band_bottom[r],
+                    Side::Left => &mut band_left[c],
+                    Side::Right => &mut band_right[c],
+                };
+                *b = b.max(*t);
+            }
+        }
+        // Every row / column of a wrap keeps its strip band, even one whose
+        // cells are all empty slots (a top band per row, as before #412).
+        if !is_grid {
+            match wrap_side {
+                Side::Top => band_top.fill(strip_height),
+                Side::Bottom => band_bottom.fill(strip_height),
+                Side::Left => band_left.fill(strip_height),
+                Side::Right => band_right.fill(strip_height),
+            }
+        }
+
         // Proportional panel sizing (R's `space =`): free_x sizes columns to
         // their data x-range, free_y sizes rows to their y-range. Fixed = equal.
         let space = match &built.facet {
@@ -573,7 +675,10 @@ impl PlotRenderer {
             }
             (lo <= hi).then_some(hi - lo)
         };
-        let avail_w = plot_area.width - gap_x * (ncol as f64 - 1.0);
+        let avail_w = plot_area.width
+            - gap_x * (ncol as f64 - 1.0)
+            - band_left.iter().sum::<f64>()
+            - band_right.iter().sum::<f64>();
         let col_widths: Vec<f64> = if let Some(g) = fixed_grid {
             vec![g.panel_w; ncol]
         } else if space.free_x() && ncol > 0 {
@@ -594,19 +699,25 @@ impl PlotRenderer {
         };
         let mut col_x = vec![plot_area.x; ncol.max(1)];
         {
-            let used_w: f64 = col_widths.iter().sum::<f64>() + gap_x * (ncol as f64 - 1.0);
+            let used_w: f64 = col_widths.iter().sum::<f64>()
+                + gap_x * (ncol as f64 - 1.0)
+                + band_left.iter().sum::<f64>()
+                + band_right.iter().sum::<f64>();
             let mut acc = if fixed_grid.is_some() {
                 plot_area.x + ((plot_area.width - used_w) / 2.0).max(0.0)
             } else {
                 plot_area.x
             };
             for c in 0..ncol {
-                col_x[c] = acc;
-                acc += col_widths[c] + gap_x;
+                col_x[c] = acc + band_left[c];
+                acc += band_left[c] + col_widths[c] + band_right[c] + gap_x;
             }
         }
 
-        let avail_h = plot_area.height - gap_y * (nrow as f64 - 1.0) - strip_height * nrow as f64;
+        let avail_h = plot_area.height
+            - gap_y * (nrow as f64 - 1.0)
+            - band_top.iter().sum::<f64>()
+            - band_bottom.iter().sum::<f64>();
         let row_heights: Vec<f64> = if let Some(g) = fixed_grid {
             vec![g.panel_h; nrow]
         } else if space.free_y() && nrow > 0 {
@@ -627,16 +738,19 @@ impl PlotRenderer {
         };
         let mut row_y = vec![plot_area.y; nrow.max(1)];
         {
-            let used_h: f64 =
-                row_heights.iter().sum::<f64>() + (strip_height + gap_y) * nrow as f64 - gap_y;
+            let used_h: f64 = row_heights.iter().sum::<f64>()
+                + gap_y * (nrow as f64 - 1.0)
+                + band_top.iter().sum::<f64>()
+                + band_bottom.iter().sum::<f64>();
             let mut acc = if fixed_grid.is_some() {
                 plot_area.y + ((plot_area.height - used_h) / 2.0).max(0.0)
             } else {
                 plot_area.y
             };
             for r in 0..nrow {
-                row_y[r] = acc;
-                acc += row_heights[r] + strip_height + gap_y;
+                // `row_y` is the panel's own top edge.
+                row_y[r] = acc + band_top[r];
+                acc += band_top[r] + row_heights[r] + band_bottom[r] + gap_y;
             }
         }
 
@@ -669,7 +783,7 @@ impl PlotRenderer {
 
             let panel_rect = crate::render::Rect {
                 x: px,
-                y: py + strip_height,
+                y: py,
                 width: panel_width,
                 height: panel_height,
             };
@@ -682,49 +796,24 @@ impl PlotRenderer {
             // faceted inside legend.
             backend.clear_corner_claims();
 
-            // Strip label background
-            if theme.strip_background.visible {
-                backend.draw_rect(
-                    (px, py),
-                    (px + panel_width, py + strip_height),
-                    &RectStyle {
-                        fill: theme.strip_background.fill,
-                        stroke: theme.strip_background.color,
-                        stroke_width: theme.strip_background.width,
-                        alpha: 1.0,
-                        clip: false,
-                        corner_radius: 0.0,
-                    },
-                )?;
-            }
-
-            // Strip label text
-            if theme.strip_text.visible {
-                let label = panel.col_label.as_deref().unwrap_or(&panel.label);
-                let family = if theme.strip_text.family.is_empty() {
-                    None
-                } else {
-                    Some(theme.strip_text.family.clone())
+            // Strips (#412): each on its side of the panel, the side ones
+            // with their text turned to read along them.
+            let mut bottom_strip = 0.0_f64;
+            let mut left_strip = 0.0_f64;
+            for (side, label, t) in &strips[pi] {
+                let (rect, angle) = match side {
+                    Side::Top => ((px, py - t, panel_width, *t), 0.0),
+                    Side::Bottom => {
+                        bottom_strip = *t;
+                        ((px, py + panel_height, panel_width, *t), 0.0)
+                    }
+                    Side::Left => {
+                        left_strip = *t;
+                        ((px - t, py, *t, panel_height), 270.0)
+                    }
+                    Side::Right => ((px + panel_width, py, *t, panel_height), 90.0),
                 };
-                let lines: Vec<&str> = label.lines().collect();
-                let n = lines.len().max(1) as f64;
-                for (k, line) in lines.iter().enumerate() {
-                    let dy = (k as f64 - (n - 1.0) / 2.0) * theme.strip_text.size * 1.2;
-                    backend.draw_text(
-                        line,
-                        (px + panel_width / 2.0, py + strip_height / 2.0 + dy),
-                        &TextStyle {
-                            color: theme.strip_text.color,
-                            size: theme.strip_text.size,
-                            anchor: TextAnchor::Middle,
-                            angle: 0.0,
-                            family: family.clone(),
-                            face: theme.strip_text.face,
-                            bg_colour: None,
-                            bg_r: 0.0,
-                        },
-                    )?;
-                }
+                draw_strip(backend, theme, rect, label, angle)?;
             }
 
             // Panel background
@@ -791,33 +880,44 @@ impl PlotRenderer {
                 }
 
                 // Bottom row gets x axis
+                // A strip below / left of the panel sits between it and its
+                // axis (ggplot2's `strip.placement = "inside"`, #412).
                 if prow == nrow - 1 || pi + ncol >= built.panels.len() {
+                    let axis_rect = crate::render::Rect {
+                        height: panel_rect.height + bottom_strip,
+                        ..panel_rect.clone()
+                    };
                     axis::draw_x_axis_with(
                         xs,
                         built.coord.as_ref(),
                         theme,
-                        &panel_rect,
+                        &axis_rect,
                         &total_area,
                         false,
                         backend,
                     )?;
-                    x_title_area = Some(union(&x_title_area, &panel_rect));
+                    x_title_area = Some(union(&x_title_area, &axis_rect));
                 }
 
                 // Left column gets y axis
                 if pcol == 0 {
+                    let axis_rect = crate::render::Rect {
+                        x: panel_rect.x - left_strip,
+                        width: panel_rect.width + left_strip,
+                        ..panel_rect.clone()
+                    };
                     axis::draw_y_axis_with(
                         ys,
                         built.coord.as_ref(),
                         theme,
-                        &panel_rect,
+                        &axis_rect,
                         false,
                         backend,
                     )?;
                     let reserve = axis::y_label_reserve(theme, &ys.breaks());
                     let prev = y_title_area.as_ref().map(|(r, _)| r.clone());
                     let widest = y_title_area.as_ref().map_or(0.0, |(_, w)| *w);
-                    y_title_area = Some((union(&prev, &panel_rect), widest.max(reserve)));
+                    y_title_area = Some((union(&prev, &axis_rect), widest.max(reserve)));
                 }
             }
 
@@ -1227,6 +1327,69 @@ impl PlotRenderer {
 
 /// Log-10 tick positions inside `[lo, hi]` (log10 units): `(position, kind)`
 /// with kind 0 = a power of ten (long), 1 = 5× (mid), 2 = the rest (short).
+/// One facet strip: its background over `(x, y, w, h)` and its label lines
+/// centred in it, turned by `angle` (90 = reads top to bottom, a right-hand
+/// row strip; 270 = bottom to top, a left one) (#412).
+fn draw_strip(
+    backend: &mut dyn DrawBackend,
+    theme: &crate::theme::Theme,
+    (x, y, w, h): (f64, f64, f64, f64),
+    label: &str,
+    angle: f64,
+) -> Result<(), RenderError> {
+    if theme.strip_background.visible {
+        backend.draw_rect(
+            (x, y),
+            (x + w, y + h),
+            &RectStyle {
+                fill: theme.strip_background.fill,
+                stroke: theme.strip_background.color,
+                stroke_width: theme.strip_background.width,
+                alpha: 1.0,
+                clip: false,
+                corner_radius: 0.0,
+            },
+        )?;
+    }
+    if !theme.strip_text.visible {
+        return Ok(());
+    }
+    let family = if theme.strip_text.family.is_empty() {
+        None
+    } else {
+        Some(theme.strip_text.family.clone())
+    };
+    let lines: Vec<&str> = label.lines().collect();
+    let n = lines.len().max(1) as f64;
+    for (k, line) in lines.iter().enumerate() {
+        let d = (k as f64 - (n - 1.0) / 2.0) * theme.strip_text.size * 1.2;
+        // Successive lines stack downwards when horizontal, and away from
+        // the panel's reading direction when turned.
+        let (dx, dy) = if angle == 90.0 {
+            (-d, 0.0)
+        } else if angle == 270.0 {
+            (d, 0.0)
+        } else {
+            (0.0, d)
+        };
+        backend.draw_text(
+            line,
+            (x + w / 2.0 + dx, y + h / 2.0 + dy),
+            &TextStyle {
+                color: theme.strip_text.color,
+                size: theme.strip_text.size,
+                anchor: TextAnchor::Middle,
+                angle,
+                family: family.clone(),
+                face: theme.strip_text.face,
+                bg_colour: None,
+                bg_r: 0.0,
+            },
+        )?;
+    }
+    Ok(())
+}
+
 fn log_ticks(lo: f64, hi: f64) -> Vec<(f64, u8)> {
     let mut out = Vec::new();
     if !(lo.is_finite() && hi.is_finite()) || hi - lo > 300.0 {

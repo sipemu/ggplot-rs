@@ -32,6 +32,38 @@ impl FacetSpace {
     }
 }
 
+/// Which side of a `facet_wrap` panel its strip sits on (ggplot2's
+/// `strip.position`, #412).
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum StripPosition {
+    #[default]
+    Top,
+    Bottom,
+    Left,
+    Right,
+}
+
+/// Move `facet_grid` strips to the opposite side (ggplot2's `switch`,
+/// #412): `X` puts the column strips below the grid, `Y` the row strips on
+/// its left, `Both` does both.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum FacetSwitch {
+    #[default]
+    None,
+    X,
+    Y,
+    Both,
+}
+
+impl FacetSwitch {
+    pub fn x(self) -> bool {
+        matches!(self, FacetSwitch::X | FacetSwitch::Both)
+    }
+    pub fn y(self) -> bool {
+        matches!(self, FacetSwitch::Y | FacetSwitch::Both)
+    }
+}
+
 /// How facet strip labels are formatted.
 #[derive(Clone, Default)]
 pub enum FacetLabeller {
@@ -103,6 +135,8 @@ pub enum Facet {
         vertical: bool,
         /// First row at the top (default; ggplot2's `as.table = TRUE`).
         as_table: bool,
+        /// The side each panel's strip sits on (`strip.position`, #412).
+        strip_position: StripPosition,
     },
     Grid {
         row_var: Option<String>,
@@ -111,6 +145,9 @@ pub enum Facet {
         labeller: FacetLabeller,
         #[doc = "Proportional panel sizing (R's `space =`)."]
         space: FacetSpace,
+        /// Column strips on top and row strips on the right, unless
+        /// switched (`switch`, #412).
+        switch: FacetSwitch,
     },
 }
 

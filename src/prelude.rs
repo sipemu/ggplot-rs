@@ -6,7 +6,7 @@ pub use crate::coord::radar::CoordRadar;
 #[cfg(feature = "sf")]
 pub use crate::coord::sf::CoordSf;
 pub use crate::data::{GGData, Value};
-pub use crate::facet::{FacetLabeller, FacetScales, FacetSpace};
+pub use crate::facet::{FacetLabeller, FacetScales, FacetSpace, FacetSwitch, StripPosition};
 pub use crate::geom::arcdiagram::GeomArcdiagram;
 pub use crate::geom::area::GeomArea;
 pub use crate::geom::arrow::{arrow, rect_edge_point, Arrow, ArrowEnds, ArrowType};

@@ -339,6 +339,11 @@ pub struct FacetSpec {
     pub as_table: Option<bool>,
     /// Wrap strip labels at this many characters (`label_wrap_gen(width)`).
     pub label_wrap: Option<usize>,
+    /// wrap: `"top"` (default), `"bottom"`, `"left"`, `"right"` (#412).
+    pub strip_position: Option<String>,
+    /// grid: `"x"`, `"y"` or `"both"` — column strips below, row strips
+    /// left (#412).
+    pub switch: Option<String>,
 }
 
 #[derive(Deserialize)]
@@ -1562,10 +1567,38 @@ fn apply_facet(plot: GGPlot, f: &FacetSpec) -> Result<GGPlot, String> {
                     *labeller = crate::facet::FacetLabeller::Wrap(width);
                 }
             }
-            Ok(plot.facet_wrap_dir(vertical, f.as_table.unwrap_or(true)))
+            if f.switch.is_some() {
+                return Err("switch is for rows/cols; a wrap takes strip_position".into());
+            }
+            let side = match f.strip_position.as_deref() {
+                None | Some("top") => crate::facet::StripPosition::Top,
+                Some("bottom") => crate::facet::StripPosition::Bottom,
+                Some("left") => crate::facet::StripPosition::Left,
+                Some("right") => crate::facet::StripPosition::Right,
+                Some(o) => {
+                    return Err(format!(
+                        "unknown strip_position '{o}' (expected top, bottom, left, right)"
+                    ))
+                }
+            };
+            Ok(plot
+                .facet_wrap_dir(vertical, f.as_table.unwrap_or(true))
+                .facet_strip_position(side))
         }
         (None, r, c) if r.is_some() || c.is_some() => {
-            Ok(plot.facet_grid_free(r.as_deref(), c.as_deref(), scales))
+            if f.strip_position.is_some() {
+                return Err("strip_position is for wrap; rows/cols take switch".into());
+            }
+            let switch = match f.switch.as_deref() {
+                None => crate::facet::FacetSwitch::None,
+                Some("x") => crate::facet::FacetSwitch::X,
+                Some("y") => crate::facet::FacetSwitch::Y,
+                Some("both") => crate::facet::FacetSwitch::Both,
+                Some(o) => return Err(format!("unknown switch '{o}' (expected x, y, both)")),
+            };
+            Ok(plot
+                .facet_grid_free(r.as_deref(), c.as_deref(), scales)
+                .facet_switch(switch))
         }
         _ => Err("set either `wrap` or `rows`/`cols`".into()),
     }
@@ -2076,6 +2109,40 @@ mod tests {
         ))
         .unwrap_err();
         assert!(e.contains("exactly one"), "{e}");
+    }
+
+    #[test]
+    fn facet_strip_position_and_switch() {
+        let d = r#""data": {"x": [1, 2, 3, 4], "y": [1, 2, 3, 4], "r": ["p", "p", "q", "q"],
+               "c": ["a", "b", "a", "b"]}, "aes": {"x": "x", "y": "y"}, "layers": [{"geom": "point"}]"#;
+        let svg = render(&format!(
+            r#"{{ {d}, "facet": {{"rows": "r", "cols": "c", "switch": "y"}} }}"#
+        ))
+        .unwrap();
+        assert!(svg.contains("rotate(270.0") && svg.contains(">p<"), "{svg}");
+        let svg = render(&format!(
+            r#"{{ {d}, "facet": {{"wrap": "c", "strip_position": "right"}} }}"#
+        ))
+        .unwrap();
+        assert!(svg.contains("rotate(90.0"), "{svg}");
+        for (f, msg) in [
+            (
+                r#"{"wrap": "c", "strip_position": "middle"}"#,
+                "unknown strip_position",
+            ),
+            (r#"{"rows": "r", "switch": "z"}"#, "unknown switch"),
+            (
+                r#"{"wrap": "c", "switch": "x"}"#,
+                "a wrap takes strip_position",
+            ),
+            (
+                r#"{"rows": "r", "strip_position": "left"}"#,
+                "rows/cols take switch",
+            ),
+        ] {
+            let e = render(&format!(r#"{{ {d}, "facet": {f} }}"#)).unwrap_err();
+            assert!(e.contains(msg), "{f}: {e}");
+        }
     }
 
     #[test]

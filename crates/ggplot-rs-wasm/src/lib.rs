@@ -210,8 +210,14 @@ export type Facet =
       as_table?: boolean;
       /** Wrap strip labels at this many characters (label_wrap_gen). */
       label_wrap?: number;
+      /** The side of each panel its strip sits on (default "top"). */
+      strip_position?: "top" | "bottom" | "left" | "right";
     }
-  | { rows?: string; cols?: string; scales?: "fixed" | "free" | "free_x" | "free_y" };
+  | {
+      rows?: string; cols?: string; scales?: "fixed" | "free" | "free_x" | "free_y";
+      /** Column strips below ("x"), row strips left ("y"), or both. */
+      switch?: "x" | "y" | "both";
+    };
 
 export type CoordName =
   | "cartesian" | "flip" | "polar" | "radial" | "fixed" | "equal" | "radar" | "quickmap" | "map" | "sf";

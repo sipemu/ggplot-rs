@@ -23,6 +23,12 @@ All notable changes to this project are documented here. The format follows
   names), `scale_radius`. Spec / npm: `scales.{size,alpha,linewidth,shape}`
   (`identity` / `values` / `range`), colour `steps2` / `midpoint` / `bins`,
   `"palette": "viridis_b:C"`.
+- Facet strips (#412): `facet_strip_position(StripPosition::{Top, Bottom,
+  Left, Right})` for `facet_wrap` (ggplot2's `strip.position`; side strips
+  read along the panel) and `facet_switch(FacetSwitch::{X, Y, Both})` for
+  `facet_grid` (`switch`); a strip below / left of a panel sits between it
+  and its axis. Spec / npm: `facet.strip_position`, `facet.switch`.
+  `Facet::Wrap` gains `strip_position`, `Facet::Grid` gains `switch`.
 - Guides per aesthetic (#409): `guide_none(aes)` (ggplot2's `guides(fill =
   "none")`) and `guide_title(aes, title)`; `guides(..)` keeps them. Spec /
   npm: `"guides": {"fill": "none", "color": {"title": "Group"}}`.
@@ -48,6 +54,10 @@ All notable changes to this project are documented here. The format follows
   `map`, `radial` (`start`, `end`, `inner_radius`), cartesian `reverse`.
 
 ### Fixed
+- `facet_grid` strips (#412): the row labels were never drawn and every
+  panel repeated its column strip. Now, as in ggplot2, column strips run
+  once along the top of the grid and row strips once down its right side
+  (text turned 90°). **Visible change** for every `facet_grid` plot.
 - `position_jitterdodge` (#429): the jitter is scaled by the dodge group
   count as in ggplot2 — ±`jitter_width / (ndodge + 2)`, `ndodge` = the most
   groups in one x slot — and `PositionJitterDodge::default()` uses ggplot2's
