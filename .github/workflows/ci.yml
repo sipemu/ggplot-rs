@@ -70,6 +70,16 @@ jobs:
       - name: Tests (sf)
         run: cargo test --no-default-features --features sf --lib --test sf --test native_svg --test linewidth_arrow --test hexbin --test svg_root_attrs --test formatted_values --test tooltip_templates --test geom_text_font --test geom_ink_paper --test geom_ink_paper_sf --test gradient_limits --test default_output_022 --test default_output_023 --test axis_label_fit --test legend_wrap --test position_panels_r --test position_vjust_text_dodge --test scale_size_area --test errorbar_dodge_caps --test boxplot_identity --test decorative_layer
 
+      # The JSON plot spec shared by the CLI and the npm package, plus the
+      # agent-skill freshness checks (skills/ must match the shipped API).
+      - name: Clippy (spec)
+        run: cargo clippy --no-default-features --features spec --lib --tests -- -D warnings
+
+      - name: Tests (spec + skills)
+        run: |
+          cargo test --no-default-features --features spec --lib spec::
+          cargo test --no-default-features --features spec --test skills
+
       - name: Clippy (tiles)
         run: cargo clippy --no-default-features --features tiles,canvas --lib --tests -- -D warnings
 
@@ -157,6 +167,39 @@ jobs:
         working-directory: js
         run: npm pack --dry-run
 
+  # The `ggplot-rs` CLI (bundled DuckDB — a slow C++ build, cached): it must
+  # build and plot on every PR, since cli-binaries.yml ships it on release.
+  cli:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: cli
+
+      - name: Clippy (cli)
+        run: cargo clippy --features cli --bin ggplot-rs -- -D warnings
+
+      - name: Build
+        run: cargo build --features cli --bin ggplot-rs
+
+      - name: Smoke test
+        run: |
+          bin=target/debug/ggplot-rs
+          printf 'x,y,g,lo,hi\n1,2,a,1,3\n2,4,b,3,5\n3,3,a,2,4\n' > smoke.csv
+          "$bin" --csv smoke.csv --describe
+          "$bin" --list-geoms | grep -qx sankey
+          "$bin" --csv smoke.csv --x x --y y --color g --geom point --geom smooth --param se=false -o a.svg
+          "$bin" --csv smoke.csv --x x --y y --aes ymin=lo --aes ymax=hi --geom pointrange -o b.png
+          echo '{"data":{"k":["a","b"],"v":[2,1]},"aes":{"weight":"v","fill":"k"},"layers":[{"geom":"treemap"}]}' > s.json
+          "$bin" --spec s.json -o c.svg
+          test -s a.svg && test -s b.png && test -s c.svg
+
   coverage:
     runs-on: ubuntu-latest
     steps:
@@ -177,7 +220,7 @@ jobs:
       - name: Generate coverage
         # Explicit features (not --all-features) to skip the `cli` feature, whose
         # bundled DuckDB is a slow C++ build and is exercised outside CI.
-        run: cargo llvm-cov --features polars,arrow,regression,serde,sf,geojson,ggpubr,tiles,canvas --workspace --lcov --output-path lcov.info
+        run: cargo llvm-cov --features polars,arrow,regression,serde,sf,geojson,ggpubr,tiles,canvas,spec --workspace --lcov --output-path lcov.info
 
       - name: Upload coverage to Codecov
         uses: codecov/codecov-action@v4

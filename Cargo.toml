@@ -1,6 +1,6 @@
 [package]
 name = "ggplot-rs"
-version = "0.38.0"
+version = "0.39.0"
 edition = "2021"
 # Only the explicit [[bin]] below is a binary; src/bin/load.rs is its module.
 autobins = false
@@ -13,6 +13,8 @@ documentation = "https://docs.rs/ggplot-rs"
 readme = "README.md"
 keywords = ["ggplot2", "plotting", "dataviz", "charts", "grammar"]
 categories = ["visualization", "science"]
+# `.claude/skills/*` are symlinks into `skills/`, which is packaged as-is.
+exclude = [".claude/"]
 
 # The library is a plain rlib. The browser (wasm-bindgen) bindings live in the
 # `crates/ggplot-rs-wasm` cdylib so that static / side-module consumers (e.g. an
@@ -108,9 +110,22 @@ geojson = ["sf", "dep:serde_json"]
 # (no getrandom/js) to build for wasm32; the wasm-bindgen browser exports moved
 # to the separate `ggplot-rs-wasm` crate (crates/ggplot-rs-wasm).
 wasm = ["sf"]
+# The declarative JSON plot spec (`ggplot_rs::spec`): one schema behind the
+# CLI's `--spec`/`--geom`, the npm package's `render()` and Rust callers.
+spec = ["serde", "dep:serde_json", "sf"]
 # `ggplot-rs` command-line tool: plot parquet files and DuckDB SQL from the shell.
 # Includes `sf` so `--geom sf` can plot geometry from the DuckDB spatial extension.
-cli = ["dep:clap", "dep:duckdb", "serde", "dep:toml", "dep:serde_json", "sf", "plotters"]
+cli = ["dep:clap", "dep:duckdb", "spec", "dep:toml", "plotters"]
+
+# `cargo binstall ggplot-rs` downloads the CLI archive cli-binaries.yml attaches
+# to each GitHub release instead of compiling the bundled DuckDB.
+[package.metadata.binstall]
+pkg-url = "{ repo }/releases/download/v{ version }/ggplot-rs-{ target }{ archive-suffix }"
+bin-dir = "ggplot-rs{ binary-ext }"
+pkg-fmt = "tgz"
+
+[package.metadata.binstall.overrides.x86_64-pc-windows-msvc]
+pkg-fmt = "zip"
 
 # The CLI binary (built only with `--features cli`).
 [[bin]]

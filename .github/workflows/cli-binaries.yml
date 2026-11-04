@@ -1,0 +1,89 @@
+name: CLI binaries
+
+# Builds the `ggplot-rs` CLI (feature `cli`, bundled DuckDB) for each target
+# and attaches the archives to the GitHub release — the same release that
+# publishes the crate (release.yml) and the npm package (npm.yml), so the
+# downloadable CLI always matches both. Archive names carry no version, so
+# `releases/latest/download/ggplot-rs-<target>.tar.gz` always works, and
+# `cargo binstall ggplot-rs` finds them via [package.metadata.binstall].
+#
+# Re-run for an existing release with workflow_dispatch + its tag.
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Release tag to build and upload for (e.g. v0.39.0)'
+        required: true
+        type: string
+
+env:
+  CARGO_TERM_COLOR: always
+  TAG: ${{ github.event_name == 'release' && github.ref_name || inputs.tag }}
+
+permissions:
+  contents: write # gh release upload
+
+jobs:
+  build:
+    name: ${{ matrix.target }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { target: x86_64-unknown-linux-gnu, os: ubuntu-latest }
+          - { target: aarch64-unknown-linux-gnu, os: ubuntu-24.04-arm }
+          - { target: aarch64-apple-darwin, os: macos-latest }
+          - { target: x86_64-apple-darwin, os: macos-latest, cross: true }
+          - { target: x86_64-pc-windows-msvc, os: windows-latest }
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.TAG }}
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+
+      - name: Versions match (crate, wasm crate, js/package.json, tag)
+        run: node js/check-version.mjs ${{ env.TAG }}
+
+      - name: Build
+        run: cargo build --release --locked --features cli --bin ggplot-rs --target ${{ matrix.target }}
+
+      - name: Smoke test
+        if: ${{ !matrix.cross }}
+        shell: bash
+        run: |
+          bin=target/${{ matrix.target }}/release/ggplot-rs
+          "$bin" --version
+          printf 'x,y,g\n1,2,a\n2,4,b\n3,3,a\n' > smoke.csv
+          "$bin" --csv smoke.csv --x x --y y --color g --geom point --geom line -o smoke.svg
+          "$bin" --csv smoke.csv --x x --y y -o smoke.png
+          test -s smoke.svg && test -s smoke.png
+
+      - name: Package (tar.gz)
+        if: runner.os != 'Windows'
+        shell: bash
+        run: |
+          dir=target/${{ matrix.target }}/release
+          cp README.md LICENSE-MIT LICENSE-APACHE "$dir/"
+          tar czf ggplot-rs-${{ matrix.target }}.tar.gz -C "$dir" ggplot-rs README.md LICENSE-MIT LICENSE-APACHE
+          echo "ASSET=ggplot-rs-${{ matrix.target }}.tar.gz" >> "$GITHUB_ENV"
+
+      - name: Package (zip)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $dir = "target/${{ matrix.target }}/release"
+          Copy-Item README.md, LICENSE-MIT, LICENSE-APACHE $dir
+          Compress-Archive -Path "$dir/ggplot-rs.exe", "$dir/README.md", "$dir/LICENSE-MIT", "$dir/LICENSE-APACHE" -DestinationPath "ggplot-rs-${{ matrix.target }}.zip"
+          "ASSET=ggplot-rs-${{ matrix.target }}.zip" | Out-File -FilePath $env:GITHUB_ENV -Append
+
+      - name: Upload to the release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release upload "$TAG" "$ASSET" --clobber

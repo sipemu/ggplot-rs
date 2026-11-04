@@ -13,9 +13,10 @@ use ggplot_rs::geom::sf::GeomSf;
 use ggplot_rs::prelude::*;
 use ggplot_rs::spatial::SfProjection;
 
-mod spec;
+use ggplot_rs::spec;
 
-// TypeScript mirror of `spec::PlotSpec` — keep in sync with spec.rs.
+// TypeScript mirror of `ggplot_rs::spec::PlotSpec` — keep in sync with src/spec.rs
+// (the `ts_mirror_matches_spec` test checks the geom list and layer params).
 #[wasm_bindgen(typescript_custom_section)]
 const PLOT_SPEC_TS: &'static str = r##"
 /** One data column: numbers → continuous, strings/booleans → categorical, null → missing. */
@@ -31,14 +32,22 @@ export type Aesthetic =
 /** Aesthetic → column name. */
 export type AesMap = Partial<Record<Aesthetic, string>>;
 
+/** Every geom `render()` accepts — `geoms()` returns the same list at runtime. */
 export type GeomName =
-  | "point" | "jitter" | "line" | "path" | "step" | "area" | "ribbon" | "col" | "bar"
-  | "histogram" | "freqpoly" | "density" | "boxplot" | "violin" | "dotplot" | "smooth"
-  | "text" | "label" | "errorbar" | "linerange" | "pointrange" | "crossbar" | "segment"
-  | "rect" | "tile" | "raster" | "polygon" | "rug" | "count" | "bin2d" | "hex"
-  | "density2d" | "contour" | "qq" | "qq_line" | "hline" | "vline" | "abline" | "blank"
-  | "waterfall" | "pareto" | "sankey" | "chord" | "treemap" | "sunburst" | "icicle"
-  | "funnel" | "stream" | "lollipop" | "dumbbell" | "candlestick" | "ohlc" | "calendar";
+  | "point" | "jitter" | "line" | "path" | "step" | "area" | "ribbon" | "stepribbon"
+  | "col" | "bar" | "segment" | "curve" | "spoke" | "rect" | "tile" | "raster" | "polygon"
+  | "text" | "label" | "text_repel" | "label_repel" | "rug" | "blank" | "hline" | "vline"
+  | "abline" | "histogram" | "freqpoly" | "density" | "density_ridges" | "boxplot"
+  | "violin" | "dotplot" | "smooth" | "count" | "bin2d" | "hex" | "density2d" | "contour"
+  | "contour_filled" | "qq" | "qq_line" | "qq_band" | "censor_marks" | "errorbar"
+  | "errorbarh" | "linerange" | "pointrange" | "crossbar" | "xrange" | "waterfall"
+  | "pareto" | "funnel" | "pyramid" | "lollipop" | "dumbbell" | "bullet"
+  | "bullet_vertical" | "marimekko" | "variwide" | "waffle" | "parliament" | "tilemap"
+  | "packed_bubble" | "variable_pie" | "wordcloud" | "venn" | "timeline" | "calendar"
+  | "flags" | "windbarb" | "treemap" | "sunburst" | "icicle" | "dendrogram" | "tree"
+  | "sankey" | "chord" | "arcdiagram" | "network" | "stream" | "candlestick" | "ohlc"
+  | "hlc" | "heikin_ashi" | "renko" | "point_figure" | "sf" | "sf_text" | "sf_label"
+  | "flow";
 
 export interface LayerParams {
   /** histogram: bin count. */
@@ -58,6 +67,26 @@ export interface LayerParams {
   intercept?: number;
   /** sunburst / icicle (required): hierarchy columns, outermost first. */
   levels?: string[];
+  /** waffle (default 10) / parliament (default 6): rows. */
+  rows?: number;
+  /** renko / point_figure (required): price box size. */
+  box_size?: number;
+  /** point_figure: reversal in boxes (default 3). */
+  reversal?: number;
+  /** tilemap tile shape (default "square"). */
+  shape?: "square" | "hexagon" | "circle" | "diamond";
+  /** windbarb (required): speed column (knots). */
+  speed?: string;
+  /** windbarb (required): direction column (degrees the wind comes from). */
+  direction?: string;
+  /** censor_marks (required): 0/1 censoring-indicator column. */
+  censor?: string;
+  /** sf / sf_text / sf_label / flow: map projection (default "platecarree"). */
+  projection?: "platecarree" | "mercator" | "equal-earth" | "albers-usa" | "albers-europe" | `utm:${string}`;
+  /** bullet / bullet_vertical: target column. */
+  target?: string;
+  /** bullet / bullet_vertical: qualitative range band upper bounds. */
+  ranges?: number[];
 }
 
 export type PositionName = "identity" | "stack" | "fill" | "dodge" | "dodge2" | "jitter" | "nudge";
@@ -102,7 +131,7 @@ export type Facet =
   | { wrap: string; ncol?: number; scales?: "fixed" | "free" | "free_x" | "free_y" }
   | { rows?: string; cols?: string; scales?: "fixed" | "free" | "free_x" | "free_y" };
 
-export type CoordName = "cartesian" | "flip" | "polar" | "fixed" | "equal" | "radar";
+export type CoordName = "cartesian" | "flip" | "polar" | "fixed" | "equal" | "radar" | "sf";
 export type Coord =
   | CoordName
   | { type: CoordName; ratio?: number; xlim?: [number, number]; ylim?: [number, number] };
@@ -235,7 +264,7 @@ pub fn render_with_warnings(spec: PlotSpecInput) -> Result<RenderResult, JsValue
 /// The geom names {@link render} accepts.
 #[wasm_bindgen]
 pub fn geoms() -> Vec<String> {
-    spec::GEOMS.iter().map(|g| g.to_string()).collect()
+    spec::geoms().iter().map(|g| g.to_string()).collect()
 }
 
 /// The ggplot-rs version this package was built from.
@@ -293,24 +322,12 @@ fn render_geo_impl(spec_json: &str) -> Result<String, String> {
 
     let num = |k: &str, d: u32| v.get(k).and_then(|x| x.as_u64()).unwrap_or(d as u64) as u32;
     let (width, height) = (num("width", 800), num("height", 600));
-    let projection = match v.get("projection").and_then(|x| x.as_str()) {
-        Some("mercator") => SfProjection::Mercator,
-        Some("equal-earth") | Some("equalearth") => SfProjection::equal_earth(0.0),
-        Some("albers-usa") => SfProjection::albers_usa(),
-        Some("albers-europe") => SfProjection::albers_europe(),
-        Some(utm) if utm.starts_with("utm:") => {
-            let rest = &utm[4..];
-            let (zone_str, south) = match rest.strip_suffix(['s', 'S']) {
-                Some(z) => (z, true),
-                None => (rest, false),
-            };
-            match zone_str.parse::<u8>() {
-                Ok(zone) if (1..=60).contains(&zone) => SfProjection::utm(zone, south),
-                _ => SfProjection::PlateCarree,
-            }
-        }
-        _ => SfProjection::PlateCarree,
-    };
+    // Lenient: an unknown name or bad UTM zone falls back to plate carrée.
+    let projection = v
+        .get("projection")
+        .and_then(|x| x.as_str())
+        .and_then(|p| SfProjection::parse(p).ok())
+        .unwrap_or_default();
     // Optional zoom window `[lo, hi]` — for pan/zoom (roam). When present the
     // map clips to that window (updating axes) instead of the equal-aspect fit.
     let lim = |k: &str| -> Option<(f64, f64)> {
@@ -998,6 +1015,43 @@ fn render_scatter_xy_impl(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// The hand-written TypeScript types must name every spec geom and every
+    /// `LayerParams` field, or `.d.ts` users can't reach them.
+    #[test]
+    fn ts_mirror_matches_spec() {
+        // `#[wasm_bindgen(typescript_custom_section)]` consumes the const, so
+        // read the TypeScript from this file's source.
+        let ts = include_str!("lib.rs");
+        let block = |start: &str, end: &str| {
+            let a = ts.find(start).expect(start);
+            let b = a + ts[a..].find(end).unwrap();
+            &ts[a..b]
+        };
+        let ts_geoms = block("export type GeomName =", ";");
+        for g in spec::GEOMS {
+            assert!(
+                ts_geoms.contains(&format!("\"{g}\"")),
+                "GeomName lacks \"{g}\""
+            );
+        }
+        let ts_params = block("export interface LayerParams {", "\n}");
+        let rs = include_str!("../../../src/spec.rs");
+        let rs = &rs[rs.find("pub struct LayerParams {").unwrap()..];
+        let rs = &rs[..rs.find("\n}").unwrap()];
+        for line in rs.lines().skip(1) {
+            if let Some(field) = line
+                .trim()
+                .strip_prefix("pub ")
+                .and_then(|l| l.split(':').next())
+            {
+                assert!(
+                    ts_params.contains(&format!("{field}?:")),
+                    "LayerParams lacks {field}"
+                );
+            }
+        }
+    }
 
     fn spec(projection: &str) -> String {
         format!(

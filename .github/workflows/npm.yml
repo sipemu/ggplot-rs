@@ -58,6 +58,7 @@ jobs:
           name: npm-package
           path: |
             js/dist/
+            js/skills/
             js/LICENSE-MIT
             js/LICENSE-APACHE
           retention-days: 1
