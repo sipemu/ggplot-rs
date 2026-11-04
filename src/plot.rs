@@ -2116,6 +2116,38 @@ impl GGPlot {
         self
     }
 
+    /// Options for a continuous colour / fill legend (ggplot2's
+    /// `guides(fill = guide_colourbar(barwidth =, nbin =, display =, frame
+    /// =, ticks =))`, or `guide_coloursteps()` with [`GuideColourbar::steps`];
+    /// #409).
+    ///
+    /// [`GuideColourbar::steps`]: crate::guide::config::GuideColourbar::steps
+    pub fn guide_colourbar(
+        mut self,
+        aes: crate::aes::Aesthetic,
+        bar: crate::guide::config::GuideColourbar,
+    ) -> Self {
+        self.guide_legend.colourbars.retain(|(a, _)| *a != aes);
+        self.guide_legend.colourbars.push((aes, bar));
+        self
+    }
+
+    /// ggplot2's `guide_coloursteps()` for `aes`: the colourbar drawn as one
+    /// solid block per interval between breaks, evenly sized (#409).
+    pub fn guide_coloursteps(self, aes: crate::aes::Aesthetic) -> Self {
+        self.guide_colourbar(aes, crate::guide::config::GuideColourbar::steps())
+    }
+
+    /// Reverse one aesthetic's legend keys (`guides(colour =
+    /// guide_legend(reverse = TRUE))`, #409).
+    pub fn guide_reverse(mut self, aes: crate::aes::Aesthetic, reverse: bool) -> Self {
+        self.guide_legend.reversed.retain(|a| *a != aes);
+        if reverse {
+            self.guide_legend.reversed.push(aes);
+        }
+        self
+    }
+
     /// Show or hide the most recent layer in one aesthetic's legend only
     /// (ggplot2's `show.legend = c(colour = TRUE, fill = FALSE)`; #410).
     pub fn show_legend_for(mut self, aes: crate::aes::Aesthetic, show: bool) -> Self {
@@ -3427,12 +3459,19 @@ impl GGPlot {
     /// Configure legend guide (title, ncol, reverse).
     pub fn guides(mut self, mut guide: crate::guide::config::GuideLegend) -> Self {
         // Keep per-aesthetic settings made earlier (`guide_none` /
-        // `guide_title`) unless the new guide sets its own.
+        // `guide_title` / `guide_reverse` / `guide_colourbar`) unless the
+        // new guide sets its own.
         if guide.hidden.is_empty() {
             guide.hidden = std::mem::take(&mut self.guide_legend.hidden);
         }
         if guide.titles.is_empty() {
             guide.titles = std::mem::take(&mut self.guide_legend.titles);
+        }
+        if guide.reversed.is_empty() {
+            guide.reversed = std::mem::take(&mut self.guide_legend.reversed);
+        }
+        if guide.colourbars.is_empty() {
+            guide.colourbars = std::mem::take(&mut self.guide_legend.colourbars);
         }
         self.guide_legend = guide;
         self
@@ -4787,6 +4826,32 @@ impl GGPlot {
             }
         }
 
+        // #409: a `guide_colourbar(bar_width)` wider than a legend key
+        // widens a side legend's reserved band by the difference.
+        if has_legend
+            && matches!(
+                built.theme.legend_position,
+                crate::theme::LegendPosition::Left | crate::theme::LegendPosition::Right
+            )
+            && !matches!(
+                built.theme.legend_direction,
+                Some(crate::theme::LegendDirection::Horizontal)
+            )
+        {
+            let key_w = built.theme.legend_key_width.max(extras.legend_max_key_size);
+            let extra =
+                crate::guide::legend::legend_scales_for(&built.scales, &built.suppressed_aes)
+                    .iter()
+                    .filter(|aes| {
+                        crate::guide::legend::is_colorbar_aesthetic(aes)
+                            && built.scales.get(aes).is_some_and(|s| !s.is_discrete())
+                    })
+                    .filter_map(|aes| built.guide_legend.colourbar_for(aes).bar_width)
+                    .map(|w| (w - key_w).max(0.0))
+                    .fold(0.0_f64, f64::max);
+            extras.legend_extra_width = extras.legend_extra_width.max(extra);
+        }
+
         // #211: a continuous colourbar at `Top`/`Bottom` (or
         // `legend_direction(Horizontal)`) draws wide × short instead of
         // its usual tall × narrow bar (see `draw_continuous_legend_at`),
@@ -4835,6 +4900,7 @@ impl GGPlot {
                     let bar_height = crate::guide::legend::continuous_horizontal_bar_height(
                         &built.theme,
                         !title.is_empty(),
+                        &built.guide_legend.colourbar_for(&scale.aesthetic()),
                     );
                     let key_h = built
                         .theme
