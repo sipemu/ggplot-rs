@@ -32,6 +32,11 @@ pub struct GuideLegend {
     /// Per-aesthetic colourbar options (`guide_colourbar(..)` /
     /// `guide_coloursteps(..)`, #409) for a continuous colour / fill.
     pub colourbars: Vec<(crate::aes::Aesthetic, GuideColourbar)>,
+    /// Per-aesthetic `guide_bins()` options (#409) for a binned scale.
+    pub bins: Vec<(crate::aes::Aesthetic, GuideBins)>,
+    /// Binned-scale aesthetics drawn as a plain key-per-bin legend
+    /// (`guides(size = "legend")`) instead of their default `guide_bins()`.
+    pub plain_keys: Vec<crate::aes::Aesthetic>,
     /// Filled by the build (#410): every layer's legend glyph and the legend
     /// aesthetics it shows, so keys draw each layer's own picture.
     #[doc(hidden)]
@@ -50,6 +55,27 @@ impl GuideLegend {
             .find(|(a, _)| a == aes)
             .map(|(_, c)| c.clone())
             .unwrap_or_default()
+    }
+
+    /// The `guide_bins()` options `aes`'s legend draws with: the ones set
+    /// for it, or the defaults for a binned scale (ggplot2's default guide
+    /// for `scale_*_binned()`) — `None` for a plain legend.
+    pub(crate) fn bins_for(
+        &self,
+        aes: &crate::aes::Aesthetic,
+        scale: &dyn crate::scale::Scale,
+    ) -> Option<GuideBins> {
+        scale.bin_edge_labels()?;
+        if self.plain_keys.contains(aes) {
+            return None;
+        }
+        Some(
+            self.bins
+                .iter()
+                .find(|(a, _)| a == aes)
+                .map(|(_, b)| b.clone())
+                .unwrap_or_default(),
+        )
     }
 
     /// Are `aes`'s legend keys reversed (globally or for `aes` alone)?
@@ -120,6 +146,44 @@ impl GuideLegend {
             out.max_rows = Some(1);
         }
         out
+    }
+}
+
+/// Options of a binned scale's legend — ggplot2's `guide_bins()` (#409):
+/// keys stacked edge to edge, labelled at the bin boundaries along a small
+/// axis. Apply with [`GGPlot::guide_bins`](crate::GGPlot::guide_bins).
+#[derive(Clone, Debug, PartialEq)]
+pub struct GuideBins {
+    /// Label the two outer limits too (`show.limits`, #408).
+    pub show_limits: bool,
+    /// Draw the axis line and ticks beside the keys.
+    pub axis: bool,
+}
+
+impl Default for GuideBins {
+    fn default() -> Self {
+        GuideBins {
+            show_limits: false,
+            axis: true,
+        }
+    }
+}
+
+impl GuideBins {
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    /// Label the outer limits (`show.limits = TRUE`).
+    pub fn with_show_limits(mut self, on: bool) -> Self {
+        self.show_limits = on;
+        self
+    }
+
+    /// Draw the axis line and ticks (`TRUE` by default).
+    pub fn with_axis(mut self, on: bool) -> Self {
+        self.axis = on;
+        self
     }
 }
 

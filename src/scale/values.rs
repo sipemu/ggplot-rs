@@ -336,6 +336,11 @@ impl Scale for ScaleValueBinned {
             .collect()
     }
 
+    fn bin_edge_labels(&self) -> Option<Vec<String>> {
+        let e = self.edges();
+        (e.len() >= 2).then(|| super::util::format_numbers_opt(&e, None))
+    }
+
     fn name(&self) -> &str {
         &self.name
     }

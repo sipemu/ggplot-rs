@@ -157,6 +157,13 @@ pub trait Scale: Send + Sync {
         self.breaks()
     }
 
+    /// A binned scale's labels for its bin *edges* — one more than its
+    /// `breaks()` (one per bin) — which `guide_bins()` (#409) draws at the
+    /// boundaries between keys. `None` (the default) for every other scale.
+    fn bin_edge_labels(&self) -> Option<Vec<String>> {
+        None
+    }
+
     /// Map a data value to a point shape. Default returns None.
     fn map_to_shape(&self, _value: &Value) -> Option<PointShape> {
         None

@@ -511,7 +511,7 @@ pub enum GuideSpec {
 pub struct GuideFull {
     pub title: Option<String>,
     /// `"legend"` (default), `"colourbar"` / `"colorbar"`,
-    /// `"coloursteps"` / `"colorsteps"` (#409).
+    /// `"coloursteps"` / `"colorsteps"`, `"bins"` (#409).
     #[serde(rename = "type")]
     pub kind: Option<String>,
     pub reverse: Option<bool>,
@@ -524,6 +524,8 @@ pub struct GuideFull {
     pub ticks: Option<bool>,
     pub even_steps: Option<bool>,
     pub show_limits: Option<bool>,
+    /// `"bins"` guides: draw the axis line and ticks (default `true`).
+    pub axis: Option<bool>,
     /// Fixed key appearance (`override.aes`, #409).
     pub override_aes: Option<OverrideSpec>,
 }
@@ -570,8 +572,9 @@ fn colourbar_spec(
         Some("coloursteps" | "colorsteps") => GuideColourbar::steps(),
         Some(o) => {
             return Err(format!(
-                "guides.{name}: unknown guide '{o}' (expected none, legend, colourbar, coloursteps)"
-            ))
+            "guides.{name}: unknown guide '{o}' (expected none, legend, colourbar, coloursteps, \
+                 bins)"
+        ))
         }
     };
     let Some(g) = g else {
@@ -822,6 +825,10 @@ pub fn build_plot_with_data(
         };
         plot = match g {
             GuideSpec::Name(n) if n == "none" => plot.guide_none(aes),
+            GuideSpec::Name(n) if n == "bins" => {
+                plot.guide_bins(aes, crate::guide::config::GuideBins::new())
+            }
+            GuideSpec::Name(n) if n == "legend" => plot.guide_legend_keys(aes),
             GuideSpec::Name(n) => match colourbar_spec(name, Some(n), None)? {
                 Some(bar) => plot.guide_colourbar(aes, bar),
                 None => plot,
@@ -871,9 +878,27 @@ pub fn build_plot_with_data(
                     }
                     plot = plot.guide_override(aes.clone(), k);
                 }
-                match colourbar_spec(name, g.kind.as_deref(), Some(g.as_ref()))? {
-                    Some(bar) => plot.guide_colourbar(aes, bar),
-                    None => plot,
+                match g.kind.as_deref() {
+                    Some("bins") => {
+                        let mut b = crate::guide::config::GuideBins::new();
+                        if let Some(v) = g.show_limits {
+                            b = b.with_show_limits(v);
+                        }
+                        if let Some(v) = g.axis {
+                            b = b.with_axis(v);
+                        }
+                        plot.guide_bins(aes, b)
+                    }
+                    _ if g.axis.is_some() => {
+                        return Err(format!("guides.{name}.axis: only for a \"bins\" guide"))
+                    }
+                    Some("legend") if colourbar_spec(name, None, Some(g.as_ref()))?.is_none() => {
+                        plot.guide_legend_keys(aes)
+                    }
+                    kind => match colourbar_spec(name, kind, Some(g.as_ref()))? {
+                        Some(bar) => plot.guide_colourbar(aes, bar),
+                        None => plot,
+                    },
                 }
             }
         };
@@ -2331,6 +2356,31 @@ mod tests {
     }
 
     #[test]
+    fn guides_bins_for_binned_scales() {
+        let binned = r#""data": {"x": [1, 2, 3], "y": [1, 2, 3], "v": [3, 50, 97]},
+               "aes": {"x": "x", "y": "y", "size": "v"}, "layers": [{"geom": "point"}],
+               "scales": {"size": {"binned": 5}}"#;
+        let edges = render(&format!("{{ {binned} }}")).unwrap();
+        assert!(edges.contains(">25<") && !edges.contains(">0–25<"));
+        let limits = render(&format!(
+            r#"{{ {binned}, "guides": {{"size": {{"type": "bins", "show_limits": true,
+               "axis": false}}}} }}"#
+        ))
+        .unwrap();
+        assert!(limits.contains(">0<") && limits.contains(">100<"));
+        let keys = render(&format!(
+            r#"{{ {binned}, "guides": {{"size": "legend"}} }}"#
+        ))
+        .unwrap();
+        assert!(keys.contains(">0–25<"));
+        let e = render(&format!(
+            r#"{{ {binned}, "guides": {{"size": {{"type": "legend", "axis": true}}}} }}"#
+        ))
+        .unwrap_err();
+        assert!(e.contains("only for a \"bins\" guide"), "{e}");
+    }
+
+    #[test]
     fn guides_colourbar_and_coloursteps() {
         let cont = r#""data": {"x": [1, 2, 3], "y": [1, 2, 3], "z": [0, 50, 100]},
                "aes": {"x": "x", "y": "y", "color": "z"}, "layers": [{"geom": "point"}]"#;
@@ -2346,8 +2396,8 @@ mod tests {
         ))
         .unwrap();
         assert_ne!(bar, base);
-        let e = render(&format!(r#"{{ {cont}, "guides": {{"color": "bins"}} }}"#)).unwrap_err();
-        assert!(e.contains("unknown guide 'bins'"), "{e}");
+        let e = render(&format!(r#"{{ {cont}, "guides": {{"color": "axis"}} }}"#)).unwrap_err();
+        assert!(e.contains("unknown guide 'axis'"), "{e}");
         let e = render(&format!(
             r#"{{ {cont}, "guides": {{"color": {{"display": "raster"}}}} }}"#
         ))

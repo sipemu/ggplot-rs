@@ -695,6 +695,38 @@ fn draw_discrete_legend_at(
         }
     }
 
+    // A binned scale's `guide_bins()` (#409): keys edge to edge, labelled
+    // at the bin boundaries.
+    if let Some(bins) = guide.bins_for(&group[0].0, *scale) {
+        if let Some(mut edges) = scale
+            .bin_edge_labels()
+            .filter(|e| e.len() == breaks.len() + 1)
+        {
+            if guide.is_reversed(&group[0].0) {
+                edges.reverse();
+            }
+            let extent = draw_bins_keys(
+                scales,
+                group,
+                theme,
+                guide,
+                &bins,
+                &breaks,
+                &edges,
+                (legend_x, items_y),
+                swatch_size,
+                item_height,
+                backend,
+                is_horizontal,
+            )?;
+            return Ok(if is_horizontal {
+                extent
+            } else {
+                title_offset + extent
+            });
+        }
+    }
+
     // Horizontal legends lay keys left-to-right; vertical ones stack downward.
     let mut cur_x = legend_x;
     for (i, (pos, label)) in breaks.iter().enumerate() {
@@ -775,6 +807,151 @@ fn draw_discrete_legend_at(
     } else {
         Ok(title_offset + breaks.len() as f64 * item_height)
     }
+}
+
+/// `guide_bins()`'s keys (#409, ggplot2's default guide for a binned
+/// scale): one key per bin, edge to edge, with `edges` (one more than
+/// `breaks`) labelled at the boundaries — the outer two only with
+/// `show_limits` — beside an axis line with a tick at each boundary.
+/// Vertical keys run down from the smallest bin with the labels to their
+/// right; horizontal ones run left to right with the labels below. Returns
+/// the keys' extent along the legend (height, or width when horizontal).
+#[allow(clippy::too_many_arguments)]
+fn draw_bins_keys(
+    scales: &ScaleSet,
+    group: &[(Aesthetic, &dyn crate::scale::Scale)],
+    theme: &Theme,
+    guide: &GuideLegend,
+    bins: &crate::guide::config::GuideBins,
+    breaks: &[(f64, String)],
+    edges: &[String],
+    (x0, y0): (f64, f64),
+    swatch_size: f64,
+    item_height: f64,
+    backend: &mut dyn DrawBackend,
+    is_horizontal: bool,
+) -> Result<f64, RenderError> {
+    let n = breaks.len();
+    let text_size = theme.legend_text.size;
+    // Horizontal cells widen to fit their boundary labels.
+    let pitch = if is_horizontal {
+        let widest = edges
+            .iter()
+            .map(|l| l.chars().count() as f64 * text_size * 0.62)
+            .fold(0.0_f64, f64::max);
+        swatch_size.max(widest + theme.legend_spacing)
+    } else {
+        item_height
+    };
+    for (i, (pos, label)) in breaks.iter().enumerate() {
+        let (cell_x, cell_y) = if is_horizontal {
+            (x0 + i as f64 * pitch, y0)
+        } else {
+            (x0, y0 + i as f64 * pitch)
+        };
+        let (cell_w, cell_h) = if is_horizontal {
+            (pitch, swatch_size)
+        } else {
+            (swatch_size, pitch)
+        };
+        if theme.legend_key.visible {
+            if let Some(fill) = theme.legend_key.fill {
+                backend.draw_rect(
+                    (cell_x, cell_y),
+                    (cell_x + cell_w, cell_y + cell_h),
+                    &RectStyle {
+                        fill: Some(fill),
+                        stroke: theme.legend_key.color,
+                        stroke_width: theme.legend_key.width,
+                        alpha: 1.0,
+                        clip: false,
+                        corner_radius: 0.0,
+                    },
+                )?;
+            }
+        }
+        // The square key glyph, centred in its cell.
+        let x = cell_x + (cell_w - swatch_size) / 2.0;
+        let y = cell_y + (cell_h - swatch_size) / 2.0;
+        draw_group_keys(
+            backend,
+            scales,
+            group,
+            theme,
+            guide,
+            label,
+            *pos,
+            (x, y, x + swatch_size / 2.0, y + swatch_size / 2.0),
+            swatch_size,
+        )?;
+    }
+
+    let length = n as f64 * pitch;
+    let tick = (swatch_size * 0.2).max(2.0);
+    let line_style = LineStyle {
+        color: theme.legend_text.color,
+        width: 0.5,
+        alpha: 1.0,
+        linetype: Linetype::Solid,
+        ..Default::default()
+    };
+    if bins.axis {
+        let axis = if is_horizontal {
+            let ay = y0 + swatch_size;
+            [(x0, ay), (x0 + length, ay)]
+        } else {
+            let ax = x0 + swatch_size;
+            [(ax, y0), (ax, y0 + length)]
+        };
+        backend.draw_line(&axis, &line_style)?;
+    }
+    let family = if theme.legend_text.family.is_empty() {
+        None
+    } else {
+        Some(theme.legend_text.family.clone())
+    };
+    for (j, label) in edges.iter().enumerate() {
+        let at = j as f64 * pitch;
+        if bins.axis {
+            let t = if is_horizontal {
+                let (x, ay) = (x0 + at, y0 + swatch_size);
+                [(x, ay), (x, ay - tick)]
+            } else {
+                let (ax, y) = (x0 + swatch_size, y0 + at);
+                [(ax, y), (ax - tick, y)]
+            };
+            backend.draw_line(&t, &line_style)?;
+        }
+        if (j == 0 || j == n) && !bins.show_limits {
+            continue;
+        }
+        let (pos, anchor) = if is_horizontal {
+            (
+                (x0 + at, y0 + swatch_size + 2.0 + text_size * 0.6),
+                TextAnchor::Middle,
+            )
+        } else {
+            (
+                (x0 + swatch_size + theme.legend_spacing, y0 + at),
+                TextAnchor::Start,
+            )
+        };
+        backend.draw_text(
+            label,
+            pos,
+            &TextStyle {
+                color: theme.legend_text.color,
+                size: text_size,
+                anchor,
+                angle: 0.0,
+                family: family.clone(),
+                face: theme.legend_text.face,
+                bg_colour: None,
+                bg_r: 0.0,
+            },
+        )?;
+    }
+    Ok(length)
 }
 
 /// #211: the bar's own `(length, thickness)` in pixels for a continuous
@@ -1705,6 +1882,10 @@ pub(crate) fn plan_all_legends(
         // only a true colourbar (continuous `Color`/`Fill`) is exempt
         // from B3-2's wrap/grid planning.
         if !scale.is_discrete() && is_colorbar_aesthetic(aes) {
+            continue;
+        }
+        // `guide_bins()` (#409) lays its keys out on its own.
+        if guide.bins_for(aes, scale).is_some() {
             continue;
         }
         let breaks = scale.breaks();

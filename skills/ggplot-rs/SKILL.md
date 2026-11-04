@@ -149,7 +149,10 @@ With polars (default feature): `GGPlot::new(df!{ "x" => [1.0, 2.0], "y" => [3.0,
   `.guide_override(Aesthetic::Color, KeyOverride::new().size(4.0).alpha(1.0))` (`override.aes`);
   a continuous colour bar: `.guide_coloursteps(Aesthetic::Fill)` or
   `.guide_colourbar(Aesthetic::Fill, GuideColourbar::new().with_bar_height(150.0)
-  .with_nbin(10).with_display(ColourbarDisplay::Rectangles).with_ticks(false))`.
+  .with_nbin(10).with_display(ColourbarDisplay::Rectangles).with_ticks(false))`;
+  a binned scale (`scale_size_binned(5)` …) draws `guide_bins` — keys labelled at the
+  bin edges — tune with `.guide_bins(Aesthetic::Size, GuideBins::new().with_show_limits(true))`
+  or get one `lo–hi` key per bin with `.guide_legend_keys(Aesthetic::Size)`.
 
 ```rust
 use ggplot_rs::prelude::*;

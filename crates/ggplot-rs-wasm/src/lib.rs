@@ -122,9 +122,11 @@ export type Position =
       preserve?: "total" | "single";
     };
 
-/** A per-aesthetic guide: `"none"`, a colourbar kind, or its options (#409). */
+/** A per-aesthetic guide: `"none"`, a colourbar / bins kind, or its options (#409). */
 export type GuideSpec =
   | "none"
+  | "legend"
+  | "bins"
   | "colourbar"
   | "colorbar"
   | "coloursteps"
@@ -132,7 +134,7 @@ export type GuideSpec =
   | {
       title?: string;
       reverse?: boolean;
-      type?: "legend" | "colourbar" | "colorbar" | "coloursteps" | "colorsteps";
+      type?: "legend" | "colourbar" | "colorbar" | "coloursteps" | "colorsteps" | "bins";
       /** Bar width / height in px. */
       barwidth?: number;
       barheight?: number;
@@ -141,7 +143,10 @@ export type GuideSpec =
       frame?: boolean;
       ticks?: boolean;
       even_steps?: boolean;
+      /** coloursteps / bins: label the outer limits too. */
       show_limits?: boolean;
+      /** bins: draw the axis line and ticks (default true). */
+      axis?: boolean;
       /** Fixed key appearance (ggplot2's override.aes). */
       override_aes?: {
         color?: string; fill?: string; shape?: string | number; linetype?: string;

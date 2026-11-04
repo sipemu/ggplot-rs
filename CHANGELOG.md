@@ -11,8 +11,17 @@ All notable changes to this project are documented here. The format follows
   ggplot2 exactly for any group count (before, a fixed 8-colour list that
   matched only for 3 groups — e.g. 2 groups were `#F8766D`/`#00BA38`, now
   `#F8766D`/`#00BFC4`). Named palettes / `with_palette` are unaffected.
+- Binned size / alpha / shape / linetype / linewidth scales draw
+  `guide_bins()` by default, as in ggplot2 (#409): keys edge to edge,
+  labelled at the bin boundaries along a small axis, instead of one `lo–hi`
+  label per key (still available via `guide_legend_keys`).
 
 ### Added
+- `GuideBins` + `GGPlot::guide_bins(aes, ..)` (#409, ggplot2's
+  `guide_bins(show.limits =, axis =)`; `show_limits` closes #408's last
+  item) and `GGPlot::guide_legend_keys(aes)` (`guides(size = "legend")`).
+  Spec / npm: `guides.<aes>`: `"bins"`, `"legend"`, or `{ type: "bins",
+  show_limits, axis }`. New `Scale::bin_edge_labels()`.
 - `ElementGeom::pointsize` / `linewidth` (#413, ggplot2 4.0's
   `element_geom(pointsize =, linewidth =)`; builders `with_pointsize` /
   `with_linewidth`, theme config `geom.pointsize` / `geom.linewidth`):
