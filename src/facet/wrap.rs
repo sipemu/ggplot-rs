@@ -2,6 +2,27 @@ use crate::render::Rect;
 
 use super::Panel;
 
+/// `(row, col)` of the `i`-th of `n` wrap panels in an `ncol`-column grid:
+/// filled row by row (`vertical = false`, ggplot2's `dir = "h"`) or column
+/// by column (`dir = "v"`), top to bottom unless `as_table = false`
+/// (ggplot2's `as.table`), which puts the first row at the bottom (#412).
+pub fn wrap_cell(
+    i: usize,
+    n: usize,
+    ncol: usize,
+    vertical: bool,
+    as_table: bool,
+) -> (usize, usize) {
+    let ncol = ncol.max(1);
+    let nrow = n.div_ceil(ncol).max(1);
+    let (row, col) = if vertical {
+        (i % nrow, i / nrow)
+    } else {
+        (i / ncol, i % ncol)
+    };
+    (if as_table { row } else { nrow - 1 - row }, col)
+}
+
 /// Compute panel layout for facet_wrap.
 pub fn compute_wrap_panels(
     levels: &[String],
@@ -191,5 +212,23 @@ mod grid_tests {
             natural_height(4, Some(1), 1.0, 700.0, 0.0, 0.0, 0.0, 160.0).0,
             1
         );
+    }
+}
+
+#[cfg(test)]
+mod cell_tests {
+    use super::wrap_cell;
+
+    #[test]
+    fn dir_and_as_table_match_ggplot2() {
+        // 5 panels, 3 columns → 2 rows. dir = "h": a b c / d e.
+        let h: Vec<_> = (0..5).map(|i| wrap_cell(i, 5, 3, false, true)).collect();
+        assert_eq!(h, [(0, 0), (0, 1), (0, 2), (1, 0), (1, 1)]);
+        // dir = "v": a c e / b d.
+        let v: Vec<_> = (0..5).map(|i| wrap_cell(i, 5, 3, true, true)).collect();
+        assert_eq!(v, [(0, 0), (1, 0), (0, 1), (1, 1), (0, 2)]);
+        // as.table = FALSE: the first row at the bottom.
+        let b: Vec<_> = (0..5).map(|i| wrap_cell(i, 5, 3, false, false)).collect();
+        assert_eq!(b, [(1, 0), (1, 1), (1, 2), (0, 0), (0, 1)]);
     }
 }

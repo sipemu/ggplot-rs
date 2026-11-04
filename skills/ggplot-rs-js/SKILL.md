@@ -72,7 +72,7 @@ if (!svg.startsWith("<svg")) throw new Error("render failed");
 | `layers[].show_legend` | `false` hides the layer from legends; `{ color: false }` per aesthetic |
 | `scales.x/y` | `{ trans, limits: [lo, hi], breaks: [...], name }`; trans `log10 log2 ln sqrt reverse logit probit pseudo_log reciprocal exp` |
 | `scales.color/fill` | `{ palette }` (`Set1 Dark2 Paired npg …`, `hue` = ggplot2's default hues, `viridis:A`…`viridis:H` for categorical; `viridis magma plasma inferno` or any Brewer name (a distiller gradient) for numeric), `{ values: { level: "#rrggbb" } }`, `{ gradient: ["#lo", "#hi"] }`, `{ levels: [...] }` |
-| `facet` | `{ wrap, ncol?, scales? }` or `{ rows?, cols?, scales? }`; scales `fixed free free_x free_y` |
+| `facet` | `{ wrap, ncol?, scales?, dir?: "h"/"v", as_table?, label_wrap?: width }` or `{ rows?, cols?, scales? }`; scales `fixed free free_x free_y` |
 | `coord` | `cartesian flip polar radial fixed radar quickmap map sf`, or `{ type, xlim, ylim, ratio, reverse: "x"/"y"/"xy", start, end, inner_radius }` (`quickmap` / `map` = plain lon/lat data; `radial` partial circles / donuts) |
 | `labels` | `title subtitle caption tag x y` (axis titles are not auto-filled from column names) |
 | `theme` | preset `gray bw minimal classic dark light void linedraw` (default `minimal`), or an overlay `{ base, primary: [r,g,b], palette, title: {...}, panel_grid_major: {...}, … }` |

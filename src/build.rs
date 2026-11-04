@@ -565,6 +565,8 @@ impl PlotBuilder {
                 ncol,
                 labeller,
                 levels: fixed,
+                vertical,
+                as_table,
                 ..
             } => {
                 // Explicit levels (#329), else unique values across all
@@ -590,8 +592,22 @@ impl PlotBuilder {
                             ncol.unwrap_or_else(|| (levels.len() as f64).sqrt().ceil() as usize);
                         let formatted = labeller.format(var, value);
                         Panel {
-                            row: i / ncols.max(1),
-                            col: i % ncols.max(1),
+                            row: crate::facet::wrap::wrap_cell(
+                                i,
+                                levels.len(),
+                                ncols,
+                                *vertical,
+                                *as_table,
+                            )
+                            .0,
+                            col: crate::facet::wrap::wrap_cell(
+                                i,
+                                levels.len(),
+                                ncols,
+                                *vertical,
+                                *as_table,
+                            )
+                            .1,
                             label: formatted.clone(),
                             row_label: None,
                             col_label: Some(formatted),
