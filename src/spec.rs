@@ -324,7 +324,7 @@ pub struct ColorScaleSpec {
     pub bins: Option<usize>,
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, Default)]
 #[serde(deny_unknown_fields)]
 pub struct FacetSpec {
     pub wrap: Option<String>,
