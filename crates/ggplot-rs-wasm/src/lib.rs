@@ -332,6 +332,13 @@ export interface ThemeConfig {
   legend_key_spacing_x?: number; legend_key_spacing_y?: number; legend_box_spacing?: number;
   legend_title?: TextElement; legend_text?: TextElement; strip_text?: TextElement;
   axis_line?: LineElement; axis_ticks?: LineElement;
+  /** Per-axis / per-side axis lines and ticks (#413). */
+  axis_line_x?: LineElement; axis_line_y?: LineElement;
+  axis_ticks_x?: LineElement; axis_ticks_y?: LineElement;
+  axis_line_x_top?: LineElement; axis_line_x_bottom?: LineElement;
+  axis_line_y_left?: LineElement; axis_line_y_right?: LineElement;
+  axis_ticks_x_top?: LineElement; axis_ticks_x_bottom?: LineElement;
+  axis_ticks_y_left?: LineElement; axis_ticks_y_right?: LineElement;
   panel_grid_major?: LineElement; panel_grid_minor?: LineElement; panel_border?: LineElement;
   panel_background?: RectElement; plot_background?: RectElement;
   legend_background?: RectElement; strip_background?: RectElement;

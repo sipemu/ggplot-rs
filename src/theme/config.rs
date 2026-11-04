@@ -79,6 +79,20 @@ pub struct ThemeConfig {
 
     pub axis_line: Option<LineCfg>,
     pub axis_ticks: Option<LineCfg>,
+    /// Per-axis / per-side axis lines and ticks (R's `axis.line.x`,
+    /// `axis.line.x.top`, `axis.ticks.y.right`, …, #413).
+    pub axis_line_x: Option<LineCfg>,
+    pub axis_line_y: Option<LineCfg>,
+    pub axis_ticks_x: Option<LineCfg>,
+    pub axis_ticks_y: Option<LineCfg>,
+    pub axis_line_x_top: Option<LineCfg>,
+    pub axis_line_x_bottom: Option<LineCfg>,
+    pub axis_line_y_left: Option<LineCfg>,
+    pub axis_line_y_right: Option<LineCfg>,
+    pub axis_ticks_x_top: Option<LineCfg>,
+    pub axis_ticks_x_bottom: Option<LineCfg>,
+    pub axis_ticks_y_left: Option<LineCfg>,
+    pub axis_ticks_y_right: Option<LineCfg>,
     pub panel_grid_major: Option<LineCfg>,
     pub panel_grid_minor: Option<LineCfg>,
     pub panel_border: Option<LineCfg>,
@@ -201,6 +215,55 @@ impl ThemeConfig {
 
         line(&self.axis_line, &mut t.axis_line)?;
         line(&self.axis_ticks, &mut t.axis_ticks)?;
+        // #413: per-axis, then per-side elements, each starting from what
+        // it inherits.
+        {
+            use crate::theme::AxisSide as S;
+            let axis = |cfg: &Option<LineCfg>,
+                        slot: &mut Option<ElementLine>,
+                        parent: &ElementLine|
+             -> Result<(), String> {
+                if cfg.is_some() {
+                    let mut el = slot.clone().unwrap_or_else(|| parent.clone());
+                    line(cfg, &mut el)?;
+                    *slot = Some(el);
+                }
+                Ok(())
+            };
+            let (line_el, ticks_el) = (t.axis_line.clone(), t.axis_ticks.clone());
+            axis(&self.axis_line_x, &mut t.axis_line_x, &line_el)?;
+            axis(&self.axis_line_y, &mut t.axis_line_y, &line_el)?;
+            axis(&self.axis_ticks_x, &mut t.axis_ticks_x, &ticks_el)?;
+            axis(&self.axis_ticks_y, &mut t.axis_ticks_y, &ticks_el)?;
+            let sides = [
+                (&self.axis_line_x_top, S::Top, true),
+                (&self.axis_line_x_bottom, S::Bottom, true),
+                (&self.axis_line_y_left, S::Left, true),
+                (&self.axis_line_y_right, S::Right, true),
+                (&self.axis_ticks_x_top, S::Top, false),
+                (&self.axis_ticks_x_bottom, S::Bottom, false),
+                (&self.axis_ticks_y_left, S::Left, false),
+                (&self.axis_ticks_y_right, S::Right, false),
+            ];
+            for (cfg, side, is_line) in sides {
+                let parent = if is_line {
+                    t.axis_line_at(side).clone()
+                } else {
+                    t.axis_ticks_at(side).clone()
+                };
+                let slot = match (side, is_line) {
+                    (S::Top, true) => &mut t.axis_line_x_top,
+                    (S::Bottom, true) => &mut t.axis_line_x_bottom,
+                    (S::Left, true) => &mut t.axis_line_y_left,
+                    (S::Right, true) => &mut t.axis_line_y_right,
+                    (S::Top, false) => &mut t.axis_ticks_x_top,
+                    (S::Bottom, false) => &mut t.axis_ticks_x_bottom,
+                    (S::Left, false) => &mut t.axis_ticks_y_left,
+                    (S::Right, false) => &mut t.axis_ticks_y_right,
+                };
+                axis(cfg, slot, &parent)?;
+            }
+        }
         line(&self.panel_grid_major, &mut t.panel_grid_major)?;
         line(&self.panel_grid_minor, &mut t.panel_grid_minor)?;
         line(&self.panel_border, &mut t.panel_border)?;

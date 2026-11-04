@@ -170,8 +170,8 @@ pub use crate::theme::presets::{
 };
 pub use crate::theme::{
     theme_sub_axis_x, theme_sub_axis_y, theme_sub_legend, theme_sub_panel, theme_sub_plot,
-    theme_sub_strip, AxisLabelFit, LegendDirection, LegendPosition, Margin, TagPosition, Theme,
-    ThemeUpdate, TitlePosition,
+    theme_sub_strip, AxisLabelFit, AxisSide, LegendDirection, LegendPosition, Margin, TagPosition,
+    Theme, ThemeUpdate, TitlePosition,
 };
 #[cfg(feature = "polars")]
 pub use polars;
