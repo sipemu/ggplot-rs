@@ -290,7 +290,7 @@ fn expected() -> Vec<(&'static str, u64)> {
         ("line", 0x5eb4712a5a898d16),  // #410 key glyph
         ("segment", 0x68fcc015406c8eb9),
         ("bar", 0x14377a5e4f3d4e62),
-        ("col", 0xc53dff73969fa5bc), // #410 key glyph
+        ("col", 0x49e97c146eb3412b), // #408 hue_pal default palette
         // the bar tooltips' bin edges are rounded to the bin width's
         // precision ("[223.4, 230.7)", not raw floats) — a documented
         // follow-up, not a regression
@@ -307,13 +307,13 @@ fn expected() -> Vec<(&'static str, u64)> {
         ("smooth", SMOOTH_HASH),
         ("polar", 0x9a387dba9658531e), // #411 polar guides (rings / spokes / labels)
         ("facet", 0xfd878f16570d2b78),
-        ("facet_stack", 0x913030cad2700d64), // #410 key glyph
+        ("facet_stack", 0x1f791f40c6c470df), // #408 hue_pal default palette
         ("flip", 0x94fdd6d55d9a7be1),
         ("text", 0x9fc585729f348a51),
-        ("text_dodge", 0x1db15cfac02795cb), // #410 key glyph
+        ("text_dodge", 0x13be0d80ce06e324), // #408 hue_pal default palette
         ("violin", 0x68cd485311890ec4),
         ("errorbar", 0xe7abdb6d7e210a85),
-        ("errorbar_dodge", 0xea66048c4581cd36), // #410 key glyph
+        ("errorbar_dodge", 0x9ab1556242166dcb), // #408 hue_pal default palette
         // #237 (fix/size-legend-keys-236): a legend key with no mapped
         // colour of its own (here, `size`'s swatch) now falls back to
         // `theme.geom.ink`, then `theme.legend_text.color`, instead of a
@@ -323,7 +323,7 @@ fn expected() -> Vec<(&'static str, u64)> {
         // CHANGELOG [Unreleased].
         ("size", 0x44ec9b5af301ad94),
         ("wide_axis", 0xc0df1cb8d594b7d2),
-        ("big_legend", 0x2e570177bbe8ab80), // #410 key glyph
+        ("big_legend", 0xf2be43094c987ffc), // #408 hue_pal default palette
     ]
 }
 

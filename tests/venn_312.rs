@@ -36,7 +36,7 @@ fn renders_two_circles_and_region_labels() {
         assert!(svg.contains(t), "label {t}");
     }
     // Two different set colours.
-    assert!(svg.contains("#F8766D") && svg.contains("#00BA38"));
+    assert!(svg.contains("#F8766D") && svg.contains("#00BFC4"));
     assert!(!svg.contains("NaN"));
 }
 

@@ -5,6 +5,13 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Changed
+- The default discrete colour/fill scale is now ggplot2's `hue_pal()`
+  spread over the number of levels (#408), so default colours match
+  ggplot2 exactly for any group count (before, a fixed 8-colour list that
+  matched only for 3 groups — e.g. 2 groups were `#F8766D`/`#00BA38`, now
+  `#F8766D`/`#00BFC4`). Named palettes / `with_palette` are unaffected.
+
 ### Added
 - `ElementGeom::pointsize` / `linewidth` (#413, ggplot2 4.0's
   `element_geom(pointsize =, linewidth =)`; builders `with_pointsize` /
