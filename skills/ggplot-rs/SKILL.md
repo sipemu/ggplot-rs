@@ -103,6 +103,10 @@ With polars (default feature): `GGPlot::new(df!{ "x" => [1.0, 2.0], "y" => [3.0,
   `facet_wrap_free(col, ncol, FacetScales::FreeY)`.
 - **Coords:** `coord_flip()`, `coord_polar()`, `coord_fixed(ratio)`,
   `coord_cartesian_zoom(Some((lo, hi)), None)`, `coord_radar()`, `coord_sf()`.
+- **Annotations:** `annotate_text/rect/segment`, `annotation_logticks("bl")`
+  (with `scale_*_log10()`), `annotation_raster(png_bytes, xmin, xmax, ymin, ymax)`,
+  `annotation_custom(inset_plot, xmin, xmax, ymin, ymax)` (a plot inside a
+  plot; `f64::INFINITY` bounds = panel edges).
 - **Labels:** `title subtitle caption tag xlab ylab`. Axis titles are **not**
   taken from column names automatically — set `xlab`/`ylab` when you want them.
 - **Theme:** `.theme_minimal()` / `.theme_bw()` / `.theme_classic()` … or
