@@ -26,11 +26,16 @@ impl PlotRenderer {
     }
 
     pub fn render(built: &BuiltPlot, backend: &mut dyn DrawBackend) -> Result<(), RenderError> {
-        if !built.facet.is_none() && !built.panels.is_empty() {
+        // #465: semantic classes on the non-data elements, when asked for.
+        backend.enable_element_classes(built.svg_classes);
+        let drawn = if !built.facet.is_none() && !built.panels.is_empty() {
             Self::render_faceted(built, backend)
         } else {
             Self::render_single(built, backend)
-        }
+        };
+        backend.set_element_class(None);
+        backend.enable_element_classes(false);
+        drawn
     }
 
     fn render_single(built: &BuiltPlot, backend: &mut dyn DrawBackend) -> Result<(), RenderError> {
@@ -61,6 +66,7 @@ impl PlotRenderer {
         // 1. Draw plot background
         if theme.plot_background.visible {
             if let Some(fill) = theme.plot_background.fill {
+                backend.set_element_class(Some("gg-plot-background"));
                 backend.draw_rect(
                     (total_area.x, total_area.y),
                     (
@@ -82,6 +88,7 @@ impl PlotRenderer {
         // 2. Draw panel background
         if theme.panel_background.visible {
             if let Some(fill) = theme.panel_background.fill {
+                backend.set_element_class(Some("gg-panel-background"));
                 backend.draw_rect(
                     (plot_area.x, plot_area.y),
                     (
@@ -113,6 +120,7 @@ impl PlotRenderer {
             let y0 = plot_area.y;
             let x1 = plot_area.x + plot_area.width;
             let y1 = plot_area.y + plot_area.height;
+            backend.set_element_class(Some("gg-panel-border"));
             backend.draw_line(&[(x0, y0), (x1, y0)], &style)?;
             backend.draw_line(&[(x1, y0), (x1, y1)], &style)?;
             backend.draw_line(&[(x1, y1), (x0, y1)], &style)?;
@@ -186,6 +194,7 @@ impl PlotRenderer {
         // nothing) simply draws nothing. #411: layers reaching past the
         // panel (a zoomed coord) are clipped to it (`clip = "on"`), or may
         // draw past it everywhere (`clip = "off"`).
+        backend.set_element_class(None);
         let clip_group = built.clip
             && built
                 .layers
@@ -223,6 +232,7 @@ impl PlotRenderer {
             }
         }
 
+        backend.set_element_class(None);
         // 6. Draw annotations
         Self::draw_annotations(
             &built.annotations,
@@ -268,6 +278,7 @@ impl PlotRenderer {
             } else {
                 Some(theme.title.family.clone())
             };
+            backend.set_element_class(Some("gg-title"));
             backend.draw_text(
                 title,
                 (tx, title_y),
@@ -296,6 +307,7 @@ impl PlotRenderer {
             } else {
                 Some(theme.subtitle.family.clone())
             };
+            backend.set_element_class(Some("gg-subtitle"));
             backend.draw_text(
                 subtitle,
                 (sx, subtitle_y),
@@ -337,6 +349,7 @@ impl PlotRenderer {
             } else {
                 Some(theme.caption.family.clone())
             };
+            backend.set_element_class(Some("gg-caption"));
             backend.draw_text(
                 caption,
                 (cx, caption_y),
@@ -471,6 +484,7 @@ impl PlotRenderer {
                 BottomLeft => (left, bottom, TextAnchor::Start),
                 BottomRight => (right, bottom, TextAnchor::End),
             };
+            backend.set_element_class(Some("gg-tag"));
             backend.draw_text(
                 tag,
                 (x, y),
@@ -497,6 +511,7 @@ impl PlotRenderer {
         // Draw plot background
         if theme.plot_background.visible {
             if let Some(fill) = theme.plot_background.fill {
+                backend.set_element_class(Some("gg-plot-background"));
                 backend.draw_rect(
                     (total_area.x, total_area.y),
                     (
@@ -996,6 +1011,7 @@ impl PlotRenderer {
             // Panel background
             if theme.panel_background.visible {
                 if let Some(fill) = theme.panel_background.fill {
+                    backend.set_element_class(Some("gg-panel-background"));
                     backend.draw_rect(
                         (panel_rect.x, panel_rect.y),
                         (
@@ -1027,6 +1043,7 @@ impl PlotRenderer {
                 let y0 = panel_rect.y;
                 let x1 = panel_rect.x + panel_rect.width;
                 let y1 = panel_rect.y + panel_rect.height;
+                backend.set_element_class(Some("gg-panel-border"));
                 backend.draw_line(&[(x0, y0), (x1, y0)], &style)?;
                 backend.draw_line(&[(x1, y0), (x1, y1)], &style)?;
                 backend.draw_line(&[(x1, y1), (x0, y1)], &style)?;
@@ -1149,6 +1166,7 @@ impl PlotRenderer {
             // #411: as for a single panel — clip this panel's layers when
             // they reach past it (a fixed-aspect grid's panel group already
             // clips), or let them draw past it with `clip = "off"`.
+            backend.set_element_class(None);
             let clip_group = built.clip
                 && fixed_grid.is_none()
                 && built.panels_data.get(pi).is_some_and(|layers| {
@@ -1264,6 +1282,7 @@ impl PlotRenderer {
             } else {
                 Some(theme.title.family.clone())
             };
+            backend.set_element_class(Some("gg-title"));
             backend.draw_text(
                 title,
                 (tx, title_y),
@@ -1289,6 +1308,7 @@ impl PlotRenderer {
             } else {
                 Some(theme.subtitle.family.clone())
             };
+            backend.set_element_class(Some("gg-subtitle"));
             backend.draw_text(
                 subtitle,
                 (sx, subtitle_y),
@@ -1318,6 +1338,7 @@ impl PlotRenderer {
             } else {
                 Some(theme.caption.family.clone())
             };
+            backend.set_element_class(Some("gg-caption"));
             backend.draw_text(
                 caption,
                 (cx, caption_y),
@@ -1334,6 +1355,7 @@ impl PlotRenderer {
             )?;
         }
 
+        backend.set_element_class(None);
         // Draw annotations
         Self::draw_annotations(
             &built.annotations,
@@ -1597,6 +1619,7 @@ fn draw_strip(
     let bg = bg.as_ref().unwrap_or(&theme.strip_background);
     let text = text.as_ref().unwrap_or(&theme.strip_text);
     if bg.visible {
+        backend.set_element_class(Some("gg-strip gg-strip-background"));
         backend.draw_rect(
             (x, y),
             (x + w, y + h),
@@ -1631,6 +1654,7 @@ fn draw_strip(
         } else {
             (0.0, d)
         };
+        backend.set_element_class(Some("gg-strip gg-strip-text"));
         backend.draw_text(
             line,
             (x + w / 2.0 + dx, y + h / 2.0 + dy),
@@ -1777,6 +1801,12 @@ impl<'a> DrawBackend for PanelBackendAdapter<'a> {
     }
     fn begin_clip(&mut self, rect: &crate::render::Rect) {
         self.inner.begin_clip(rect)
+    }
+    fn enable_element_classes(&mut self, on: bool) {
+        self.inner.enable_element_classes(on)
+    }
+    fn set_element_class(&mut self, class: Option<&'static str>) {
+        self.inner.set_element_class(class)
     }
     fn end_clip(&mut self) {
         self.inner.end_clip()

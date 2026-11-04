@@ -72,6 +72,8 @@ pub struct BuiltPlot {
     pub(crate) legend_at: Option<String>,
     /// Clip the data layers to the panel (`clip = "on"`, #411).
     pub clip: bool,
+    /// Semantic CSS classes on the SVG's non-data elements (#465).
+    pub svg_classes: bool,
 }
 
 impl BuiltPlot {
@@ -254,6 +256,7 @@ impl PlotBuilder {
             hide_y_guides,
             legend_bottom_share: _,
             clip,
+            svg_classes,
             legend_auto: _,
             locale,
             svg_root_data: _,
@@ -490,6 +493,7 @@ impl PlotBuilder {
             legend_plans: std::collections::HashMap::new(),
             legend_at: None,
             clip,
+            svg_classes,
         })
     }
 

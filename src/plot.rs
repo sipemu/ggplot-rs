@@ -120,6 +120,9 @@ pub struct GGPlot {
     /// Clip the data layers to the panel (ggplot2's `coord_*(clip = "on")`,
     /// the default; #411).
     pub(crate) clip: bool,
+    /// Tag axes, grid, legend, strips and titles with semantic CSS classes
+    /// in SVG output (#465).
+    pub(crate) svg_classes: bool,
     /// [`GGPlot::legend_inside_auto`]'s settings, if set (#332).
     pub(crate) legend_auto: Option<LegendAuto>,
     /// Panel aspect ratio used when the theme sets none (helpers such as
@@ -209,6 +212,7 @@ impl GGPlot {
             warnings: Vec::new(),
             legend_bottom_share: None,
             clip: true,
+            svg_classes: false,
             legend_auto: None,
             default_aspect_ratio: None,
             hide_position_guides: false,
@@ -3465,6 +3469,21 @@ impl GGPlot {
     /// carry. `data-fx` is omitted when it would just duplicate `data-x`.
     /// Default off, and omitted entirely when off (byte-identical to not
     /// calling this).
+    /// Tag the SVG's non-data elements with stable semantic CSS classes
+    /// (#465), so a page stylesheet can restyle them: `gg-plot-background`,
+    /// `gg-panel-background`, `gg-panel-border`, `gg-grid` (+ `gg-grid-major`
+    /// / `gg-grid-minor`), `gg-axis` (+ `gg-axis-x` / `gg-axis-y` and
+    /// `gg-axis-line` / `gg-axis-tick` / `gg-axis-text`), `gg-axis-title`
+    /// (+ `-x` / `-y`), `gg-legend` (+ `gg-legend-title` / `gg-legend-key`
+    /// / `gg-legend-text` / `gg-legend-background`), `gg-strip` (+
+    /// `gg-strip-background` / `gg-strip-text`), `gg-title`, `gg-subtitle`,
+    /// `gg-caption`, `gg-tag`. Data marks always carry `gg-mark gg-<kind>`.
+    /// Off by default (output unchanged).
+    pub fn svg_semantic_classes(mut self, on: bool) -> Self {
+        self.svg_classes = on;
+        self
+    }
+
     pub fn svg_formatted_values(mut self, on: bool) -> Self {
         self.svg_formatted_values = on;
         self

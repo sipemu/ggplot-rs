@@ -89,6 +89,9 @@ pub struct SvgBackend {
     /// label, clip rect, data rect)`. Each clip becomes a `<clipPath>` in
     /// `<defs>`; the list is written as the root `data-panels`.
     panels: Vec<(usize, String, Rect, Rect)>,
+    /// Semantic element classes on (#465) and the current one.
+    element_classes: bool,
+    element_class: Option<&'static str>,
     /// `begin_clip` rects (#411), one `<clipPath>` each.
     clips: Vec<Rect>,
 }
@@ -137,6 +140,8 @@ impl SvgBackend {
             viewport: None,
             panels: Vec::new(),
             clips: Vec::new(),
+            element_classes: false,
+            element_class: None,
         }
     }
 
@@ -459,7 +464,11 @@ impl SvgBackend {
                 }
                 format!(" class=\"{class}\" data-geom=\"{}\"", escape_attr(g))
             }
-            None => String::new(),
+            // #465: a non-data element's semantic class, when enabled.
+            None => match (self.element_classes, self.element_class) {
+                (true, Some(c)) => format!(" class=\"{c}\""),
+                _ => String::new(),
+            },
         }
     }
 
@@ -1218,6 +1227,14 @@ impl DrawBackend for SvgBackend {
     fn end_panel(&mut self) {
         self.flush_groups();
         self.body.push_str("</g>");
+    }
+
+    fn enable_element_classes(&mut self, on: bool) {
+        self.element_classes = on;
+    }
+
+    fn set_element_class(&mut self, class: Option<&'static str>) {
+        self.element_class = class;
     }
 
     fn begin_clip(&mut self, rect: &Rect) {
