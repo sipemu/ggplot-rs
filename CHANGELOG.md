@@ -6,6 +6,11 @@ All notable changes to this project are documented here. The format follows
 ## [Unreleased]
 
 ### Fixed
+- Student-t quantiles without the `regression` feature: `qt` returned the
+  normal 1.96 for every probability and df, so `mean_cl_normal` (and other
+  t-based intervals) were too narrow for small samples and wrong for levels
+  other than 95%. A self-contained t-CDF inversion now matches R's `qt` to
+  1e-9.
 - `geom_hex` / `stat_binhex`: the hexagon lattice is anchored like ggplot2's
   `hex_bounds` (the data minimum rounded down to a whole bin, less 1e-6),
   not at the data minimum, so cells sit where ggplot2 puts them. The R
@@ -24,6 +29,13 @@ All notable changes to this project are documented here. The format follows
   `position_dodge` / `position_dodge2` on a discrete axis.
 
 ### Added
+- Helpers (#414, `ggplot_rs::helpers`, in the prelude): `cut_interval`,
+  `cut_interval_length`, `cut_number`, `cut_width` (+ `CutWidth { center,
+  boundary, closed_left }`) returning `Cut { values, levels }` with R's
+  `cut()` labels (`[0.5,3.67]`, `(3.67,6.83]`, `1e+03`, …), `resolution`,
+  `mean_se(x, mult)`, `mean_cl_normal(x, conf_int)`, `mean_cl_boot(x,
+  conf_int, b)`, `mean_sdl(x, mult)`, `median_hilow(x, conf_int)`, and
+  `GGPlot::qplot(data, x, y)`. Unit-tested against ggplot2 4.0.3.
 - Annotations (#407): `annotation_logticks(sides)` (long / mid / short log-10
   ticks on any of `trbl`; `Annotation::logticks(..).outside()`),
   `annotation_raster(png, xmin, xmax, ymin, ymax)` /
@@ -62,6 +74,10 @@ All notable changes to this project are documented here. The format follows
   npm: `position: { type: "dodge", preserve: "single" }`.
 
 ### Changed
+- `geom_smooth`'s confidence ribbon without the `regression` feature is
+  now the exact Student-t interval (as R and the `regression` build), a
+  little wider than the old normal-approximation one for small samples
+  (#414).
 - `geom_violin` defaults to `scale = "area"` (ggplot2's default): violins
   share one width scale, so a group with a flatter density draws narrower.
   `GeomViolin::default().with_scale(ViolinScale::Width)` restores the old

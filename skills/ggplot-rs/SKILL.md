@@ -135,6 +135,16 @@ assert!(svg.contains("<rect"));
 # Ok::<(), ggplot_rs::GGError>(())
 ```
 
+## Helpers
+
+`GGPlot::qplot(data, "x", Some("y"))` (points; histogram / bars with `None`),
+`cut_interval(&x, n)` / `cut_interval_length(&x, len)` / `cut_number(&x, n)` /
+`cut_width(&x, w, CutWidth::default())` → `Cut { values, levels }` (ggplot2's
+`[a,b]` / `(a,b]` labels; use `values` as a discrete column), `resolution(&x,
+true)`, and the summary functions `mean_se(&y, 1.0)`, `mean_cl_normal(&y, 0.95)`,
+`mean_cl_boot(&y, 0.95, 1000)`, `mean_sdl(&y, 2.0)`, `median_hilow(&y, 0.95)` →
+`(y, ymin, ymax)`.
+
 ## Rendering
 
 | Call | Needs | Output |

@@ -1,21 +1,21 @@
 //! Student-t quantile used for confidence-interval multipliers.
 //!
-//! Per this crate's rule (no statistical calculation lives here), the quantile
-//! itself is computed by anofox-regression (`statrs::StudentsT`) when the
-//! `regression` feature is enabled. Without that feature there is no
-//! distribution library available, so we fall back to the large-sample normal
-//! 97.5% quantile `1.96` — enable `regression` for exact `qt(p, df)`.
+//! With the `regression` feature the quantile is computed by
+//! anofox-regression (`statrs::StudentsT`). Without it, a self-contained
+//! inversion of the t CDF (regularised incomplete beta, bisection) gives the
+//! same value to ~1e-10 — before #414 this fell back to the normal 1.96 for
+//! every `p` and `df`, so small-sample intervals were too narrow.
 
-/// Standard-normal 0.975 quantile — the large-sample CI multiplier used as the
-/// fallback when the `regression` feature (and thus a t-distribution) is absent.
+/// Standard-normal 0.975 quantile — the fallback if statrs can't build the
+/// t distribution (the `regression` path).
+#[cfg(feature = "regression")]
 pub(crate) const Z_975: f64 = 1.959_963_984_540_054;
 
 /// Student-t quantile: the `t` with `P(T ≤ t) = p` for `df` degrees of freedom
 /// (R's `qt(p, df)`). `df` may be non-integer (e.g. loess effective df).
 ///
 /// With the `regression` feature this delegates to anofox-regression's
-/// `StudentsT` (statrs) for an exact value; without it, it returns the normal
-/// approximation [`Z_975`] (correct only for `p = 0.975`).
+/// `StudentsT` (statrs); without it, [`qt_native`] computes it.
 #[cfg(feature = "regression")]
 pub fn qt(p: f64, df: f64) -> f64 {
     use anofox_regression::distributions::{ContinuousCDF, StudentsT};
@@ -27,11 +27,111 @@ pub fn qt(p: f64, df: f64) -> f64 {
         .unwrap_or(Z_975)
 }
 
-/// See the `regression`-enabled variant above; without a distribution library
-/// this returns the large-sample normal 0.975 quantile.
+/// See the `regression`-enabled variant above.
 #[cfg(not(feature = "regression"))]
-pub fn qt(_p: f64, _df: f64) -> f64 {
-    Z_975
+pub fn qt(p: f64, df: f64) -> f64 {
+    qt_native(p, df)
+}
+
+#[cfg_attr(feature = "regression", allow(dead_code))]
+/// Continued fraction for the regularised incomplete beta (Numerical Recipes'
+/// `betacf`, modified Lentz).
+fn beta_cf(a: f64, b: f64, x: f64) -> f64 {
+    const TINY: f64 = 1e-300;
+    let (qab, qap, qam) = (a + b, a + 1.0, a - 1.0);
+    let mut c = 1.0;
+    let mut d = 1.0 - qab * x / qap;
+    if d.abs() < TINY {
+        d = TINY;
+    }
+    d = 1.0 / d;
+    let mut h = d;
+    for m in 1..=300 {
+        let m = m as f64;
+        let m2 = 2.0 * m;
+        let aa = m * (b - m) * x / ((qam + m2) * (a + m2));
+        d = 1.0 + aa * d;
+        d = if d.abs() < TINY { TINY } else { d };
+        c = 1.0 + aa / c;
+        c = if c.abs() < TINY { TINY } else { c };
+        d = 1.0 / d;
+        h *= d * c;
+        let aa = -(a + m) * (qab + m) * x / ((a + m2) * (qap + m2));
+        d = 1.0 + aa * d;
+        d = if d.abs() < TINY { TINY } else { d };
+        c = 1.0 + aa / c;
+        c = if c.abs() < TINY { TINY } else { c };
+        d = 1.0 / d;
+        let del = d * c;
+        h *= del;
+        if (del - 1.0).abs() < 1e-15 {
+            break;
+        }
+    }
+    h
+}
+
+#[cfg_attr(feature = "regression", allow(dead_code))]
+/// Regularised incomplete beta `I_x(a, b)`.
+fn inc_beta(a: f64, b: f64, x: f64) -> f64 {
+    use crate::stat::distribution::ln_gamma;
+    if x <= 0.0 {
+        return 0.0;
+    }
+    if x >= 1.0 {
+        return 1.0;
+    }
+    let front =
+        (ln_gamma(a + b) - ln_gamma(a) - ln_gamma(b) + a * x.ln() + b * (1.0 - x).ln()).exp();
+    if x < (a + 1.0) / (a + b + 2.0) {
+        front * beta_cf(a, b, x) / a
+    } else {
+        1.0 - front * beta_cf(b, a, 1.0 - x) / b
+    }
+}
+
+#[cfg_attr(feature = "regression", allow(dead_code))]
+/// Student-t CDF `P(T ≤ t)` for `df` degrees of freedom.
+pub(crate) fn pt_native(t: f64, df: f64) -> f64 {
+    let tail = 0.5 * inc_beta(df / 2.0, 0.5, df / (df + t * t));
+    if t >= 0.0 {
+        1.0 - tail
+    } else {
+        tail
+    }
+}
+
+#[cfg_attr(feature = "regression", allow(dead_code))]
+/// Student-t quantile by bisection on [`pt_native`] (any `df > 0`).
+pub(crate) fn qt_native(p: f64, df: f64) -> f64 {
+    if df.is_nan() || df <= 0.0 || !(0.0..=1.0).contains(&p) {
+        return f64::NAN;
+    }
+    if p == 0.0 {
+        return f64::NEG_INFINITY;
+    }
+    if p == 1.0 {
+        return f64::INFINITY;
+    }
+    let (mut lo, mut hi) = (-1.0, 1.0);
+    while pt_native(lo, df) > p {
+        lo *= 2.0;
+    }
+    while pt_native(hi, df) < p {
+        hi *= 2.0;
+    }
+    for _ in 0..200 {
+        let mid = 0.5 * (lo + hi);
+        if pt_native(mid, df) < p {
+            lo = mid;
+        } else {
+            hi = mid;
+        }
+        if hi - lo < 1e-12 * hi.abs().max(1.0) {
+            break;
+        }
+    }
+    0.5 * (lo + hi)
 }
 
 /// Standard-normal quantile (probit), R's `qnorm(p)`.
@@ -143,6 +243,28 @@ mod tests {
                 (got - want).abs() < 1e-6,
                 "qt(0.975,{df}) = {got}, want {want}"
             );
+        }
+    }
+}
+
+#[cfg(test)]
+mod native_t_tests {
+    use super::qt_native;
+
+    #[test]
+    fn qt_matches_r() {
+        // R: qt(c(.975, .95, .995, .025, .9), df)
+        for (p, df, want) in [
+            (0.975, 6.0, 2.446911851),
+            (0.95, 6.0, 1.943180281),
+            (0.995, 3.0, 5.840909310),
+            (0.025, 10.0, -2.228138852),
+            (0.9, 1.0, 3.077683537),
+            (0.975, 1000.0, 1.962339081),
+            (0.975, 2.5, 3.574654842),
+        ] {
+            let got = qt_native(p, df);
+            assert!((got - want).abs() < 1e-7, "qt({p}, {df}) = {got}, R {want}");
         }
     }
 }
