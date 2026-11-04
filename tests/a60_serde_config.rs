@@ -48,6 +48,8 @@ fn geom_config_keys_set_ink_paper_accent_and_family() {
             paper: Some([0, 0, 0]),
             accent: Some([10, 20, 30]),
             family: Some("Georgia".to_string()),
+            pointsize: None,
+            linewidth: None,
         }),
         ..Default::default()
     };

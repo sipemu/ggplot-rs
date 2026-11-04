@@ -6,6 +6,10 @@ All notable changes to this project are documented here. The format follows
 ## [Unreleased]
 
 ### Added
+- `ElementGeom::pointsize` / `linewidth` (#413, ggplot2 4.0's
+  `element_geom(pointsize =, linewidth =)`; builders `with_pointsize` /
+  `with_linewidth`, theme config `geom.pointsize` / `geom.linewidth`):
+  replace `geom_point`'s / `geom_line`'s built-in defaults theme-wide.
 - `FacetLabeller::Parsed` (#412, ggplot2's `label_parsed`; spec `"labeller":
   "parsed"`): strip values read as plotmath and drawn as Unicode — Greek
   names, `^` superscripts, `[ ]` subscripts, `==`, `%*%`, `~`
