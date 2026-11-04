@@ -310,6 +310,8 @@ pub struct PositionScaleSpec {
     pub time: Option<bool>,
     /// Binned position scale (`scale_x_binned(n.breaks)`, #408).
     pub binned: Option<usize>,
+    /// Log10 minor ticks (`guide_axis_logticks()`, #409; with `trans: "log10"`).
+    pub logticks: Option<bool>,
     /// A secondary axis (x: top, y: right; #409): `true` repeats the
     /// primary (`dup_axis()`), or `{ name, scale, offset }` for a linear
     /// `secondary = primary * scale + offset`.
@@ -1520,6 +1522,9 @@ fn position_scale(s: &PositionScaleSpec) -> Result<ScaleContinuous, String> {
     if let Some(n) = s.n_breaks {
         sc = sc.with_n_breaks(n);
     }
+    if s.logticks == Some(true) {
+        sc = sc.with_log_ticks();
+    }
     if let Some(n) = &s.name {
         sc = sc.with_name(n);
     }
@@ -2603,6 +2608,21 @@ mod tests {
         ))
         .unwrap_err();
         assert!(e.contains("exactly one"), "{e}");
+    }
+
+    #[test]
+    fn logticks_spec() {
+        let d = r#""data": {"x": [1, 10, 100, 1000], "y": [1, 2, 3, 4]}, "aes": {"x": "x", "y": "y"},
+               "layers": [{"geom": "point"}]"#;
+        let base = render(&format!(
+            r#"{{ {d}, "theme": "gray", "scales": {{"x": {{"trans": "log10"}}}} }}"#
+        ))
+        .unwrap();
+        let lt = render(&format!(
+            r#"{{ {d}, "theme": "gray", "scales": {{"x": {{"trans": "log10", "logticks": true}}}} }}"#
+        ))
+        .unwrap();
+        assert!(lt.matches("<polyline").count() > base.matches("<polyline").count() + 20);
     }
 
     #[test]

@@ -310,6 +310,24 @@ pub(crate) fn draw_x_axis_with(
         }
     }
 
+    // `guide_axis_logticks()` (#409): ggplot2's 2.25 / 1.5 / 0.75 lengths.
+    if axis_ticks.visible {
+        for (pos, kind) in scale.log_ticks() {
+            let px = along_x(coord, pos, plot_area);
+            let len = tick_len * [2.25, 1.5, 0.75][kind as usize];
+            backend.draw_line(
+                &[(px, edge_y), (px, edge_y + dir * len)],
+                &LineStyle {
+                    color: axis_ticks.color,
+                    width: axis_ticks.width,
+                    alpha: 1.0,
+                    linetype: axis_ticks.linetype.clone(),
+                    ..Default::default()
+                },
+            )?;
+        }
+    }
+
     if with_title {
         draw_x_axis_title(scale, theme, plot_area, backend)?;
     }
@@ -459,6 +477,24 @@ pub(crate) fn draw_y_axis_with(
             let py = along_y(coord, pos, plot_area);
             backend.draw_line(
                 &[(plot_area.x - tick_len * 0.5, py), (plot_area.x, py)],
+                &LineStyle {
+                    color: axis_ticks.color,
+                    width: axis_ticks.width,
+                    alpha: 1.0,
+                    linetype: axis_ticks.linetype.clone(),
+                    ..Default::default()
+                },
+            )?;
+        }
+    }
+
+    // `guide_axis_logticks()` (#409).
+    if axis_ticks.visible {
+        for (pos, kind) in scale.log_ticks() {
+            let py = along_y(coord, pos, plot_area);
+            let len = tick_len * [2.25, 1.5, 0.75][kind as usize];
+            backend.draw_line(
+                &[(plot_area.x - len, py), (plot_area.x, py)],
                 &LineStyle {
                     color: axis_ticks.color,
                     width: axis_ticks.width,

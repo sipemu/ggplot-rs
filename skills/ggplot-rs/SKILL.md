@@ -129,7 +129,8 @@ With polars (default feature): `GGPlot::new(df!{ "x" => [1.0, 2.0], "y" => [3.0,
   (`expand = FALSE` per side), `coord_polar_with(CoordPolar::new().reverse(theta, r)
   .rotate_angle(true).r_axis_inside(true))`, `coord_trans`/`coord_transform(x, y)`, `coord_quickmap()`,
   `coord_map()` (Mercator, plain lon/lat), `coord_radar()`, `coord_sf()`.
-- **Annotations:** `annotate_text/rect/segment`, `annotation_logticks("bl")`
+- **Annotations:** `annotate_text/rect/segment`, `annotation_logticks("bl")` (or on the axis:
+  `.scale_x_log10().guide_axis_logticks(Aesthetic::X)`)
   (with `scale_*_log10()`), `annotation_raster(png_bytes, xmin, xmax, ymin, ymax)`,
   `annotation_custom(inset_plot, xmin, xmax, ymin, ymax)` (a plot inside a
   plot; `f64::INFINITY` bounds = panel edges).

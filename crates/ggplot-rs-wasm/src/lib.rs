@@ -186,6 +186,8 @@ export interface PositionScale {
   sec_axis?: boolean | { name?: string; scale?: number; offset?: number };
   /** Binned position scale: about this many breaks (scale_x_binned). */
   binned?: number;
+  /** Log10 minor ticks (guide_axis_logticks), with trans "log10". */
+  logticks?: boolean;
 }
 
 export interface ColorScale {
