@@ -1359,6 +1359,18 @@ fn draw_group_keys(
                 _ => {}
             }
         }
+        // #409: `override.aes` for any of this legend's aesthetics wins.
+        for (aes, _) in group {
+            if let Some((_, o)) = guide.overrides.iter().find(|(a, _)| a == aes) {
+                props.color = o.color.or(props.color);
+                props.fill = o.fill.or(props.fill);
+                props.shape = o.shape.or(props.shape);
+                props.linetype = o.linetype.clone().or(props.linetype);
+                props.size = o.size.or(props.size);
+                props.alpha = o.alpha.or(props.alpha);
+                props.linewidth = o.linewidth.or(props.linewidth);
+            }
+        }
         draw_key(backend, glyph, &props, ink, (x, y, swatch_size))?;
     }
     Ok(())

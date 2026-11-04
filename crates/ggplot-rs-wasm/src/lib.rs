@@ -142,6 +142,11 @@ export type GuideSpec =
       ticks?: boolean;
       even_steps?: boolean;
       show_limits?: boolean;
+      /** Fixed key appearance (ggplot2's override.aes). */
+      override_aes?: {
+        color?: string; fill?: string; shape?: string | number; linetype?: string;
+        size?: number; alpha?: number; linewidth?: number;
+      };
     };
 
 export interface Layer {

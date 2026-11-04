@@ -2151,6 +2151,18 @@ impl GGPlot {
         self
     }
 
+    /// Draw one legend's keys with fixed values (ggplot2's `guides(colour =
+    /// guide_legend(override.aes = list(size = 4, alpha = 1)))`, #409).
+    pub fn guide_override(
+        mut self,
+        aes: crate::aes::Aesthetic,
+        keys: crate::guide::config::KeyOverride,
+    ) -> Self {
+        self.guide_legend.overrides.retain(|(a, _)| *a != aes);
+        self.guide_legend.overrides.push((aes, keys));
+        self
+    }
+
     /// Show or hide the most recent layer in one aesthetic's legend only
     /// (ggplot2's `show.legend = c(colour = TRUE, fill = FALSE)`; #410).
     pub fn show_legend_for(mut self, aes: crate::aes::Aesthetic, show: bool) -> Self {
@@ -3647,6 +3659,9 @@ impl GGPlot {
         }
         if guide.colourbars.is_empty() {
             guide.colourbars = std::mem::take(&mut self.guide_legend.colourbars);
+        }
+        if guide.overrides.is_empty() {
+            guide.overrides = std::mem::take(&mut self.guide_legend.overrides);
         }
         self.guide_legend = guide;
         self
