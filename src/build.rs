@@ -964,6 +964,22 @@ impl PlotBuilder {
             }
         }
 
+        // Step 5a: a binned position scale moves each x / y to its bin's
+        // midpoint before the stat (`scale_x_binned`, #408).
+        for (aes, col) in [(Aesthetic::X, "x"), (Aesthetic::Y, "y")] {
+            let Some(values) = working_data.column(col).map(|c| c.to_vec()) else {
+                continue;
+            };
+            if let Some(binned) = scale_set
+                .get_mut(&aes)
+                .and_then(|s| s.bin_positions(&values))
+            {
+                if let Some(c) = working_data.column_mut(col) {
+                    *c = binned;
+                }
+            }
+        }
+
         // Step 5b: Filter out-of-bounds data (xlim/ylim filter before stats)
         Self::filter_oob_data(&mut working_data, scale_set);
 

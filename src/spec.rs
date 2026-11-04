@@ -290,6 +290,9 @@ pub struct ValueScaleSpec {
     pub identity: Option<bool>,
     pub values: Option<BTreeMap<String, f64>>,
     pub range: Option<[f64; 2]>,
+    /// Binned (`scale_*_binned(n.breaks)`, #408): about this many breaks;
+    /// `range` sets the output range.
+    pub binned: Option<usize>,
 }
 
 #[derive(Deserialize, Default)]
@@ -305,6 +308,8 @@ pub struct PositionScaleSpec {
     pub n_breaks: Option<usize>,
     /// A time-of-day axis: seconds, `HH:MM:SS` labels (`scale_x_time`).
     pub time: Option<bool>,
+    /// Binned position scale (`scale_x_binned(n.breaks)`, #408).
+    pub binned: Option<usize>,
     /// A secondary axis (x: top, y: right; #409): `true` repeats the
     /// primary (`dup_axis()`), or `{ name, scale, offset }` for a linear
     /// `secondary = primary * scale + offset`.
@@ -1430,10 +1435,10 @@ pub fn apply_position(plot: GGPlot, p: &PositionSpec) -> Result<GGPlot, String> 
 }
 
 fn position_scale(s: &PositionScaleSpec) -> Result<ScaleContinuous, String> {
-    let mut sc = if s.time == Some(true) {
-        ScaleContinuous::time()
-    } else {
-        ScaleContinuous::new()
+    let mut sc = match (s.binned, s.time) {
+        (Some(n), _) => ScaleContinuous::binned(n),
+        (None, Some(true)) => ScaleContinuous::time(),
+        _ => ScaleContinuous::new(),
     };
     if let Some(t) = &s.trans {
         let t = match t.as_str() {
@@ -1503,6 +1508,16 @@ fn parse_hex(s: &str) -> Result<RGBAColor, String> {
 
 /// A `size` / `alpha` / `linewidth` / `shape` scale spec (#408).
 fn apply_value_scale(plot: GGPlot, aes: Aesthetic, v: &ValueScaleSpec) -> Result<GGPlot, String> {
+    if let Some(n) = v.binned {
+        if v.identity.is_some() || v.values.is_some() {
+            return Err("binned takes only range".into());
+        }
+        let mut b = crate::scale::values::ScaleValueBinned::new(aes, n);
+        if let Some([lo, hi]) = v.range {
+            b = b.with_range(lo, hi);
+        }
+        return Ok(plot.scale_color(b));
+    }
     let set = [
         v.identity == Some(true),
         v.values.is_some(),
@@ -2414,6 +2429,24 @@ mod tests {
         ))
         .unwrap_err();
         assert!(e.contains("unknown dir"), "{e}");
+    }
+
+    #[test]
+    fn binned_scales() {
+        let svg = render(
+            r#"{ "data": {"x": [0.5, 1, 4, 9], "s": [1, 2, 3, 40]}, "aes": {"x": "x", "size": "s"},
+                 "layers": [{"geom": "bar"}, {"geom": "point", "aes": {"y": "s"}}],
+                 "scales": {"x": {"binned": 5}, "size": {"binned": 4, "range": [1, 8]}} }"#,
+        )
+        .unwrap();
+        assert!(svg.contains(">2.5<"), "{svg}");
+        let e = render(
+            r#"{ "data": {"x": [1], "s": [1]}, "aes": {"x": "x", "size": "s"},
+                 "layers": [{"geom": "point", "aes": {"y": "s"}}],
+                 "scales": {"size": {"binned": 4, "identity": true}} }"#,
+        )
+        .unwrap_err();
+        assert!(e.contains("binned takes only range"), "{e}");
     }
 
     #[test]

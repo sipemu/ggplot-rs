@@ -2800,6 +2800,46 @@ impl GGPlot {
         self.scale_size(crate::scale::size::ScaleSizeContinuous::new().with_range(min, max))
     }
 
+    /// ggplot2's `scale_size_binned(n.breaks = n)` (#408): sizes by bin.
+    pub fn scale_size_binned(self, n: usize) -> Self {
+        self.scale_color(crate::scale::values::ScaleValueBinned::new(
+            crate::aes::Aesthetic::Size,
+            n,
+        ))
+    }
+
+    /// ggplot2's `scale_alpha_binned()` (#408).
+    pub fn scale_alpha_binned(self, n: usize) -> Self {
+        self.scale_color(crate::scale::values::ScaleValueBinned::new(
+            crate::aes::Aesthetic::Alpha,
+            n,
+        ))
+    }
+
+    /// ggplot2's `scale_linewidth_binned()` (#408).
+    pub fn scale_linewidth_binned(self, n: usize) -> Self {
+        self.scale_color(crate::scale::values::ScaleValueBinned::new(
+            crate::aes::Aesthetic::Linewidth,
+            n,
+        ))
+    }
+
+    /// ggplot2's `scale_shape_binned()` (#408): one shape per bin.
+    pub fn scale_shape_binned(self, n: usize) -> Self {
+        self.scale_color(crate::scale::values::ScaleValueBinned::new(
+            crate::aes::Aesthetic::Shape,
+            n,
+        ))
+    }
+
+    /// ggplot2's `scale_linetype_binned()` (#408): one linetype per bin.
+    pub fn scale_linetype_binned(self, n: usize) -> Self {
+        self.scale_color(crate::scale::values::ScaleValueBinned::new(
+            crate::aes::Aesthetic::Linetype,
+            n,
+        ))
+    }
+
     /// `scale_size_manual(values)`: named levels → point sizes (#408).
     pub fn scale_size_manual(self, values: Vec<(&str, f64)>) -> Self {
         self.scale_color(crate::scale::values::ScaleValueManual::new(
@@ -2962,6 +3002,18 @@ impl GGPlot {
     /// ggplot2's `scale_y_time()` — see [`scale_x_time`](Self::scale_x_time).
     pub fn scale_y_time(self) -> Self {
         self.scale_y_continuous(ScaleContinuous::time())
+    }
+
+    /// ggplot2's `scale_x_binned(n.breaks = n)` (#408): x cut into round
+    /// bins between about `n` breaks, each value at its bin's midpoint before the stat —
+    /// `geom_bar()` then draws a histogram, the axis breaks are the edges.
+    pub fn scale_x_binned(self, n: usize) -> Self {
+        self.scale_x_continuous(ScaleContinuous::binned(n))
+    }
+
+    /// ggplot2's `scale_y_binned()` — see [`scale_x_binned`](Self::scale_x_binned).
+    pub fn scale_y_binned(self, n: usize) -> Self {
+        self.scale_y_continuous(ScaleContinuous::binned(n))
     }
 
     pub fn scale_x_boxcox(self, lambda: f64) -> Self {

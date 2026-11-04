@@ -102,7 +102,8 @@ With polars (default feature): `GGPlot::new(df!{ "x" => [1.0, 2.0], "y" => [3.0,
   `scale_color_gradient(lo, hi)`, `scale_color_gradientn(stops)`,
   `scale_color_hue(HuePalette::default())` (ggplot2's default colours for any
   number of groups), `scale_color_viridis_d('D', 0.0, 1.0, 1)` (options A–H),
-  `scale_color_distiller(PaletteName::Blues, -1)`; binned `scale_fill_steps2(lo, mid,
+  `scale_color_distiller(PaletteName::Blues, -1)`; `scale_x_binned(10)` (bin x before the stat —
+  `geom_bar()` → histogram), `scale_size_binned(5)` / `_alpha_` / `_shape_` / `_linetype_` / `_linewidth_binned`; binned `scale_fill_steps2(lo, mid,
   hi, midpoint, n_bins)`, `scale_color_viridis_b('C', n_bins)`; `scale_size_manual(vec![("a",
   2.0)])` / `scale_alpha_manual` / `scale_linewidth_manual`, `scale_size_identity()` /
   `_alpha_` / `_linewidth_` / `scale_shape_identity()` (pch codes), `scale_radius(1.0, 8.0)`;

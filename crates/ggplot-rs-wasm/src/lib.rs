@@ -184,6 +184,8 @@ export interface PositionScale {
   /** Secondary axis (x: top, y: right): `true` repeats the primary
    *  (`dup_axis()`), or `secondary = primary * scale + offset`. */
   sec_axis?: boolean | { name?: string; scale?: number; offset?: number };
+  /** Binned position scale: about this many breaks (scale_x_binned). */
+  binned?: number;
 }
 
 export interface ColorScale {
@@ -211,6 +213,8 @@ export interface ValueScale {
   values?: Record<string, number>;
   /** Output range `[lo, hi]` (size: radius, ggplot2's `scale_radius`). */
   range?: [number, number];
+  /** Binned (scale_*_binned): about this many breaks; with `range`. */
+  binned?: number;
 }
 
 /** Which panels get axes, and whether inner axes are labelled (#412). */

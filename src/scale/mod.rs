@@ -246,6 +246,13 @@ pub trait Scale: Send + Sync {
     /// `expand = FALSE` for one side, #411). Default: no-op.
     fn clear_expand(&mut self, _lower: bool, _upper: bool) {}
 
+    /// A binned position scale (`scale_x_binned`, #408) replaces each value
+    /// with its bin's midpoint before the stat runs; `None` (the default)
+    /// leaves positions alone.
+    fn bin_positions(&mut self, _values: &[Value]) -> Option<Vec<Value>> {
+        None
+    }
+
     /// Map an already-computed `[0, 1]` scale fraction (as returned
     /// alongside each label by [`breaks`](Self::breaks)) directly to an
     /// output size, bypassing the round trip through [`map`](Self::map) — a
