@@ -73,7 +73,7 @@ if (!svg.startsWith("<svg")) throw new Error("render failed");
 | `scales.x/y` | `{ trans, limits: [lo, hi], breaks: [...], name }`; trans `log10 log2 ln sqrt reverse logit probit pseudo_log reciprocal exp` |
 | `scales.color/fill` | `{ palette }` (`Set1 Dark2 Paired npg …` categorical; `viridis magma plasma inferno` numeric), `{ values: { level: "#rrggbb" } }`, `{ gradient: ["#lo", "#hi"] }`, `{ levels: [...] }` |
 | `facet` | `{ wrap, ncol?, scales? }` or `{ rows?, cols?, scales? }`; scales `fixed free free_x free_y` |
-| `coord` | `cartesian flip polar fixed radar sf`, or `{ type, xlim, ylim, ratio }` |
+| `coord` | `cartesian flip polar radial fixed radar quickmap map sf`, or `{ type, xlim, ylim, ratio, reverse: "x"/"y"/"xy", start, end, inner_radius }` (`quickmap` / `map` = plain lon/lat data; `radial` partial circles / donuts) |
 | `labels` | `title subtitle caption tag x y` (axis titles are not auto-filled from column names) |
 | `theme` | preset `gray bw minimal classic dark light void linedraw` (default `minimal`), or an overlay `{ base, primary: [r,g,b], palette, title: {...}, panel_grid_major: {...}, … }` |
 | `legend` | `right left top bottom none inside` or `[x, y]` inside the panel |

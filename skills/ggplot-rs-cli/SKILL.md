@@ -105,7 +105,9 @@ rows), `connect` (steps), `summary_hex` (summary of a `z` column per hexagon),
 
 - Small multiples: `--facet-wrap COL`, or `--facet-grid "ROW:COL"` (either side
   may be empty, e.g. `":region"`); `--facet-scales fixed|free|free_x|free_y`.
-- `--log-x`, `--log-y`, `--flip`; `--coord cartesian|flip|polar|fixed|radar|sf`.
+- `--log-x`, `--log-y`, `--flip`; `--coord cartesian|flip|polar|radial|fixed|radar|quickmap|map|sf`
+  (`quickmap` / `map` for plain lon/lat columns; reversed axes / partial
+  circles via a `--spec` coord object).
 - Labels: `--title --subtitle --xlab --ylab --caption`. Axis titles are not
   filled from column names — pass `--xlab`/`--ylab` when you want them.
 - `--legend right|left|top|bottom|none|inside`.

@@ -168,10 +168,17 @@ export type Facet =
   | { wrap: string; ncol?: number; scales?: "fixed" | "free" | "free_x" | "free_y" }
   | { rows?: string; cols?: string; scales?: "fixed" | "free" | "free_x" | "free_y" };
 
-export type CoordName = "cartesian" | "flip" | "polar" | "fixed" | "equal" | "radar" | "sf";
+export type CoordName =
+  | "cartesian" | "flip" | "polar" | "radial" | "fixed" | "equal" | "radar" | "quickmap" | "map" | "sf";
 export type Coord =
   | CoordName
-  | { type: CoordName; ratio?: number; xlim?: [number, number]; ylim?: [number, number] };
+  | {
+      type: CoordName; ratio?: number; xlim?: [number, number]; ylim?: [number, number];
+      /** cartesian: mirror the panel. */
+      reverse?: "x" | "y" | "xy" | "none";
+      /** radial: theta start / end in radians (clockwise from 12 o'clock) and a donut hole (0–1). */
+      start?: number; end?: number; inner_radius?: number;
+    };
 
 export interface Labels {
   title?: string;
