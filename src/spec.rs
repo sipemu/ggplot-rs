@@ -377,6 +377,13 @@ pub struct FacetSpec {
     pub axes: Option<String>,
     /// `"all"` (default) or `"margins"`: label the inner axes or not.
     pub axis_labels: Option<String>,
+    /// wrap: fixed panel order, empty panels kept (`drop = FALSE`).
+    pub levels: Option<Vec<String>>,
+    /// grid: fixed row / column order, empty ones kept (#412).
+    pub row_levels: Option<Vec<String>>,
+    pub col_levels: Option<Vec<String>>,
+    /// grid: add "(all)" margin panels (`margins = TRUE`, #412).
+    pub margins: Option<bool>,
 }
 
 #[derive(Deserialize)]
@@ -1731,9 +1738,16 @@ fn apply_facet(plot: GGPlot, f: &FacetSpec) -> Result<GGPlot, String> {
                     ))
                 }
             };
-            Ok(plot
+            if f.row_levels.is_some() || f.col_levels.is_some() || f.margins.is_some() {
+                return Err("row_levels / col_levels / margins are for rows/cols".into());
+            }
+            let mut plot = plot
                 .facet_wrap_dir(vertical, f.as_table.unwrap_or(true))
-                .facet_strip_position(side))
+                .facet_strip_position(side);
+            if let Some(l) = &f.levels {
+                plot = plot.facet_levels(l);
+            }
+            Ok(plot)
         }
         (None, r, c) if r.is_some() || c.is_some() => {
             if f.strip_position.is_some() {
@@ -1746,9 +1760,14 @@ fn apply_facet(plot: GGPlot, f: &FacetSpec) -> Result<GGPlot, String> {
                 Some("both") => crate::facet::FacetSwitch::Both,
                 Some(o) => return Err(format!("unknown switch '{o}' (expected x, y, both)")),
             };
+            if f.levels.is_some() {
+                return Err("levels is for wrap; rows/cols take row_levels / col_levels".into());
+            }
             Ok(plot
                 .facet_grid_free(r.as_deref(), c.as_deref(), scales)
-                .facet_switch(switch))
+                .facet_switch(switch)
+                .facet_grid_levels(f.row_levels.as_deref(), f.col_levels.as_deref())
+                .facet_margins(f.margins.unwrap_or(false)))
         }
         _ => Err("set either `wrap` or `rows`/`cols`".into()),
     }
@@ -2438,6 +2457,27 @@ mod tests {
         )
         .unwrap();
         assert!(svg.contains("#C80000") && svg.contains("#0000C8"), "{svg}");
+    }
+
+    #[test]
+    fn facet_levels_and_margins() {
+        let d = r#""data": {"x": [1, 2, 3, 4], "y": [1, 2, 3, 4], "r": ["p", "p", "q", "q"],
+               "c": ["a", "b", "a", "b"]}, "aes": {"x": "x", "y": "y"}, "layers": [{"geom": "point"}]"#;
+        let svg = render(&format!(
+            r#"{{ {d}, "facet": {{"rows": "r", "cols": "c", "row_levels": ["q", "p", "z"], "margins": true}} }}"#
+        ))
+        .unwrap();
+        assert!(svg.contains(">z<") && svg.contains(">(all)<"), "{svg}");
+        let svg = render(&format!(
+            r#"{{ {d}, "facet": {{"wrap": "c", "levels": ["b", "a", "e"]}} }}"#
+        ))
+        .unwrap();
+        assert!(svg.contains(">e<"));
+        let e = render(&format!(
+            r#"{{ {d}, "facet": {{"wrap": "c", "margins": true}} }}"#
+        ))
+        .unwrap_err();
+        assert!(e.contains("are for rows/cols"), "{e}");
     }
 
     #[test]

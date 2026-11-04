@@ -281,6 +281,30 @@ impl PlotBuilder {
             }
         }
 
+        // #412: `facet_grid(margins = TRUE)` — copy the rows into "(all)"
+        // levels before any stat runs, so the margin panels are computed on
+        // the pooled data (as ggplot2's `reshape_add_margins`).
+        let (plot_data, layers) = match &facet {
+            Facet::Grid {
+                margins: true,
+                row_var,
+                col_var,
+                ..
+            } => {
+                let add =
+                    |d: DataFrame| Self::add_margins(d, row_var.as_deref(), col_var.as_deref());
+                let layers = layers
+                    .into_iter()
+                    .map(|mut l| {
+                        l.data = l.data.take().map(add);
+                        l
+                    })
+                    .collect();
+                (add(plot_data), layers)
+            }
+            _ => (plot_data, layers),
+        };
+
         let mut scale_set = ScaleSet::new();
 
         // Add user-specified scales
@@ -642,13 +666,26 @@ impl PlotBuilder {
                 row_var,
                 col_var,
                 labeller,
+                row_levels: fixed_rows,
+                col_levels: fixed_cols,
+                margins,
                 ..
             } => {
-                let mut row_levels: Vec<String> = Vec::new();
-                let mut col_levels: Vec<String> = Vec::new();
+                // #412: fixed levels (+ the "(all)" margin) when given.
+                let with_margin = |l: &Vec<String>| {
+                    let mut l = l.clone();
+                    if *margins {
+                        l.push(Self::MARGIN_LEVEL.to_string());
+                    }
+                    l
+                };
+                let mut row_levels: Vec<String> =
+                    fixed_rows.as_ref().map(with_margin).unwrap_or_default();
+                let mut col_levels: Vec<String> =
+                    fixed_cols.as_ref().map(with_margin).unwrap_or_default();
 
                 for bl in built_layers {
-                    if let Some(rv) = row_var {
+                    if let (Some(rv), None) = (row_var, fixed_rows) {
                         if let Some(col) = bl.data.column(rv) {
                             for v in col {
                                 let key = v.to_group_key();
@@ -658,7 +695,7 @@ impl PlotBuilder {
                             }
                         }
                     }
-                    if let Some(cv) = col_var {
+                    if let (Some(cv), None) = (col_var, fixed_cols) {
                         if let Some(col) = bl.data.column(cv) {
                             for v in col {
                                 let key = v.to_group_key();
@@ -738,6 +775,26 @@ impl PlotBuilder {
                 (panels, panels_data)
             }
         }
+    }
+
+    /// The "(all)" margin level of `facet_grid(margins = TRUE)` (#412).
+    pub(crate) const MARGIN_LEVEL: &'static str = "(all)";
+
+    /// `data` plus a copy with the row variable set to "(all)", then all of
+    /// that plus a copy with the column variable set to "(all)".
+    fn add_margins(data: DataFrame, row: Option<&str>, col: Option<&str>) -> DataFrame {
+        let mut out = data;
+        for var in [row, col].into_iter().flatten() {
+            if !out.has_column(var) || out.nrows() == 0 {
+                continue;
+            }
+            let mut copy = out.clone();
+            if let Some(c) = copy.column_mut(var) {
+                c.fill(crate::data::Value::Str(Self::MARGIN_LEVEL.to_string()));
+            }
+            out.vstack(&copy);
+        }
+        out
     }
 
     fn filter_data_by_var(data: &DataFrame, var: &str, level: &str) -> DataFrame {

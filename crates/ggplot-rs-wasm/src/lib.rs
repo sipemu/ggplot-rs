@@ -234,11 +234,17 @@ export type Facet = FacetAxesSpec & (
       label_wrap?: number;
       /** The side of each panel its strip sits on (default "top"). */
       strip_position?: "top" | "bottom" | "left" | "right";
+      /** Fixed panel order; listed levels without data still get a panel. */
+      levels?: string[];
     }
   | {
       rows?: string; cols?: string; scales?: "fixed" | "free" | "free_x" | "free_y";
       /** Column strips below ("x"), row strips left ("y"), or both. */
       switch?: "x" | "y" | "both";
+      /** Fixed row / column order, empty ones kept (drop = FALSE). */
+      row_levels?: string[]; col_levels?: string[];
+      /** An extra "(all)" row and column (margins = TRUE). */
+      margins?: boolean;
     });
 
 export type CoordName =

@@ -3110,6 +3110,45 @@ impl GGPlot {
         self
     }
 
+    /// Fix a `facet_grid`'s row / column order and keep empty ones
+    /// (ggplot2's factor levels with `drop = FALSE`, #412): `None` keeps the
+    /// data's own levels for that direction. Call after `facet_grid*`.
+    pub fn facet_grid_levels<S: AsRef<str>>(
+        mut self,
+        rows: Option<&[S]>,
+        cols: Option<&[S]>,
+    ) -> Self {
+        let dedup = |l: &[S]| {
+            let mut seen = Vec::<String>::new();
+            for s in l {
+                if !seen.iter().any(|x| x == s.as_ref()) {
+                    seen.push(s.as_ref().to_string());
+                }
+            }
+            seen
+        };
+        if let Facet::Grid {
+            row_levels,
+            col_levels,
+            ..
+        } = &mut self.facet
+        {
+            *row_levels = rows.map(dedup);
+            *col_levels = cols.map(dedup);
+        }
+        self
+    }
+
+    /// Add an "(all)" row and column pooling the others (ggplot2's
+    /// `facet_grid(margins = TRUE)`, #412). Stats are computed on the pooled
+    /// data. Call after `facet_grid*`.
+    pub fn facet_margins(mut self, on: bool) -> Self {
+        if let Facet::Grid { margins, .. } = &mut self.facet {
+            *margins = on;
+        }
+        self
+    }
+
     /// Move `facet_grid` strips to the opposite side (ggplot2's `switch =
     /// "x" | "y" | "both"`): column strips below the grid, row strips on its
     /// left. Call after `facet_grid*` (#412).
@@ -3147,6 +3186,9 @@ impl GGPlot {
             labeller: FacetLabeller::default(),
             space: FacetSpace::Fixed,
             switch: crate::facet::FacetSwitch::None,
+            row_levels: None,
+            col_levels: None,
+            margins: false,
         };
         self
     }
@@ -3164,6 +3206,9 @@ impl GGPlot {
             labeller: FacetLabeller::default(),
             space: FacetSpace::Fixed,
             switch: crate::facet::FacetSwitch::None,
+            row_levels: None,
+            col_levels: None,
+            margins: false,
         };
         self
     }
@@ -3208,6 +3253,9 @@ impl GGPlot {
             labeller: FacetLabeller::default(),
             space,
             switch: crate::facet::FacetSwitch::None,
+            row_levels: None,
+            col_levels: None,
+            margins: false,
         };
         self
     }
@@ -3228,6 +3276,9 @@ impl GGPlot {
             labeller: FacetLabeller::default(),
             space,
             switch: crate::facet::FacetSwitch::None,
+            row_levels: None,
+            col_levels: None,
+            margins: false,
         };
         self
     }
@@ -3245,6 +3296,9 @@ impl GGPlot {
             labeller,
             space: FacetSpace::Fixed,
             switch: crate::facet::FacetSwitch::None,
+            row_levels: None,
+            col_levels: None,
+            margins: false,
         };
         self
     }

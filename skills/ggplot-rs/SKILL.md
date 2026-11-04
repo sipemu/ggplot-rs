@@ -119,6 +119,8 @@ With polars (default feature): `GGPlot::new(df!{ "x" => [1.0, 2.0], "y" => [3.0,
   (grid: row strips on the left; by default column strips are on top, row strips right).
   `.facet_axes(FacetAxes::all().margin_labels())` (axes on every panel; ggplot2's
   `axes = "all", axis.labels = "margins"`).
+  `.facet_grid_levels(Some(&["b", "a", "z"]), None::<&[&str]>)` (order, keep empty),
+  `.facet_margins(true)` ("(all)" panels; ggplot2's `margins = TRUE`).
 - **Coords:** `coord_flip()`, `coord_polar()`, `coord_radial(start, end,
   inner_radius)`, `coord_fixed(ratio)`, `coord_cartesian_zoom(Some((lo, hi)), None)`,
   `coord_reverse(x, y)`, `coord_cartesian_with(CoordCartesian::new().expand(t, r, b, l))`
