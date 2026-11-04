@@ -2163,6 +2163,16 @@ impl GGPlot {
         self
     }
 
+    /// ggplot2's `guides(x = guide_axis_logticks())` (#409): log10 minor
+    /// ticks on that axis (long at decades, mid at 5s, short otherwise).
+    /// Call after `scale_x_log10()` / `scale_y_log10()`.
+    pub fn guide_axis_logticks(mut self, aes: crate::aes::Aesthetic) -> Self {
+        for s in self.scales.iter_mut().filter(|s| s.aesthetic() == aes) {
+            s.set_log_ticks(true);
+        }
+        self
+    }
+
     /// Show or hide the most recent layer in one aesthetic's legend only
     /// (ggplot2's `show.legend = c(colour = TRUE, fill = FALSE)`; #410).
     pub fn show_legend_for(mut self, aes: crate::aes::Aesthetic, show: bool) -> Self {

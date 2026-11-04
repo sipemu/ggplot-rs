@@ -49,6 +49,8 @@ pub struct ScaleContinuous {
     /// The bin edges, fixed by the first layer binned (later layers share
     /// them); also the axis breaks.
     bin_edges: Vec<f64>,
+    /// Draw ggplot2's `guide_axis_logticks()` ticks (#409).
+    log_ticks: bool,
 }
 
 impl ScaleContinuous {
@@ -64,6 +66,7 @@ impl ScaleContinuous {
             time: false,
             binned: None,
             bin_edges: Vec::new(),
+            log_ticks: false,
             expand: (0.05, 0.0, 0.05, 0.0),
             position_opposite: false,
             scale_transform: ScaleTransform::Identity,
@@ -126,6 +129,14 @@ impl ScaleContinuous {
         let mut s = ScaleContinuous::new();
         s.binned = Some(n.max(1));
         s
+    }
+
+    /// ggplot2's `guide = guide_axis_logticks()` (#409): on a log10 axis,
+    /// extra ticks at every 1–9 × 10ᵏ — long at the decades, mid at the 5s,
+    /// short otherwise. No effect on other transforms.
+    pub fn with_log_ticks(mut self) -> Self {
+        self.log_ticks = true;
+        self
     }
 
     pub fn with_breaks(mut self, breaks: Vec<f64>) -> Self {
@@ -452,6 +463,38 @@ impl Scale for ScaleContinuous {
 
     fn transform(&self, value: &Value) -> Value {
         self.scale_transform.transform_value(value)
+    }
+
+    fn set_log_ticks(&mut self, on: bool) {
+        self.log_ticks = on;
+    }
+
+    fn log_ticks(&self) -> Vec<(f64, u8)> {
+        if !self.log_ticks
+            || !self.trained
+            || !matches!(self.scale_transform, ScaleTransform::Log10)
+        {
+            return Vec::new();
+        }
+        let (lo, hi) = self.expanded_range();
+        if !(lo.is_finite() && hi.is_finite()) || hi <= lo || hi - lo > 30.0 {
+            return Vec::new();
+        }
+        let mut out = Vec::new();
+        for k in (lo.floor() as i64)..=(hi.ceil() as i64) {
+            for m in 1..=9u32 {
+                let t = k as f64 + (m as f64).log10();
+                if t >= lo - 1e-9 && t <= hi + 1e-9 {
+                    let kind = match m {
+                        1 => 0,
+                        5 => 1,
+                        _ => 2,
+                    };
+                    out.push((self.map(&Value::Float(t)), kind));
+                }
+            }
+        }
+        out
     }
 
     fn bin_positions(&mut self, values: &[Value]) -> Option<Vec<Value>> {

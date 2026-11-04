@@ -253,6 +253,16 @@ pub trait Scale: Send + Sync {
         None
     }
 
+    /// `guide_axis_logticks()` (#409): `(position, kind)` of the log10
+    /// ticks to draw on this axis — kind 0 at each decade (long), 1 at the
+    /// 5s (mid), 2 at the other integers (short). Empty by default.
+    fn log_ticks(&self) -> Vec<(f64, u8)> {
+        Vec::new()
+    }
+
+    /// Switch [`log_ticks`](Self::log_ticks) on or off. Default: no-op.
+    fn set_log_ticks(&mut self, _on: bool) {}
+
     /// Map an already-computed `[0, 1]` scale fraction (as returned
     /// alongside each label by [`breaks`](Self::breaks)) directly to an
     /// output size, bypassing the round trip through [`map`](Self::map) — a

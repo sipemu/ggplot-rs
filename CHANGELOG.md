@@ -6,6 +6,11 @@ All notable changes to this project are documented here. The format follows
 ## [Unreleased]
 
 ### Added
+- `guide_axis_logticks(aes)` (#409) / `ScaleContinuous::with_log_ticks()`:
+  ggplot2's `guide_axis_logticks()` — on a log10 axis, ticks at every
+  1–9 × 10ᵏ outside the panel (long at decades, mid at 5s, short
+  otherwise). New `Scale::log_ticks` / `set_log_ticks` hooks. Spec / npm:
+  `scales.x/y.logticks`.
 - `ScaleContinuous::with_n_breaks(n)` (#408): ggplot2's `n.breaks` — about
   `n` round breaks instead of 5. `scale_x_time()` / `scale_y_time()`
   (`ScaleContinuous::time()`): seconds on the axis, breaks on round time
