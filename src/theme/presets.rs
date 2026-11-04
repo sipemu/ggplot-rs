@@ -172,6 +172,7 @@ pub fn theme_gray_base(base_size: f64) -> Theme {
         legend_location_plot: false,
         axis_ticks_length_x: None,
         axis_ticks_length_y: None,
+        tag_location_panel: false,
         strip_switch_pad: 2.75,
         legend_margin: Margin {
             top: 10.0,
@@ -620,6 +621,7 @@ pub fn theme_void_base(base_size: f64) -> Theme {
         legend_location_plot: false,
         axis_ticks_length_x: None,
         axis_ticks_length_y: None,
+        tag_location_panel: false,
         strip_switch_pad: 2.75,
         legend_margin: Margin {
             top: 0.0,

@@ -335,7 +335,14 @@ impl PlotRenderer {
         }
 
         // 11. Draw corner tag (labs(tag = ...))
-        Self::draw_tag(&built.labels, theme, &total_area, backend)?;
+        // #413: `plot.tag.location = "panel"` puts the tag in the panel's
+        // corner instead of the plot's.
+        let tag_area = if theme.tag_location_panel {
+            &plot_area
+        } else {
+            &total_area
+        };
+        Self::draw_tag(&built.labels, theme, tag_area, backend)?;
 
         Ok(())
     }
@@ -1309,7 +1316,14 @@ impl PlotRenderer {
         )?;
 
         // Draw corner tag (labs(tag = ...))
-        Self::draw_tag(&built.labels, theme, &total_area, backend)?;
+        // #413: `plot.tag.location = "panel"` puts the tag in the panel's
+        // corner instead of the plot's.
+        let tag_area = if theme.tag_location_panel {
+            &plot_area
+        } else {
+            &total_area
+        };
+        Self::draw_tag(&built.labels, theme, tag_area, backend)?;
 
         Ok(())
     }
