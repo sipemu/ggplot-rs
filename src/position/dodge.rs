@@ -108,6 +108,64 @@ pub(crate) fn dedup_order(keys: &[String]) -> Vec<String> {
     set.into_iter().map(str::to_string).collect()
 }
 
+/// #428: rank the dodge keys `order` the way the legend lists them — by each
+/// of `group` / `fill` / `colour`'s discrete scale level order (the scale
+/// cloned and trained on this layer's values, so ggplot2's sorted factor
+/// levels or user `limits` win), not by which row happens to come first.
+/// A column without a discrete scale (an explicit `group`) keeps its
+/// first-appearance rank; ties keep `order`'s own order.
+pub(crate) fn order_by_scale_levels(
+    order: Vec<String>,
+    data: &DataFrame,
+    scales: &crate::scale::ScaleSet,
+) -> Vec<String> {
+    use crate::aes::Aesthetic;
+    let Some(keys) = group_keys(data) else {
+        return order;
+    };
+    let ranks: Vec<Vec<f64>> = [
+        ("group", Aesthetic::Group),
+        ("fill", Aesthetic::Fill),
+        ("color", Aesthetic::Color),
+    ]
+    .iter()
+    .filter_map(|(c, aes)| Some((data.column(c)?, aes)))
+    .map(
+        |(col, aes)| match scales.get(aes).filter(|s| s.is_discrete()) {
+            Some(scale) => {
+                let mut scale = scale.clone_box();
+                scale.train(col);
+                col.iter().map(|v| scale.map(v)).collect()
+            }
+            None => {
+                let seen: indexmap::IndexSet<String> =
+                    col.iter().map(Value::to_group_key).collect();
+                col.iter()
+                    .map(|v| seen.get_index_of(&v.to_group_key()).unwrap_or(0) as f64)
+                    .collect()
+            }
+        },
+    )
+    .collect();
+    let mut rank: indexmap::IndexMap<&str, Vec<f64>> = indexmap::IndexMap::new();
+    for (i, k) in keys.iter().enumerate() {
+        rank.entry(k.as_str())
+            .or_insert_with(|| ranks.iter().map(|r| r[i]).collect());
+    }
+    let mut order = order;
+    order.sort_by(|a, b| {
+        let (ra, rb) = (rank.get(a.as_str()), rank.get(b.as_str()));
+        ra.zip(rb).map_or(std::cmp::Ordering::Equal, |(ra, rb)| {
+            ra.iter()
+                .zip(rb)
+                .map(|(x, y)| x.total_cmp(y))
+                .find(|o| o.is_ne())
+                .unwrap_or(std::cmp::Ordering::Equal)
+        })
+    });
+    order
+}
+
 /// The dodge key of each row: its group / fill / colour levels combined
 /// (`None` when the frame has none of these columns).
 pub(crate) fn group_keys(data: &DataFrame) -> Option<Vec<String>> {

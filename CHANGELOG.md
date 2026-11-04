@@ -27,6 +27,13 @@ All notable changes to this project are documented here. The format follows
   circles / donuts on `CoordPolar`). Spec / CLI / npm coords: `quickmap`,
   `map`, `radial` (`start`, `end`, `inner_radius`), cartesian `reverse`.
 
+### Fixed
+- Dodge order (#428): `position_dodge` / `position_dodge2` rank groups by the
+  `group` / `fill` / `colour` scale's level order — the legend's — instead of
+  by which row comes first. Precomputed `stat = "identity"` boxplots (one row
+  per box) with an explicit-levels fill scale now dodge the same way as the
+  raw-row path, whatever the row order.
+
 ## [0.40.0] — 2026-11-04
 
 ### Fixed

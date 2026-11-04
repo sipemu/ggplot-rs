@@ -1147,7 +1147,14 @@ impl PlotBuilder {
         // Step 7: Position adjustment. `validate` runs once per layer (D2)
         // regardless of whether the position is per-panel.
         position.validate(warnings);
-        let params = PositionParams::default();
+        // #428: dodge groups in the legend's (scale level) order, whatever
+        // the row order — precomputed `stat = "identity"` rows included.
+        let params = PositionParams {
+            group_order: position.group_order(&working_data).map(|order| {
+                crate::position::dodge::order_by_scale_levels(order, &working_data, scale_set)
+            }),
+            ..PositionParams::default()
+        };
         if position.per_panel() {
             Self::compute_position_per_panel(
                 position.as_ref(),
@@ -1470,7 +1477,9 @@ impl PlotBuilder {
         // global `group` id). Positions that don't override `group_order`
         // (stack/fill/jitter) get `None` back, unchanged from before.
         let mut panel_params = params.clone();
-        panel_params.group_order = position.group_order(data);
+        if panel_params.group_order.is_none() {
+            panel_params.group_order = position.group_order(data);
+        }
 
         let col_names: Vec<String> = data.column_names().iter().map(|s| s.to_string()).collect();
         let mut panels: Vec<(Vec<usize>, DataFrame)> = Vec::with_capacity(order.len());
