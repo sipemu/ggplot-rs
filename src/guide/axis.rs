@@ -72,8 +72,13 @@ pub(crate) fn draw_x_axis_with(
     };
     let breaks = scale.breaks();
     let tick_len = theme.ticks_len_x();
-    let axis_line = theme.get_axis_line_x();
-    let axis_ticks = theme.get_axis_ticks_x();
+    let side = if top {
+        crate::theme::AxisSide::Top
+    } else {
+        crate::theme::AxisSide::Bottom
+    };
+    let axis_line = theme.axis_line_at(side);
+    let axis_ticks = theme.axis_ticks_at(side);
 
     let edge_y = if top {
         plot_area.y
@@ -412,8 +417,8 @@ pub(crate) fn draw_y_axis_with(
 ) -> Result<(), RenderError> {
     let breaks = scale.breaks();
     let tick_len = theme.ticks_len_y();
-    let axis_line = theme.get_axis_line_y();
-    let axis_ticks = theme.get_axis_ticks_y();
+    let axis_line = theme.axis_line_at(crate::theme::AxisSide::Left);
+    let axis_ticks = theme.axis_ticks_at(crate::theme::AxisSide::Left);
 
     // Axis line
     if axis_line.visible {
@@ -598,8 +603,8 @@ pub fn draw_sec_y_axis(
     let own_ticks = sec_axis.own_ticks(primary_scale);
     let breaks = own_ticks.clone().unwrap_or_else(|| primary_scale.breaks());
     let tick_len = theme.ticks_len_y();
-    let axis_line = theme.get_axis_line_y();
-    let axis_ticks = theme.get_axis_ticks_y();
+    let axis_line = theme.axis_line_at(crate::theme::AxisSide::Right);
+    let axis_ticks = theme.axis_ticks_at(crate::theme::AxisSide::Right);
 
     let right_x = plot_area.x + plot_area.width;
 
@@ -768,8 +773,8 @@ pub fn draw_sec_x_axis(
     let breaks = own_ticks.clone().unwrap_or_else(|| primary_scale.breaks());
     let labels = sec_labels(primary_scale, sec_axis, &breaks, own_ticks.is_some());
     let tick_len = theme.ticks_len_x();
-    let axis_line = theme.get_axis_line_x();
-    let axis_ticks = theme.get_axis_ticks_x();
+    let axis_line = theme.axis_line_at(crate::theme::AxisSide::Top);
+    let axis_ticks = theme.axis_ticks_at(crate::theme::AxisSide::Top);
     let top_y = plot_area.y;
     let line = |el: &crate::theme::elements::ElementLine| LineStyle {
         color: el.color,

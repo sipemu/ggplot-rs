@@ -5,6 +5,15 @@ pub mod presets;
 
 pub use elements::{ElementGeom, ElementLine, ElementRect, ElementText};
 
+/// A side of the panel an axis can sit on (#413's per-side elements).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum AxisSide {
+    Top,
+    Bottom,
+    Left,
+    Right,
+}
+
 /// Position of the legend.
 #[derive(Clone, Debug)]
 pub enum LegendPosition {
@@ -196,6 +205,17 @@ pub struct Theme {
     pub axis_line_y: Option<ElementLine>,
     pub axis_ticks_x: Option<ElementLine>,
     pub axis_ticks_y: Option<ElementLine>,
+    /// One side's axis line / ticks (ggplot2's `axis.line.x.top`,
+    /// `axis.ticks.y.right`, …, #413); `None` = the axis's own
+    /// (`axis_line_x` …), then the shared one.
+    pub axis_line_x_top: Option<ElementLine>,
+    pub axis_line_x_bottom: Option<ElementLine>,
+    pub axis_line_y_left: Option<ElementLine>,
+    pub axis_line_y_right: Option<ElementLine>,
+    pub axis_ticks_x_top: Option<ElementLine>,
+    pub axis_ticks_x_bottom: Option<ElementLine>,
+    pub axis_ticks_y_left: Option<ElementLine>,
+    pub axis_ticks_y_right: Option<ElementLine>,
     pub panel_grid_major_x: Option<ElementLine>,
     pub panel_grid_major_y: Option<ElementLine>,
     pub panel_grid_minor_x: Option<ElementLine>,
@@ -470,6 +490,36 @@ impl Theme {
 
     pub fn get_axis_ticks_y(&self) -> &ElementLine {
         self.axis_ticks_y.as_ref().unwrap_or(&self.axis_ticks)
+    }
+
+    /// The axis line on one side of the panel (#413): its side's own
+    /// element, else the x / y one, else `axis_line`.
+    pub fn axis_line_at(&self, side: AxisSide) -> &ElementLine {
+        let own = match side {
+            AxisSide::Top => &self.axis_line_x_top,
+            AxisSide::Bottom => &self.axis_line_x_bottom,
+            AxisSide::Left => &self.axis_line_y_left,
+            AxisSide::Right => &self.axis_line_y_right,
+        };
+        own.as_ref().unwrap_or(match side {
+            AxisSide::Top | AxisSide::Bottom => self.get_axis_line_x(),
+            AxisSide::Left | AxisSide::Right => self.get_axis_line_y(),
+        })
+    }
+
+    /// The axis ticks on one side of the panel (#413), inheriting like
+    /// [`Theme::axis_line_at`].
+    pub fn axis_ticks_at(&self, side: AxisSide) -> &ElementLine {
+        let own = match side {
+            AxisSide::Top => &self.axis_ticks_x_top,
+            AxisSide::Bottom => &self.axis_ticks_x_bottom,
+            AxisSide::Left => &self.axis_ticks_y_left,
+            AxisSide::Right => &self.axis_ticks_y_right,
+        };
+        own.as_ref().unwrap_or(match side {
+            AxisSide::Top | AxisSide::Bottom => self.get_axis_ticks_x(),
+            AxisSide::Left | AxisSide::Right => self.get_axis_ticks_y(),
+        })
     }
 
     pub fn get_panel_grid_major_x(&self) -> &ElementLine {

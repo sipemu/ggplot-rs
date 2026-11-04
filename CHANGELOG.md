@@ -17,6 +17,11 @@ All notable changes to this project are documented here. The format follows
   label per key (still available via `guide_legend_keys`).
 
 ### Added
+- Per-side axis lines / ticks (#413, ggplot2's `axis.line.x.top`,
+  `axis.ticks.y.right`, …): `Theme.axis_line_{x_top,x_bottom,y_left,
+  y_right}` / `axis_ticks_*`, resolved by `Theme::axis_line_at` /
+  `axis_ticks_at(AxisSide)` (side → axis → shared). Theme config / npm keys
+  of the same names plus `axis_line_x/_y`, `axis_ticks_x/_y`.
 - `Theme.legend_key_spacing_x` / `_y` (#413, ggplot2's
   `legend.key.spacing.x` / `.y`) — gaps between legend keys — and
   `Theme.legend_box_spacing` (`legend.box.spacing`) — the panel-to-legend
