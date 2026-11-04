@@ -65,7 +65,7 @@ if (!svg.startsWith("<svg")) throw new Error("render failed");
 | `aes` / `layers[].aes` | aesthetic → column: `x y color fill size shape alpha group linetype linewidth label weight xmin xmax ymin ymax xend yend angle radius tooltip from to subgroup open high low close lower middle upper fontface class` |
 | `layers[].geom` | see Geoms |
 | `layers[].params` | `bins` · `method` (`"lm"`/`"loess"`) `span` `se` · `yintercept` `xintercept` `slope` `intercept` · `levels` · `rows` · `box_size` `reversal` · `shape` · `speed` `direction` · `censor` · `projection` · `target` `ranges` |
-| `layers[].position` | `identity stack fill dodge dodge2 jitter nudge`, or `{ type: "dodge", width: 0.8 }` |
+| `layers[].position` | `identity stack fill dodge dodge2 jitter nudge`, or `{ type: "dodge", width: 0.8, preserve: "single" }`. boxplot dodges (`dodge2`) and violin (`dodge`) by default, so grouped boxes sit side by side |
 | `layers[].stat` | `"identity"` (plot precomputed values, e.g. bar heights) |
 | `layers[].data` | layer-specific data |
 | `scales.x/y` | `{ trans, limits: [lo, hi], breaks: [...], name }`; trans `log10 log2 ln sqrt reverse logit probit pseudo_log reciprocal exp` |

@@ -92,7 +92,11 @@ export interface LayerParams {
 export type PositionName = "identity" | "stack" | "fill" | "dodge" | "dodge2" | "jitter" | "nudge";
 export type Position =
   | PositionName
-  | { type: PositionName; width?: number; height?: number; padding?: number; x?: number; y?: number };
+  | {
+      type: PositionName; width?: number; height?: number; padding?: number; x?: number; y?: number;
+      /** dodge / dodge2: keep one group's width in slots with fewer groups (default "total"). */
+      preserve?: "total" | "single";
+    };
 
 export interface Layer {
   geom: GeomName;

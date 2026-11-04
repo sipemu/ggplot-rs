@@ -3,7 +3,6 @@ use std::collections::HashMap;
 use crate::aes::Aesthetic;
 use crate::coord::Coord;
 use crate::data::DataFrame;
-use crate::position::identity::PositionIdentity;
 use crate::position::Position;
 use crate::render::backend::{DrawBackend, RectStyle};
 use crate::render::RenderError;
@@ -68,12 +67,21 @@ impl Geom for GeomViolin {
             0.03
         };
 
+        // A dodge (the default `position_dodge`) shifts each violin within its
+        // x slot and shares the slot's width between the groups there (#404).
+        let x_mapper = super::support::XMapper::new(data, scales);
+        let series: Vec<Option<String>> = (0..data.nrows())
+            .map(|i| super::series_key(data, i))
+            .collect();
+
         // The stat vstacks one contiguous block of points per group; partition
-        // rows back into groups (keyed by the x value) and draw a polygon each.
+        // rows back into groups (keyed by x and the group / fill / colour
+        // level, so grouped violins at one x stay separate) and draw a
+        // polygon each.
         let mut order: Vec<String> = Vec::new();
         let mut groups: HashMap<String, Vec<usize>> = HashMap::new();
         for (i, xv) in x_col.iter().enumerate() {
-            let key = format!("{xv:?}");
+            let key = format!("{xv:?}\u{1f}{:?}", series[i]);
             if !groups.contains_key(&key) {
                 order.push(key.clone());
                 groups.insert(key.clone(), Vec::new());
@@ -84,7 +92,12 @@ impl Geom for GeomViolin {
         for key in &order {
             let idxs = &groups[key];
             let first = idxs[0];
-            let nx = x_scale.map(|s| s.map(&x_col[first])).unwrap_or(0.5);
+            let nx = if x_scale.is_some() {
+                x_mapper.map(&x_col[first], first)
+            } else {
+                0.5
+            };
+            let max_half_width = max_half_width / x_mapper.slot_n(first);
             let fill_color = fill_col
                 .and_then(|fc| scales.map_color(&Aesthetic::Fill, &fc[first]))
                 .unwrap_or(self.fill);
@@ -139,8 +152,9 @@ impl Geom for GeomViolin {
         Box::new(StatYDensity::default())
     }
 
+    /// ggplot2's default: grouped violins sit side by side in their x slot.
     fn default_position(&self) -> Box<dyn Position> {
-        Box::new(PositionIdentity)
+        Box::new(crate::position::dodge::PositionDodge)
     }
 
     fn default_params(&self) -> GeomParams {

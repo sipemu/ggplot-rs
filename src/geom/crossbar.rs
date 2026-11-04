@@ -60,10 +60,16 @@ impl Geom for GeomCrossbar {
         let x_scale = scales.get(&Aesthetic::X);
         let y_scale = scales.get(&Aesthetic::Y);
 
-        let half_w = self.bar_width / 2.0;
+        let x_mapper = super::support::XMapper::new(data, scales);
 
         for i in 0..data.nrows() {
-            let nx = x_scale.map(|s| s.map(&x_col[i])).unwrap_or(0.0);
+            // Honour a dodge: shift within the x slot and share its width.
+            let nx = if x_scale.is_some() {
+                x_mapper.map(&x_col[i], i)
+            } else {
+                0.0
+            };
+            let half_w = self.bar_width / 2.0 / x_mapper.slot_n(i);
             let ny = y_scale.map(|s| s.map(&y_col[i])).unwrap_or(0.0);
             let ny_min = y_scale.map(|s| s.map(&ymin_col[i])).unwrap_or(0.0);
             let ny_max = y_scale.map(|s| s.map(&ymax_col[i])).unwrap_or(0.0);

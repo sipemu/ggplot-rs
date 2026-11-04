@@ -5,6 +5,26 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Fixed
+- Grouped `geom_boxplot` / `geom_violin` no longer draw every group's
+  element on top of each other (#404): boxplot now defaults to
+  `PositionDodge2` and violin to `PositionDodge`, as in ggplot2, and both
+  (with the whiskers, outliers, median and hover marks) follow the dodged x
+  and share the slot width. An explicit `.position(PositionDodge2…)` on a
+  boxplot works too (it was ignored at draw time). Grouped violins at one x
+  are separate polygons again (they were merged into one).
+- `geom_crossbar`, `geom_dotplot` and the candlestick family honour
+  `position_dodge` / `position_dodge2` on a discrete axis.
+
+### Added
+- `PositionDodge::with_preserve_single()` / `PositionDodge2::with_preserve_single()`
+  (`preserve_single` field) — ggplot2's `preserve = "single"`; spec / CLI /
+  npm: `position: { type: "dodge", preserve: "single" }`.
+
+### Changed
+- `PositionDodge` and `PositionDodge2` gain a public `preserve_single`
+  field (breaking for struct-literal construction; use the constructors).
+
 ## [0.39.0] — 2026-11-04
 
 ### Added

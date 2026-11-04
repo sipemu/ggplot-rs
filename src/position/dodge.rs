@@ -22,6 +22,10 @@ pub struct PositionDodge {
     pub width: Option<f64>,
     /// Reverse the group order (ggplot2 ≥ 3.5 `reverse = TRUE`).
     pub reverse: bool,
+    /// ggplot2's `preserve = "single"`: every element gets the width of one
+    /// group in the fullest slot, so a slot with fewer groups doesn't widen
+    /// its elements (they stay centred). `false` = `preserve = "total"`.
+    pub preserve_single: bool,
 }
 
 /// The default dodge (`width` 0.9, groups in legend order): lets
@@ -30,6 +34,7 @@ pub struct PositionDodge {
 pub const PositionDodge: PositionDodge = PositionDodge {
     width: None,
     reverse: false,
+    preserve_single: false,
 };
 
 impl PositionDodge {
@@ -38,12 +43,19 @@ impl PositionDodge {
         PositionDodge {
             width: Some(width),
             reverse: false,
+            preserve_single: false,
         }
     }
 
     /// Reverse the order of the dodged groups.
     pub fn with_reverse(mut self, reverse: bool) -> Self {
         self.reverse = reverse;
+        self
+    }
+
+    /// `preserve = "single"` (see [`preserve_single`](Self::preserve_single)).
+    pub fn with_preserve_single(mut self) -> Self {
+        self.preserve_single = true;
         self
     }
 }
@@ -60,6 +72,7 @@ impl Position for PositionDodge {
             self.width.unwrap_or(params.width),
             None,
             self.reverse,
+            self.preserve_single,
             params.group_order.as_deref(),
         );
     }
@@ -132,6 +145,7 @@ pub(crate) fn dodge_rows(
     width: f64,
     padding: Option<f64>,
     reverse: bool,
+    preserve_single: bool,
     external_order: Option<&[String]>,
 ) {
     let Some(x_col) = data.column("x").map(|c| c.to_vec()) else {
@@ -177,6 +191,8 @@ pub(crate) fn dodge_rows(
     for present in slots.values_mut() {
         present.sort_unstable();
     }
+    // `preserve = "single"`: size every element as one of the fullest slot's.
+    let max_n = slots.values().map(Vec::len).max().unwrap_or(1) as f64;
 
     let discrete = x_col
         .iter()
@@ -195,11 +211,12 @@ pub(crate) fn dodge_rows(
             .iter()
             .position(|&r| r == rank(&keys[i]))
             .unwrap_or(0) as f64;
-        let group_width = width / n;
+        let n_width = if preserve_single { max_n } else { n };
+        let group_width = width / n_width;
         let offset = (k - (n - 1.0) / 2.0) * group_width;
         if discrete {
             offsets[i] = Value::Float(offset);
-            counts[i] = Value::Float(n);
+            counts[i] = Value::Float(n_width);
             continue;
         }
         let Some(xv) = x.as_f64() else {
@@ -298,6 +315,33 @@ mod tests {
         assert!((off[1] - 0.125).abs() < 1e-12);
         // t2 has only m2 → centred (ggplot2's preserve = "total").
         assert_eq!(off[2], 0.0);
+    }
+
+    #[test]
+    fn preserve_single_keeps_element_width_in_partial_slots() {
+        let x: Vec<Value> = ["t1", "t1", "t1", "t2"]
+            .iter()
+            .map(|s| Value::Str(s.to_string()))
+            .collect();
+        let mut df = frame(x, &["a", "b", "c", "a"]);
+        PositionDodge::new(0.9)
+            .with_preserve_single()
+            .compute(&mut df, &PositionParams::default());
+        // Every element is one third of the slot wide, also t2's lone one,
+        // which stays centred.
+        assert_eq!(col(&df, DODGE_N_COL), vec![3.0, 3.0, 3.0, 3.0]);
+        assert_eq!(col(&df, DODGE_OFFSET_COL)[3], 0.0);
+        // Continuous x: t2-like partial slot keeps its centre.
+        let mut df = frame(
+            vec![Value::Float(1.0), Value::Float(1.0), Value::Float(2.0)],
+            &["a", "b", "a"],
+        );
+        PositionDodge::new(0.6)
+            .with_preserve_single()
+            .compute(&mut df, &PositionParams::default());
+        let xs = col(&df, "x");
+        assert!((xs[0] - 0.85).abs() < 1e-12 && (xs[1] - 1.15).abs() < 1e-12);
+        assert!((xs[2] - 2.0).abs() < 1e-12);
     }
 
     #[test]
