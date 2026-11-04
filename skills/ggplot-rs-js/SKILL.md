@@ -77,6 +77,7 @@ if (!svg.startsWith("<svg")) throw new Error("render failed");
 | `labels` | `title subtitle caption tag x y` (axis titles are not auto-filled from column names) |
 | `theme` | preset `gray bw minimal classic dark light void linedraw` (default `minimal`), or an overlay `{ base, primary: [r,g,b], palette, title: {...}, panel_grid_major: {...}, … }` |
 | `legend` | `right left top bottom none inside` or `[x, y]` inside the panel |
+| `guides` | per aesthetic: `{ fill: "none", color: { title: "Group" } }` |
 
 ## Geoms
 

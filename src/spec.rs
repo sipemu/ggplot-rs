@@ -62,6 +62,9 @@ pub struct PlotSpec {
     pub labels: LabelsSpec,
     pub theme: Option<ThemeSpec>,
     pub legend: Option<LegendSpec>,
+    /// Per-aesthetic guides: `{"fill": "none", "color": {"title": "…"}}`.
+    #[serde(default)]
+    pub guides: BTreeMap<String, GuideSpec>,
     pub width: Option<u32>,
     pub height: Option<u32>,
 }
@@ -363,6 +366,20 @@ pub enum ThemeSpec {
 
 #[derive(Deserialize)]
 #[serde(untagged)]
+pub enum GuideSpec {
+    /// `"none"` drops the legend.
+    Name(String),
+    Full(GuideFull),
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct GuideFull {
+    pub title: Option<String>,
+}
+
+#[derive(Deserialize)]
+#[serde(untagged)]
 pub enum LegendSpec {
     /// `"right"`, `"left"`, `"top"`, `"bottom"`, `"none"`, `"inside"` (auto).
     Name(String),
@@ -548,6 +565,28 @@ pub fn build_plot_with_data(
                 .map_err(|e| format!("theme: {e}"))?,
         ),
     };
+    for (name, g) in &spec.guides {
+        let aes = match name.as_str() {
+            "color" | "colour" => Aesthetic::Color,
+            "fill" => Aesthetic::Fill,
+            "shape" => Aesthetic::Shape,
+            "size" => Aesthetic::Size,
+            "alpha" => Aesthetic::Alpha,
+            "linetype" => Aesthetic::Linetype,
+            "linewidth" => Aesthetic::Linewidth,
+            o => return Err(format!("guides.{o}: not a legend aesthetic")),
+        };
+        plot = match g {
+            GuideSpec::Name(n) if n == "none" => plot.guide_none(aes),
+            GuideSpec::Name(n) => {
+                return Err(format!(
+                    "guides.{name}: unknown guide '{n}' (expected \"none\")"
+                ))
+            }
+            GuideSpec::Full(GuideFull { title: Some(t) }) => plot.guide_title(aes, t),
+            GuideSpec::Full(_) => plot,
+        };
+    }
     if let Some(l) = &spec.legend {
         plot = match l {
             LegendSpec::Inside([x, y]) => plot.legend_position_inside(*x, *y),
@@ -1777,6 +1816,23 @@ mod tests {
             .unwrap_or_else(|e| panic!("{coord}: {e}"));
             assert!(svg.contains("<circle"), "{coord}");
         }
+    }
+
+    #[test]
+    fn guides_none_and_title() {
+        let svg = render(&format!(
+            r#"{{ {DATA}, "aes": {{"x": "x", "y": "y", "color": "g", "fill": "g"}},
+               "layers": [{{"geom": "point"}}],
+               "guides": {{"color": {{"title": "Group"}}, "fill": "none"}} }}"#
+        ))
+        .unwrap();
+        assert!(svg.contains(">Group<"));
+        let e = render(&format!(
+            r#"{{ {DATA}, "aes": {{"x": "x", "y": "y"}}, "layers": [{{"geom": "point"}}],
+               "guides": {{"x": "none"}} }}"#
+        ))
+        .unwrap_err();
+        assert!(e.contains("not a legend aesthetic"), "{e}");
     }
 
     #[test]
