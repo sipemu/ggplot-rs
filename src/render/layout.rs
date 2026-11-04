@@ -23,6 +23,8 @@ pub struct PlotLayout {
 pub(crate) struct LayoutExtras {
     pub left: f64,
     pub right: f64,
+    /// Above the panel: a secondary x axis's ticks, labels and title (#409).
+    pub top: f64,
     pub legend_extra_rows: usize,
     /// Extra legend band width (B3-2, review #158 finding 3): a vertical
     /// explicit grid with `ncol > 1` needs `(cols − 1) · col_pitch` beyond
@@ -226,6 +228,7 @@ impl PlotLayout {
             + title_height
             + subtitle_height
             + legend_top
+            + extras.top
             + if x_axis_top { x_axis_height } else { 0.0 };
         let plot_width = width
             - margin.left
@@ -243,7 +246,8 @@ impl PlotLayout {
             - caption_height
             - x_axis_height
             - legend_top
-            - legend_bottom;
+            - legend_bottom
+            - extras.top;
 
         let mut plot_width = plot_width.max(50.0);
         let mut plot_height = plot_height.max(50.0);

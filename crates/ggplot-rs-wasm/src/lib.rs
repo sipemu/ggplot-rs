@@ -172,6 +172,9 @@ export interface PositionScale {
   breaks?: number[];
   /** Axis title. */
   name?: string;
+  /** Secondary axis (x: top, y: right): `true` repeats the primary
+   *  (`dup_axis()`), or `secondary = primary * scale + offset`. */
+  sec_axis?: boolean | { name?: string; scale?: number; offset?: number };
 }
 
 export interface ColorScale {

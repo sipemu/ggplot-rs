@@ -4468,6 +4468,15 @@ impl GGPlot {
             };
             extras.right += theme.axis_ticks_length + theme.legend_spacing + text + title;
         }
+        // …and a secondary x axis its height above the panel (#409).
+        if let Some(sec) = built
+            .scales
+            .get(&h_aes)
+            .filter(|s| !s.axis_position_opposite())
+            .and_then(|s| s.sec_axis())
+        {
+            extras.top += crate::guide::axis::sec_x_axis_height(&built.theme, sec);
+        }
         let can_reserve = built.facet.is_none()
             && built.theme.axis_text_x.visible
             && built.theme.axis_text_x_fit == crate::theme::AxisLabelFit::Reserve

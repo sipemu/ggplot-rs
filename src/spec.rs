@@ -301,6 +301,25 @@ pub struct PositionScaleSpec {
     pub limits: Option<[f64; 2]>,
     pub breaks: Option<Vec<f64>>,
     pub name: Option<String>,
+    /// A secondary axis (x: top, y: right; #409): `true` repeats the
+    /// primary (`dup_axis()`), or `{ name, scale, offset }` for a linear
+    /// `secondary = primary * scale + offset`.
+    pub sec_axis: Option<SecAxisSpec>,
+}
+
+#[derive(Deserialize)]
+#[serde(untagged)]
+pub enum SecAxisSpec {
+    Dup(bool),
+    Full(SecAxisFull),
+}
+
+#[derive(Deserialize, Default)]
+#[serde(deny_unknown_fields)]
+pub struct SecAxisFull {
+    pub name: Option<String>,
+    pub scale: Option<f64>,
+    pub offset: Option<f64>,
 }
 
 #[derive(Deserialize, Default)]
@@ -1381,6 +1400,21 @@ fn position_scale(s: &PositionScaleSpec) -> Result<ScaleContinuous, String> {
     if let Some(n) = &s.name {
         sc = sc.with_name(n);
     }
+    use crate::scale::sec_axis::SecAxis;
+    match &s.sec_axis {
+        None | Some(SecAxisSpec::Dup(false)) => {}
+        Some(SecAxisSpec::Dup(true)) => sc = sc.with_sec_axis(SecAxis::dup()),
+        Some(SecAxisSpec::Full(f)) => {
+            let mut a = match (f.scale, f.offset) {
+                (None, None) => SecAxis::dup(),
+                (k, b) => SecAxis::linear(k.unwrap_or(1.0), b.unwrap_or(0.0)),
+            };
+            if let Some(n) = &f.name {
+                a = a.with_name(n);
+            }
+            sc = sc.with_sec_axis(a);
+        }
+    }
     Ok(sc)
 }
 
@@ -2248,6 +2282,18 @@ mod tests {
         ))
         .unwrap_err();
         assert!(e.contains("unknown axes"), "{e}");
+    }
+
+    #[test]
+    fn secondary_axes() {
+        let d = r#""data": {"x": [0, 10, 20], "y": [1, 2, 3]}, "aes": {"x": "x", "y": "y"},
+               "layers": [{"geom": "point"}]"#;
+        let svg = render(&format!(
+            r#"{{ {d}, "scales": {{"x": {{"sec_axis": {{"name": "F", "scale": 1.8, "offset": 32}}}},
+               "y": {{"sec_axis": true}}}} }}"#
+        ))
+        .unwrap();
+        assert!(svg.contains(">F<") && svg.contains(">50<"), "{svg}");
     }
 
     #[test]

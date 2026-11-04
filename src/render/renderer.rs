@@ -10,6 +10,21 @@ use crate::render::RenderError;
 pub struct PlotRenderer;
 
 impl PlotRenderer {
+    /// How far the title must rise to clear an axis above the panel: a
+    /// top primary x axis, or a secondary x axis (#409).
+    fn top_axis_lift(built: &BuiltPlot, theme: &crate::theme::Theme) -> f64 {
+        let Some(xs) = built.scales.get(&Aesthetic::X) else {
+            return 0.0;
+        };
+        if xs.axis_position_opposite() {
+            theme.axis_ticks_length + theme.axis_text_x.size + theme.legend_spacing
+        } else if let Some(sec) = xs.sec_axis().filter(|_| built.facet.is_none()) {
+            axis::sec_x_axis_height(theme, sec)
+        } else {
+            0.0
+        }
+    }
+
     pub fn render(built: &BuiltPlot, backend: &mut dyn DrawBackend) -> Result<(), RenderError> {
         if !built.facet.is_none() && !built.panels.is_empty() {
             Self::render_faceted(built, backend)
@@ -145,6 +160,11 @@ impl PlotRenderer {
             if let Some(sec) = built.scales.sec_axis(&Aesthetic::Y) {
                 axis::draw_sec_y_axis(vs, sec, built.coord.as_ref(), theme, &plot_area, backend)?;
             }
+            // 4c. A secondary x axis along the top (#409) — unless the
+            // primary axis is already up there.
+            if let Some(sec) = hs.sec_axis().filter(|_| !hs.axis_position_opposite()) {
+                axis::draw_sec_x_axis(hs, sec, built.coord.as_ref(), theme, &plot_area, backend)?;
+            }
         }
 
         // 5. Draw each layer's geometry
@@ -197,16 +217,7 @@ impl PlotRenderer {
             let (tx, anchor) = Self::hjust_pos(&theme.title, &title_ref);
             // A top x-axis occupies the space just above the panel — lift the
             // title above it so they don't overlap.
-            let x_axis_top = built
-                .scales
-                .get(&Aesthetic::X)
-                .map(|s| s.axis_position_opposite())
-                .unwrap_or(false);
-            let x_axis_lift = if x_axis_top {
-                theme.axis_ticks_length + theme.axis_text_x.size + theme.legend_spacing
-            } else {
-                0.0
-            };
+            let x_axis_lift = Self::top_axis_lift(built, theme);
             let (title_y, _) = Self::title_subtitle_y(
                 theme,
                 plot_area.y,
@@ -238,16 +249,7 @@ impl PlotRenderer {
         if let Some(ref subtitle) = built.labels.subtitle {
             let (sx, anchor) = Self::hjust_pos(&theme.subtitle, &title_ref);
             // #281: lifted above a Top legend's band; a top x-axis too.
-            let x_axis_top = built
-                .scales
-                .get(&Aesthetic::X)
-                .map(|s| s.axis_position_opposite())
-                .unwrap_or(false);
-            let x_axis_lift = if x_axis_top {
-                theme.axis_ticks_length + theme.axis_text_x.size + theme.legend_spacing
-            } else {
-                0.0
-            };
+            let x_axis_lift = Self::top_axis_lift(built, theme);
             let (_, subtitle_y) =
                 Self::title_subtitle_y(theme, plot_area.y, x_axis_lift + legend_lift, true);
             let family = if theme.subtitle.family.is_empty() {
