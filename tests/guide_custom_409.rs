@@ -61,7 +61,11 @@ fn custom_guide_draws_after_the_scale_legends() {
 
 #[test]
 fn custom_guide_alone_reserves_a_legend_band() {
-    let base = || GGPlot::new(data()).aes(Aes::new().x("x").y("y")).geom_point();
+    let base = || {
+        GGPlot::new(data())
+            .aes(Aes::new().x("x").y("y"))
+            .geom_point()
+    };
     let plain = base().render_svg_native_with_size(500, 300).unwrap();
     let with = base()
         .guide_custom(GuideCustom::new(150.0, 20.0, |_, _| Ok(())))

@@ -2281,7 +2281,6 @@ fn draw_legend_planned_inner(
         }
     }
 
-
     // #409: custom guides (`guide_custom()`), after the scales' own.
     let family = (!theme.legend_title.family.is_empty()).then(|| theme.legend_title.family.clone());
     for custom in &guide.custom {

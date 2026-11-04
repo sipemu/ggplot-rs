@@ -5351,9 +5351,8 @@ impl GGPlot {
                     .iter()
                     .map(|g| (g.title_offset(&built.theme) + g.height - key_h).max(0.0))
                     .fold(0.0_f64, f64::max);
-                extras.continuous_horizontal_legend_extra_height = extras
-                    .continuous_horizontal_legend_extra_height
-                    .max(custom);
+                extras.continuous_horizontal_legend_extra_height =
+                    extras.continuous_horizontal_legend_extra_height.max(custom);
             }
         }
 
