@@ -170,6 +170,10 @@ export interface PositionScale {
     | "probit" | "pseudo_log" | "reciprocal" | "exp";
   limits?: [number, number];
   breaks?: number[];
+  /** About this many breaks (ggplot2's n.breaks). */
+  n_breaks?: number;
+  /** Time-of-day axis: values in seconds, HH:MM:SS labels (scale_x_time). */
+  time?: boolean;
   /** Axis title. */
   name?: string;
   /** Secondary axis (x: top, y: right): `true` repeats the primary

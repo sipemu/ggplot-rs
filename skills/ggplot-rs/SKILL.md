@@ -96,7 +96,8 @@ With polars (default feature): `GGPlot::new(df!{ "x" => [1.0, 2.0], "y" => [3.0,
   `PositionJitter::new(w, h)`, `PositionNudge::new(x, y)`.
 - **Scales:** `scale_x_log10()`, `scale_x_continuous(ScaleContinuous::new()
   .with_limits(0.0, 10.0).with_breaks(vec![..]).with_transform(ScaleTransform::Sqrt)
-  .with_label_formatter(label_percent(None)))`, `scale_color_brewer(PaletteName::Dark2)`,
+  .with_label_formatter(label_percent(None)))` (`.with_n_breaks(10)` = `n.breaks`),
+  `scale_x_time()` (seconds → `HH:MM:SS`), `scale_color_brewer(PaletteName::Dark2)`,
   `scale_fill_manual(vec![("a", RGBAColor::new(230, 159, 0))])`,
   `scale_color_gradient(lo, hi)`, `scale_color_gradientn(stops)`,
   `scale_color_hue(HuePalette::default())` (ggplot2's default colours for any

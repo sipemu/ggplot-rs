@@ -301,6 +301,10 @@ pub struct PositionScaleSpec {
     pub limits: Option<[f64; 2]>,
     pub breaks: Option<Vec<f64>>,
     pub name: Option<String>,
+    /// About this many breaks (`n.breaks`, #408).
+    pub n_breaks: Option<usize>,
+    /// A time-of-day axis: seconds, `HH:MM:SS` labels (`scale_x_time`).
+    pub time: Option<bool>,
     /// A secondary axis (x: top, y: right; #409): `true` repeats the
     /// primary (`dup_axis()`), or `{ name, scale, offset }` for a linear
     /// `secondary = primary * scale + offset`.
@@ -1373,7 +1377,11 @@ pub fn apply_position(plot: GGPlot, p: &PositionSpec) -> Result<GGPlot, String> 
 }
 
 fn position_scale(s: &PositionScaleSpec) -> Result<ScaleContinuous, String> {
-    let mut sc = ScaleContinuous::new();
+    let mut sc = if s.time == Some(true) {
+        ScaleContinuous::time()
+    } else {
+        ScaleContinuous::new()
+    };
     if let Some(t) = &s.trans {
         let t = match t.as_str() {
             "identity" => ScaleTransform::Identity,
@@ -1396,6 +1404,9 @@ fn position_scale(s: &PositionScaleSpec) -> Result<ScaleContinuous, String> {
     }
     if let Some(b) = &s.breaks {
         sc = sc.with_breaks(b.clone());
+    }
+    if let Some(n) = s.n_breaks {
+        sc = sc.with_n_breaks(n);
     }
     if let Some(n) = &s.name {
         sc = sc.with_name(n);
@@ -2294,6 +2305,17 @@ mod tests {
         ))
         .unwrap();
         assert!(svg.contains(">F<") && svg.contains(">50<"), "{svg}");
+    }
+
+    #[test]
+    fn n_breaks_and_time_scale() {
+        let svg = render(
+            r#"{ "data": {"x": [0, 3600, 7200], "y": [0, 50, 100]}, "aes": {"x": "x", "y": "y"},
+                 "layers": [{"geom": "point"}],
+                 "scales": {"x": {"time": true}, "y": {"n_breaks": 10}} }"#,
+        )
+        .unwrap();
+        assert!(svg.contains(">01:00:00<") && svg.contains(">90<"), "{svg}");
     }
 
     #[test]

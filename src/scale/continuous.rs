@@ -39,6 +39,11 @@ pub struct ScaleContinuous {
     /// distinct from `label_formatter` — e.g. a full currency string where
     /// the axis itself shows an abbreviated break.
     value_formatter: Option<LabelFormatter>,
+    /// Target number of breaks (ggplot2's `n.breaks`, #408; default 5).
+    n_breaks: usize,
+    /// A time-of-day axis (`scale_x_time`, #408): values are seconds, breaks
+    /// fall on round time steps.
+    time: bool,
 }
 
 impl ScaleContinuous {
@@ -50,6 +55,8 @@ impl ScaleContinuous {
             max: f64::NEG_INFINITY,
             trained: false,
             filter_oob: false,
+            n_breaks: 5,
+            time: false,
             expand: (0.05, 0.0, 0.05, 0.0),
             position_opposite: false,
             scale_transform: ScaleTransform::Identity,
@@ -87,6 +94,22 @@ impl ScaleContinuous {
     }
 
     /// Set custom break positions (data values where ticks appear).
+    /// Aim for about `n` breaks (ggplot2's `n.breaks`, #408) instead of 5;
+    /// the extended-Wilkinson search still picks round values.
+    pub fn with_n_breaks(mut self, n: usize) -> Self {
+        self.n_breaks = n.max(2);
+        self
+    }
+
+    /// ggplot2's `scale_x_time()` / `scale_y_time()` (#408): the values are
+    /// seconds (e.g. since midnight, `hms`), the breaks fall on round time
+    /// steps (1 s … 1 h … 1 day) and the labels read `HH:MM:SS`.
+    pub fn time() -> Self {
+        let mut s = ScaleContinuous::new().with_label_formatter(super::util::format_hms);
+        s.time = true;
+        s
+    }
+
     pub fn with_breaks(mut self, breaks: Vec<f64>) -> Self {
         self.custom_breaks = Some(breaks);
         self
@@ -349,7 +372,7 @@ impl Scale for ScaleContinuous {
             let data_max = self.scale_transform.inverse(self.max);
             if data_min.is_finite() && data_max.is_finite() && data_max > data_min {
                 self.scale_transform
-                    .breaks_in_data_space(data_min, data_max, 5)
+                    .breaks_in_data_space(data_min, data_max, self.n_breaks)
                     .into_iter()
                     .map(|d| self.scale_transform.apply(d))
                     .filter(|&v| v.is_finite() && v >= emin - tol && v <= emax + tol)
@@ -358,10 +381,14 @@ impl Scale for ScaleContinuous {
                 vec![]
             }
         } else {
-            extended_breaks(self.min, self.max, 5)
-                .into_iter()
-                .filter(|&v| v >= emin - tol && v <= emax + tol)
-                .collect()
+            if self.time {
+                super::util::time_breaks(self.min, self.max, self.n_breaks)
+            } else {
+                extended_breaks(self.min, self.max, self.n_breaks)
+            }
+            .into_iter()
+            .filter(|&v| v >= emin - tol && v <= emax + tol)
+            .collect()
         };
         let shown: Vec<f64> = breaks
             .iter()
