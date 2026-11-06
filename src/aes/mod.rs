@@ -64,6 +64,12 @@ pub enum Aesthetic {
     /// [`CLASS_INTERNAL_NAME`] the same way `Tooltip` is. No scale, no
     /// legend.
     Class,
+    /// A mark's key (#476, [`Aes::key`]): the value a mark reports as its
+    /// `data-x` (what a click / selection reads) where that differs from the
+    /// text it shows — e.g. a treemap tile keyed by a region code while it
+    /// is labelled with the region's name. Read by `geom_treemap`; without
+    /// it the key is the label, as before. No scale, no legend.
+    Key,
     /// A caller-named group wrapper (#221, [`Aes::group_wrap`]): every mark
     /// whose row has the same value — across all layers that map the same
     /// name — is drawn inside one `<g data-<name>="<value>">`. The `String`
@@ -139,6 +145,7 @@ impl Aesthetic {
             Aesthetic::Tooltip => "tooltip",
             Aesthetic::DataAttr(name) => name,
             Aesthetic::Class => "class",
+            Aesthetic::Key => "key",
             Aesthetic::GroupWrap(name) => name,
             Aesthetic::Open => "open",
             Aesthetic::High => "high",
@@ -404,6 +411,13 @@ impl Aes {
     /// `("class", "…")` instead.
     pub fn class(self, col: &str) -> Self {
         self.push(col, Aesthetic::Class)
+    }
+
+    /// Map the mark key (#476, [`Aesthetic::Key`]): `geom_treemap` writes
+    /// it as each tile's `data-x` (the value a click reads) while `label`
+    /// stays the shown text. Unmapped, the key is the label.
+    pub fn key(self, col: &str) -> Self {
+        self.push(col, Aesthetic::Key)
     }
 
     /// Wrap marks in caller-named groups (#221): every mark whose row has

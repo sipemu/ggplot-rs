@@ -5,6 +5,12 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Added
+- `Aes::key` / `Aesthetic::Key` (#476): a mark key separate from its label.
+  `geom_treemap` writes it as each tile's `data-x` (what a click reads), so a
+  tile can drill on a code (`DE-BY`) while it shows a name (`Bavaria`).
+  Unmapped, the key is the label, as before. Spec / npm aesthetic `"key"`.
+
 ### Fixed
 - A layer's legend key takes the layer's constant `fill` and `alpha` where the
   legend doesn't map them, as ggplot2's `draw_key_polygon` does (#473): a
