@@ -69,6 +69,10 @@ impl Default for GeomCol {
 }
 
 impl Geom for GeomCol {
+    fn key_fill(&self) -> Option<((u8, u8, u8), f64)> {
+        Some((self.fill, self.alpha))
+    }
+
     fn draw(
         &self,
         data: &DataFrame,

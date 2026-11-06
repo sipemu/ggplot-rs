@@ -458,6 +458,7 @@ impl PlotBuilder {
             .iter()
             .map(|bl| crate::guide::key::LayerKey {
                 glyph: bl.key_glyph,
+                fill: bl.geom.key_fill(),
                 aesthetics: crate::guide::legend::LEGEND_AESTHETICS
                     .iter()
                     .filter(|a| bl.data.has_column(a.col_name()))

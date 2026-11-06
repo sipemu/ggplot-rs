@@ -32,6 +32,10 @@ impl Default for GeomDensity {
 }
 
 impl Geom for GeomDensity {
+    fn key_fill(&self) -> Option<((u8, u8, u8), f64)> {
+        Some((self.fill, self.alpha))
+    }
+
     fn draw(
         &self,
         data: &DataFrame,

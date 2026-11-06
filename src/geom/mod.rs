@@ -236,6 +236,15 @@ pub trait Geom: Send + Sync {
         })
     }
 
+    /// The layer's constant `fill` and `alpha` (its parameters, not mapped
+    /// aesthetics), which its legend key is drawn with where the legend
+    /// doesn't map them — ggplot2's draw_key_polygon reads the layer's
+    /// `fill` / `alpha` params the same way (#473). `None`: the key glyph's
+    /// own defaults (grey35, opaque).
+    fn key_fill(&self) -> Option<((u8, u8, u8), f64)> {
+        None
+    }
+
     /// Geom-specific data preparation after the stat and position steps but
     /// before scale training (ggplot2's `GeomX$setup_data`) — e.g. a tile adds
     /// its `xmin`/`xmax`/`ymin`/`ymax` extents so continuous scales train on

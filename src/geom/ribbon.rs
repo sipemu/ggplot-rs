@@ -146,6 +146,10 @@ impl Default for GeomRibbon {
 }
 
 impl Geom for GeomRibbon {
+    fn key_fill(&self) -> Option<((u8, u8, u8), f64)> {
+        Some((self.fill, self.alpha))
+    }
+
     fn draw(
         &self,
         data: &DataFrame,
@@ -221,6 +225,10 @@ impl GeomStepribbon {
 }
 
 impl Geom for GeomStepribbon {
+    fn key_fill(&self) -> Option<((u8, u8, u8), f64)> {
+        Some((self.fill, self.alpha))
+    }
+
     fn draw(
         &self,
         data: &DataFrame,

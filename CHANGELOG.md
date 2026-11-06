@@ -5,6 +5,14 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Fixed
+- A layer's legend key takes the layer's constant `fill` and `alpha` where the
+  legend doesn't map them, as ggplot2's `draw_key_polygon` does (#473): a
+  translucent ribbon under a colour-mapped line no longer keys as an opaque
+  grey35 square (a 0.41 regression of #410's per-layer glyphs). Affects the
+  polygon-keyed geoms (bar/col/histogram, area, ribbon, stepribbon, density,
+  violin, polygon, rect, tile, density_ridges).
+
 ## [0.41.0] — 2026-11-04
 
 ### Changed

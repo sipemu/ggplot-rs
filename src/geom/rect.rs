@@ -46,6 +46,10 @@ impl GeomRect {
 }
 
 impl Geom for GeomRect {
+    fn key_fill(&self) -> Option<((u8, u8, u8), f64)> {
+        Some((self.fill, self.alpha))
+    }
+
     fn draw(
         &self,
         data: &DataFrame,
