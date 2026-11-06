@@ -65,7 +65,7 @@ fn signature(values: &[Value]) -> u64 {
 /// Binned fill/colour scale: `n` classes from `n + 1` increasing edges,
 /// each with its own colour. See the [module docs](self) for how it
 /// relates to `scale_fill_steps`/`::CLASSES`.
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct ScaleFillBinned {
     aesthetic: Aesthetic,
     /// `n + 1` increasing edges (`colors.len() == n`).
@@ -111,29 +111,18 @@ pub struct ScaleFillBinned {
     show_counts: bool,
     /// `with_label_formatter` (#474): formats both bin edges of a class
     /// label. `None` (the default): `format_value`, as before.
-    label_formatter: Option<LabelFormatter>,
+    label_formatter: Option<EdgeFormatter>,
     name: String,
     corrected: bool,
 }
 
-impl std::fmt::Debug for ScaleFillBinned {
+/// A [`LabelFormatter`] that prints as `LabelFormatter` in `Debug` output.
+#[derive(Clone)]
+struct EdgeFormatter(LabelFormatter);
+
+impl std::fmt::Debug for EdgeFormatter {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("ScaleFillBinned")
-            .field("aesthetic", &self.aesthetic)
-            .field("breaks", &self.breaks)
-            .field("colors", &self.colors)
-            .field("counts", &self.counts)
-            .field("na_count", &self.na_count)
-            .field("na_color", &self.na_color)
-            .field("na_pattern", &self.na_pattern)
-            .field("na_label", &self.na_label)
-            .field("na_key", &self.na_key)
-            .field("count_reserve", &self.count_reserve)
-            .field("show_counts", &self.show_counts)
-            .field("label_formatter", &self.label_formatter.is_some())
-            .field("name", &self.name)
-            .field("corrected", &self.corrected)
-            .finish_non_exhaustive()
+        f.write_str("LabelFormatter")
     }
 }
 
@@ -320,13 +309,13 @@ impl ScaleFillBinned {
     where
         F: Fn(f64) -> String + Send + Sync + 'static,
     {
-        self.label_formatter = Some(std::sync::Arc::new(f));
+        self.label_formatter = Some(EdgeFormatter(std::sync::Arc::new(f)));
         self
     }
 
     fn edge(&self, v: f64) -> String {
         match &self.label_formatter {
-            Some(f) => f(v),
+            Some(f) => (f.0)(v),
             None => format_value(&Value::Float(v)),
         }
     }
@@ -650,6 +639,7 @@ mod tests {
         let s = s.show_counts(false);
         let labels: Vec<String> = s.breaks().into_iter().map(|(_, l)| l).collect();
         assert_eq!(labels, vec!["140–2.7M", "2.7M", "2.7M–1.4B"]);
+        assert!(format!("{s:?}").contains("label_formatter: Some(LabelFormatter)"));
     }
 
     #[test]
