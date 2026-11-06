@@ -6,6 +6,10 @@ All notable changes to this project are documented here. The format follows
 ## [Unreleased]
 
 ### Added
+- `ScaleFillBinned::with_label_formatter` (#474): formats both bin edges of
+  a class label (e.g. `label_si()` for `2.7M–6.9M (35)`); the count is
+  unaffected. Default unchanged.
+
 - `Aes::key` / `Aesthetic::Key` (#476): a mark key separate from its label.
   `geom_treemap` writes it as each tile's `data-x` (what a click reads), so a
   tile can drill on a code (`DE-BY`) while it shows a name (`Bavaria`).
