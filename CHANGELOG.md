@@ -9,13 +9,19 @@ All notable changes to this project are documented here. The format follows
 - `ScaleFillBinned::with_label_formatter` (#474): formats both bin edges of
   a class label (e.g. `label_si()` for `2.7M–6.9M (35)`); the count is
   unaffected. Default unchanged.
-
 - `Aes::key` / `Aesthetic::Key` (#476): a mark key separate from its label.
   `geom_treemap` writes it as each tile's `data-x` (what a click reads), so a
   tile can drill on a code (`DE-BY`) while it shows a name (`Bavaria`).
   Unmapped, the key is the label, as before. Spec / npm aesthetic `"key"`.
 
 ### Fixed
+- `geom_text_repel` / `geom_label_repel` (#475): a label pinned to the panel
+  edge is no longer pushed into it (where the clamp cancelled the move and
+  left it on the points it covers). Off a point it moves sideways or to the
+  point's other side; against another label, the free one takes the whole
+  separation. The final separation-only phase also keeps moving labels that
+  are clear of other labels off the points they cover, and ends in the
+  overlap-free layout covering the fewest points.
 - A layer's legend key takes the layer's constant `fill` and `alpha` where the
   legend doesn't map them, as ggplot2's `draw_key_polygon` does (#473): a
   translucent ribbon under a colour-mapped line no longer keys as an opaque

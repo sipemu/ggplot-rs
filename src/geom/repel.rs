@@ -379,6 +379,17 @@ pub(crate) fn layout_with_lines(
         };
     };
 
+    // #475: whether a box already touches the panel edge it would be pushed
+    // towards (`sign` < 0: left / up), so the push would be clamped away.
+    let blocked = |b: &LabelBox, along_x: bool, sign: f64| {
+        let eps = 1e-6;
+        if along_x {
+            (sign < 0.0 && b.cx - b.hw <= x0 + eps) || (sign > 0.0 && b.cx + b.hw >= x1 - eps)
+        } else {
+            (sign < 0.0 && b.cy - b.hh <= y0 + eps) || (sign > 0.0 && b.cy + b.hh >= y1 - eps)
+        }
+    };
+
     let mut rng = crate::rng::SplitMix64::new(p.seed);
     let mut boxes: Vec<LabelBox> = (0..n)
         .map(|i| {
@@ -426,6 +437,11 @@ pub(crate) fn layout_with_lines(
         // Largest step per iteration, against overshooting when many
         // overlaps add up.
         let max_step = 12.0;
+        // #475: the final phase keeps pushing labels that are clear of every
+        // other label off the points / lines they cover, and remembers the
+        // label-overlap-free layout that covers the fewest of them (that
+        // push can make two labels touch again before the phase ends).
+        let mut best: Option<(usize, Vec<LabelBox>)> = None;
         for iter in 0..p.max_iter {
             #[cfg(not(target_arch = "wasm32"))]
             if iter % 16 == 15 && started.elapsed() >= p.max_time {
@@ -469,31 +485,53 @@ pub(crate) fn layout_with_lines(
                     };
                     // Separate along the axis of least overlap (respecting the
                     // allowed direction).
-                    let along_x = match p.direction {
+                    let mut along_x = match p.direction {
                         RepelDirection::X => true,
                         RepelDirection::Y => false,
                         RepelDirection::Both => ox * move_x <= oy * move_y,
                     };
-                    let k = 0.5 * force;
+                    let s = |x: bool| if x { sx } else { sy };
+                    // #475: a box pinned to the panel edge it would move
+                    // towards leaves the whole move to the other one; both
+                    // pinned on that axis, separate along the other.
+                    let pinned = |x: bool| (blocked(&bi, x, s(x)), blocked(&bj, x, -s(x)));
+                    if p.direction == RepelDirection::Both && pinned(along_x) == (true, true) {
+                        along_x = !along_x;
+                    }
+                    let (pi, pj) = pinned(along_x);
+                    let (ki, kj) = match (pi, pj) {
+                        (true, false) => (0.0, force),
+                        (false, true) => (force, 0.0),
+                        _ => (0.5 * force, 0.5 * force),
+                    };
                     if along_x {
-                        delta[i].0 += sx * ox * k;
-                        delta[j].0 -= sx * ox * k;
+                        delta[i].0 += sx * ox * ki;
+                        delta[j].0 -= sx * ox * kj;
                     } else {
-                        delta[i].1 += sy * oy * k;
-                        delta[j].1 -= sy * oy * k;
+                        delta[i].1 += sy * oy * ki;
+                        delta[j].1 -= sy * oy * kj;
                     }
                 }
             }
 
             let label_overlaps = overlaps;
+            let final_phase = iter >= pull_until;
+            // Labels in an overlap with another label (the final phase moves
+            // those only apart from each other).
+            let label_hit = if final_phase { hit.clone() } else { Vec::new() };
+            let free = |i: usize| !final_phase || !label_hit[i];
 
-            // Box–point: push labels off every data point they cover. The
-            // final phase only separates labels from each other (a point
-            // that cannot be avoided must not keep two labels overlapping).
-            let point_force = if iter < pull_until { force } else { 0.0 };
+            // Box–point: push labels off every data point they cover. In the
+            // final phase only labels clear of every other label are pushed
+            // (a point that cannot be avoided must not keep two labels
+            // overlapping), at half strength.
+            let point_force = if final_phase { 0.5 * force } else { force };
             for i in 0..n {
                 if point_force == 0.0 {
                     break;
+                }
+                if !free(i) {
+                    continue;
                 }
                 let b = boxes[i];
                 let r = pt_r + box_pad;
@@ -516,11 +554,30 @@ pub(crate) fn layout_with_lines(
                     } else {
                         dy.signum()
                     };
-                    let along_x = match p.direction {
+                    let mut along_x = match p.direction {
                         RepelDirection::X => true,
                         RepelDirection::Y => false,
                         RepelDirection::Both => ox <= oy,
                     };
+                    let (mut sx, mut sy, mut ox, mut oy) = (sx, sy, ox, oy);
+                    // #475: off a point towards a panel edge the box already
+                    // touches, the clamp would cancel the push and pin the
+                    // label on the point: go along the other axis, else
+                    // across to the point's other side.
+                    if blocked(&b, along_x, if along_x { sx } else { sy }) {
+                        let other = !along_x;
+                        if p.direction == RepelDirection::Both
+                            && !blocked(&b, other, if other { sx } else { sy })
+                        {
+                            along_x = other;
+                        } else if along_x {
+                            sx = -sx;
+                            ox = 2.0 * (b.hw + r) - ox;
+                        } else {
+                            sy = -sy;
+                            oy = 2.0 * (b.hh + r) - oy;
+                        }
+                    }
                     if along_x {
                         delta[i].0 += sx * ox * point_force;
                     } else {
@@ -534,6 +591,9 @@ pub(crate) fn layout_with_lines(
             for i in 0..n {
                 if point_force == 0.0 {
                     break;
+                }
+                if !free(i) {
+                    continue;
                 }
                 let b = boxes[i];
                 for &(a, e) in &lines {
@@ -552,6 +612,16 @@ pub(crate) fn layout_with_lines(
                         delta[i].0 += side * nx * need * point_force;
                         delta[i].1 += side * ny * need * point_force;
                     }
+                }
+            }
+
+            if final_phase && label_overlaps == 0 {
+                let covered = overlaps - label_overlaps;
+                if best.as_ref().is_none_or(|(c, _)| covered < *c) {
+                    best = Some((covered, boxes.clone()));
+                }
+                if covered == 0 {
+                    break;
                 }
             }
 
@@ -582,9 +652,17 @@ pub(crate) fn layout_with_lines(
                 clamp_box(b);
                 moved = moved.max((b.cx - px).abs() + (b.cy - py).abs());
             }
-            if (overlaps == 0 && moved < 0.05) || (label_overlaps == 0 && iter >= pull_until) {
+            if (overlaps == 0 && moved < 0.05)
+                || (final_phase && label_overlaps == 0 && moved < 0.05)
+            {
                 break;
             }
+        }
+        // The best label-overlap-free state of the final phase (its
+        // overlaps were counted, unlike those of the state after the last
+        // move).
+        if let Some((_, b)) = best {
+            boxes = b;
         }
     }
 
@@ -1059,6 +1137,53 @@ mod tests {
             },
         );
         assert_eq!(overlapping(&c), 0);
+    }
+
+    #[test]
+    fn crowded_top_edge_labels_end_clear_of_labels_and_points() {
+        // #475: a risk map's points crowd the top edge (y = 100 %); the
+        // spring phase leaves labels on neighbouring points, and the final
+        // separation-only phase used to stop as soon as labels were apart.
+        let pan = Rect {
+            x: 0.0,
+            y: 0.0,
+            width: 440.0,
+            height: 260.0,
+        };
+        let px = |v: f64| 10.0 + v / 33.0 * 420.0;
+        let py = |p: f64| 17.0 + (100.0 - p) / 80.0 * 226.0;
+        let pts: Vec<(f64, f64)> = [
+            (1.0, 100.0),
+            (2.0, 100.0),
+            (4.0, 100.0),
+            (4.4, 100.0),
+            (5.0, 100.0),
+            (7.0, 100.0),
+            (7.4, 97.0),
+            (6.0, 83.0),
+            (9.0, 100.0),
+            (16.0, 41.0),
+            (16.5, 24.0),
+            (18.0, 27.0),
+        ]
+        .iter()
+        .map(|&(v, p)| (px(v), py(p)))
+        .collect();
+        let half = vec![(21.0, 6.0); pts.len()];
+        let lay = layout(&pts, &pts, &half, &pts, &pan, &RepelParams::default());
+        assert_eq!(overlapping(&lay), 0);
+        assert_eq!(lay.dropped, 0);
+        // A label box touching another point's dot (radius point_size).
+        let r = RepelParams::default().point_size;
+        let covered: Vec<usize> = (0..pts.len())
+            .filter(|&i| {
+                let b = lay.boxes[i];
+                pts.iter().enumerate().any(|(j, q)| {
+                    j != i && (q.0 - b.cx).abs() < b.hw + r && (q.1 - b.cy).abs() < b.hh + r
+                })
+            })
+            .collect();
+        assert!(covered.is_empty(), "labels on other points: {covered:?}");
     }
 
     #[test]
