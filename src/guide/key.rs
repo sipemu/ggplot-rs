@@ -79,6 +79,8 @@ impl KeyGlyph {
 pub struct LayerKey {
     pub glyph: Option<KeyGlyph>,
     pub aesthetics: Vec<Aesthetic>,
+    /// The layer's constant fill and alpha ([`Geom::key_fill`](crate::geom::Geom::key_fill), #473).
+    pub fill: Option<((u8, u8, u8), f64)>,
 }
 
 /// The mapped values a key is drawn with (each `None` = not mapped in this

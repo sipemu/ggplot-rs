@@ -1643,7 +1643,13 @@ fn draw_group_keys(
             legacy(backend, Some(&k.aesthetics))?;
             continue;
         };
-        let mut props = KeyProps::default();
+        // #473: unmapped fill / alpha come from the layer's own constants
+        // (a translucent ribbon's key is translucent, in the ribbon's fill).
+        let mut props = KeyProps {
+            fill: k.fill.map(|(f, _)| f),
+            alpha: k.fill.map(|(_, a)| a),
+            ..KeyProps::default()
+        };
         for (aes, scale) in group {
             if !k.aesthetics.contains(aes) {
                 continue;
