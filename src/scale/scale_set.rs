@@ -78,6 +78,7 @@ impl ScaleSet {
                 | Aesthetic::Tooltip
                 | Aesthetic::DataAttr(_)
                 | Aesthetic::Class
+                | Aesthetic::Key
                 | Aesthetic::GroupWrap(_)
                 // Per-row fontface (#228) is parsed straight into
                 // `FontFace` — no visual mapping, no legend.

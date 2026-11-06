@@ -1095,6 +1095,7 @@ fn build_aes(map: &AesMap, available: &[String], ctx: &str) -> Result<Aes, Strin
             "upper" => aes.upper(col),
             "fontface" => aes.fontface(col),
             "class" => aes.class(col),
+            "key" => aes.key(col),
             other => {
                 return Err(format!(
                     "{ctx}: unknown aesthetic '{other}' (expected one of: {})",

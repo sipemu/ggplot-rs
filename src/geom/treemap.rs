@@ -106,6 +106,7 @@ impl Geom for GeomTreemap {
         );
         let fill_col = data.column("fill");
         let label_col = data.column("label");
+        let key_col = data.column("key");
         let sub_col = data.column("subgroup");
         let area = backend.plot_area();
         let px = |i: usize| {
@@ -135,10 +136,15 @@ impl Geom for GeomTreemap {
             } else {
                 format!("{name}: {}", super::tip_value(&area_c[i]))
             };
+            // data-x: the key (#476) where mapped, else the shown label.
+            let key = key_col
+                .map(|c| super::tip_value(&c[i]))
+                .filter(|s| !s.is_empty())
+                .or_else(|| label.clone());
             super::set_mark(
                 backend,
                 Some(tip),
-                label.clone(),
+                key,
                 super::series_key(data, i),
                 super::raw_value(&area_c[i]),
             );

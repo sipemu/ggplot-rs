@@ -28,7 +28,7 @@ export type Aesthetic =
   | "x" | "y" | "color" | "colour" | "fill" | "size" | "shape" | "alpha" | "group"
   | "linetype" | "linewidth" | "label" | "weight" | "xmin" | "xmax" | "ymin" | "ymax"
   | "xend" | "yend" | "angle" | "radius" | "tooltip" | "from" | "to" | "subgroup"
-  | "open" | "high" | "low" | "close" | "lower" | "middle" | "upper" | "fontface" | "class";
+  | "open" | "high" | "low" | "close" | "lower" | "middle" | "upper" | "fontface" | "class" | "key";
 /** Aesthetic → column name. */
 export type AesMap = Partial<Record<Aesthetic, string>>;
 
