@@ -16,6 +16,7 @@ use crate::data::Value;
 use crate::format::format_value;
 use crate::render::backend::FillPattern;
 
+use super::format::LabelFormatter;
 use super::Scale;
 
 /// `ScaleFillBinned::na_key` (sipemu/ggplot-rs#269): whether the legend's
@@ -64,7 +65,7 @@ fn signature(values: &[Value]) -> u64 {
 /// Binned fill/colour scale: `n` classes from `n + 1` increasing edges,
 /// each with its own colour. See the [module docs](self) for how it
 /// relates to `scale_fill_steps`/`::CLASSES`.
-#[derive(Clone, Debug)]
+#[derive(Clone)]
 pub struct ScaleFillBinned {
     aesthetic: Aesthetic,
     /// `n + 1` increasing edges (`colors.len() == n`).
@@ -108,8 +109,32 @@ pub struct ScaleFillBinned {
     /// `show_counts` — whether legend labels carry their `" (n)"`.
     /// Default `true`.
     show_counts: bool,
+    /// `with_label_formatter` (#474): formats both bin edges of a class
+    /// label. `None` (the default): `format_value`, as before.
+    label_formatter: Option<LabelFormatter>,
     name: String,
     corrected: bool,
+}
+
+impl std::fmt::Debug for ScaleFillBinned {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("ScaleFillBinned")
+            .field("aesthetic", &self.aesthetic)
+            .field("breaks", &self.breaks)
+            .field("colors", &self.colors)
+            .field("counts", &self.counts)
+            .field("na_count", &self.na_count)
+            .field("na_color", &self.na_color)
+            .field("na_pattern", &self.na_pattern)
+            .field("na_label", &self.na_label)
+            .field("na_key", &self.na_key)
+            .field("count_reserve", &self.count_reserve)
+            .field("show_counts", &self.show_counts)
+            .field("label_formatter", &self.label_formatter.is_some())
+            .field("name", &self.name)
+            .field("corrected", &self.corrected)
+            .finish_non_exhaustive()
+    }
 }
 
 /// At least two increasing, finite edges: non-finite values dropped and
@@ -189,6 +214,7 @@ impl ScaleFillBinned {
             na_key: NaKey::Auto,
             count_reserve: None,
             show_counts: true,
+            label_formatter: None,
             name: String::new(),
             corrected: edges_corrected || colors_corrected,
         }
@@ -217,6 +243,7 @@ impl ScaleFillBinned {
             na_key: NaKey::Auto,
             count_reserve: None,
             show_counts: true,
+            label_formatter: None,
             name: String::new(),
             corrected,
         }
@@ -285,6 +312,25 @@ impl ScaleFillBinned {
         self
     }
 
+    /// Format the class labels' bin edges with `f` (both edges; the
+    /// `" (n)"` count is unaffected) — e.g. `label_si()` for
+    /// `"2.7M–6.9M (35)"` instead of `"2657637–6914216 (35)"`. Default:
+    /// the plain number format.
+    pub fn with_label_formatter<F>(mut self, f: F) -> Self
+    where
+        F: Fn(f64) -> String + Send + Sync + 'static,
+    {
+        self.label_formatter = Some(std::sync::Arc::new(f));
+        self
+    }
+
+    fn edge(&self, v: f64) -> String {
+        match &self.label_formatter {
+            Some(f) => f(v),
+            None => format_value(&Value::Float(v)),
+        }
+    }
+
     /// Pad `label`'s trailing `" (count)"` so its digit run is at least
     /// `min_digits` wide (zero-padded), for [`breaks_for_layout`]'s
     /// `count_reserve` sizing pass — never for what's drawn. A label that
@@ -345,26 +391,15 @@ impl ScaleFillBinned {
     /// the single value 150.
     fn class_label(&self, i: usize) -> String {
         let (lo, hi) = (self.breaks[i], self.breaks[i + 1]);
-        if !self.show_counts {
-            return if lo == hi {
-                format_value(&Value::Float(lo))
-            } else {
-                format!(
-                    "{}–{}",
-                    format_value(&Value::Float(lo)),
-                    format_value(&Value::Float(hi))
-                )
-            };
-        }
-        if lo == hi {
-            format!("{} ({})", format_value(&Value::Float(lo)), self.counts[i])
+        let range = if lo == hi {
+            self.edge(lo)
         } else {
-            format!(
-                "{}–{} ({})",
-                format_value(&Value::Float(lo)),
-                format_value(&Value::Float(hi)),
-                self.counts[i]
-            )
+            format!("{}–{}", self.edge(lo), self.edge(hi))
+        };
+        if self.show_counts {
+            format!("{range} ({})", self.counts[i])
+        } else {
+            range
         }
     }
 
@@ -590,6 +625,31 @@ mod tests {
         // A genuinely different batch afterward still counts normally.
         s.train(&[Value::Float(60.0)]);
         assert_eq!(s.counts, vec![1, 1, 1]);
+    }
+
+    #[test]
+    fn label_formatter_formats_both_edges_not_the_count() {
+        // #474: a choropleth's raw edges (140–2657637) read as 140–2.7M.
+        let mut s = ScaleFillBinned::new(
+            Aesthetic::Fill,
+            vec![140.0, 2_657_637.0, 2_657_637.0, 1_397_715_000.0],
+            vec![(0, 0, 255), (0, 255, 0), (255, 0, 0)],
+        )
+        .with_label_formatter(|v| {
+            if v >= 1e9 {
+                format!("{:.1}B", v / 1e9)
+            } else if v >= 1e6 {
+                format!("{:.1}M", v / 1e6)
+            } else {
+                format!("{v}")
+            }
+        });
+        s.train(&[Value::Float(500.0), Value::Float(2_657_637.0)]);
+        let labels: Vec<String> = s.breaks().into_iter().map(|(_, l)| l).collect();
+        assert_eq!(labels, vec!["140–2.7M (1)", "2.7M (1)", "2.7M–1.4B (0)"]);
+        let s = s.show_counts(false);
+        let labels: Vec<String> = s.breaks().into_iter().map(|(_, l)| l).collect();
+        assert_eq!(labels, vec!["140–2.7M", "2.7M", "2.7M–1.4B"]);
     }
 
     #[test]
