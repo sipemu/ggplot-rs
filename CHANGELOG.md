@@ -5,6 +5,8 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.42.0] — 2026-11-06
+
 ### Added
 - `ScaleFillBinned::with_label_formatter` (#474): formats both bin edges of
   a class label (e.g. `label_si()` for `2.7M–6.9M (35)`); the count is
