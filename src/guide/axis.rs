@@ -373,8 +373,23 @@ pub(crate) fn draw_x_axis_title(
         } else {
             TextAnchor::Middle
         };
-        let title_y = edge_y
-            + dir * (tick_len + theme.axis_text_x.size + 8.0 + theme.axis_title_x.size / 2.0);
+        // #482: below rotated labels (auto-rotated to -45°/270°, or an
+        // explicit angle) the title clears their real extent — the same
+        // rise/fall the layout reserves for them — not one line of text.
+        let angle = theme.axis_text_x.angle;
+        let labels_h = if theme.axis_text_x.visible && angle.abs() > 10.0 {
+            let breaks = scale.breaks();
+            let (rise, fall) = crate::render::text::rotated_label_rise_fall(
+                breaks.iter().map(|(_, l)| l.as_str()),
+                theme.axis_text_x.size,
+                angle,
+                crate::render::text::rotated_anchor_frac(angle, dir),
+            );
+            (rise + fall).max(theme.axis_text_x.size)
+        } else {
+            theme.axis_text_x.size
+        };
+        let title_y = edge_y + dir * (tick_len + labels_h + 8.0 + theme.axis_title_x.size / 2.0);
         let family = if theme.axis_title_x.family.is_empty() {
             None
         } else {
