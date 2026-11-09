@@ -5,6 +5,13 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.42.1] — 2026-11-09
+
+### Fixed
+- The x-axis title clears rotated tick labels (#482): with labels at −45°/270°
+  (auto-rotated or an explicit angle) it was drawn through them; it now sits
+  below their rotated extent, the space the layout already reserved.
+
 ## [0.42.0] — 2026-11-06
 
 ### Added
