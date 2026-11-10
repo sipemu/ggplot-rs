@@ -269,81 +269,33 @@ impl Geom for GeomBoxplot {
                 backend.draw_rect((box_left, box_top), (box_right, box_bottom), &box_style)?;
             }
 
-            // Median line (inset to the notch's waist when notched)
+            // Median line (inset to the notch's waist when notched), the
+            // whiskers and their staples: each end transformed as a whole
+            // point, so they stay right under coord_flip (mixing one
+            // point's x with another's y drew them with zero length there).
             let med_half = if notch.is_some() {
                 half_width - inset
             } else {
                 half_width
             };
-            let (med_left, med_y) = coord.transform((nx - med_half, map_y(middle)), &plot_area);
-            let (med_right, _) = coord.transform((nx + med_half, map_y(middle)), &plot_area);
+            let t = |x: f64, y: f64| coord.transform((x, map_y(y)), &plot_area);
+            let line = |w: f64| LineStyle {
+                color: self.color,
+                width: w,
+                alpha: 1.0,
+                linetype: Linetype::Solid,
+                ..Default::default()
+            };
             backend.draw_line(
-                &[(med_left, med_y), (med_right, med_y)],
-                &LineStyle {
-                    color: self.color,
-                    width: 2.0,
-                    alpha: 1.0,
-                    linetype: Linetype::Solid,
-                    ..Default::default()
-                },
+                &[t(nx - med_half, middle), t(nx + med_half, middle)],
+                &line(2.0),
             )?;
-
-            // Lower whisker
-            let (_, whisker_bottom) = coord.transform((nx, map_y(ymin)), &plot_area);
-            let (center_x, _) = coord.transform((nx, map_y(lower)), &plot_area);
-            backend.draw_line(
-                &[(center_x, box_bottom), (center_x, whisker_bottom)],
-                &LineStyle {
-                    color: self.color,
-                    width: 1.0,
-                    alpha: 1.0,
-                    linetype: Linetype::Solid,
-                    ..Default::default()
-                },
-            )?;
-            // Lower whisker cap (staple)
             let staple = half_width * self.staple_width.max(0.0);
-            if staple > 0.0 {
-                let (wl, _) = coord.transform((nx - staple, map_y(ymin)), &plot_area);
-                let (wr, _) = coord.transform((nx + staple, map_y(ymin)), &plot_area);
-                backend.draw_line(
-                    &[(wl, whisker_bottom), (wr, whisker_bottom)],
-                    &LineStyle {
-                        color: self.color,
-                        width: 1.0,
-                        alpha: 1.0,
-                        linetype: Linetype::Solid,
-                        ..Default::default()
-                    },
-                )?;
-            }
-
-            // Upper whisker
-            let (_, whisker_top) = coord.transform((nx, map_y(ymax)), &plot_area);
-            backend.draw_line(
-                &[(center_x, box_top), (center_x, whisker_top)],
-                &LineStyle {
-                    color: self.color,
-                    width: 1.0,
-                    alpha: 1.0,
-                    linetype: Linetype::Solid,
-                    ..Default::default()
-                },
-            )?;
-            // Upper whisker cap (staple)
-            if staple > 0.0 {
-                let (wl, _) = coord.transform((nx - staple, map_y(ymax)), &plot_area);
-                let (wr, _) = coord.transform((nx + staple, map_y(ymax)), &plot_area);
-                backend.draw_line(
-                    &[(wl, whisker_top), (wr, whisker_top)],
-                    &LineStyle {
-                        color: self.color,
-                        width: 1.0,
-                        alpha: 1.0,
-                        linetype: Linetype::Solid,
-                        ..Default::default()
-                    },
-                )?;
+            for (edge, end) in [(lower, ymin), (upper, ymax)] {
+                backend.draw_line(&[t(nx, edge), t(nx, end)], &line(1.0))?;
+                if staple > 0.0 {
+                    backend.draw_line(&[t(nx - staple, end), t(nx + staple, end)], &line(1.0))?;
+                }
             }
 
             // Outliers — `setup_data` has already normalised this cell to a
