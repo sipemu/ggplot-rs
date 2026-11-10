@@ -87,7 +87,18 @@ fn interval_geoms_read_a_mapped_tooltip() {
         GGPlot::new(data()).aes(aes().y("y")).geom_pointrange(),
     ]
     .map(|p| p.render_svg_native_with_size(300, 200).unwrap());
-    for svg in &svgs {
+    // the horizontal one: y is the category, xmin / xmax the interval
+    let h = GGPlot::new(vec![
+        ("y".to_string(), strs(&["A", "B"])),
+        ("lo".to_string(), floats(&[6.0, 15.0])),
+        ("hi".to_string(), floats(&[8.0, 17.0])),
+        ("tip".to_string(), strs(&["A: Target 7", "B: Target 16"])),
+    ])
+    .aes(Aes::new().y("y").xmin("lo").xmax("hi").tooltip("tip"))
+    .geom_errorbarh()
+    .render_svg_native_with_size(300, 200)
+    .unwrap();
+    for svg in svgs.iter().chain([&h]) {
         assert!(svg.contains("<title>A: Target 7</title>"), "{svg}");
         assert!(svg.contains("<title>B: Target 16</title>"));
     }
