@@ -100,6 +100,7 @@ impl Geom for GeomErrorbarh {
             // The "value" here is an [xmin, xmax] range, not a single raw
             // value `Scale::format_value` can take — reset only.
             super::set_mark_formatted(backend, scales, None, &Aesthetic::X, None);
+            super::set_row_extras(backend, data, i);
             let h = self.cap_height;
             let t = |p: (f64, f64)| coord.transform(p, &plot_area);
             // One connected polyline per bar (cap, bar, cap) so each
@@ -117,6 +118,7 @@ impl Geom for GeomErrorbarh {
             )?;
         }
         super::clear_mark(backend);
+        super::clear_row_extras(backend);
         Ok(())
     }
 
@@ -134,6 +136,12 @@ impl Geom for GeomErrorbarh {
     }
     fn name(&self) -> &str {
         "errorbarh"
+    }
+
+    /// A mapped `Aes::tooltip` / `tooltip()` template replaces the default
+    /// `x: [lo, hi]` text (#485).
+    fn consumes_tooltips(&self) -> bool {
+        true
     }
     fn apply_element_geom(&mut self, el: &crate::theme::elements::ElementGeom) {
         if let (true, Some(ink)) = (self.color == (0, 0, 0), el.ink) {

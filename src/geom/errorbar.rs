@@ -98,6 +98,7 @@ impl Geom for GeomErrorbar {
                 &ymin_col[i],
                 &ymax_col[i],
             );
+            super::set_row_extras(backend, data, i);
             backend.draw_line(
                 &[
                     t((nx - c, ny_max)),
@@ -111,6 +112,7 @@ impl Geom for GeomErrorbar {
             )?;
         }
         super::clear_mark(backend);
+        super::clear_row_extras(backend);
 
         Ok(())
     }
@@ -130,6 +132,12 @@ impl Geom for GeomErrorbar {
     }
     fn name(&self) -> &str {
         "errorbar"
+    }
+
+    /// A mapped `Aes::tooltip` / `tooltip()` template replaces the default
+    /// `x: [lo, hi]` text (#485).
+    fn consumes_tooltips(&self) -> bool {
+        true
     }
 
     fn apply_element_geom(&mut self, el: &crate::theme::elements::ElementGeom) {
