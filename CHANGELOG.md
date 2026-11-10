@@ -5,6 +5,17 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.42.2] — 2026-11-10
+
+### Fixed
+- `geom_boxplot` under `coord_flip()` (#484): the median line, the whiskers
+  and their staples were drawn with zero length (each line mixed one
+  transformed point's x with another's y); a flipped box now has all of them.
+- `geom_errorbar`, `geom_errorbarh`, `geom_linerange`, `geom_pointrange`
+  (#485) read a mapped `Aes::tooltip`, `Aes::data_attr` / class and a
+  `tooltip()` template, like the other geoms; without one the default
+  `x: [lo, hi]` text is unchanged.
+
 ## [0.42.1] — 2026-11-09
 
 ### Fixed
