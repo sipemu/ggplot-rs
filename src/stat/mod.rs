@@ -81,6 +81,13 @@ pub trait Stat: Send + Sync {
         false
     }
 
+    /// True when the stat computes `y` itself in data units (a count, a
+    /// density, an ECDF) — ggplot2's `y = after_stat(count)` default. The
+    /// build then passes it through the y scale's transform (#490).
+    fn computed_y(&self) -> bool {
+        false
+    }
+
     /// Name for debug/display.
     fn name(&self) -> &str;
 

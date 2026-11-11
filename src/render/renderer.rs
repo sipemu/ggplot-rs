@@ -619,6 +619,20 @@ impl PlotRenderer {
             ),
             _ => (false, false),
         };
+        // `coord_flip` (#491): the horizontal axis reads the Y scale and the
+        // vertical one the X scale, on every panel as on a single one — so a
+        // free data-x scale varies the vertical (left) axes.
+        let flipped = built.coord.is_flipped();
+        let (h_aes, v_aes) = if flipped {
+            (Aesthetic::Y, Aesthetic::X)
+        } else {
+            (Aesthetic::X, Aesthetic::Y)
+        };
+        let (free_x, free_y) = if flipped {
+            (free_y, free_x)
+        } else {
+            (free_x, free_y)
+        };
         let all_x = built.facet_axes.all_x || free_x;
         let all_y = built.facet_axes.all_y || free_y;
         // A free scale's inner axes are always labelled (they differ).
@@ -643,7 +657,7 @@ impl PlotRenderer {
                             .panel_scales
                             .iter()
                             .chain(std::iter::once(&built.scales))
-                            .filter_map(|s| s.get(&Aesthetic::Y))
+                            .filter_map(|s| s.get(&v_aes))
                             .map(|ys| axis::y_label_reserve(theme, &ys.breaks()))
                             .fold(0.0_f64, f64::max)
                     } else {
@@ -760,7 +774,7 @@ impl PlotRenderer {
                 .panel_scales
                 .iter()
                 .chain(std::iter::once(&built.scales))
-                .filter_map(|s| s.get(&Aesthetic::Y))
+                .filter_map(|s| s.get(&v_aes))
                 .map(|ys| axis::y_label_reserve(theme, &ys.breaks()))
                 .fold(0.0_f64, f64::max)
             + theme.strip_switch_pad;
@@ -1064,8 +1078,8 @@ impl PlotRenderer {
             };
 
             // Gridlines + axes for edge panels
-            let x_scale = panel_scale_set.get(&Aesthetic::X);
-            let y_scale = panel_scale_set.get(&Aesthetic::Y);
+            let x_scale = panel_scale_set.get(&h_aes);
+            let y_scale = panel_scale_set.get(&v_aes);
 
             if let (true, Some(xs), Some(ys)) = (
                 built.coord.is_polar() && !built.coord.is_radar(),
@@ -1221,11 +1235,10 @@ impl PlotRenderer {
         // The grid's single axis titles (#348), against the first panel's
         // scales (the titles are the same on every panel).
         let title_scales = built.panel_scales.first().unwrap_or(&built.scales);
-        if let (Some(area), Some(xs)) = (&x_title_area, title_scales.get(&Aesthetic::X)) {
+        if let (Some(area), Some(xs)) = (&x_title_area, title_scales.get(&h_aes)) {
             axis::draw_x_axis_title(xs, theme, area, backend)?;
         }
-        if let (Some((area, reserve)), Some(ys)) = (&y_title_area, title_scales.get(&Aesthetic::Y))
-        {
+        if let (Some((area, reserve)), Some(ys)) = (&y_title_area, title_scales.get(&v_aes)) {
             axis::draw_y_axis_title(ys, theme, area, *reserve, backend)?;
         }
 
