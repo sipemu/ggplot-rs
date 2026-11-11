@@ -38,9 +38,10 @@ pub struct SeriesSummary {
     pub key: Option<String>,
     /// Rows with a finite y.
     pub n: usize,
-    /// First and last x, in row order (the order the marks are drawn in).
-    pub x_first: String,
-    pub x_last: String,
+    /// The x extent: the smallest and largest of a numeric or date x, the
+    /// first and last (in the order drawn) of a discrete one.
+    pub x_from: String,
+    pub x_to: String,
     pub y_first: f64,
     pub y_last: f64,
     /// `(y, x)` of the smallest and largest y (the first, on a tie).
@@ -84,7 +85,18 @@ impl BuiltPlot {
                 layers.extend(layer_summary(l.geom.name(), &l.data, date_x));
             }
         }
-        PlotSummary { layers }
+        // a layer repeating the one before it (a line's point markers) is
+        // one entry: `line+point`
+        let mut merged: Vec<LayerSummary> = Vec::new();
+        for l in layers {
+            match merged.last_mut() {
+                Some(m) if m.panel == l.panel && m.series == l.series => {
+                    m.geom = format!("{}+{}", m.geom, l.geom);
+                }
+                _ => merged.push(l),
+            }
+        }
+        PlotSummary { layers: merged }
     }
 
     /// [`summary`](Self::summary) as text, one line per layer and panel.
@@ -111,13 +123,27 @@ impl std::fmt::Display for PlotSummary {
                 if let Some(k) = &s.key {
                     write!(f, " {k} —")?;
                 }
+                // a ribbon is its band: its y is only the lower edge
+                if let (true, Some((lo, hi))) = (l.geom == "ribbon", s.band) {
+                    write!(
+                        f,
+                        " {} mark{}, x {} … {}, band {} … {}",
+                        s.n,
+                        if s.n == 1 { "" } else { "s" },
+                        s.x_from,
+                        s.x_to,
+                        num(lo),
+                        num(hi)
+                    )?;
+                    continue;
+                }
                 write!(
                     f,
                     " {} mark{}, x {} … {}; y first {}, last {}, min {} at {}, max {} at {}",
                     s.n,
                     if s.n == 1 { "" } else { "s" },
-                    s.x_first,
-                    s.x_last,
+                    s.x_from,
+                    s.x_to,
                     num(s.y_first),
                     num(s.y_last),
                     num(s.y_min.0),
@@ -189,11 +215,25 @@ fn layer_summary(geom: &str, d: &DataFrame, date_x: bool) -> Option<LayerSummary
                 };
                 f(ymin, f64::min).zip(f(ymax, f64::max))
             });
+            // a numeric / date x: its extent, not the row order (a scatter's
+            // rows are in no x order)
+            let xs: Vec<(usize, f64)> = pts
+                .iter()
+                .filter(|(i, _)| !matches!(x[*i], Value::Str(_)))
+                .filter_map(|(i, _)| x[*i].as_f64().map(|v| (*i, v)))
+                .collect();
+            let (x_from, x_to) = if xs.len() == pts.len() {
+                let a = xs.iter().fold(xs[0], |a, b| if b.1 < a.1 { *b } else { a });
+                let b = xs.iter().fold(xs[0], |a, b| if b.1 > a.1 { *b } else { a });
+                (xl(a.0), xl(b.0))
+            } else {
+                (xl(i0), xl(i1))
+            };
             Some(SeriesSummary {
                 key: key.map(|_| k),
                 n: pts.len(),
-                x_first: xl(i0),
-                x_last: xl(i1),
+                x_from,
+                x_to,
                 y_first: y0,
                 y_last: y1,
                 y_min: (lo.1, xl(lo.0)),
@@ -273,7 +313,7 @@ mod tests {
         let a = &line.series[0];
         assert_eq!(a.key.as_deref(), Some("A"));
         assert_eq!(
-            (a.n, a.x_first.as_str(), a.x_last.as_str()),
+            (a.n, a.x_from.as_str(), a.x_to.as_str()),
             (3, "2023-11-15", "2023-11-17")
         );
         assert_eq!(a.y_max, (5.0, "2023-11-16".to_string()));
@@ -282,7 +322,7 @@ mod tests {
         assert_eq!(smooth.geom, "smooth");
         // the fitted grid's x is a date too, and its band is reported
         assert!(
-            smooth.series[0].x_first.starts_with("2023-11-15"),
+            smooth.series[0].x_from.starts_with("2023-11-15"),
             "{smooth:?}"
         );
         assert!(smooth.series[0].band.is_some());
@@ -322,6 +362,30 @@ mod tests {
         let panels: Vec<_> = s.layers.iter().map(|l| l.panel.clone().unwrap()).collect();
         assert_eq!(panels, ["a", "b"]);
         assert_eq!(s.layers[1].series[0].y_max, (5.0, "W1".to_string()));
+    }
+
+    #[test]
+    fn scatter_x_extent_ribbon_band_and_markers_merged() {
+        let df = vec![
+            ("x".to_string(), [5.0, 1.0, 9.0].map(Value::Float).to_vec()),
+            ("y".to_string(), [2.0, 4.0, 3.0].map(Value::Float).to_vec()),
+            ("lo".to_string(), [1.0, 3.0, 2.0].map(Value::Float).to_vec()),
+            ("hi".to_string(), [3.0, 6.0, 4.0].map(Value::Float).to_vec()),
+        ];
+        let t = GGPlot::new(df)
+            .aes(Aes::new().x("x").y("y").ymin("lo").ymax("hi"))
+            .geom_ribbon()
+            .geom_line()
+            .geom_point()
+            .build()
+            .summary_text();
+        let lines: Vec<&str> = t.lines().collect();
+        assert_eq!(lines[0], "ribbon: 3 marks, x 1 … 9, band 1 … 6", "{t}");
+        assert!(
+            lines[1].starts_with("line+point: 3 marks, x 1 … 9; y first"),
+            "{t}"
+        );
+        assert_eq!(lines.len(), 2, "{t}");
     }
 
     #[test]
