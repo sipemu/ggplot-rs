@@ -5,6 +5,15 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.44.0] — 2026-11-11
+
+### Added
+- `PlotSummary::compare`: a plot of exactly two series over the same x values
+  (2025 against 2024, actual against plan) states their difference per x —
+  where it is largest and smallest, absolute and in % — the comparison a
+  written answer gets wrong most (DataZooDE/anofox-visualization#1107).
+  `SeriesSummary::points` keeps every mark's `(x, y)`.
+
 ## [0.43.0] — 2026-11-11
 
 ### Added
