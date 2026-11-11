@@ -5,6 +5,14 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.45.0] — 2026-11-11
+
+### Added
+- `SeriesSummary::band_width`: a band's width at the first and last x, and in
+  the summary text whether it widens, narrows or stays about even — a
+  forecast answer claimed a widening band that narrowed
+  (DataZooDE/anofox-visualization#1107).
+
 ## [0.44.0] — 2026-11-11
 
 ### Added

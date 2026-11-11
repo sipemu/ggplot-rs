@@ -49,6 +49,9 @@ pub struct SeriesSummary {
     pub y_max: (f64, String),
     /// `(lowest ymin, highest ymax)` of a band (ribbon, smooth, interval).
     pub band: Option<(f64, f64)>,
+    /// The band's width (ymax − ymin) at `x_from` and at `x_to`: whether
+    /// the uncertainty widens or narrows along x.
+    pub band_width: Option<(f64, f64)>,
     /// Every mark's `(x label, y)`, in the order drawn.
     pub points: Vec<(String, f64)>,
 }
@@ -157,6 +160,7 @@ impl std::fmt::Display for PlotSummary {
                         num(lo),
                         num(hi)
                     )?;
+                    write_width(f, s)?;
                     continue;
                 }
                 write!(
@@ -175,6 +179,7 @@ impl std::fmt::Display for PlotSummary {
                 )?;
                 if let Some((lo, hi)) = s.band {
                     write!(f, ", band {} … {}", num(lo), num(hi))?;
+                    write_width(f, s)?;
                 }
             }
             if l.series.len() > shown {
@@ -267,6 +272,28 @@ fn compare(layers: &[LayerSummary]) -> Option<Comparison> {
     })
 }
 
+/// `, width 16 at a → 25.3 at b (widens)` for a band.
+fn write_width(f: &mut std::fmt::Formatter<'_>, s: &SeriesSummary) -> std::fmt::Result {
+    let Some((a, b)) = s.band_width else {
+        return Ok(());
+    };
+    let trend = if (b - a).abs() <= 0.02 * a.abs().max(b.abs()) {
+        "about even"
+    } else if b > a {
+        "widens"
+    } else {
+        "narrows"
+    };
+    write!(
+        f,
+        ", width {} at {} → {} at {} ({trend})",
+        num(a),
+        s.x_from,
+        num(b),
+        s.x_to
+    )
+}
+
 fn layer_summary(geom: &str, d: &DataFrame, date_x: bool) -> Option<LayerSummary> {
     let x = d.column("x")?;
     // a stacked layer keeps each mark's own value in `.y_raw`
@@ -326,13 +353,24 @@ fn layer_summary(geom: &str, d: &DataFrame, date_x: bool) -> Option<LayerSummary
                 .filter(|(i, _)| !matches!(x[*i], Value::Str(_)))
                 .filter_map(|(i, _)| x[*i].as_f64().map(|v| (*i, v)))
                 .collect();
-            let (x_from, x_to) = if xs.len() == pts.len() {
+            let (ia, ib) = if xs.len() == pts.len() {
                 let a = xs.iter().fold(xs[0], |a, b| if b.1 < a.1 { *b } else { a });
                 let b = xs.iter().fold(xs[0], |a, b| if b.1 > a.1 { *b } else { a });
-                (xl(a.0), xl(b.0))
+                (a.0, b.0)
             } else {
-                (xl(i0), xl(i1))
+                (i0, i1)
             };
+            let (x_from, x_to) = (xl(ia), xl(ib));
+            let width = |i: usize| {
+                let lo = ymin?.get(i)?.as_f64()?;
+                let hi = ymax?.get(i)?.as_f64()?;
+                (lo.is_finite() && hi.is_finite()).then_some(hi - lo)
+            };
+            let band_width = band
+                .as_ref()
+                .and_then(|b| b.as_ref())
+                .and_then(|_| width(ia).zip(width(ib)))
+                .filter(|_| ia != ib);
             Some(SeriesSummary {
                 key: key.map(|_| k),
                 n: pts.len(),
@@ -343,6 +381,7 @@ fn layer_summary(geom: &str, d: &DataFrame, date_x: bool) -> Option<LayerSummary
                 y_min: (lo.1, xl(lo.0)),
                 y_max: (hi.1, xl(hi.0)),
                 band: band.flatten(),
+                band_width,
                 points: pts.iter().map(|(i, v)| (xl(*i), *v)).collect(),
             })
         })
@@ -485,7 +524,11 @@ mod tests {
             .build()
             .summary_text();
         let lines: Vec<&str> = t.lines().collect();
-        assert_eq!(lines[0], "ribbon: 3 marks, x 1 … 9, band 1 … 6", "{t}");
+        // widths: x=1 → 6−3 = 3, x=9 → 4−2 = 2
+        assert_eq!(
+            lines[0], "ribbon: 3 marks, x 1 … 9, band 1 … 6, width 3 at 1 → 2 at 9 (narrows)",
+            "{t}"
+        );
         assert!(
             lines[1].starts_with("line+point: 3 marks, x 1 … 9; y first"),
             "{t}"
