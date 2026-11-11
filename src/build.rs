@@ -233,6 +233,32 @@ fn render_placeholder(name: &str, data: &DataFrame, scales: &ScaleSet, row: usiz
     crate::geom::tip_value(v)
 }
 
+/// A position scale's transform applied to one column: `None` when it
+/// changes nothing (an identity scale). A transform that is undefined for a
+/// value (log of 0 or a negative) yields NaN, so the non-finite filter drops
+/// the row with a warning instead of drawing it at 0.
+fn transform_column(
+    scale: &dyn crate::scale::Scale,
+    col: &[crate::data::Value],
+) -> Option<Vec<crate::data::Value>> {
+    let transformed: Vec<_> = col
+        .iter()
+        .map(|v| match (scale.transform(v), v.as_f64()) {
+            (crate::data::Value::Na, Some(_)) => crate::data::Value::Float(f64::NAN),
+            (t, _) => t,
+        })
+        .collect();
+    let any_changed =
+        transformed
+            .iter()
+            .zip(col.iter())
+            .any(|(t, o)| match (t.as_f64(), o.as_f64()) {
+                (Some(a), Some(b)) => a.is_nan() || (a - b).abs() > f64::EPSILON,
+                _ => false,
+            });
+    any_changed.then_some(transformed)
+}
+
 /// The grammar pipeline: transforms a GGPlot specification into render-ready data.
 pub struct PlotBuilder;
 
@@ -1009,20 +1035,7 @@ impl PlotBuilder {
                 // A transform that is undefined for a value (log of 0 or a
                 // negative) yields NaN, so the non-finite filter below drops
                 // the row with a warning instead of drawing it at 0.
-                let transformed: Vec<_> = col
-                    .iter()
-                    .map(|v| match (scale.transform(v), v.as_f64()) {
-                        (crate::data::Value::Na, Some(_)) => crate::data::Value::Float(f64::NAN),
-                        (t, _) => t,
-                    })
-                    .collect();
-                let any_changed = transformed.iter().zip(col.iter()).any(|(t, o)| {
-                    match (t.as_f64(), o.as_f64()) {
-                        (Some(a), Some(b)) => a.is_nan() || (a - b).abs() > f64::EPSILON,
-                        _ => false,
-                    }
-                });
-                if any_changed {
+                if let Some(transformed) = transform_column(scale, col) {
                     if let Some(col_mut) = working_data.column_mut(col_name) {
                         *col_mut = transformed;
                     }
@@ -1118,6 +1131,29 @@ impl PlotBuilder {
         for m in &merged_mapping.mappings {
             if m.stage == crate::aes::MappingStage::AfterStat {
                 scale_set.ensure_scale(&m.aesthetic, &working_data);
+            }
+        }
+
+        // Step 6a-transform (#490): a `y` the stat computed (a count, a
+        // density) or an `after_stat()` y is in data units, but the y scale
+        // works in transformed space — so it goes through the transform here,
+        // as ggplot2's `map_statistic` does. Without this, `scale_y_log10`
+        // read a count of 30 as 10^30. A zero count becomes NaN and is
+        // dropped below (log of 0), like ggplot2's non-finite removal.
+        let y_after_stat = merged_mapping
+            .mappings
+            .iter()
+            .any(|m| m.stage == crate::aes::MappingStage::AfterStat && m.aesthetic == Aesthetic::Y);
+        let y_computed = stat.computed_y() && !pre_stat_columns.iter().any(|c| c == "y");
+        if y_after_stat || y_computed {
+            if let (Some(scale), Some(col)) =
+                (scale_set.get(&Aesthetic::Y), working_data.column("y"))
+            {
+                if let Some(transformed) = transform_column(scale, col) {
+                    if let Some(col_mut) = working_data.column_mut("y") {
+                        *col_mut = transformed;
+                    }
+                }
             }
         }
 

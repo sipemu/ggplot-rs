@@ -197,6 +197,10 @@ impl Stat for StatBin {
         true
     }
 
+    fn computed_y(&self) -> bool {
+        true
+    }
+
     fn name(&self) -> &str {
         "bin"
     }

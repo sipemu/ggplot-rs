@@ -5,6 +5,17 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.45.1] — 2026-11-12
+
+### Fixed
+- A stat-computed `y` (`stat_bin`, `stat_count`, `stat_density`, `stat_ecdf`)
+  and an `after_stat()` y now go through the y scale's transform, as in
+  ggplot2. `geom_histogram() + scale_y_log10()` read a count of 30 as 10^30
+  (#490).
+- `facet_wrap` + `coord_flip`: each panel's axes and the axis
+  titles now swap like a single panel's do. Before, the bars flipped but the
+  ticks and titles did not (#491).
+
 ## [0.45.0] — 2026-11-11
 
 ### Added

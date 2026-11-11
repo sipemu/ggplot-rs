@@ -69,6 +69,10 @@ impl Stat for StatDensity {
         vec![Aesthetic::X]
     }
 
+    fn computed_y(&self) -> bool {
+        true
+    }
+
     fn name(&self) -> &str {
         "density"
     }
