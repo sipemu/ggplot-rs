@@ -5,6 +5,17 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.43.0] — 2026-11-11
+
+### Added
+- `BuiltPlot::summary()` / `summary_text()`: what a built plot draws, as
+  numbers. Per layer (and facet panel) and series: the marks, the x range,
+  the first / last y, the y minimum and maximum with their x, and a band's
+  extent (smooth, ribbon, intervals). Stat output counts (a smooth's fitted
+  line, a histogram's bins); stacked layers report each mark's own value;
+  dates read as dates. For callers that write about a chart (a title, an AI
+  answer) from the chart's own numbers (DataZooDE/anofox-visualization#1095).
+
 ## [0.42.2] — 2026-11-10
 
 ### Fixed

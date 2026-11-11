@@ -22,6 +22,7 @@ pub mod spatial;
 #[cfg(feature = "spec")]
 pub mod spec;
 pub mod stat;
+pub mod summary;
 pub mod theme;
 
 pub use locale::Locale;
