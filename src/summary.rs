@@ -49,12 +49,30 @@ pub struct SeriesSummary {
     pub y_max: (f64, String),
     /// `(lowest ymin, highest ymax)` of a band (ribbon, smooth, interval).
     pub band: Option<(f64, f64)>,
+    /// Every mark's `(x label, y)`, in the order drawn.
+    pub points: Vec<(String, f64)>,
 }
 
 /// The summaries of every layer, panel by panel.
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct PlotSummary {
     pub layers: Vec<LayerSummary>,
+    /// Two series over the same x values: their difference per x.
+    pub compare: Option<Comparison>,
+}
+
+/// `b − a` per shared x, for a plot of exactly two series (2025 against
+/// 2024, actual against plan): where the gap is largest and smallest.
+#[derive(Debug, Clone, PartialEq)]
+pub struct Comparison {
+    pub a: String,
+    pub b: String,
+    /// `(b − a, (b − a) / |a| in %, x)` of the largest and smallest difference.
+    pub largest: (f64, Option<f64>, String),
+    pub smallest: (f64, Option<f64>, String),
+    /// The same by the % change, when that ranks the x values differently.
+    pub largest_pct: Option<(f64, Option<f64>, String)>,
+    pub smallest_pct: Option<(f64, Option<f64>, String)>,
 }
 
 impl BuiltPlot {
@@ -96,7 +114,11 @@ impl BuiltPlot {
                 _ => merged.push(l),
             }
         }
-        PlotSummary { layers: merged }
+        let compare = compare(&merged);
+        PlotSummary {
+            layers: merged,
+            compare,
+        }
     }
 
     /// [`summary`](Self::summary) as text, one line per layer and panel.
@@ -159,8 +181,90 @@ impl std::fmt::Display for PlotSummary {
                 write!(f, "; +{} more series", l.series.len() - shown)?;
             }
         }
+        if let Some(c) = &self.compare {
+            let one = |(d, p, x): &(f64, Option<f64>, String)| {
+                let sign = if *d >= 0.0 { "+" } else { "" };
+                match p {
+                    Some(p) => format!("{sign}{} ({sign}{} %) at {x}", num(*d), num(*p)),
+                    None => format!("{sign}{} at {x}", num(*d)),
+                }
+            };
+            write!(
+                f,
+                "\n{} − {}: largest {}, smallest {}",
+                c.b,
+                c.a,
+                one(&c.largest),
+                one(&c.smallest)
+            )?;
+            if let (Some(l), Some(s)) = (&c.largest_pct, &c.smallest_pct) {
+                write!(f, "; by %: largest {}, smallest {}", one(l), one(s))?;
+            }
+        }
         Ok(())
     }
+}
+
+/// The plot's series outside bands and ribbons; exactly two named ones over
+/// the same (at least two) x values are compared.
+fn compare(layers: &[LayerSummary]) -> Option<Comparison> {
+    let series: Vec<&SeriesSummary> = layers
+        .iter()
+        .filter(|l| l.panel.is_none() && l.geom != "ribbon" && l.geom != "smooth")
+        .flat_map(|l| &l.series)
+        .collect();
+    let [a, b] = series.as_slice() else {
+        return None;
+    };
+    let (ka, kb) = (a.key.clone()?, b.key.clone()?);
+    if ka == kb || a.points.len() < 2 || a.points.len() != b.points.len() {
+        return None;
+    }
+    let diffs: Vec<(f64, Option<f64>, String)> = a
+        .points
+        .iter()
+        .map(|(x, ya)| {
+            let yb = b.points.iter().find(|(xb, _)| xb == x)?.1;
+            let d = yb - ya;
+            Some((d, (*ya != 0.0).then(|| 100.0 * d / ya.abs()), x.clone()))
+        })
+        .collect::<Option<_>>()?;
+    let pick = |better: fn(f64, f64) -> bool| {
+        diffs
+            .iter()
+            .fold(None::<&(f64, Option<f64>, String)>, |m, d| match m {
+                Some(m) if !better(d.0, m.0) => Some(m),
+                _ => Some(d),
+            })
+            .cloned()
+    };
+    let largest = pick(|x, y| x > y)?;
+    let smallest = pick(|x, y| x < y)?;
+    let by_pct = |better: fn(f64, f64) -> bool| {
+        diffs
+            .iter()
+            .filter_map(|d| d.1.map(|p| (p, d)))
+            .fold(
+                None::<(f64, &(f64, Option<f64>, String))>,
+                |m, (p, d)| match m {
+                    Some(m) if !better(p, m.0) => Some(m),
+                    _ => Some((p, d)),
+                },
+            )
+            .map(|(_, d)| d.clone())
+    };
+    let (lp, sp) = (by_pct(|x, y| x > y), by_pct(|x, y| x < y));
+    // only when % ranks them differently (else it repeats the line above)
+    let differs = lp.as_ref().map(|l| &l.2) != Some(&largest.2)
+        || sp.as_ref().map(|s| &s.2) != Some(&smallest.2);
+    Some(Comparison {
+        a: ka,
+        b: kb,
+        largest,
+        smallest,
+        largest_pct: lp.filter(|_| differs),
+        smallest_pct: sp.filter(|_| differs),
+    })
 }
 
 fn layer_summary(geom: &str, d: &DataFrame, date_x: bool) -> Option<LayerSummary> {
@@ -239,6 +343,7 @@ fn layer_summary(geom: &str, d: &DataFrame, date_x: bool) -> Option<LayerSummary
                 y_min: (lo.1, xl(lo.0)),
                 y_max: (hi.1, xl(hi.0)),
                 band: band.flatten(),
+                points: pts.iter().map(|(i, v)| (xl(*i), *v)).collect(),
             })
         })
         .collect();
@@ -386,6 +491,57 @@ mod tests {
             "{t}"
         );
         assert_eq!(lines.len(), 2, "{t}");
+    }
+
+    #[test]
+    fn two_series_over_the_same_x_are_compared() {
+        let m: Vec<Value> = (1..=3).map(|i| Value::Float(i as f64)).collect();
+        let df = vec![
+            ("x".to_string(), [m.clone(), m].concat()),
+            (
+                "y".to_string(),
+                [100.0, 200.0, 50.0, 130.0, 220.0, 51.0]
+                    .map(Value::Float)
+                    .to_vec(),
+            ),
+            (
+                "g".to_string(),
+                strs(&["2024", "2024", "2024", "2025", "2025", "2025"]),
+            ),
+        ];
+        let t = GGPlot::new(df)
+            .aes(Aes::new().x("x").y("y").color("g"))
+            .geom_line()
+            .build()
+            .summary_text();
+        assert!(
+            t.ends_with("2025 − 2024: largest +30 (+30 %) at 1, smallest +1 (+2 %) at 3"),
+            "{t}"
+        );
+    }
+
+    #[test]
+    fn a_comparison_by_percent_when_it_ranks_differently() {
+        let df = vec![
+            (
+                "x".to_string(),
+                [1.0, 2.0, 1.0, 2.0].map(Value::Float).to_vec(),
+            ),
+            (
+                "y".to_string(),
+                [10.0, 200.0, 15.0, 260.0].map(Value::Float).to_vec(),
+            ),
+            ("g".to_string(), strs(&["a", "a", "b", "b"])),
+        ];
+        let t = GGPlot::new(df)
+            .aes(Aes::new().x("x").y("y").color("g"))
+            .geom_line()
+            .build()
+            .summary_text();
+        assert!(
+            t.ends_with("by %: largest +5 (+50 %) at 1, smallest +60 (+30 %) at 2"),
+            "{t}"
+        );
     }
 
     #[test]
