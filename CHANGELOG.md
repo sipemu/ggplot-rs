@@ -5,6 +5,22 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.47.0] — 2026-11-12
+
+### Added
+- `graph::draw`: draws a laid-out graph (from `graph_layout::layered`) as one
+  plot of ordinary layers: swimlane bands with names, edges as paths with an
+  arrowhead, a linetype (solid, dashed, dots), a width and a label kept clear
+  of the boxes, and node boxes with a wrapped label, a value line, a status
+  badge, a sparkline and an accent bar. The caller decides what each mark
+  says and its colour (`DrawNode`, `DrawEdge`, `GraphStyle`). Every mark
+  carries the caller's `data-*` attributes, and a node's contents sit in one
+  `<g data-of="<id>">`. `graph::node_box` sizes a box for its contents,
+  `graph::edge_label_width` measures an edge label for the layout, and
+  `graph::flow_width` gives an edge's width for the value it carries. Moved
+  from anofox-visualization's `::DIAGRAM`, which renders byte for byte as
+  before (#497, DataZooDE/anofox-visualization#1153).
+
 ## [0.46.0] — 2026-11-12
 
 ### Added
