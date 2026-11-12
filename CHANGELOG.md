@@ -5,6 +5,8 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.48.0] — 2026-11-13
+
 ### Added
 - Factor graphs (Forney style) in `graph`: `NodeShape` (box, circle, filled
   circle, small square, filled square, text) with `graph::node_size`;
