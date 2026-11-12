@@ -5,7 +5,13 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Added
+- `ScaleDateTime::with_n_breaks`, and `date_breaks` / `date_labels` on a spec's
+  x / y scale (#494).
+
 ### Fixed
+- A spec's x / y scale on a date column keeps the date axis: `n_breaks` no
+  longer shows epoch seconds, and `time: true` no longer shows hours (#494).
 - Stacked bars (`position_stack`, `position_fill`) stack in the order of the
   fill (else colour, else group) levels, the same in every bar, as in
   ggplot2. Before, each bar stacked in the order its rows came. A manual
