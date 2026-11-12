@@ -309,8 +309,14 @@ pub struct PositionScaleSpec {
     pub name: Option<String>,
     /// About this many breaks (`n.breaks`, #408).
     pub n_breaks: Option<usize>,
-    /// A time-of-day axis: seconds, `HH:MM:SS` labels (`scale_x_time`).
+    /// A time-of-day axis: seconds, `HH:MM:SS` labels (`scale_x_time`). On
+    /// a date column, the date axis is kept (#494).
     pub time: Option<bool>,
+    /// A date axis's break interval: `"1 month"`, `"2 weeks"`, `"1 year"`, …
+    /// (`date_breaks`).
+    pub date_breaks: Option<String>,
+    /// A date axis's label format, strftime style: `"%b %d"` (`date_labels`).
+    pub date_labels: Option<String>,
     /// Binned position scale (`scale_x_binned(n.breaks)`, #408).
     pub binned: Option<usize>,
     /// Log10 minor ticks (`guide_axis_logticks()`, #409; with `trans: "log10"`).
@@ -679,6 +685,8 @@ pub fn build_plot_with_data(
     let plot_aes = build_aes(&spec.aes, &plot_names, "aes")?;
     // Column → "holds strings?", to pick discrete vs. continuous color scales.
     let mut is_str: HashMap<String, bool> = string_columns(&plot_data);
+    // Column → "holds dates?", to keep a date axis when the spec sets x / y.
+    let mut is_date: HashMap<String, bool> = date_columns(&plot_data);
 
     let mut plot = GGPlot::new(plot_data).aes(plot_aes);
     for (i, layer) in spec.layers.iter().enumerate() {
@@ -692,6 +700,9 @@ pub fn build_plot_with_data(
             let d = columns(d).map_err(|e| format!("layers[{i}].data: {e}"))?;
             for (k, v) in string_columns(&d) {
                 is_str.entry(k).or_insert(v);
+            }
+            for (k, v) in date_columns(&d) {
+                is_date.entry(k).or_insert(v);
             }
             plot = plot.layer_data(d);
         }
@@ -754,11 +765,20 @@ pub fn build_plot_with_data(
                 .find_map(|l| l.aes.as_ref().and_then(|a| a.get(aes).cloned()))
         })
     };
+    let dates = |aes: &str| mapped(aes).is_some_and(|c| *is_date.get(&c).unwrap_or(&false));
     if let Some(s) = &spec.scales.x {
-        plot = plot.scale_x_continuous(position_scale(s).map_err(|e| format!("scales.x: {e}"))?);
+        plot = if dates("x") {
+            plot.scale_x_datetime(date_scale(s, Aesthetic::X))
+        } else {
+            plot.scale_x_continuous(position_scale(s).map_err(|e| format!("scales.x: {e}"))?)
+        };
     }
     if let Some(s) = &spec.scales.y {
-        plot = plot.scale_y_continuous(position_scale(s).map_err(|e| format!("scales.y: {e}"))?);
+        plot = if dates("y") {
+            plot.scale_y_datetime(date_scale(s, Aesthetic::Y))
+        } else {
+            plot.scale_y_continuous(position_scale(s).map_err(|e| format!("scales.y: {e}"))?)
+        };
     }
     for (name, aes, v) in [
         ("size", Aesthetic::Size, &spec.scales.size),
@@ -999,6 +1019,38 @@ fn columns(data: &Columns) -> Result<Vec<(String, Vec<Value>)>, String> {
         out.push((k.clone(), vals.iter().map(jval).collect()));
     }
     Ok(out)
+}
+
+/// Which columns hold dates (their first value that isn't NA).
+fn date_columns(data: &[(String, Vec<Value>)]) -> HashMap<String, bool> {
+    data.iter()
+        .map(|(k, vals)| {
+            let d = vals
+                .iter()
+                .find(|x| !matches!(x, Value::Na))
+                .is_some_and(|x| matches!(x, Value::DateTime(_)));
+            (k.clone(), d)
+        })
+        .collect()
+}
+
+/// A date column's axis (#494): `n_breaks`, `date_breaks`, `date_labels` and
+/// `name` apply; `time` keeps the dates (a date is not a time of day).
+fn date_scale(s: &PositionScaleSpec, aes: Aesthetic) -> crate::scale::datetime::ScaleDateTime {
+    let mut sc = crate::scale::datetime::ScaleDateTime::new().for_aesthetic(aes);
+    if let Some(n) = s.n_breaks {
+        sc = sc.with_n_breaks(n);
+    }
+    if let Some(b) = &s.date_breaks {
+        sc = sc.with_date_breaks(b);
+    }
+    if let Some(f) = &s.date_labels {
+        sc = sc.with_date_labels(f);
+    }
+    if let Some(n) = &s.name {
+        sc = sc.with_name(n);
+    }
+    sc
 }
 
 fn string_columns(data: &[(String, Vec<Value>)]) -> HashMap<String, bool> {
@@ -2624,6 +2676,50 @@ mod tests {
         ))
         .unwrap();
         assert!(svg.contains(">F<") && svg.contains(">50<"), "{svg}");
+    }
+
+    /// #494: a date column keeps its date axis when the spec sets
+    /// `n_breaks` or `time`, and takes `date_labels` / `date_breaks`.
+    #[test]
+    fn a_date_axis_keeps_dates_under_spec_scales() {
+        // 2026-01-05, 2026-03-05, 2026-06-29
+        let days = [20458_i64, 20517, 20633];
+        let data = || {
+            vec![
+                (
+                    "date".to_string(),
+                    days.iter().map(|d| Value::DateTime(d * 86_400)).collect(),
+                ),
+                (
+                    "y".to_string(),
+                    vec![Value::Float(1.0), Value::Float(2.0), Value::Float(3.0)],
+                ),
+            ]
+        };
+        let render = |x: &str| {
+            let spec = parse(&format!(
+                r#"{{"aes": {{"x": "date", "y": "y"}}, "layers": [{{"geom": "line"}}],
+                    "scales": {{"x": {x}}}}}"#
+            ))
+            .unwrap();
+            build_plot_with_data(&spec, data())
+                .unwrap()
+                .render_svg_native_at(0.0, 0.0, 500, 300)
+                .unwrap()
+        };
+        for x in [r#"{"n_breaks": 3}"#, r#"{"time": true, "n_breaks": 3}"#] {
+            let svg = render(x);
+            assert!(svg.contains(">2026-"), "{x}: date labels");
+            assert!(
+                !svg.contains(":00:00<") && !svg.contains(">17"),
+                "{x}: no hours or epoch"
+            );
+        }
+        let svg = render(r#"{"date_breaks": "2 months", "date_labels": "%b %d"}"#);
+        assert!(
+            svg.contains(">Mar 01<") && svg.contains(">May 01<"),
+            "date_labels"
+        );
     }
 
     #[test]

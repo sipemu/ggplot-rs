@@ -23,6 +23,8 @@ pub struct ScaleDateTime {
     expand: (f64, f64),
     date_breaks: Option<DateBreak>,
     date_labels: Option<String>,
+    /// About this many breaks (an automatic step), else about five.
+    n_breaks: Option<usize>,
     /// Locale for month/weekday names and default date formats.
     locale: Option<crate::locale::Locale>,
 }
@@ -203,6 +205,7 @@ impl ScaleDateTime {
             expand: (0.05, 0.0),
             date_breaks: None,
             date_labels: None,
+            n_breaks: None,
             locale: None,
         }
     }
@@ -221,6 +224,13 @@ impl ScaleDateTime {
     /// `"2 weeks"`, `"1 year"`, `"6 hours"`, … Unrecognised specs are ignored.
     pub fn with_date_breaks(mut self, spec: &str) -> Self {
         self.date_breaks = parse_date_break(spec);
+        self
+    }
+
+    /// About `n` breaks (`n.breaks`): the automatic step is chosen for that
+    /// many instead of about five. An explicit `date_breaks` wins.
+    pub fn with_n_breaks(mut self, n: usize) -> Self {
+        self.n_breaks = Some(n.max(1));
         self
     }
 
@@ -277,7 +287,7 @@ impl ScaleDateTime {
     }
 
     /// Choose a "nice" step size in seconds for date/time breaks.
-    fn nice_datetime_step(range_secs: f64) -> f64 {
+    fn nice_datetime_step(range_secs: f64, n: usize) -> f64 {
         const MINUTE: f64 = 60.0;
         const HOUR: f64 = 3600.0;
         const DAY: f64 = 86400.0;
@@ -314,7 +324,7 @@ impl ScaleDateTime {
             100.0 * YEAR,
         ];
 
-        let target = range_secs / 5.0;
+        let target = range_secs / n.max(1) as f64;
         for &c in &candidates {
             if c >= target {
                 return c;
@@ -485,7 +495,7 @@ impl Scale for ScaleDateTime {
         let explicit_secs = matches!(self.date_breaks, Some(DateBreak::Secs(s)) if s > 0.0);
         let step = match self.date_breaks {
             Some(DateBreak::Secs(s)) if s > 0.0 => s,
-            _ => Self::nice_datetime_step(range),
+            _ => Self::nice_datetime_step(range, self.n_breaks.unwrap_or(5)),
         };
 
         // For month-or-larger auto steps, snap breaks to calendar boundaries with
