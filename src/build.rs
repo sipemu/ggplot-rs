@@ -143,6 +143,48 @@ fn train_intercepts(scale: &mut Box<dyn crate::scale::Scale>, values: &[crate::d
     scale.train(values);
 }
 
+/// Raw columns named like a style aesthetic. Only a mapping makes them one
+/// (as in ggplot2): unmapped, they are renamed with [`RAW_PREFIX`] so no
+/// stat or geom reads them as that aesthetic (#495: a data column `alpha`
+/// made every point transparent). Tooltip templates and facets still find
+/// them by their own name ([`column_or_raw`]).
+const STYLE_COLUMNS: &[&str] = &[
+    "alpha",
+    "color",
+    "colour",
+    "fill",
+    "size",
+    "shape",
+    "linetype",
+    "linewidth",
+    "stroke",
+    "weight",
+];
+
+/// The prefix of a shadowed raw column (see [`STYLE_COLUMNS`]).
+const RAW_PREFIX: &str = "\u{1}raw:";
+
+fn shadow_unmapped_style(data: &mut DataFrame, mapping: &crate::aes::Aes) {
+    for &name in STYLE_COLUMNS {
+        let mapped = mapping.mappings.iter().any(|m| {
+            let c = m.aesthetic.col_name();
+            c == name || (c == "color" && name == "colour")
+        });
+        if !mapped && data.has_column(name) {
+            if let Some(values) = data.column(name).map(<[_]>::to_vec) {
+                data.remove_column(name);
+                data.add_column(format!("{RAW_PREFIX}{name}"), values);
+            }
+        }
+    }
+}
+
+/// `data`'s column `name`, or the raw column of that name a layer shadowed.
+fn column_or_raw<'a>(data: &'a DataFrame, name: &str) -> Option<&'a [crate::data::Value]> {
+    data.column(name)
+        .or_else(|| data.column(&format!("{RAW_PREFIX}{name}")))
+}
+
 /// Map a canonical column name to the aesthetic whose scale formats it
 /// (B2-5 tooltip templates / B2-4 `data-fvalue`-style formatting). Columns
 /// outside this list (group, label, or a stat output like `count`) have no
@@ -215,7 +257,7 @@ fn render_tooltip_template(
 }
 
 fn render_placeholder(name: &str, data: &DataFrame, scales: &ScaleSet, row: usize) -> String {
-    let Some(col) = data.column(name) else {
+    let Some(col) = column_or_raw(data, name) else {
         return String::new();
     };
     let Some(v) = col.get(row) else {
@@ -636,7 +678,7 @@ impl PlotBuilder {
                 // layers in first-appearance order.
                 let mut levels: Vec<String> = fixed.clone().unwrap_or_default();
                 for bl in built_layers.iter().filter(|_| fixed.is_none()) {
-                    if let Some(col) = bl.data.column(var) {
+                    if let Some(col) = column_or_raw(&bl.data, var) {
                         for v in col {
                             let key = v.to_group_key();
                             if !levels.contains(&key) {
@@ -721,7 +763,7 @@ impl PlotBuilder {
 
                 for bl in built_layers {
                     if let (Some(rv), None) = (row_var, fixed_rows) {
-                        if let Some(col) = bl.data.column(rv) {
+                        if let Some(col) = column_or_raw(&bl.data, rv) {
                             for v in col {
                                 let key = v.to_group_key();
                                 if !row_levels.contains(&key) {
@@ -731,7 +773,7 @@ impl PlotBuilder {
                         }
                     }
                     if let (Some(cv), None) = (col_var, fixed_cols) {
-                        if let Some(col) = bl.data.column(cv) {
+                        if let Some(col) = column_or_raw(&bl.data, cv) {
                             for v in col {
                                 let key = v.to_group_key();
                                 if !col_levels.contains(&key) {
@@ -820,6 +862,12 @@ impl PlotBuilder {
     fn add_margins(data: DataFrame, row: Option<&str>, col: Option<&str>) -> DataFrame {
         let mut out = data;
         for var in [row, col].into_iter().flatten() {
+            let raw = format!("{RAW_PREFIX}{var}");
+            let var = if out.has_column(var) {
+                var
+            } else {
+                raw.as_str()
+            };
             if !out.has_column(var) || out.nrows() == 0 {
                 continue;
             }
@@ -833,7 +881,7 @@ impl PlotBuilder {
     }
 
     fn filter_data_by_var(data: &DataFrame, var: &str, level: &str) -> DataFrame {
-        if let Some(col) = data.column(var) {
+        if let Some(col) = column_or_raw(data, var) {
             let indices: Vec<usize> = col
                 .iter()
                 .enumerate()
@@ -920,6 +968,7 @@ impl PlotBuilder {
 
         // Step 3: Evaluate aes — rename columns to canonical names
         let mut working_data = resolve_mappings(source_data, &merged_mapping, warnings);
+        shadow_unmapped_style(&mut working_data, &merged_mapping);
 
         // D3 (B3-5): drop a "mapped-only" column (e.g. `lower`/`middle`/
         // `upper`/`outliers` for the boxplot) unless the user actually
@@ -1674,4 +1723,55 @@ pub(crate) fn detect_group_columns(data: &DataFrame) -> Vec<String> {
         }
     }
     group_cols
+}
+
+#[cfg(test)]
+mod unmapped_style_tests {
+    use crate::prelude::*;
+
+    fn frame(extra: &str) -> Vec<(String, Vec<Value>)> {
+        vec![
+            ("a".into(), vec![Value::Float(1.0), Value::Float(2.0)]),
+            ("b".into(), vec![Value::Float(2.0), Value::Float(3.0)]),
+            (extra.into(), vec![Value::Float(0.05), Value::Float(0.05)]),
+        ]
+    }
+
+    /// #495: a data column named like an aesthetic changes nothing unless
+    /// it is mapped.
+    #[test]
+    fn an_unmapped_alpha_column_is_not_the_alpha() {
+        let plain = GGPlot::new(frame("other"))
+            .aes(Aes::new().x("a").y("b"))
+            .geom_point()
+            .render_svg_native_at(0.0, 0.0, 300, 200)
+            .unwrap();
+        let with_alpha = GGPlot::new(frame("alpha"))
+            .aes(Aes::new().x("a").y("b"))
+            .geom_point()
+            .render_svg_native_at(0.0, 0.0, 300, 200)
+            .unwrap();
+        assert_eq!(plain, with_alpha);
+        // mapped, it is the alpha
+        let mapped = GGPlot::new(frame("alpha"))
+            .aes(Aes::new().x("a").y("b").alpha("alpha"))
+            .geom_point()
+            .render_svg_native_at(0.0, 0.0, 300, 200)
+            .unwrap();
+        assert_ne!(plain, mapped);
+    }
+
+    /// The shadowed column still feeds a tooltip template and a facet.
+    #[test]
+    fn a_shadowed_column_still_reads_by_name() {
+        let svg = GGPlot::new(frame("size"))
+            .aes(Aes::new().x("a").y("b"))
+            .geom_point()
+            .tooltip("size {size}")
+            .facet_wrap("size", None)
+            .render_svg_native_at(0.0, 0.0, 300, 200)
+            .unwrap();
+        assert!(svg.contains("size 0.05"), "tooltip");
+        assert!(svg.contains(">0.05<"), "facet strip");
+    }
 }
