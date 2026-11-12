@@ -165,7 +165,7 @@ pub fn position_stack() -> PositionStack {
 }
 
 impl Position for PositionStack {
-    fn compute(&self, data: &mut DataFrame, _params: &PositionParams) {
+    fn compute(&self, data: &mut DataFrame, params: &PositionParams) {
         // Group by x, accumulate y values
         let x_col = match data.column("x") {
             Some(c) => c.to_vec(),
@@ -205,6 +205,7 @@ impl Position for PositionStack {
         // total, and its own top/bottom are left NaN below — so it
         // doesn't poison any other row's stack, matching ggplot2's
         // `pos_stack` (`y <- ifelse(is.na(df$y), 0, df$y)`).
+        let seq = super::stacking_sequence(data, params.group_order.as_deref());
         for positive in [true, false] {
             let mut totals: HashMap<Cow<'_, str>, f64> = HashMap::new();
             for (x, y) in x_col.iter().zip(y_col.iter()) {
@@ -216,7 +217,8 @@ impl Position for PositionStack {
             }
 
             let mut consumed: HashMap<Cow<'_, str>, f64> = HashMap::new();
-            for (i, (x, y)) in x_col.iter().zip(y_col.iter()).enumerate() {
+            for &i in &seq {
+                let (x, y) = (&x_col[i], &y_col[i]);
                 let row = super::stack_row(y);
                 if row.is_positive_bucket() != positive {
                     continue;
@@ -296,6 +298,10 @@ impl Position for PositionStack {
 
     fn name(&self) -> &str {
         "stack"
+    }
+
+    fn group_order(&self, data: &DataFrame) -> Option<Vec<String>> {
+        super::dodge::group_keys(data).map(|keys| super::dodge::dedup_order(&keys))
     }
 
     fn per_panel(&self) -> bool {
@@ -484,5 +490,82 @@ mod tests {
             .map(|&i| (hi[i] + lo[i + 1]) / 2.0)
             .sum::<f64>();
         assert!(mid.abs() < 1e-9, "{mid}");
+    }
+}
+
+#[cfg(test)]
+mod level_order_tests {
+    /// The stacked rects' (fill, ymin) pairs per x in an SVG, bottom first.
+    fn stacks(svg: &str) -> Vec<Vec<String>> {
+        let mut bars: Vec<(f64, f64, String)> = Vec::new();
+        for tag in svg
+            .split('<')
+            .filter(|t| t.starts_with("rect") && t.contains("gg-bar"))
+        {
+            let attr = |n: &str| {
+                let k = format!(" {n}=\"");
+                tag.find(&k).map(|i| {
+                    let r = &tag[i + k.len()..];
+                    r[..r.find('"').unwrap()].to_string()
+                })
+            };
+            let (Some(x), Some(y), Some(fill)) = (attr("x"), attr("y"), attr("fill")) else {
+                continue;
+            };
+            bars.push((x.parse().unwrap(), y.parse().unwrap(), fill));
+        }
+        let mut xs: Vec<f64> = bars.iter().map(|b| b.0).collect();
+        xs.sort_by(f64::total_cmp);
+        xs.dedup();
+        xs.iter()
+            .map(|&x| {
+                let mut col: Vec<&(f64, f64, String)> = bars.iter().filter(|b| b.0 == x).collect();
+                // svg y grows down: the bottom segment has the largest y
+                col.sort_by(|a, b| b.1.total_cmp(&a.1));
+                col.iter().map(|b| b.2.clone()).collect()
+            })
+            .collect()
+    }
+
+    /// #496: every bar stacks in the fill levels' order, not row order.
+    #[test]
+    fn stacks_follow_the_fill_levels() {
+        use crate::aes::Aesthetic;
+        use crate::prelude::*;
+        use crate::scale::color::ScaleColorDiscrete;
+        let txt = |v: &[&str]| {
+            v.iter()
+                .map(|s| Value::Str(s.to_string()))
+                .collect::<Vec<_>>()
+        };
+        for fill in [false, true] {
+            let mut plot = GGPlot::new(vec![
+                ("x".to_string(), txt(&["a", "a", "a", "b", "b", "b"])),
+                (
+                    "n".to_string(),
+                    [1.0, 2.0, 3.0, 3.0, 2.0, 1.0].map(Value::Float).to_vec(),
+                ),
+                (
+                    "k".to_string(),
+                    txt(&["ok", "miss", "early", "early", "ok", "miss"]),
+                ),
+            ])
+            .aes(Aes::new().x("x").y("n").fill("k"))
+            .scale_fill(ScaleColorDiscrete::new(Aesthetic::Fill).with_levels(vec![
+                "miss".into(),
+                "early".into(),
+                "ok".into(),
+            ]));
+            plot = if fill {
+                plot.geom_col()
+                    .position(crate::position::fill::PositionFill::default())
+            } else {
+                plot.geom_col().position(super::position_stack())
+            };
+            let svg = plot.render_svg_native_at(0.0, 0.0, 300, 200).unwrap();
+            let s = stacks(&svg);
+            assert_eq!(s.len(), 2, "fill={fill}");
+            assert_eq!(s[0], s[1], "fill={fill}: both bars stack alike");
+        }
     }
 }

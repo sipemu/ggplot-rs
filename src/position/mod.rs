@@ -177,3 +177,22 @@ pub(crate) fn add_x_offsets(
         None => data.add_column(DODGE_OFFSET_COL.to_string(), col),
     }
 }
+
+/// The order a stack accumulates its rows in (#496): by each row's group
+/// rank in `order` (the legend's level order, [`Position::group_order`]),
+/// rows of one group in data order; data order without `order` or group
+/// columns. The first group lands at the top of each stack, as in ggplot2.
+pub(crate) fn stacking_sequence(data: &DataFrame, order: Option<&[String]>) -> Vec<usize> {
+    let n = data.nrows();
+    let (Some(order), Some(keys)) = (order, dodge::group_keys(data)) else {
+        return (0..n).collect();
+    };
+    let rank: std::collections::HashMap<&str, usize> = order
+        .iter()
+        .enumerate()
+        .map(|(i, k)| (k.as_str(), i))
+        .collect();
+    let mut seq: Vec<usize> = (0..n).collect();
+    seq.sort_by_key(|&i| (rank.get(keys[i].as_str()).copied().unwrap_or(usize::MAX), i));
+    seq
+}

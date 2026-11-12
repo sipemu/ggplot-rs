@@ -45,7 +45,7 @@ pub fn position_fill() -> PositionFill {
 }
 
 impl Position for PositionFill {
-    fn compute(&self, data: &mut DataFrame, _params: &PositionParams) {
+    fn compute(&self, data: &mut DataFrame, params: &PositionParams) {
         let x_col = match data.column("x") {
             Some(c) => c.to_vec(),
             None => return,
@@ -74,6 +74,7 @@ impl Position for PositionFill {
         // review #167 finding 3 on #171) joins the positive bucket but
         // contributes 0 to its total/denominator, and its own top/bottom
         // are left NaN below, matching ggplot2's `position_fill`.
+        let seq = super::stacking_sequence(data, params.group_order.as_deref());
         for positive in [true, false] {
             let sign_total = if positive { 1.0 } else { -1.0 };
             let mut totals: HashMap<Cow<'_, str>, f64> = HashMap::new();
@@ -86,7 +87,8 @@ impl Position for PositionFill {
             }
 
             let mut consumed: HashMap<Cow<'_, str>, f64> = HashMap::new();
-            for (i, (x, y)) in x_col.iter().zip(y_col.iter()).enumerate() {
+            for &i in &seq {
+                let (x, y) = (&x_col[i], &y_col[i]);
                 let row = super::stack_row(y);
                 if row.is_positive_bucket() != positive {
                     continue;
@@ -156,6 +158,10 @@ impl Position for PositionFill {
 
     fn name(&self) -> &str {
         "fill"
+    }
+
+    fn group_order(&self, data: &DataFrame) -> Option<Vec<String>> {
+        super::dodge::group_keys(data).map(|keys| super::dodge::dedup_order(&keys))
     }
 
     fn per_panel(&self) -> bool {
