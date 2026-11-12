@@ -963,4 +963,89 @@ mod tests {
         );
         assert!(t.nodes[0].cy < t.nodes[1].cy && t.nodes[0].cx == t.nodes[1].cx);
     }
+
+    #[test]
+    fn edge_cases_loops_labels_ports_lanes_and_empty() {
+        let p = LayeredParams::default();
+        let empty = layered(&[], &[], &p);
+        assert!(empty.nodes.is_empty() && empty.layers == 1);
+        // self-loops left to right and top to bottom, in layers and on a grid
+        for dir in [Direction::LeftRight, Direction::TopBottom] {
+            let q = LayeredParams {
+                direction: dir,
+                ..Default::default()
+            };
+            let l = layered(
+                &[node(60.0, 30.0), node(60.0, 30.0)],
+                &[edge(0, 0), edge(0, 1)],
+                &q,
+            );
+            assert_eq!(l.edges[0].len(), 4, "a self-loop");
+            let g: Vec<GraphNode> = (0..2)
+                .map(|i| GraphNode {
+                    w: 60.0,
+                    h: 30.0,
+                    pin: (Some(i as f64), Some(0.0)),
+                    ..Default::default()
+                })
+                .collect();
+            let gl = layered(&g, &[edge(1, 1), edge(0, 1)], &q);
+            assert_eq!(gl.edges[0].len(), 4);
+        }
+        // an edge label widens its gap; a long edge gets dummies (bends)
+        let ns = vec![node(60.0, 30.0); 4];
+        let plain = layered(
+            &ns,
+            &[edge(0, 1), edge(1, 2), edge(0, 2), edge(0, 3), edge(2, 3)],
+            &p,
+        );
+        let labelled = layered(
+            &ns,
+            &[
+                GraphEdge {
+                    from: 0,
+                    to: 1,
+                    label_w: Some(300.0),
+                },
+                edge(1, 2),
+                edge(0, 2),
+                edge(0, 3),
+                edge(2, 3),
+            ],
+            &p,
+        );
+        assert!(
+            labelled.nodes[1].cx - labelled.nodes[0].cx > plain.nodes[1].cx - plain.nodes[0].cx
+        );
+        assert!(
+            plain.edges[3].len() > 2,
+            "a long edge bends through its dummies"
+        );
+        // several edges leave one node: their ports spread along its side
+        let starts: Vec<f64> = [0, 2, 3].iter().map(|&k| plain.edges[k][0].1).collect();
+        assert!(starts.windows(2).any(|w| w[0] != w[1]), "{starts:?}");
+        // a pinned layer against the flow: a straight edge drawn back
+        let mut pn = vec![node(60.0, 30.0); 3];
+        pn[0].pin.0 = Some(2.0);
+        pn[1].pin.0 = Some(0.0);
+        let back = layered(&pn, &[edge(0, 1), edge(1, 2)], &p);
+        assert_eq!(back.edges[0].len(), 2);
+        // swimlanes top to bottom, an unlaned node, crossings between lanes
+        let mut lanes = vec![node(60.0, 30.0); 5];
+        for (i, n) in lanes.iter_mut().enumerate().take(4) {
+            n.lane = Some(i % 2);
+        }
+        let q = LayeredParams {
+            direction: Direction::TopBottom,
+            lanes: 2,
+            ..Default::default()
+        };
+        let tb = layered(
+            &lanes,
+            &[edge(0, 3), edge(1, 2), edge(2, 4), edge(3, 4)],
+            &q,
+        );
+        assert_eq!(tb.bands.len(), 2);
+        assert!(tb.bands.iter().all(|b| b.3 > b.1 && b.4 > b.2));
+    }
 }
