@@ -148,8 +148,11 @@ impl Default for BandedParams {
 /// along an edge **within** a band; an edge into another band keeps the
 /// column, so a branch drops straight down (or up) into its band — the
 /// state chain stays one straight row with each observation below its
-/// state. Nodes that share a band and a column stack in tracks, a node
-/// staying on the track of the node before it in its band. A source is
+/// state. A leaf hanging off one node of its band (an observed variable
+/// under its factor) sits right below it; nodes dropping in from other
+/// bands side by side fan out over the band's free columns. Nodes that
+/// still share a band and a column stack in tracks, a node staying on the
+/// track of the node before it in its band. A source is
 /// pulled right to just before its first successor in its band (a
 /// constant next to its factor). Edges are straight; a cycle's closing
 /// edge is drawn as is and marked `back`.
@@ -175,13 +178,31 @@ pub fn banded(nodes: &[GraphNode], edges: &[GraphEdge], p: &BandedParams) -> Gra
         }
     }
     let step = |u: usize, v: usize| usize::from(band(u) == band(v));
+    // a leaf hanging off one node of its own band (an observed variable
+    // under its factor): same column, the track below it
+    let below =
+        |v: usize| succs[v].is_empty() && preds[v].len() == 1 && band(preds[v][0]) == band(v);
+    // a node fed only from other bands (a branch dropping in): it fans out
+    // to the next free column of its band rather than stacking
+    let drops = |v: usize| !preds[v].is_empty() && preds[v].iter().all(|&u| band(u) != band(v));
     let mut col = vec![0usize; n];
+    let mut used: std::collections::HashSet<(usize, usize)> = Default::default();
     for &v in &topo {
-        col[v] = preds[v]
-            .iter()
-            .map(|&u| col[u] + step(u, v))
-            .max()
-            .unwrap_or(0);
+        col[v] = if below(v) {
+            col[preds[v][0]]
+        } else {
+            preds[v]
+                .iter()
+                .map(|&u| col[u] + step(u, v))
+                .max()
+                .unwrap_or(0)
+        };
+        if drops(v) {
+            while used.contains(&(band(v), col[v])) {
+                col[v] += 1;
+            }
+        }
+        used.insert((band(v), col[v]));
     }
     for &v in topo.iter().rev() {
         if preds[v].is_empty() {
@@ -198,12 +219,16 @@ pub fn banded(nodes: &[GraphNode], edges: &[GraphEdge], p: &BandedParams) -> Gra
     let mut track = vec![0usize; n];
     let mut taken: std::collections::HashSet<(usize, usize, usize)> = Default::default();
     for &v in &topo {
-        let want = preds[v]
-            .iter()
-            .filter(|&&u| band(u) == band(v))
-            .map(|&u| track[u])
-            .min()
-            .unwrap_or(0);
+        let want = if below(v) {
+            track[preds[v][0]] + 1
+        } else {
+            preds[v]
+                .iter()
+                .filter(|&&u| band(u) == band(v))
+                .map(|&u| track[u])
+                .min()
+                .unwrap_or(0)
+        };
         let mut t = want;
         while taken.contains(&(band(v), col[v], t)) {
             t += 1;
@@ -1229,5 +1254,46 @@ mod tests {
         );
         assert_eq!(tb.bands.len(), 2);
         assert!(tb.bands.iter().all(|b| b.3 > b.1 && b.4 > b.2));
+    }
+
+    /// A coin toss in bands param / obs: the Bernoulli factors dropping from
+    /// θ fan out side by side, each observation right below its factor.
+    #[test]
+    fn banded_fans_out_drops_and_hangs_leaves_below() {
+        // 0 θ (param), 1..=3 Bernoulli (obs), 4..=6 y (obs)
+        let node = |lane| GraphNode {
+            w: 40.0,
+            h: 20.0,
+            lane: Some(lane),
+            ..Default::default()
+        };
+        let mut nodes = vec![node(0)];
+        nodes.extend((0..3).map(|_| node(1)));
+        nodes.extend((0..3).map(|_| node(1)));
+        let edge = |from, to| GraphEdge {
+            from,
+            to,
+            label_w: None,
+        };
+        let mut edges = Vec::new();
+        for i in 0..3 {
+            edges.push(edge(0, 1 + i));
+            edges.push(edge(1 + i, 4 + i));
+        }
+        let l = banded(
+            &nodes,
+            &edges,
+            &BandedParams {
+                bands: 2,
+                ..Default::default()
+            },
+        );
+        let cx: Vec<f64> = (1..=3).map(|i| l.nodes[i].cx).collect();
+        assert!(cx[0] < cx[1] && cx[1] < cx[2], "fanned out: {cx:?}");
+        for i in 0..3 {
+            let (f, y) = (&l.nodes[1 + i], &l.nodes[4 + i]);
+            assert_eq!(f.cx, y.cx, "y{i} under its factor");
+            assert!(y.cy > f.cy);
+        }
     }
 }
