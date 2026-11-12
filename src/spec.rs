@@ -1679,10 +1679,16 @@ fn apply_color_scale(
     discrete: bool,
 ) -> Result<GGPlot, String> {
     if let Some(values) = &s.values {
-        let parsed: Vec<(String, RGBAColor)> = values
+        let mut parsed: Vec<(String, RGBAColor)> = values
             .iter()
             .map(|(k, v)| parse_hex(v).map(|c| (k.clone(), c)))
             .collect::<Result<_, _>>()?;
+        // #496: the legend follows `levels` (the rest after them), not the
+        // values' alphabetical key order
+        if let Some(lv) = &s.levels {
+            let rank = |k: &str| lv.iter().position(|l| l == k).unwrap_or(usize::MAX);
+            parsed.sort_by_key(|(k, _)| rank(k));
+        }
         let refs: Vec<(&str, RGBAColor)> = parsed.iter().map(|(k, c)| (k.as_str(), *c)).collect();
         return Ok(if aes == Aesthetic::Color {
             plot.scale_color_manual(refs)
@@ -2831,6 +2837,24 @@ mod tests {
         assert!(
             svg.contains("#440154") && svg.contains("#FDE725"),
             "viridis_d ends"
+        );
+    }
+
+    /// #496: manual values keep the `levels` order in the legend.
+    #[test]
+    fn manual_values_follow_levels_in_the_legend() {
+        let (svg, _) = render_json(
+            r##"{"data": {"x": ["a","a","a"], "n": [1,2,3], "k": ["ok","miss","early"]},
+                "aes": {"x": "x", "y": "n", "fill": "k"},
+                "layers": [{"geom": "col", "position": "stack"}],
+                "scales": {"fill": {"levels": ["miss","early","ok"],
+                  "values": {"ok": "#1E8449", "early": "#AAB7B8", "miss": "#C0392B"}}}}"##,
+        )
+        .unwrap();
+        let at = |s: &str| svg.find(&format!(">{s}<")).unwrap();
+        assert!(
+            at("miss") < at("early") && at("early") < at("ok"),
+            "legend order"
         );
     }
 

@@ -6,6 +6,11 @@ All notable changes to this project are documented here. The format follows
 ## [Unreleased]
 
 ### Fixed
+- Stacked bars (`position_stack`, `position_fill`) stack in the order of the
+  fill (else colour, else group) levels, the same in every bar, as in
+  ggplot2. Before, each bar stacked in the order its rows came. A manual
+  `values` map in a spec keeps the `levels` order in the legend instead of
+  sorting the keys (#496).
 - A data column named like a style aesthetic (`alpha`, `color`/`colour`,
   `fill`, `size`, `shape`, `linetype`, `linewidth`, `stroke`, `weight`) no
   longer changes the plot unless it is mapped, as in ggplot2. An unmapped
