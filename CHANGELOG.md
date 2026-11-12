@@ -5,6 +5,17 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.46.0] — 2026-11-12
+
+### Added
+- `graph_layout::layered`: a layered (Sugiyama-style) layout of a directed
+  graph of boxes. It does cycle breaking, longest-path ranks with pinned
+  layers, dummy vertices, barycenter plus transposition crossing reduction,
+  isotonic placement, ports, swimlane bands and a fully pinned grid. Node sizes
+  come from the caller. It is moved from anofox-visualization's `::DIAGRAM`
+  (DataZooDE/anofox-visualization#1153), the first step of a graph geom that
+  covers factor graphs too (#497).
+
 ## [0.45.1] — 2026-11-12
 
 ### Fixed

@@ -8,6 +8,7 @@ pub mod facet;
 pub mod format;
 pub mod geom;
 pub mod ggpubr;
+pub mod graph_layout;
 pub mod guide;
 pub mod helpers;
 pub mod locale;
