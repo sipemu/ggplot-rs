@@ -2027,3 +2027,39 @@ mod tests {
         assert!(svg.contains("data-x=\"v\""));
     }
 }
+
+#[cfg(test)]
+mod zoom_clip_tests {
+    use crate::prelude::*;
+
+    fn data() -> Vec<(String, Vec<Value>)> {
+        let f = |v: &[f64]| v.iter().map(|&x| Value::Float(x)).collect::<Vec<_>>();
+        vec![
+            ("x".into(), f(&[1.0, 2.0, 3.0, 4.0])),
+            ("y".into(), f(&[0.0, 0.1, 0.5, 1.0])),
+            ("lo".into(), f(&[0.0, 0.05, 0.3, 0.8])),
+            ("hi".into(), f(&[0.0, 0.2, 0.7, 1.0])),
+            ("g".into(), vec![Value::Str("a".into()); 4]),
+        ]
+    }
+
+    /// #493: a zoomed y range clips the line and ribbon to the panel.
+    #[test]
+    fn a_zoom_clips_layers_to_the_panel() {
+        for facet in [false, true] {
+            let mut p = GGPlot::new(data())
+                .aes(Aes::new().x("x").y("y").ymin("lo").ymax("hi"))
+                .geom_ribbon()
+                .geom_line()
+                .coord_cartesian_zoom(None, Some((0.0, 0.2)));
+            if facet {
+                p = p.facet_wrap("g", None);
+            }
+            let svg = p.render_svg_native_at(0.0, 0.0, 400, 300).unwrap();
+            assert!(
+                svg.contains("clip-path=\"url("),
+                "facet={facet}: no clip group"
+            );
+        }
+    }
+}

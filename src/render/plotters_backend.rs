@@ -84,6 +84,9 @@ pub struct PlottersAdapter<'a, DB: DrawingBackend> {
     /// Clip lines / points / clip-flagged rects to the panel (data marks);
     /// off while legends draw (#410), whose keys sit outside it.
     clip: bool,
+    /// The renderer's clip groups ([`DrawBackend::begin_clip`]): a zoomed
+    /// panel's rect, which marks are clipped to while it's open (#493).
+    clips: Vec<Rect>,
 }
 
 impl<'a, DB: DrawingBackend> PlottersAdapter<'a, DB> {
@@ -100,6 +103,7 @@ impl<'a, DB: DrawingBackend> PlottersAdapter<'a, DB> {
             },
             corner_claims: Vec::new(),
             clip: true,
+            clips: Vec::new(),
         }
     }
 }
@@ -123,6 +127,50 @@ fn point_in_rect(x: f64, y: f64, rect: &Rect) -> bool {
         && x <= rect.x + rect.width + margin
         && y >= rect.y - margin
         && y <= rect.y + rect.height + margin
+}
+
+/// Sutherland–Hodgman: `points` (a polygon) cut to `rect`.
+fn clip_polygon(points: &[(f64, f64)], rect: &Rect) -> Vec<(f64, f64)> {
+    let (x0, y0) = (rect.x, rect.y);
+    let (x1, y1) = (rect.x + rect.width, rect.y + rect.height);
+    // (inside?, intersection with the edge) per side
+    type Side = (fn(&(f64, f64), f64) -> bool, bool, f64);
+    let sides: [Side; 4] = [
+        (|p, v| p.0 >= v, true, x0),
+        (|p, v| p.0 <= v, true, x1),
+        (|p, v| p.1 >= v, false, y0),
+        (|p, v| p.1 <= v, false, y1),
+    ];
+    let mut out: Vec<(f64, f64)> = points.to_vec();
+    for (inside, vertical, v) in sides {
+        let input = std::mem::take(&mut out);
+        let Some(&last) = input.last() else {
+            break;
+        };
+        let cross = |a: (f64, f64), b: (f64, f64)| {
+            if vertical {
+                let t = (v - a.0) / (b.0 - a.0);
+                (v, a.1 + t * (b.1 - a.1))
+            } else {
+                let t = (v - a.1) / (b.1 - a.1);
+                (a.0 + t * (b.0 - a.0), v)
+            }
+        };
+        let mut prev = last;
+        for &cur in &input {
+            match (inside(&cur, v), inside(&prev, v)) {
+                (true, true) => out.push(cur),
+                (true, false) => {
+                    out.push(cross(prev, cur));
+                    out.push(cur);
+                }
+                (false, true) => out.push(cross(prev, cur)),
+                (false, false) => {}
+            }
+            prev = cur;
+        }
+    }
+    out
 }
 
 /// Cohen-Sutherland line clipping. Returns clipped line segment or None if fully outside.
@@ -274,17 +322,30 @@ fn segment_dashed(points: &[(f64, f64)], pattern: &[(f64, f64)]) -> Vec<Vec<(f64
 impl<DB: DrawingBackend> PlottersAdapter<'_, DB> {
     /// The rect marks are clipped to: the panel, or the canvas when off.
     fn clip_area(&self) -> Rect {
-        if self.clip {
-            self.plot_area.clone()
-        } else {
-            self.total_area.clone()
+        match (self.clip, self.clips.last()) {
+            (true, Some(r)) => r.clone(),
+            (true, None) => self.plot_area.clone(),
+            (false, _) => self.total_area.clone(),
         }
+    }
+
+    /// The open clip group's rect, while clipping is on.
+    fn clip_group(&self) -> Option<Rect> {
+        self.clip.then(|| self.clips.last().cloned()).flatten()
     }
 }
 
 impl<'a, DB: DrawingBackend> DrawBackend for PlottersAdapter<'a, DB> {
     fn set_clipping(&mut self, on: bool) {
         self.clip = on;
+    }
+
+    fn begin_clip(&mut self, rect: &Rect) {
+        self.clips.push(rect.clone());
+    }
+
+    fn end_clip(&mut self) {
+        self.clips.pop();
     }
 
     fn draw_circle(
@@ -527,6 +588,37 @@ impl<'a, DB: DrawingBackend> DrawBackend for PlottersAdapter<'a, DB> {
         style: &RectStyle,
     ) -> Result<(), RenderError> {
         if points.len() < 3 {
+            return Ok(());
+        }
+        // #493: inside a clip group (a zoomed panel), the fill is cut to the
+        // panel and the outline drawn as clipped segments, so the cut adds
+        // no edge of its own.
+        if let Some(rect) = self.clip_group() {
+            let clipped = clip_polygon(points, &rect);
+            if let (Some(fill), true) = (style.fill, clipped.len() >= 3) {
+                let pts: Vec<(i32, i32)> = clipped
+                    .iter()
+                    .map(|(x, y)| (*x as i32, *y as i32))
+                    .collect();
+                self.area
+                    .draw(&Polygon::new(pts, to_rgba(fill, style.alpha).filled()))
+                    .map_err(map_err)?;
+            }
+            if let (Some(stroke), true) = (style.stroke, style.stroke_width > 0.0) {
+                let width = (style.stroke_width as u32).max(1);
+                let n = points.len();
+                for i in 0..n {
+                    let (a, b) = (points[i], points[(i + 1) % n]);
+                    if let Some((p, q)) = clip_line_segment(a.0, a.1, b.0, b.1, &rect) {
+                        self.area
+                            .draw(&PathElement::new(
+                                vec![(p.0 as i32, p.1 as i32), (q.0 as i32, q.1 as i32)],
+                                to_rgba(stroke, style.alpha).stroke_width(width),
+                            ))
+                            .map_err(map_err)?;
+                    }
+                }
+            }
             return Ok(());
         }
         let int_points: Vec<(i32, i32)> =
@@ -860,5 +952,39 @@ impl<'a, DB: DrawingBackend> PlottersAdapter<'a, DB> {
         }
 
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod clip_polygon_tests {
+    use super::*;
+
+    fn rect() -> Rect {
+        Rect {
+            x: 0.0,
+            y: 0.0,
+            width: 10.0,
+            height: 10.0,
+        }
+    }
+
+    /// #493: a polygon reaching past the panel is cut at its edge.
+    #[test]
+    fn cuts_a_polygon_at_the_rect() {
+        let tri = [(2.0, 2.0), (8.0, 2.0), (5.0, -6.0)];
+        let out = clip_polygon(&tri, &rect());
+        assert!(out.len() >= 3);
+        assert!(out
+            .iter()
+            .all(|&(x, y)| (0.0..=10.0).contains(&x) && (0.0..=10.0).contains(&y)));
+        assert!(out.iter().any(|&(_, y)| y == 0.0), "{out:?}");
+    }
+
+    #[test]
+    fn keeps_an_inside_polygon_and_drops_an_outside_one() {
+        let inside = [(1.0, 1.0), (4.0, 1.0), (4.0, 4.0)];
+        assert_eq!(clip_polygon(&inside, &rect()), inside.to_vec());
+        let outside = [(20.0, 20.0), (30.0, 20.0), (30.0, 30.0)];
+        assert!(clip_polygon(&outside, &rect()).is_empty());
     }
 }
