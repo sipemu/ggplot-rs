@@ -5,6 +5,22 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.48.0] — 2026-11-13
+
+### Added
+- Factor graphs (Forney style) in `graph`: `NodeShape` (box, circle, filled
+  circle, small square, filled square, text) with `graph::node_size`;
+  undirected edges and an edge label at a set point (`DrawEdge::undirected`,
+  `label_at`, e.g. an interface name near its factor); plates, dashed boxes
+  around a collection (`graph::Plate`); `GraphStyle` colours for variables,
+  observed nodes and plates. `graph::draw` takes the plates (#497).
+- `graph_layout::banded`: one horizontal band per layer (parameters, states,
+  observations, …). Columns advance only along edges inside a band, so a
+  chain stays one straight row and a branch drops straight into its band;
+  nodes sharing a cell stack (#497).
+- `ScaleDateTime::with_n_breaks`, and `date_breaks` / `date_labels` on a spec's
+  x / y scale (#494).
+
 ### Fixed
 - PNG (and the CLI's other plotters outputs): a zoomed `coord_cartesian`
   clips lines, points, rects and polygons (ribbons, areas) to each panel.
@@ -22,10 +38,6 @@ All notable changes to this project are documented here. The format follows
   longer changes the plot unless it is mapped, as in ggplot2. An unmapped
   `alpha` column made every point transparent. Tooltip templates and facets
   still read such a column by its name (#495).
-
-### Added
-- `ScaleDateTime::with_n_breaks`, and `date_breaks` / `date_labels` on a spec's
-  x / y scale (#494).
 
 ## [0.47.0] — 2026-11-12
 
