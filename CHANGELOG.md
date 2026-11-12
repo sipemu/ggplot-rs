@@ -5,6 +5,13 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Fixed
+- A data column named like a style aesthetic (`alpha`, `color`/`colour`,
+  `fill`, `size`, `shape`, `linetype`, `linewidth`, `stroke`, `weight`) no
+  longer changes the plot unless it is mapped, as in ggplot2. An unmapped
+  `alpha` column made every point transparent. Tooltip templates and facets
+  still read such a column by its name (#495).
+
 ## [0.47.0] — 2026-11-12
 
 ### Added
