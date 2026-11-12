@@ -5,11 +5,11 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
-### Added
-- `ScaleDateTime::with_n_breaks`, and `date_breaks` / `date_labels` on a spec's
-  x / y scale (#494).
-
 ### Fixed
+- PNG (and the CLI's other plotters outputs): a zoomed `coord_cartesian`
+  clips lines, points, rects and polygons (ribbons, areas) to each panel.
+  Before, they ran over the facet strips, the title and the neighbouring
+  panels (#493).
 - A spec's x / y scale on a date column keeps the date axis: `n_breaks` no
   longer shows epoch seconds, and `time: true` no longer shows hours (#494).
 - Stacked bars (`position_stack`, `position_fill`) stack in the order of the
@@ -22,6 +22,10 @@ All notable changes to this project are documented here. The format follows
   longer changes the plot unless it is mapped, as in ggplot2. An unmapped
   `alpha` column made every point transparent. Tooltip templates and facets
   still read such a column by its name (#495).
+
+### Added
+- `ScaleDateTime::with_n_breaks`, and `date_breaks` / `date_labels` on a spec's
+  x / y scale (#494).
 
 ## [0.47.0] — 2026-11-12
 
