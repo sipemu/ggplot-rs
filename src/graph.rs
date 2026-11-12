@@ -161,10 +161,18 @@ pub struct GraphStyle {
     pub heading: Rgb,
     /// Node values and badge text.
     pub ink: Rgb,
+    /// A variable's circle ([`NodeShape::Circle`]).
+    pub variable_fill: Rgb,
+    /// An observed variable's circle ([`NodeShape::FilledCircle`]) and a
+    /// delta node's square; their labels are drawn in `card`.
+    pub observed_fill: Rgb,
+    /// A plate's dashed outline and its label.
+    pub plate: Rgb,
     /// Prefix of the layer classes (`<prefix>node`, `<prefix>edge`,
     /// `<prefix>edge-label`, `<prefix>lane`, `<prefix>lane-label`,
     /// `<prefix>node-label`, `<prefix>node-value`, `<prefix>node-badge`,
-    /// `<prefix>node-spark`).
+    /// `<prefix>node-spark`, `<prefix>plate`, `<prefix>plate-label`; a
+    /// shaped node's mark also has `<prefix>node-<shape>`).
     pub class_prefix: String,
 }
 
@@ -176,9 +184,83 @@ impl Default for GraphStyle {
             muted: (107, 114, 128),
             heading: (17, 24, 39),
             ink: (31, 41, 55),
+            variable_fill: (229, 231, 235),
+            observed_fill: (75, 85, 99),
+            plate: (107, 114, 128),
             class_prefix: "gg-graph-".to_string(),
         }
     }
+}
+
+/// A node's mark. A factor graph (Forney style) draws factors as boxes,
+/// variables as circles (filled when observed), equality nodes as small
+/// squares, deterministic (delta) nodes as small filled squares, and
+/// constants as plain text.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum NodeShape {
+    /// A box with a label, value, badge and sparkline ([`node_box`]).
+    #[default]
+    Box,
+    Circle,
+    FilledCircle,
+    /// A small square, its label above it.
+    Square,
+    /// A small filled square, its label above it.
+    FilledSquare,
+    /// The label alone.
+    Text,
+}
+
+impl NodeShape {
+    fn name(self) -> &'static str {
+        match self {
+            NodeShape::Box => "box",
+            NodeShape::Circle => "circle",
+            NodeShape::FilledCircle => "filled-circle",
+            NodeShape::Square => "square",
+            NodeShape::FilledSquare => "filled-square",
+            NodeShape::Text => "text",
+        }
+    }
+}
+
+/// A small square's side (px).
+const SQUARE: f64 = 14.0;
+
+/// The size a node of `shape` needs for `label` (a [`NodeShape::Box`] is
+/// [`node_box`] without a value, badge or sparkline). A circle fits its
+/// label on one line, at least 30 px across.
+pub fn node_size(shape: NodeShape, label: &str) -> NodeBox {
+    let one = || vec![label.to_string()];
+    match shape {
+        NodeShape::Box => node_box(label, None, None, false),
+        NodeShape::Circle | NodeShape::FilledCircle => {
+            let d = (text_w(label, LABEL_PX, true) + 14.0).max(30.0);
+            NodeBox {
+                w: d,
+                h: d,
+                lines: one(),
+            }
+        }
+        NodeShape::Square | NodeShape::FilledSquare => NodeBox {
+            w: SQUARE,
+            h: SQUARE,
+            lines: if label.is_empty() { Vec::new() } else { one() },
+        },
+        NodeShape::Text => NodeBox {
+            w: text_w(label, LABEL_PX, false) + 8.0,
+            h: 20.0,
+            lines: one(),
+        },
+    }
+}
+
+/// A plate: a dashed box around a collection of nodes (indices in the
+/// layout's order), labelled at its top left (`x_t`, `t = 1..T`).
+#[derive(Clone, Debug, Default)]
+pub struct Plate {
+    pub label: String,
+    pub nodes: Vec<usize>,
 }
 
 /// A `data-*` attribute: its name (without `data-`) and value; `None` leaves
@@ -191,13 +273,15 @@ pub type DataAttr = (String, Option<String>);
 pub struct DrawNode {
     /// The `data-of` group of everything drawn for the node.
     pub id: String,
+    /// Its mark; anything but a box shows only the label.
+    pub shape: NodeShape,
     /// The label, wrapped ([`NodeBox::lines`]).
     pub lines: Vec<String>,
     /// A value line under the label.
     pub value: Option<String>,
     /// A badge row: its text and its dot's (and outline's) colour.
     pub badge: Option<(String, Rgb)>,
-    /// The box outline.
+    /// The box (or circle, square) outline.
     pub stroke: Rgb,
     /// A thin bar along the box's left edge.
     pub accent: Option<Rgb>,
@@ -220,7 +304,8 @@ pub enum EdgeLine {
 }
 
 /// What an edge looks like, and its attributes. Its points come from the
-/// layout ([`GraphLayout::edges`]); the arrowhead is on its last point.
+/// layout ([`GraphLayout::edges`]); the arrowhead is on its last point,
+/// unless `undirected`.
 #[derive(Clone, Debug, Default)]
 pub struct DrawEdge {
     pub colour: Rgb,
@@ -232,6 +317,12 @@ pub struct DrawEdge {
     pub tooltip: String,
     /// A label (`\n` breaks lines) on the edge, clear of the boxes.
     pub label: Option<String>,
+    /// Where along the edge the label goes (0 at its start, 1 at its end),
+    /// e.g. near a factor for an interface name; `None`: the middle, moved
+    /// along the edge until no box covers it.
+    pub label_at: Option<f64>,
+    /// No arrowhead (a factor graph's edges).
+    pub undirected: bool,
     /// `data-*` on the path; every edge lists the same names, in the same
     /// order.
     pub attrs: Vec<DataAttr>,
@@ -389,13 +480,15 @@ fn mid_of_baseline(baseline: f64, px: f64) -> f64 {
 }
 
 /// Draw a laid-out graph on a `layout.w` × `layout.h` px canvas: `lanes`
-/// names the layout's bands, `nodes` and `edges` are in the layout's order.
+/// names the layout's bands, `plates` group nodes, `nodes` and `edges` are
+/// in the layout's order.
 /// `theme` is the base (a void theme; the legend is turned off). Render the
 /// result with e.g. `render_svg_native_at(0.0, 0.0, w, h)` at the canvas
 /// size rounded up.
 pub fn draw(
     layout: &GraphLayout,
     lanes: &[String],
+    plates: &[Plate],
     nodes: &[DrawNode],
     edges: &[DrawEdge],
     style: &GraphStyle,
@@ -475,8 +568,74 @@ pub fn draw(
             .layer_svg_attrs([("aria-hidden", "true"), ("class", &*class("lane-label"))]);
     }
 
-    // edges (under the nodes): one path per edge
-    let (mut ef, mut lf) = (Frame::default(), Frame::default());
+    // plates (under the edges): a dashed box around each collection
+    let (mut pf, mut pl) = (Frame::default(), Frame::default());
+    for p in plates {
+        let members: Vec<&PlacedNode> = p
+            .nodes
+            .iter()
+            .filter_map(|&i| layout.nodes.get(i))
+            .collect();
+        if members.is_empty() {
+            continue;
+        }
+        let pad = 8.0;
+        let x0 = members
+            .iter()
+            .map(|n| n.cx - n.w / 2.0)
+            .fold(f64::INFINITY, f64::min)
+            - pad;
+        let x1 = members
+            .iter()
+            .map(|n| n.cx + n.w / 2.0)
+            .fold(f64::NEG_INFINITY, f64::max)
+            + pad;
+        let y0 = members
+            .iter()
+            .map(|n| n.cy - n.h / 2.0)
+            .fold(f64::INFINITY, f64::min)
+            - pad
+            - 14.0;
+        let y1 = members
+            .iter()
+            .map(|n| n.cy + n.h / 2.0)
+            .fold(f64::NEG_INFINITY, f64::max)
+            + pad;
+        for (x, y) in [(x0, y0), (x1, y0), (x1, y1), (x0, y1), (x0, y0)] {
+            pf.num("x", x).num("y", y).txt("lt", "dashed");
+            pf.txt("g", p.label.clone()).txt("plate", p.label.clone());
+        }
+        pl.num("x", x0 + 6.0)
+            .num("y", mid_of_baseline(y0 + 13.0, SMALL_PX));
+        pl.txt("label", p.label.clone());
+    }
+    if !pf.is_empty() {
+        plot = plot
+            .geom_path_with(GeomPath::default().color(s.plate).linewidth(1.0))
+            .layer_data(pf.take(h))
+            .layer_aes(
+                Aes::new()
+                    .x("x")
+                    .y("y")
+                    .group("g")
+                    .linetype("lt")
+                    .data_attr("plate", "plate"),
+            )
+            .layer_svg_attrs([("aria-hidden", "true"), ("class", &*class("plate"))]);
+        plot = plot
+            .geom_text_with(GeomText {
+                size: SMALL_PX,
+                color: s.plate,
+                hjust: 0.0,
+                ..Default::default()
+            })
+            .layer_data(pl.take(h))
+            .layer_aes(Aes::new().x("x").y("y").label("label"))
+            .layer_svg_attrs([("aria-hidden", "true"), ("class", &*class("plate-label"))]);
+    }
+
+    // edges (under the nodes): one path per edge, arrowed ones first
+    let (mut ef, mut uf, mut lf) = (Frame::default(), Frame::default(), Frame::default());
     for (k, e) in edges.iter().enumerate() {
         let Some(route) = layout.edges.get(k) else {
             continue;
@@ -489,11 +648,14 @@ pub fn draw(
         // stroked as wide as the line (its mitred tip reaching about one
         // line width further): end the path one width short of the box so
         // the tip lands on its edge.
-        let n = pts.len();
-        let ((fx, fy), (tx, ty)) = (pts[n - 2], pts[n - 1]);
-        let len = ((tx - fx).powi(2) + (ty - fy).powi(2)).sqrt().max(1e-6);
-        let pull = e.width.min(len / 2.0);
-        pts[n - 1] = (tx - (tx - fx) / len * pull, ty - (ty - fy) / len * pull);
+        if !e.undirected {
+            let n = pts.len();
+            let ((fx, fy), (tx, ty)) = (pts[n - 2], pts[n - 1]);
+            let len = ((tx - fx).powi(2) + (ty - fy).powi(2)).sqrt().max(1e-6);
+            let pull = e.width.min(len / 2.0);
+            pts[n - 1] = (tx - (tx - fx) / len * pull, ty - (ty - fy) / len * pull);
+        }
+        let ef = if e.undirected { &mut uf } else { &mut ef };
         let lt = match e.line {
             EdgeLine::Solid => "solid",
             EdgeLine::Dashed => "dashed",
@@ -508,15 +670,21 @@ pub fn draw(
             ef.attrs(&e.attrs);
         }
         if let Some(l) = &e.label {
-            let (mx, my) = edge_label_at(route, l, &layout.nodes);
+            let (mx, my) = match e.label_at {
+                Some(t) => point_at(route, t.clamp(0.0, 1.0)),
+                None => edge_label_at(route, l, &layout.nodes),
+            };
             lf.num("x", mx)
                 .num("y", mid_of_baseline(my - 4.0, SMALL_PX));
             lf.txt("label", l.clone());
             lf.attrs(&e.label_attrs);
         }
     }
-    if !ef.is_empty() {
-        let aes = ef.attr_aes(
+    for (mut f, arrowed) in [(ef, true), (uf, false)] {
+        if f.is_empty() {
+            continue;
+        }
+        let aes = f.attr_aes(
             Aes::new()
                 .x("x")
                 .y("y")
@@ -527,20 +695,20 @@ pub fn draw(
                 .class("cls")
                 .tooltip("tip"),
         );
+        let mut geom = GeomPath::default().lineend(LineEnd::Round);
+        if arrowed {
+            // a 7 px + width head, ~29° half-angle
+            geom = geom.arrow(
+                arrow()
+                    .closed()
+                    .angle(29.0)
+                    .length(ARROW + 1.0)
+                    .length_per_linewidth(1.2),
+            );
+        }
         plot = plot
-            .geom_path_with(
-                GeomPath::default()
-                    .lineend(LineEnd::Round)
-                    // a 7 px + width head, ~29° half-angle
-                    .arrow(
-                        arrow()
-                            .closed()
-                            .angle(29.0)
-                            .length(ARROW + 1.0)
-                            .length_per_linewidth(1.2),
-                    ),
-            )
-            .layer_data(ef.take(h))
+            .geom_path_with(geom)
+            .layer_data(f.take(h))
             .layer_aes(aes)
             .layer_svg_attr("class", class("edge"));
     }
@@ -568,6 +736,10 @@ pub fn draw(
     let mut order: Vec<usize> = (0..nodes.len().min(layout.nodes.len())).collect();
     order.sort_by_key(|&i| (layout.nodes[i].order, i));
     let mut boxes: Vec<(Rgb, Frame)> = Vec::new();
+    // shaped nodes, a layer per (shape, corner radius, outline)
+    let mut shaped: Vec<((NodeShape, u64, Rgb), Frame)> = Vec::new();
+    let (mut inside, mut inverse, mut above) =
+        (Frame::default(), Frame::default(), Frame::default());
     let mut badges: Vec<(Rgb, Frame)> = Vec::new();
     let (mut accent, mut lines, mut values) =
         (Frame::default(), Frame::default(), Frame::default());
@@ -582,6 +754,52 @@ pub fn draw(
         let pn = &layout.nodes[v];
         let id = nd.id.clone();
         let (x, y) = (pn.cx - pn.w / 2.0, pn.cy - pn.h / 2.0);
+        if nd.shape != NodeShape::Box {
+            let r = match nd.shape {
+                NodeShape::Circle | NodeShape::FilledCircle => pn.w.min(pn.h) / 2.0,
+                NodeShape::Square | NodeShape::FilledSquare => 1.5,
+                _ => 0.0,
+            };
+            let (fill, stroke) = match nd.shape {
+                NodeShape::Circle => (s.variable_fill, nd.stroke),
+                NodeShape::FilledCircle | NodeShape::FilledSquare => {
+                    (s.observed_fill, s.observed_fill)
+                }
+                NodeShape::Square => (s.card, nd.stroke),
+                _ => (s.card, s.card),
+            };
+            let key = (nd.shape, r.to_bits(), stroke);
+            let i = match shaped.iter().position(|(k, _)| *k == key) {
+                Some(i) => i,
+                None => {
+                    shaped.push((key, Frame::default()));
+                    shaped.len() - 1
+                }
+            };
+            let f = &mut shaped[i].1;
+            f.num("x0", x)
+                .num("x1", x + pn.w)
+                .num("y0", y)
+                .num("y1", y + pn.h);
+            f.txt("fill", hex(fill));
+            f.txt("tip", nd.tooltip.clone()).attrs(&nd.attrs);
+            let label = nd.lines.join(" ");
+            if label.is_empty() {
+                continue;
+            }
+            let target = match nd.shape {
+                NodeShape::FilledCircle => &mut inverse,
+                NodeShape::Square | NodeShape::FilledSquare => &mut above,
+                _ => &mut inside,
+            };
+            let ly = match nd.shape {
+                NodeShape::Square | NodeShape::FilledSquare => y - 4.0 - 0.36 * SMALL_PX,
+                _ => pn.cy,
+            };
+            target.num("x", pn.cx).num("y", ly);
+            target.txt("label", label).txt("of", id.clone());
+            continue;
+        }
         let f = by_colour(&mut boxes, nd.stroke);
         f.num("x0", x)
             .num("x1", x + pn.w)
@@ -669,6 +887,27 @@ pub fn draw(
             .layer_aes(aes)
             .layer_svg_attr("class", class("node"));
     }
+    for ((shape, r, stroke), mut f) in shaped {
+        let aes = f.attr_aes(rect_aes().fill("fill").tooltip("tip"));
+        let cls = format!(
+            "{} {}",
+            class("node"),
+            class(&format!("node-{}", shape.name()))
+        );
+        plot = plot
+            .geom_rect_with(
+                GeomRect {
+                    color: stroke,
+                    alpha: 1.0,
+                    line_width: if shape == NodeShape::Text { 0.0 } else { 1.2 },
+                    ..Default::default()
+                }
+                .with_radius(f64::from_bits(r)),
+            )
+            .layer_data(f.take(h))
+            .layer_aes(aes)
+            .layer_svg_attr("class", cls);
+    }
     // everything below: dims / lights with its node (`data-of`), inert
     let of = |a: Aes| a.group_wrap("of", "of");
     if !accent.is_empty() {
@@ -689,6 +928,9 @@ pub fn draw(
     for (mut f, size, colour, cls) in [
         (lines, LABEL_PX, s.heading, class("node-label")),
         (values, VALUE_PX, s.ink, class("node-value")),
+        (inside, LABEL_PX, s.heading, class("node-label")),
+        (inverse, LABEL_PX, s.card, class("node-label")),
+        (above, SMALL_PX, s.muted, class("node-label")),
     ] {
         if f.is_empty() {
             continue;
@@ -927,12 +1169,14 @@ mod tests {
                 label: (a == 0).then(|| "rows".to_string()),
                 attrs: vec![("edge".to_string(), Some(format!("{a}>{b}")))],
                 label_attrs: vec![("from".to_string(), Some(labels[a].to_string()))],
+                ..Default::default()
             })
             .collect();
         let lanes = ["Left".to_string(), "Right".to_string()];
         let svg = draw(
             &l,
             &lanes,
+            &[],
             &nodes,
             &edges,
             &GraphStyle::default(),
@@ -986,5 +1230,131 @@ mod tests {
         }
         assert!(svg.contains("data-lane=\"Right\""));
         assert!(svg.contains(">Left<") && svg.contains(">42<"));
+    }
+
+    /// A coin toss as a Forney-style factor graph: a Beta prior box, the
+    /// parameter's circle, an equality node, Bernoulli boxes and observed
+    /// circles in a plate; undirected edges with interface names near the
+    /// factor.
+    #[test]
+    fn draws_a_factor_graph_with_shapes_and_a_plate() {
+        let n = 3;
+        // (label, shape)
+        let mut spec = vec![
+            ("Beta", NodeShape::Box),
+            ("θ", NodeShape::Circle),
+            ("=", NodeShape::Square),
+        ];
+        for _ in 0..n {
+            spec.push(("Ber", NodeShape::Box));
+        }
+        for _ in 0..n {
+            spec.push(("y", NodeShape::FilledCircle));
+        }
+        spec.push(("2.0", NodeShape::Text));
+        let sizes: Vec<NodeBox> = spec.iter().map(|(l, sh)| node_size(*sh, l)).collect();
+        // (from, to, interface)
+        let mut links = vec![(0, 1, "out"), (1, 2, ""), (9, 0, "a")];
+        for i in 0..n {
+            links.push((2, 3 + i, "p"));
+            links.push((3 + i, 3 + n + i, "out"));
+        }
+        let gnodes: Vec<GraphNode> = sizes
+            .iter()
+            .map(|b| GraphNode {
+                w: b.w,
+                h: b.h,
+                ..Default::default()
+            })
+            .collect();
+        let gedges: Vec<GraphEdge> = links
+            .iter()
+            .map(|&(a, b, _)| GraphEdge {
+                from: a,
+                to: b,
+                label_w: None,
+            })
+            .collect();
+        // a plate reaches past its nodes: room for it in the margin
+        let params = LayeredParams {
+            margin: 32.0,
+            ..Default::default()
+        };
+        let l = layered(&gnodes, &gedges, &params);
+        let nodes: Vec<DrawNode> = spec
+            .iter()
+            .zip(&sizes)
+            .enumerate()
+            .map(|(i, ((_, shape), b))| DrawNode {
+                id: format!("n{i}"),
+                shape: *shape,
+                lines: b.lines.clone(),
+                stroke: (60, 60, 60),
+                tooltip: b.lines.join(" "),
+                attrs: vec![("node".to_string(), Some(format!("n{i}")))],
+                ..Default::default()
+            })
+            .collect();
+        let edges: Vec<DrawEdge> = links
+            .iter()
+            .map(|&(a, b, iface)| DrawEdge {
+                colour: (90, 90, 90),
+                width: 1.2,
+                undirected: true,
+                label: (!iface.is_empty()).then(|| iface.to_string()),
+                // the interface name near the factor
+                label_at: Some(if spec[b].1 == NodeShape::Box {
+                    0.8
+                } else {
+                    0.2
+                }),
+                attrs: vec![("edge".to_string(), Some(format!("{a}>{b}")))],
+                ..Default::default()
+            })
+            .collect();
+        let plates = [Plate {
+            label: "i = 1..3".to_string(),
+            nodes: (3..3 + 2 * n).collect(),
+        }];
+        let style = GraphStyle::default();
+        let svg = draw(
+            &l,
+            &[],
+            &plates,
+            &nodes,
+            &edges,
+            &style,
+            crate::theme::presets::theme_void(),
+        )
+        .render_svg_native_at(0.0, 0.0, l.w.ceil() as u32, l.h.ceil() as u32)
+        .unwrap();
+        // every node is a mark, shapes classed, undirected: no arrowheads
+        assert_eq!(svg.matches("data-node=").count(), spec.len());
+        for shape in ["circle", "filled-circle", "square", "text"] {
+            assert!(svg.contains(&format!("gg-graph-node-{shape}")), "{shape}");
+        }
+        assert!(
+            !svg.contains("<polygon"),
+            "an undirected edge has no arrowhead"
+        );
+        assert_eq!(svg.matches("data-edge=").count(), links.len());
+        // the plate, and its label
+        assert!(svg.contains("data-plate=\"i = 1..3\"") && svg.contains(">i = 1..3<"));
+        // the observed circles' dark fill
+        assert!(svg.contains(&format!(
+            "fill=\"{}\"",
+            hex(style.observed_fill).to_uppercase()
+        )));
+        // no two nodes overlap
+        for (i, a) in l.nodes.iter().enumerate() {
+            for b in &l.nodes[i + 1..] {
+                let apart = (a.cx - b.cx).abs() >= (a.w + b.w) / 2.0
+                    || (a.cy - b.cy).abs() >= (a.h + b.h) / 2.0;
+                assert!(apart, "overlap");
+            }
+        }
+        // the circle is round: rx is half its width
+        let c = &l.nodes[1];
+        assert!(svg.contains(&format!("rx=\"{:.2}\"", c.w / 2.0)), "{}", c.w);
     }
 }
