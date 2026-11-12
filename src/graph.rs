@@ -1357,4 +1357,138 @@ mod tests {
         let c = &l.nodes[1];
         assert!(svg.contains(&format!("rx=\"{:.2}\"", c.w / 2.0)), "{}", c.w);
     }
+
+    /// An HMM over five slices with learned transition (A) and observation
+    /// (B) matrices, in bands param / state / obs: the state chain is one
+    /// straight row, each observation below its state.
+    #[test]
+    fn banded_hmm_keeps_the_state_chain_straight() {
+        use crate::graph_layout::{banded, BandedParams};
+        let t_n = 5;
+        // (label, shape, band)
+        let mut spec: Vec<(String, NodeShape, usize)> = vec![
+            ("Dir".into(), NodeShape::Box, 0),   // 0: prior on A
+            ("A".into(), NodeShape::Square, 0),  // 1: = of A
+            ("Dir".into(), NodeShape::Box, 0),   // 2: prior on B
+            ("B".into(), NodeShape::Square, 0),  // 3: = of B
+            ("Cat".into(), NodeShape::Box, 1),   // 4: initial state prior
+            ("s₀".into(), NodeShape::Circle, 1), // 5
+        ];
+        let mut links: Vec<(usize, usize, &str)> =
+            vec![(0, 1, "out"), (2, 3, "out"), (4, 5, "out")];
+        let mut prev = 5;
+        for t in 1..=t_n {
+            let tr = spec.len();
+            spec.push(("T".into(), NodeShape::Box, 1));
+            let eq = spec.len();
+            spec.push((format!("s{t}"), NodeShape::Square, 1));
+            let ob = spec.len();
+            spec.push(("T".into(), NodeShape::Box, 2));
+            let x = spec.len();
+            spec.push((format!("x{t}"), NodeShape::FilledCircle, 2));
+            links.extend([
+                (prev, tr, "in"),
+                (1, tr, "a"),
+                (tr, eq, "out"),
+                (eq, ob, "in"),
+                (3, ob, "a"),
+                (ob, x, "out"),
+            ]);
+            prev = eq;
+        }
+        let sizes: Vec<NodeBox> = spec.iter().map(|(l, sh, _)| node_size(*sh, l)).collect();
+        let gnodes: Vec<GraphNode> = spec
+            .iter()
+            .zip(&sizes)
+            .map(|((_, _, b), s)| GraphNode {
+                w: s.w,
+                h: s.h,
+                lane: Some(*b),
+                ..Default::default()
+            })
+            .collect();
+        let gedges: Vec<GraphEdge> = links
+            .iter()
+            .map(|&(a, b, _)| GraphEdge {
+                from: a,
+                to: b,
+                label_w: None,
+            })
+            .collect();
+        let l = banded(
+            &gnodes,
+            &gedges,
+            &BandedParams {
+                bands: 3,
+                margin: 32.0,
+                ..Default::default()
+            },
+        );
+        // the chain: every transition and state node on one row
+        let chain: Vec<usize> = (0..spec.len())
+            .filter(|&i| spec[i].2 == 1 && i != 4)
+            .collect();
+        let y = l.nodes[chain[0]].cy;
+        for &i in &chain {
+            assert_eq!(l.nodes[i].cy, y, "{} off the row", spec[i].0);
+        }
+        // each observation factor straight below its state's = node
+        for t in 0..t_n {
+            let (eq, ob) = (6 + 4 * t + 1, 6 + 4 * t + 2);
+            assert_eq!(l.nodes[eq].cx, l.nodes[ob].cx, "slice {t}");
+            assert!(l.nodes[ob].cy > y);
+        }
+        // nothing overlaps
+        for (i, a) in l.nodes.iter().enumerate() {
+            for b in &l.nodes[i + 1..] {
+                assert!(
+                    (a.cx - b.cx).abs() >= (a.w + b.w) / 2.0
+                        || (a.cy - b.cy).abs() >= (a.h + b.h) / 2.0
+                );
+            }
+        }
+        let nodes: Vec<DrawNode> = spec
+            .iter()
+            .zip(&sizes)
+            .enumerate()
+            .map(|(i, ((_, shape, _), b))| DrawNode {
+                id: format!("n{i}"),
+                shape: *shape,
+                lines: b.lines.clone(),
+                stroke: (60, 60, 60),
+                ..Default::default()
+            })
+            .collect();
+        let edges: Vec<DrawEdge> = links
+            .iter()
+            .map(|&(_, b, iface)| DrawEdge {
+                colour: (90, 90, 90),
+                width: 1.2,
+                undirected: true,
+                label: Some(iface.to_string()),
+                label_at: Some(if spec[b].1 == NodeShape::Box {
+                    0.8
+                } else {
+                    0.2
+                }),
+                ..Default::default()
+            })
+            .collect();
+        let lanes = ["param".to_string(), "state".to_string(), "obs".to_string()];
+        let svg = draw(
+            &l,
+            &lanes,
+            &[],
+            &nodes,
+            &edges,
+            &GraphStyle::default(),
+            crate::theme::presets::theme_void(),
+        )
+        .render_svg_native_at(0.0, 0.0, l.w.ceil() as u32, l.h.ceil() as u32)
+        .unwrap();
+        if let Ok(path) = std::env::var("GGPLOT_GRAPH_SVG") {
+            std::fs::write(path, &svg).unwrap();
+        }
+        assert_eq!(svg.matches("data-lane=").count(), 3);
+    }
 }
