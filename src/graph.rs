@@ -230,6 +230,9 @@ impl NodeShape {
 
 /// How far from its end an edge label set near that end sits, at most (px).
 const LABEL_REACH: f64 = 22.0;
+/// A belief curve's size over its node (px).
+pub const BELIEF_W: f64 = 46.0;
+pub const BELIEF_H: f64 = 16.0;
 /// A small square's side (px).
 const SQUARE: f64 = 14.0;
 /// A glyph factor's side (px) and its glyph's size.
@@ -304,6 +307,9 @@ pub struct DrawNode {
     pub accent: Option<Rgb>,
     /// A sparkline (two values or more) along the bottom, and its colour.
     pub spark: Option<(Vec<f64>, Rgb)>,
+    /// A belief curve over the node (a factor graph variable's density):
+    /// heights 0..=1 at evenly spaced points (three or more), and its colour.
+    pub belief: Option<(Vec<f64>, Rgb)>,
     pub tooltip: String,
     /// `data-*` on the box (the hit target); every node lists the same
     /// names, in the same order.
@@ -778,6 +784,7 @@ pub fn draw(
     let mut order: Vec<usize> = (0..nodes.len().min(layout.nodes.len())).collect();
     order.sort_by_key(|&i| (layout.nodes[i].order, i));
     let mut boxes: Vec<(Rgb, Frame)> = Vec::new();
+    let mut beliefs = Frame::default();
     // shaped nodes, a layer per (shape, corner radius, outline)
     let mut shaped: Vec<((NodeShape, u64, Rgb), Frame)> = Vec::new();
     let (mut inside, mut inverse, mut above, mut glyphs) = (
@@ -800,6 +807,29 @@ pub fn draw(
         let pn = &layout.nodes[v];
         let id = nd.id.clone();
         let (x, y) = (pn.cx - pn.w / 2.0, pn.cy - pn.h / 2.0);
+        // the belief curve sits over the node (over a square's label)
+        if let Some((hs, col)) = nd.belief.as_ref().filter(|(h, _)| h.len() >= 3) {
+            let above = matches!(nd.shape, NodeShape::Square | NodeShape::FilledSquare);
+            let base = y - if above { 17.0 } else { 3.0 };
+            let x0 = pn.cx - BELIEF_W / 2.0;
+            let last = (hs.len() - 1) as f64;
+            let mut pts: Vec<(f64, f64)> = hs
+                .iter()
+                .enumerate()
+                .map(|(i, &h)| {
+                    (
+                        x0 + BELIEF_W * i as f64 / last,
+                        base - h.clamp(0.0, 1.0) * BELIEF_H,
+                    )
+                })
+                .collect();
+            pts.push((x0 + BELIEF_W, base));
+            pts.push((x0, base));
+            for (px, py) in pts {
+                beliefs.num("x", px).num("y", py).txt("g", id.clone());
+                beliefs.txt("fill", hex(*col)).txt("of", id.clone());
+            }
+        }
         if nd.shape != NodeShape::Box {
             let r = match nd.shape {
                 NodeShape::Circle | NodeShape::FilledCircle => pn.w.min(pn.h) / 2.0,
@@ -955,6 +985,26 @@ pub fn draw(
             .layer_data(f.take(h))
             .layer_aes(aes)
             .layer_svg_attr("class", cls);
+    }
+    if !beliefs.is_empty() {
+        plot = plot
+            .geom_polygon_with(GeomPolygon {
+                alpha: 0.45,
+                line_width: 0.0,
+                ..Default::default()
+            })
+            .layer_data(beliefs.take(h))
+            .layer_aes(
+                Aes::new()
+                    .x("x")
+                    .y("y")
+                    .group("g")
+                    .fill("fill")
+                    .group_wrap("of", "of"),
+            )
+            .decorative()
+            .layer_svg_attrs(inert)
+            .layer_svg_attr("class", class("node-belief"));
     }
     // everything below: dims / lights with its node (`data-of`), inert
     let of = |a: Aes| a.group_wrap("of", "of");
@@ -1341,6 +1391,8 @@ mod tests {
                 stroke: (60, 60, 60),
                 tooltip: b.lines.join(" "),
                 attrs: vec![("node".to_string(), Some(format!("n{i}")))],
+                // θ's belief curve
+                belief: (i == 1).then(|| (vec![0.0, 0.3, 1.0, 0.3, 0.0], (120, 80, 200))),
                 ..Default::default()
             })
             .collect();
@@ -1383,10 +1435,13 @@ mod tests {
             assert!(svg.contains(&format!("gg-graph-node-{shape}")), "{shape}");
         }
         assert!(
-            !svg.contains("<polygon"),
+            !svg.contains("data-part=\"arrow\""),
             "an undirected edge has no arrowhead"
         );
         assert_eq!(svg.matches("data-edge=").count(), links.len());
+        // θ's belief curve: a filled shape over its circle, in its group
+        assert!(svg.contains("gg-graph-node-belief"), "belief layer");
+        assert!(svg.contains("fill=\"#7850C8\""), "belief colour");
         // the plate, and its label
         assert!(svg.contains("data-plate=\"i = 1..3\"") && svg.contains(">i = 1..3<"));
         // the observed circles' dark fill
