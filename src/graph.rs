@@ -224,6 +224,9 @@ pub enum NodeShape {
     /// A small square box with a short glyph centred in it (a factor drawn
     /// as `𝒩`, `Γ`, `Ber`, …): uniform, so a factor graph stays compact.
     Glyph,
+    /// A small filled square at the end of an edge, its label beside it (to
+    /// the right): an observation in Forney style, where data enters.
+    Terminal,
 }
 
 impl NodeShape {
@@ -236,6 +239,7 @@ impl NodeShape {
             NodeShape::FilledSquare => "filled-square",
             NodeShape::Text => "text",
             NodeShape::Glyph => "glyph",
+            NodeShape::Terminal => "terminal",
         }
     }
 }
@@ -247,6 +251,8 @@ pub const BELIEF_W: f64 = 46.0;
 pub const BELIEF_H: f64 = 16.0;
 /// A small square's side (px).
 const SQUARE: f64 = 14.0;
+/// A terminal's side (px).
+const TERMINAL: f64 = 11.0;
 /// A glyph factor's side (px) and its glyph's size.
 const GLYPH_SIDE: f64 = 34.0;
 const GLYPH_PX: f64 = 15.0;
@@ -269,6 +275,11 @@ pub fn node_size(shape: NodeShape, label: &str) -> NodeBox {
         NodeShape::Square | NodeShape::FilledSquare => NodeBox {
             w: SQUARE,
             h: SQUARE,
+            lines: if label.is_empty() { Vec::new() } else { one() },
+        },
+        NodeShape::Terminal => NodeBox {
+            w: TERMINAL,
+            h: TERMINAL,
             lines: if label.is_empty() { Vec::new() } else { one() },
         },
         NodeShape::Text => NodeBox {
@@ -362,6 +373,10 @@ pub struct DrawEdge {
     pub label_at: Option<f64>,
     /// No arrowhead (a factor graph's edges).
     pub undirected: bool,
+    /// The label names a variable (Forney style: the edge is the variable):
+    /// set in [`GraphStyle::math_font`] when there is one, in the heading
+    /// colour.
+    pub label_math: bool,
     /// `data-*` on the path; every edge lists the same names, in the same
     /// order.
     pub attrs: Vec<DataAttr>,
@@ -675,6 +690,8 @@ pub fn draw(
 
     // edges (under the nodes): one path per edge, arrowed ones first
     let (mut ef, mut uf, mut lf) = (Frame::default(), Frame::default(), Frame::default());
+    // a variable's name on its edge (Forney style), in the math font
+    let mut lmf = Frame::default();
     for (k, e) in edges.iter().enumerate() {
         let Some(route) = layout.edges.get(k) else {
             continue;
@@ -738,10 +755,14 @@ pub fn draw(
                 }
                 None => edge_label_at(route, l, &layout.nodes),
             };
-            lf.num("x", mx)
-                .num("y", mid_of_baseline(my - 4.0, SMALL_PX));
-            lf.txt("label", l.clone());
-            lf.attrs(&e.label_attrs);
+            let f = if e.label_math && s.math_font.is_some() {
+                &mut lmf
+            } else {
+                &mut lf
+            };
+            f.num("x", mx).num("y", mid_of_baseline(my - 4.0, SMALL_PX));
+            f.txt("label", l.clone());
+            f.attrs(&e.label_attrs);
         }
     }
     for (mut f, arrowed) in [(ef, true), (uf, false)] {
@@ -776,6 +797,25 @@ pub fn draw(
             .layer_aes(aes)
             .layer_svg_attr("class", class("edge"));
     }
+    if !lmf.is_empty() {
+        let aes = lmf.attr_aes(Aes::new().x("x").y("y").label("label"));
+        plot = plot
+            .geom_text_with(
+                GeomText {
+                    size: LABEL_PX + 1.0,
+                    color: s.heading,
+                    fontface: FontFace::Italic,
+                    fontfamily: s.math_font.clone().unwrap_or_default(),
+                    ..Default::default()
+                }
+                .bg_colour(s.card)
+                .bg_r(2.0),
+            )
+            .layer_data(lmf.take(h))
+            .layer_aes(aes)
+            .layer_svg_attrs(inert)
+            .layer_svg_attrs([("aria-hidden", "true"), ("class", &*class("edge-label"))]);
+    }
     if !lf.is_empty() {
         // text directly on the line, a card-coloured halo keeping it legible
         let aes = lf.attr_aes(Aes::new().x("x").y("y").label("label"));
@@ -804,7 +844,8 @@ pub fn draw(
     let mut priors = Frame::default();
     // shaped nodes, a layer per (shape, corner radius, outline)
     let mut shaped: Vec<((NodeShape, u64, Rgb), Frame)> = Vec::new();
-    let (mut inside, mut inverse, mut above, mut glyphs, mut texts) = (
+    let (mut inside, mut inverse, mut above, mut glyphs, mut texts, mut beside) = (
+        Frame::default(),
         Frame::default(),
         Frame::default(),
         Frame::default(),
@@ -861,13 +902,13 @@ pub fn draw(
         if nd.shape != NodeShape::Box {
             let r = match nd.shape {
                 NodeShape::Circle | NodeShape::FilledCircle => pn.w.min(pn.h) / 2.0,
-                NodeShape::Square | NodeShape::FilledSquare => 1.5,
+                NodeShape::Square | NodeShape::FilledSquare | NodeShape::Terminal => 1.5,
                 NodeShape::Glyph => 4.0,
                 _ => 0.0,
             };
             let (fill, stroke) = match nd.shape {
                 NodeShape::Circle => (s.variable_fill, nd.stroke),
-                NodeShape::FilledCircle | NodeShape::FilledSquare => {
+                NodeShape::FilledCircle | NodeShape::FilledSquare | NodeShape::Terminal => {
                     (s.observed_fill, s.observed_fill)
                 }
                 NodeShape::Square => (s.card, nd.stroke),
@@ -899,13 +940,19 @@ pub fn draw(
                 NodeShape::Square | NodeShape::FilledSquare => &mut above,
                 // a constant is a number: upright, never the math italic
                 NodeShape::Text => &mut texts,
+                NodeShape::Terminal => &mut beside,
                 _ => &mut inside,
             };
             let ly = match nd.shape {
                 NodeShape::Square | NodeShape::FilledSquare => y - 4.0 - 0.36 * SMALL_PX,
                 _ => pn.cy,
             };
-            target.num("x", pn.cx).num("y", ly);
+            // a terminal's label starts just right of it
+            let lx = match nd.shape {
+                NodeShape::Terminal => x + pn.w + 5.0,
+                _ => pn.cx,
+            };
+            target.num("x", lx).num("y", ly);
             target.txt("label", label).txt("of", id.clone());
             continue;
         }
@@ -1074,19 +1121,21 @@ pub fn draw(
             .decorative()
             .layer_svg_attrs(inert);
     }
-    for (mut f, size, colour, cls, math) in [
-        (lines, LABEL_PX, s.heading, class("node-label"), false),
-        (values, VALUE_PX, s.ink, class("node-value"), false),
-        (inside, LABEL_PX, s.heading, class("node-label"), true),
-        (texts, LABEL_PX, s.heading, class("node-label"), false),
-        (inverse, LABEL_PX, s.card, class("node-label"), true),
-        (above, SMALL_PX, s.muted, class("node-label"), true),
+    for (mut f, size, colour, cls, math, hjust) in [
+        (lines, LABEL_PX, s.heading, class("node-label"), false, 0.5),
+        (values, VALUE_PX, s.ink, class("node-value"), false, 0.5),
+        (inside, LABEL_PX, s.heading, class("node-label"), true, 0.5),
+        (texts, LABEL_PX, s.heading, class("node-label"), false, 0.5),
+        (inverse, LABEL_PX, s.card, class("node-label"), true, 0.5),
+        (above, SMALL_PX, s.muted, class("node-label"), true, 0.5),
+        (beside, LABEL_PX, s.heading, class("node-label"), true, 0.0),
         (
             glyphs,
             GLYPH_PX,
             s.glyph_ink.unwrap_or(s.heading),
             class("node-label"),
             true,
+            0.5,
         ),
     ] {
         if f.is_empty() {
@@ -1103,6 +1152,7 @@ pub fn draw(
                 color: colour,
                 fontface,
                 fontfamily,
+                hjust,
                 ..Default::default()
             })
             .layer_data(f.take(h))
@@ -1393,6 +1443,128 @@ mod tests {
         }
         assert!(svg.contains("data-lane=\"Right\""));
         assert!(svg.contains(">Left<") && svg.contains(">42<"));
+    }
+
+    /// Forney style (#1172): an observation as a terminal square, its label
+    /// beside it; a variable as a labelled edge, its name in the math font.
+    #[test]
+    fn forney_terminals_and_variable_edges() {
+        use crate::graph_layout::{layered, GraphEdge, GraphNode, LayeredParams};
+        let spec = [
+            ("Cat", NodeShape::Glyph),
+            ("T", NodeShape::Glyph),
+            ("x₁", NodeShape::Terminal),
+        ];
+        let sizes: Vec<NodeBox> = spec.iter().map(|(l, sh)| node_size(*sh, l)).collect();
+        assert_eq!((sizes[2].w, sizes[2].h), (TERMINAL, TERMINAL));
+        let gnodes: Vec<GraphNode> = sizes
+            .iter()
+            .map(|b| GraphNode {
+                w: b.w,
+                h: b.h,
+                ..Default::default()
+            })
+            .collect();
+        let gedges = vec![
+            GraphEdge {
+                from: 0,
+                to: 1,
+                label_w: None,
+            },
+            GraphEdge {
+                from: 1,
+                to: 2,
+                label_w: None,
+            },
+        ];
+        let l = layered(&gnodes, &gedges, &LayeredParams::default());
+        let nodes: Vec<DrawNode> = spec
+            .iter()
+            .zip(&sizes)
+            .enumerate()
+            .map(|(i, ((_, shape), b))| DrawNode {
+                id: format!("n{i}"),
+                shape: *shape,
+                lines: b.lines.clone(),
+                stroke: (13, 148, 136),
+                tooltip: b.lines.join(" "),
+                attrs: vec![("node".to_string(), Some(format!("n{i}")))],
+                ..Default::default()
+            })
+            .collect();
+        let edges = vec![
+            // the variable s₀ between the two factors
+            DrawEdge {
+                colour: (13, 148, 136),
+                width: 1.2,
+                undirected: true,
+                label: Some("s₀".to_string()),
+                label_math: true,
+                ..Default::default()
+            },
+            DrawEdge {
+                colour: (13, 148, 136),
+                width: 1.2,
+                undirected: true,
+                ..Default::default()
+            },
+        ];
+        let render = |style: &GraphStyle| {
+            draw(
+                &l,
+                &[],
+                &[],
+                &nodes,
+                &edges,
+                style,
+                crate::theme::presets::theme_void(),
+            )
+            .render_svg_native_at(0.0, 0.0, l.w.ceil() as u32 + 40, l.h.ceil() as u32)
+            .unwrap()
+        };
+        let math = GraphStyle {
+            math_font: Some("STIX Two Math, serif".to_string()),
+            ..GraphStyle::default()
+        };
+        let svg = render(&math);
+        let el = |text: &str| {
+            let at = svg
+                .find(&format!(">{text}</text>"))
+                .unwrap_or_else(|| panic!("{text}"));
+            svg[svg[..at].rfind('<').unwrap()..at].to_string()
+        };
+        // the terminal: a filled square, its label starting beside it
+        assert!(svg.contains("gg-graph-node-terminal"), "terminal mark");
+        let x1 = el("x₁");
+        assert!(
+            x1.contains("text-anchor=\"start\"") && x1.contains("italic"),
+            "{x1}"
+        );
+        let t = &l.nodes[2];
+        let lx: f64 = x1
+            .split("x=\"")
+            .nth(1)
+            .unwrap()
+            .split('"')
+            .next()
+            .unwrap()
+            .parse()
+            .unwrap();
+        assert!(
+            lx > t.cx + t.w / 2.0,
+            "the label right of the square: {lx} vs {}",
+            t.cx
+        );
+        // the variable's edge label in the math font
+        let s0 = el("s₀");
+        assert!(
+            s0.contains("STIX Two Math") && s0.contains("italic"),
+            "{s0}"
+        );
+        // without a math font: a plain edge label
+        let plain = render(&GraphStyle::default());
+        let at = plain.find(">s₀</text>").unwrap();
+        assert!(!plain[plain[..at].rfind('<').unwrap()..at].contains("italic"));
     }
 
     /// A coin toss as a Forney-style factor graph: a Beta prior box, the

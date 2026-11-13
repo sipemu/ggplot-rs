@@ -5,6 +5,15 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.53.0] — 2026-11-14
+
+### Added
+- `NodeShape::Terminal`: a small filled square at the end of an edge, its
+  label beside it (to the right) — an observation in Forney style.
+- `DrawEdge::label_math`: the edge's label names a variable (Forney style:
+  the edge is the variable), set in `GraphStyle::math_font` when there is
+  one (DataZooDE/anofox-visualization#1172).
+
 ## [0.52.0] — 2026-11-13
 
 ### Added
