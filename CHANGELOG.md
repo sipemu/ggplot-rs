@@ -13,6 +13,12 @@ All notable changes to this project are documented here. The format follows
   compact; `node_size` sizes it (34 px, wider only for a longer glyph)
   (DataZooDE/anofox-visualization#1166).
 
+### Changed
+- `DrawEdge::label_at` near an end places the label at most 22 px from that
+  end. `GraphLayout::routed` marks the edges `banded` routes as a bus (each
+  entering a shared target on its own line); `graph::draw` leaves their
+  labels to the tooltip.
+
 ## [0.48.1] — 2026-11-13
 
 ### Changed

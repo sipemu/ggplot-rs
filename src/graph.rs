@@ -228,6 +228,8 @@ impl NodeShape {
     }
 }
 
+/// How far from its end an edge label set near that end sits, at most (px).
+const LABEL_REACH: f64 = 22.0;
 /// A small square's side (px).
 const SQUARE: f64 = 14.0;
 /// A glyph factor's side (px) and its glyph's size.
@@ -684,9 +686,34 @@ pub fn draw(
             ef.opt("cls", e.class.clone()).txt("tip", e.tooltip.clone());
             ef.attrs(&e.attrs);
         }
-        if let Some(l) = &e.label {
+        // a bus-routed edge's label is left to its tooltip: on the shared
+        // lane or at a shared entry it would only clutter
+        let routed = layout.routed.get(k).copied().unwrap_or(false);
+        if let Some(l) = e.label.as_ref().filter(|_| !routed) {
             let (mx, my) = match e.label_at {
-                Some(t) => point_at(route, t.clamp(0.0, 1.0)),
+                // near an end: at most LABEL_REACH px from it
+                Some(t) => {
+                    let t = t.clamp(0.0, 1.0);
+                    let len: f64 = route
+                        .windows(2)
+                        .map(|w| ((w[1].0 - w[0].0).powi(2) + (w[1].1 - w[0].1).powi(2)).sqrt())
+                        .sum();
+                    let reach = |f: f64| {
+                        if len > 0.0 {
+                            (len * f).min(LABEL_REACH) / len
+                        } else {
+                            f
+                        }
+                    };
+                    point_at(
+                        route,
+                        if t >= 0.5 {
+                            1.0 - reach(1.0 - t)
+                        } else {
+                            reach(t)
+                        },
+                    )
+                }
                 None => edge_label_at(route, l, &layout.nodes),
             };
             lf.num("x", mx)

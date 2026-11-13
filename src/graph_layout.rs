@@ -99,6 +99,9 @@ pub struct GraphLayout {
     pub edges: Vec<Vec<(f64, f64)>>,
     /// Edges drawn against the layer order (they close a cycle).
     pub back: Vec<bool>,
+    /// Per edge: routed orthogonally around other boxes (`banded`'s bus);
+    /// a drawing may leave such an edge's label to its tooltip.
+    pub routed: Vec<bool>,
     pub layers: usize,
     /// Swimlane bands: (lane, x0, y0, x1, y1).
     pub bands: Vec<(usize, f64, f64, f64, f64)>,
@@ -300,6 +303,7 @@ pub fn banded(nodes: &[GraphNode], edges: &[GraphEdge], p: &BandedParams) -> Gra
         .collect();
     let mut edge_pts = vec![Vec::new(); edges.len()];
     let mut back = vec![false; edges.len()];
+    let mut routed = vec![false; edges.len()];
     // An edge into another band and another column (a parameter feeding
     // factors along a chain) runs orthogonally, like a bus: out of its node's
     // side into the gap beside its column, along a lane of the channel
@@ -366,7 +370,10 @@ pub fn banded(nodes: &[GraphNode], edges: &[GraphEdge], p: &BandedParams) -> Gra
             } else {
                 b.cy + b.h / 2.0
             };
-            pts.extend([(b.cx, y), (b.cx, ey)]);
+            // each bus enters a shared target on its own line, as on its lane
+            let off = ((i - (us.len().max(1) - 1) as f64 / 2.0) * LANE)
+                .clamp(-b.w / 2.0 + 3.0, b.w / 2.0 - 3.0);
+            pts.extend([(b.cx + off, y), (b.cx + off, ey)]);
         } else {
             let (ex, tg) = side(b, col[v], !right);
             pts.extend([(tg, y), (tg, b.cy), (ex, b.cy)]);
@@ -375,6 +382,7 @@ pub fn banded(nodes: &[GraphNode], edges: &[GraphEdge], p: &BandedParams) -> Gra
     };
     for &(_, _, k, rev) in &dag {
         let (u, v) = (edges[k].from, edges[k].to);
+        routed[k] = bussed(u, v);
         edge_pts[k] = if bussed(u, v) {
             route(u, v)
         } else {
@@ -397,7 +405,9 @@ pub fn banded(nodes: &[GraphNode], edges: &[GraphEdge], p: &BandedParams) -> Gra
     } else {
         Vec::new()
     };
-    finish(pn, edge_pts, back, ncol, bands, p.margin)
+    let mut g = finish(pn, edge_pts, back, ncol, bands, p.margin);
+    g.routed = routed;
+    g
 }
 
 /// A DAG edge: `(u, v, edge index, reversed)`.
@@ -1133,6 +1143,7 @@ fn finish(
     GraphLayout {
         w: r(x1 - x0 + 2.0 * margin),
         h: r(y1 - y0 + 2.0 * margin),
+        routed: vec![false; edge_pts.len()],
         nodes: pn,
         edges: edge_pts,
         back,
