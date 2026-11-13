@@ -5,6 +5,14 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.50.0] — 2026-11-13
+
+### Added
+- `DrawNode::belief`: a belief curve over a node (heights 0..=1 at evenly
+  spaced points, a colour), drawn as a filled shape `BELIEF_W` × `BELIEF_H`
+  px over the node (over a square's label) in the node's `data-of` group,
+  class `<prefix>node-belief` (DataZooDE/anofox-visualization#1166).
+
 ## [0.49.0] — 2026-11-13
 
 ### Added
