@@ -209,6 +209,9 @@ pub enum NodeShape {
     FilledSquare,
     /// The label alone.
     Text,
+    /// A small square box with a short glyph centred in it (a factor drawn
+    /// as `𝒩`, `Γ`, `Ber`, …): uniform, so a factor graph stays compact.
+    Glyph,
 }
 
 impl NodeShape {
@@ -220,12 +223,16 @@ impl NodeShape {
             NodeShape::Square => "square",
             NodeShape::FilledSquare => "filled-square",
             NodeShape::Text => "text",
+            NodeShape::Glyph => "glyph",
         }
     }
 }
 
 /// A small square's side (px).
 const SQUARE: f64 = 14.0;
+/// A glyph factor's side (px) and its glyph's size.
+const GLYPH_SIDE: f64 = 34.0;
+const GLYPH_PX: f64 = 15.0;
 
 /// The size a node of `shape` needs for `label` (a [`NodeShape::Box`] is
 /// [`node_box`] without a value, badge or sparkline). A circle fits its
@@ -252,6 +259,14 @@ pub fn node_size(shape: NodeShape, label: &str) -> NodeBox {
             h: 20.0,
             lines: one(),
         },
+        NodeShape::Glyph => {
+            let side = (text_w(label, GLYPH_PX, true) + 14.0).max(GLYPH_SIDE);
+            NodeBox {
+                w: side,
+                h: GLYPH_SIDE,
+                lines: one(),
+            }
+        }
     }
 }
 
@@ -738,8 +753,12 @@ pub fn draw(
     let mut boxes: Vec<(Rgb, Frame)> = Vec::new();
     // shaped nodes, a layer per (shape, corner radius, outline)
     let mut shaped: Vec<((NodeShape, u64, Rgb), Frame)> = Vec::new();
-    let (mut inside, mut inverse, mut above) =
-        (Frame::default(), Frame::default(), Frame::default());
+    let (mut inside, mut inverse, mut above, mut glyphs) = (
+        Frame::default(),
+        Frame::default(),
+        Frame::default(),
+        Frame::default(),
+    );
     let mut badges: Vec<(Rgb, Frame)> = Vec::new();
     let (mut accent, mut lines, mut values) =
         (Frame::default(), Frame::default(), Frame::default());
@@ -758,6 +777,7 @@ pub fn draw(
             let r = match nd.shape {
                 NodeShape::Circle | NodeShape::FilledCircle => pn.w.min(pn.h) / 2.0,
                 NodeShape::Square | NodeShape::FilledSquare => 1.5,
+                NodeShape::Glyph => 4.0,
                 _ => 0.0,
             };
             let (fill, stroke) = match nd.shape {
@@ -765,7 +785,7 @@ pub fn draw(
                 NodeShape::FilledCircle | NodeShape::FilledSquare => {
                     (s.observed_fill, s.observed_fill)
                 }
-                NodeShape::Square => (s.card, nd.stroke),
+                NodeShape::Square | NodeShape::Glyph => (s.card, nd.stroke),
                 _ => (s.card, s.card),
             };
             let key = (nd.shape, r.to_bits(), stroke);
@@ -788,6 +808,7 @@ pub fn draw(
                 continue;
             }
             let target = match nd.shape {
+                NodeShape::Glyph => &mut glyphs,
                 NodeShape::FilledCircle => &mut inverse,
                 NodeShape::Square | NodeShape::FilledSquare => &mut above,
                 _ => &mut inside,
@@ -931,6 +952,7 @@ pub fn draw(
         (inside, LABEL_PX, s.heading, class("node-label")),
         (inverse, LABEL_PX, s.card, class("node-label")),
         (above, SMALL_PX, s.muted, class("node-label")),
+        (glyphs, GLYPH_PX, s.heading, class("node-label")),
     ] {
         if f.is_empty() {
             continue;
@@ -1367,11 +1389,11 @@ mod tests {
         let t_n = 5;
         // (label, shape, band)
         let mut spec: Vec<(String, NodeShape, usize)> = vec![
-            ("Dir".into(), NodeShape::Box, 0),   // 0: prior on A
+            ("Dir".into(), NodeShape::Glyph, 0), // 0: prior on A
             ("A".into(), NodeShape::Square, 0),  // 1: = of A
-            ("Dir".into(), NodeShape::Box, 0),   // 2: prior on B
+            ("Dir".into(), NodeShape::Glyph, 0), // 2: prior on B
             ("B".into(), NodeShape::Square, 0),  // 3: = of B
-            ("Cat".into(), NodeShape::Box, 1),   // 4: initial state prior
+            ("Cat".into(), NodeShape::Glyph, 1), // 4: initial state prior
             ("s₀".into(), NodeShape::Circle, 1), // 5
         ];
         let mut links: Vec<(usize, usize, &str)> =
@@ -1379,11 +1401,11 @@ mod tests {
         let mut prev = 5;
         for t in 1..=t_n {
             let tr = spec.len();
-            spec.push(("T".into(), NodeShape::Box, 1));
+            spec.push(("T".into(), NodeShape::Glyph, 1));
             let eq = spec.len();
             spec.push((format!("s{t}"), NodeShape::Square, 1));
             let ob = spec.len();
-            spec.push(("T".into(), NodeShape::Box, 2));
+            spec.push(("T".into(), NodeShape::Glyph, 2));
             let x = spec.len();
             spec.push((format!("x{t}"), NodeShape::FilledCircle, 2));
             links.extend([
@@ -1488,7 +1510,7 @@ mod tests {
                 width: 1.2,
                 undirected: true,
                 label: Some(iface.to_string()),
-                label_at: Some(if spec[b].1 == NodeShape::Box {
+                label_at: Some(if spec[b].1 == NodeShape::Glyph {
                     0.8
                 } else {
                     0.2

@@ -5,6 +5,14 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.49.0] — 2026-11-13
+
+### Added
+- `graph::NodeShape::Glyph`: a factor drawn as a small uniform square with a
+  short glyph (`𝒩`, `Γ`, `Ber`, …) centred in it, so a factor graph stays
+  compact; `node_size` sizes it (34 px, wider only for a longer glyph)
+  (DataZooDE/anofox-visualization#1166).
+
 ## [0.48.1] — 2026-11-13
 
 ### Changed
