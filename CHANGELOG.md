@@ -5,6 +5,16 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.48.1] — 2026-11-13
+
+### Changed
+- `graph_layout::banded`: an edge into another band and another column (a
+  parameter feeding factors along a chain) runs orthogonally, like a bus:
+  out of its node's side, along its own lane of the channel between the
+  bands, then into the top of a target in the next band, or down the gap
+  beside a farther target and into its side. It no longer cuts across the
+  boxes of the bands between (#497).
+
 ## [0.48.0] — 2026-11-13
 
 ### Added
