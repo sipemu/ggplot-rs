@@ -300,8 +300,86 @@ pub fn banded(nodes: &[GraphNode], edges: &[GraphEdge], p: &BandedParams) -> Gra
         .collect();
     let mut edge_pts = vec![Vec::new(); edges.len()];
     let mut back = vec![false; edges.len()];
+    // An edge into another band and another column (a parameter feeding
+    // factors along a chain) runs orthogonally, like a bus: out of its node's
+    // side into the gap beside its column, along a lane of the channel
+    // between the bands (one lane per source), then into the top (bottom) of
+    // a target in the next band, or down (up) the gap beside a farther
+    // target's column and into its side — so it crosses no box.
+    let bussed = |u: usize, v: usize| band(u) != band(v) && col[u] != col[v];
+    let mut lanes_of: Vec<((usize, bool), Vec<usize>)> = Vec::new();
+    for &(_, _, k, _) in &dag {
+        let (u, v) = (edges[k].from, edges[k].to);
+        if !bussed(u, v) {
+            continue;
+        }
+        let key = (band(u), band(v) > band(u));
+        match lanes_of.iter_mut().find(|(c, _)| *c == key) {
+            Some((_, us)) if !us.contains(&u) => us.push(u),
+            Some(_) => {}
+            None => lanes_of.push((key, vec![u])),
+        }
+    }
+    const LANE: f64 = 8.0;
+    let route = |u: usize, v: usize| -> Vec<(f64, f64)> {
+        let (a, b) = (&pn[u], &pn[v]);
+        let down = band(v) > band(u);
+        let (top, bottom) = band_span[band(u)];
+        let channel = if down {
+            bottom + p.band_gap / 2.0
+        } else {
+            top - (if lanes { p.band_head } else { 0.0 }) - p.band_gap / 2.0
+        };
+        let us = lanes_of
+            .iter()
+            .find(|(c, _)| *c == (band(u), down))
+            .map_or(&[][..], |(_, us)| &us[..]);
+        let i = us.iter().position(|&x| x == u).unwrap_or(0) as f64;
+        let y = channel + (i - (us.len().max(1) - 1) as f64 / 2.0) * LANE;
+        let right = col[v] > col[u];
+        let side = |n: &PlacedNode, c: usize, r: bool| {
+            if r {
+                (
+                    n.cx + n.w / 2.0,
+                    col_x[c] + col_w[c] / 2.0 + p.col_gap / 2.0,
+                )
+            } else {
+                (
+                    n.cx - n.w / 2.0,
+                    col_x[c] - col_w[c] / 2.0 - p.col_gap / 2.0,
+                )
+            }
+        };
+        let (sx, sg) = side(a, col[u], right);
+        // each source descends its own line of the gap, as it has its own lane
+        let sg = sg + (i - (us.len().max(1) - 1) as f64 / 2.0) * LANE;
+        let mut pts = vec![(sx, a.cy), (sg, a.cy), (sg, y)];
+        let next_band = band(v).abs_diff(band(u)) == 1;
+        let facing = if down {
+            track[v] == 0
+        } else {
+            track[v] + 1 == ntr[band(v)]
+        };
+        if next_band && facing {
+            let ey = if down {
+                b.cy - b.h / 2.0
+            } else {
+                b.cy + b.h / 2.0
+            };
+            pts.extend([(b.cx, y), (b.cx, ey)]);
+        } else {
+            let (ex, tg) = side(b, col[v], !right);
+            pts.extend([(tg, y), (tg, b.cy), (ex, b.cy)]);
+        }
+        pts
+    };
     for &(_, _, k, rev) in &dag {
-        edge_pts[k] = straight(&pn, edges[k].from, edges[k].to);
+        let (u, v) = (edges[k].from, edges[k].to);
+        edge_pts[k] = if bussed(u, v) {
+            route(u, v)
+        } else {
+            straight(&pn, u, v)
+        };
         back[k] = rev;
     }
     for &k in &loops {

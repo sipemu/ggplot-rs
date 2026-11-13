@@ -1438,6 +1438,28 @@ mod tests {
             assert_eq!(l.nodes[eq].cx, l.nodes[ob].cx, "slice {t}");
             assert!(l.nodes[ob].cy > y);
         }
+        // no edge passes through a box other than its own two ends
+        let crosses = |(x0, y0): (f64, f64), (x1, y1): (f64, f64), n: &PlacedNode| {
+            // sampled along the segment, the box shrunk by a pixel
+            (0..=40).any(|k| {
+                let t = k as f64 / 40.0;
+                let (x, y) = (x0 + (x1 - x0) * t, y0 + (y1 - y0) * t);
+                (x - n.cx).abs() < n.w / 2.0 - 1.0 && (y - n.cy).abs() < n.h / 2.0 - 1.0
+            })
+        };
+        for (k, &(a, b, _)) in links.iter().enumerate() {
+            for w in l.edges[k].windows(2) {
+                for (i, n) in l.nodes.iter().enumerate() {
+                    if i != a && i != b {
+                        assert!(
+                            !crosses(w[0], w[1], n),
+                            "edge {a}->{b} crosses {}",
+                            spec[i].0
+                        );
+                    }
+                }
+            }
+        }
         // nothing overlaps
         for (i, a) in l.nodes.iter().enumerate() {
             for b in &l.nodes[i + 1..] {
