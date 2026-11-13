@@ -174,6 +174,15 @@ pub struct GraphStyle {
     /// `<prefix>node-spark`, `<prefix>plate`, `<prefix>plate-label`; a
     /// shaped node's mark also has `<prefix>node-<shape>`).
     pub class_prefix: String,
+    /// A factor graph's math font: when set, the labels of shaped nodes
+    /// (variables, observations, equality nodes, glyph factors) are set in
+    /// this family, italic and regular weight — `θ`, `x₁`, `𝒩` read as
+    /// mathematics. `None` keeps the bold sans labels.
+    pub math_font: Option<String>,
+    /// A glyph factor's fill ([`NodeShape::Glyph`]); `None` is `card`.
+    pub glyph_fill: Option<Rgb>,
+    /// A glyph factor's glyph colour; `None` is `heading`.
+    pub glyph_ink: Option<Rgb>,
 }
 
 impl Default for GraphStyle {
@@ -188,6 +197,9 @@ impl Default for GraphStyle {
             observed_fill: (75, 85, 99),
             plate: (107, 114, 128),
             class_prefix: "gg-graph-".to_string(),
+            math_font: None,
+            glyph_fill: None,
+            glyph_ink: None,
         }
     }
 }
@@ -792,7 +804,8 @@ pub fn draw(
     let mut priors = Frame::default();
     // shaped nodes, a layer per (shape, corner radius, outline)
     let mut shaped: Vec<((NodeShape, u64, Rgb), Frame)> = Vec::new();
-    let (mut inside, mut inverse, mut above, mut glyphs) = (
+    let (mut inside, mut inverse, mut above, mut glyphs, mut texts) = (
+        Frame::default(),
         Frame::default(),
         Frame::default(),
         Frame::default(),
@@ -857,7 +870,8 @@ pub fn draw(
                 NodeShape::FilledCircle | NodeShape::FilledSquare => {
                     (s.observed_fill, s.observed_fill)
                 }
-                NodeShape::Square | NodeShape::Glyph => (s.card, nd.stroke),
+                NodeShape::Square => (s.card, nd.stroke),
+                NodeShape::Glyph => (s.glyph_fill.unwrap_or(s.card), nd.stroke),
                 _ => (s.card, s.card),
             };
             let key = (nd.shape, r.to_bits(), stroke);
@@ -883,6 +897,8 @@ pub fn draw(
                 NodeShape::Glyph => &mut glyphs,
                 NodeShape::FilledCircle => &mut inverse,
                 NodeShape::Square | NodeShape::FilledSquare => &mut above,
+                // a constant is a number: upright, never the math italic
+                NodeShape::Text => &mut texts,
                 _ => &mut inside,
             };
             let ly = match nd.shape {
@@ -1058,22 +1074,35 @@ pub fn draw(
             .decorative()
             .layer_svg_attrs(inert);
     }
-    for (mut f, size, colour, cls) in [
-        (lines, LABEL_PX, s.heading, class("node-label")),
-        (values, VALUE_PX, s.ink, class("node-value")),
-        (inside, LABEL_PX, s.heading, class("node-label")),
-        (inverse, LABEL_PX, s.card, class("node-label")),
-        (above, SMALL_PX, s.muted, class("node-label")),
-        (glyphs, GLYPH_PX, s.heading, class("node-label")),
+    for (mut f, size, colour, cls, math) in [
+        (lines, LABEL_PX, s.heading, class("node-label"), false),
+        (values, VALUE_PX, s.ink, class("node-value"), false),
+        (inside, LABEL_PX, s.heading, class("node-label"), true),
+        (texts, LABEL_PX, s.heading, class("node-label"), false),
+        (inverse, LABEL_PX, s.card, class("node-label"), true),
+        (above, SMALL_PX, s.muted, class("node-label"), true),
+        (
+            glyphs,
+            GLYPH_PX,
+            s.glyph_ink.unwrap_or(s.heading),
+            class("node-label"),
+            true,
+        ),
     ] {
         if f.is_empty() {
             continue;
         }
+        // a factor graph's labels as mathematics: the math font, italic
+        let (fontfamily, fontface, size) = match s.math_font.as_ref().filter(|_| math) {
+            Some(family) => (family.clone(), FontFace::Italic, size + 2.0),
+            None => (String::new(), FontFace::Bold, size),
+        };
         plot = plot
             .geom_text_with(GeomText {
                 size,
                 color: colour,
-                fontface: FontFace::Bold,
+                fontface,
+                fontfamily,
                 ..Default::default()
             })
             .layer_data(f.take(h))
@@ -1487,6 +1516,32 @@ mod tests {
         assert!(pr < be, "the prior under the belief");
         let mark = &svg[svg[..pr].rfind('<').unwrap()..pr];
         assert!(mark.contains("stroke-dasharray"), "dashed prior: {mark}");
+        // no math font: bold sans labels
+        assert!(!svg.contains("font-style=\"italic\""), "plain labels");
+        // a math font: the shaped nodes' labels in it, italic; glyph colours
+        let math = GraphStyle {
+            math_font: Some("STIX Two Math, serif".to_string()),
+            glyph_fill: Some((240, 247, 246)),
+            glyph_ink: Some((13, 148, 136)),
+            ..style.clone()
+        };
+        let msvg = draw(
+            &l,
+            &[],
+            &plates,
+            &nodes,
+            &edges,
+            &math,
+            crate::theme::presets::theme_void(),
+        )
+        .render_svg_native_at(0.0, 0.0, l.w.ceil() as u32, l.h.ceil() as u32)
+        .unwrap();
+        assert!(msvg.contains("STIX Two Math"), "math font");
+        assert!(msvg.contains("font-style=\"italic\""), "italic labels");
+        // …but a constant stays upright
+        let two = msvg.find(">2.0<").expect("the constant 2.0");
+        let el = &msvg[msvg[..two].rfind('<').unwrap()..two];
+        assert!(!el.contains("italic"), "upright constant: {el}");
         // the plate, and its label
         assert!(svg.contains("data-plate=\"i = 1..3\"") && svg.contains(">i = 1..3<"));
         // the observed circles' dark fill

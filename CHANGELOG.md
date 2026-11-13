@@ -5,6 +5,15 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.52.0] — 2026-11-13
+
+### Added
+- `GraphStyle::math_font`: a factor graph's labels as mathematics — the
+  labels of variables, observations, equality nodes and glyph factors in
+  that family, italic and regular weight; constants stay upright.
+- `GraphStyle::glyph_fill` / `glyph_ink`: a glyph factor's fill and glyph
+  colour (DataZooDE/anofox-visualization#1172).
+
 ## [0.51.0] — 2026-11-13
 
 ### Added
