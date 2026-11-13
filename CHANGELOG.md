@@ -5,6 +5,14 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.51.0] — 2026-11-13
+
+### Added
+- `DrawNode::prior`: the prior behind a node's belief curve (heights on the
+  belief's scale and span, a colour), drawn as a faint dashed outline under
+  the belief in the node's `data-of` group, class `<prefix>node-prior`
+  (DataZooDE/anofox-visualization#1172).
+
 ## [0.50.0] — 2026-11-13
 
 ### Added
