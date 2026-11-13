@@ -310,6 +310,10 @@ pub struct DrawNode {
     /// A belief curve over the node (a factor graph variable's density):
     /// heights 0..=1 at evenly spaced points (three or more), and its colour.
     pub belief: Option<(Vec<f64>, Rgb)>,
+    /// The prior behind the belief curve: heights on the same scale and
+    /// span as [`DrawNode::belief`], drawn as a faint dashed outline, and
+    /// its colour.
+    pub prior: Option<(Vec<f64>, Rgb)>,
     pub tooltip: String,
     /// `data-*` on the box (the hit target); every node lists the same
     /// names, in the same order.
@@ -785,6 +789,7 @@ pub fn draw(
     order.sort_by_key(|&i| (layout.nodes[i].order, i));
     let mut boxes: Vec<(Rgb, Frame)> = Vec::new();
     let mut beliefs = Frame::default();
+    let mut priors = Frame::default();
     // shaped nodes, a layer per (shape, corner radius, outline)
     let mut shaped: Vec<((NodeShape, u64, Rgb), Frame)> = Vec::new();
     let (mut inside, mut inverse, mut above, mut glyphs) = (
@@ -808,13 +813,12 @@ pub fn draw(
         let id = nd.id.clone();
         let (x, y) = (pn.cx - pn.w / 2.0, pn.cy - pn.h / 2.0);
         // the belief curve sits over the node (over a square's label)
-        if let Some((hs, col)) = nd.belief.as_ref().filter(|(h, _)| h.len() >= 3) {
-            let above = matches!(nd.shape, NodeShape::Square | NodeShape::FilledSquare);
-            let base = y - if above { 17.0 } else { 3.0 };
-            let x0 = pn.cx - BELIEF_W / 2.0;
+        let squared = matches!(nd.shape, NodeShape::Square | NodeShape::FilledSquare);
+        let base = y - if squared { 17.0 } else { 3.0 };
+        let x0 = pn.cx - BELIEF_W / 2.0;
+        let curve = |hs: &[f64]| -> Vec<(f64, f64)> {
             let last = (hs.len() - 1) as f64;
-            let mut pts: Vec<(f64, f64)> = hs
-                .iter()
+            hs.iter()
                 .enumerate()
                 .map(|(i, &h)| {
                     (
@@ -822,7 +826,18 @@ pub fn draw(
                         base - h.clamp(0.0, 1.0) * BELIEF_H,
                     )
                 })
-                .collect();
+                .collect()
+        };
+        // the prior: a faint outline behind the belief
+        if let Some((hs, col)) = nd.prior.as_ref().filter(|(h, _)| h.len() >= 3) {
+            for (px, py) in curve(hs) {
+                priors.num("x", px).num("y", py).txt("g", id.clone());
+                priors.txt("col", hex(*col)).txt("lt", "dashed");
+                priors.txt("of", id.clone());
+            }
+        }
+        if let Some((hs, col)) = nd.belief.as_ref().filter(|(h, _)| h.len() >= 3) {
+            let mut pts = curve(hs);
             pts.push((x0 + BELIEF_W, base));
             pts.push((x0, base));
             for (px, py) in pts {
@@ -985,6 +1000,26 @@ pub fn draw(
             .layer_data(f.take(h))
             .layer_aes(aes)
             .layer_svg_attr("class", cls);
+    }
+    if !priors.is_empty() {
+        plot = plot
+            .geom_path_with(GeomPath {
+                alpha: 0.7,
+                ..GeomPath::default().linewidth(1.0)
+            })
+            .layer_data(priors.take(h))
+            .layer_aes(
+                Aes::new()
+                    .x("x")
+                    .y("y")
+                    .group("g")
+                    .color("col")
+                    .linetype("lt")
+                    .group_wrap("of", "of"),
+            )
+            .decorative()
+            .layer_svg_attrs(inert)
+            .layer_svg_attr("class", class("node-prior"));
     }
     if !beliefs.is_empty() {
         plot = plot
@@ -1393,6 +1428,8 @@ mod tests {
                 attrs: vec![("node".to_string(), Some(format!("n{i}")))],
                 // θ's belief curve
                 belief: (i == 1).then(|| (vec![0.0, 0.3, 1.0, 0.3, 0.0], (120, 80, 200))),
+                // and its prior, wider
+                prior: (i == 1).then(|| (vec![0.2, 0.4, 0.5, 0.4, 0.2], (150, 150, 150))),
                 ..Default::default()
             })
             .collect();
@@ -1442,6 +1479,14 @@ mod tests {
         // θ's belief curve: a filled shape over its circle, in its group
         assert!(svg.contains("gg-graph-node-belief"), "belief layer");
         assert!(svg.contains("fill=\"#7850C8\""), "belief colour");
+        // its prior: a dashed outline, drawn before (under) the belief
+        let (pr, be) = (
+            svg.find("gg-graph-node-prior").expect("prior layer"),
+            svg.find("gg-graph-node-belief").unwrap(),
+        );
+        assert!(pr < be, "the prior under the belief");
+        let mark = &svg[svg[..pr].rfind('<').unwrap()..pr];
+        assert!(mark.contains("stroke-dasharray"), "dashed prior: {mark}");
         // the plate, and its label
         assert!(svg.contains("data-plate=\"i = 1..3\"") && svg.contains(">i = 1..3<"));
         // the observed circles' dark fill
