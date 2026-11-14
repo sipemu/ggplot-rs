@@ -5,6 +5,14 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.54.0] — 2026-11-14
+
+### Changed
+- A filled mark (`FilledCircle`, `FilledSquare`, `Terminal`) is filled with
+  the node's `accent` when it has one (a status: an observation the model
+  did not expect), otherwise `GraphStyle::observed_fill` as before
+  (DataZooDE/anofox-visualization#1172).
+
 ## [0.53.0] — 2026-11-14
 
 ### Added

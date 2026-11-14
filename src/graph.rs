@@ -326,7 +326,8 @@ pub struct DrawNode {
     pub badge: Option<(String, Rgb)>,
     /// The box (or circle, square) outline.
     pub stroke: Rgb,
-    /// A thin bar along the box's left edge.
+    /// A thin bar along the box's left edge; a filled mark (an observation,
+    /// a terminal) is filled with it instead.
     pub accent: Option<Rgb>,
     /// A sparkline (two values or more) along the bottom, and its colour.
     pub spark: Option<(Vec<f64>, Rgb)>,
@@ -908,8 +909,11 @@ pub fn draw(
             };
             let (fill, stroke) = match nd.shape {
                 NodeShape::Circle => (s.variable_fill, nd.stroke),
+                // a filled mark takes the node's accent (a status: an
+                // observation the model did not expect) over the observed fill
                 NodeShape::FilledCircle | NodeShape::FilledSquare | NodeShape::Terminal => {
-                    (s.observed_fill, s.observed_fill)
+                    let c = nd.accent.unwrap_or(s.observed_fill);
+                    (c, c)
                 }
                 NodeShape::Square => (s.card, nd.stroke),
                 NodeShape::Glyph => (s.glyph_fill.unwrap_or(s.card), nd.stroke),
@@ -1489,6 +1493,8 @@ mod tests {
                 stroke: (13, 148, 136),
                 tooltip: b.lines.join(" "),
                 attrs: vec![("node".to_string(), Some(format!("n{i}")))],
+                // the observation flagged: filled in its accent
+                accent: (*shape == NodeShape::Terminal).then_some((217, 119, 6)),
                 ..Default::default()
             })
             .collect();
@@ -1535,6 +1541,10 @@ mod tests {
         };
         // the terminal: a filled square, its label starting beside it
         assert!(svg.contains("gg-graph-node-terminal"), "terminal mark");
+        assert!(
+            svg.contains("fill=\"#D97706\""),
+            "the terminal in its accent"
+        );
         let x1 = el("x₁");
         assert!(
             x1.contains("text-anchor=\"start\"") && x1.contains("italic"),
