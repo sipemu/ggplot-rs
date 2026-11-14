@@ -5,6 +5,14 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.55.0] — 2026-11-14
+
+### Added
+- `GeomPareto::total` / `StatPareto::total`: the grand total the cumulative
+  share is of, for a top N of a longer list — the line ends at the top N's
+  share, the y scale (and the secondary axis's 100 %) reaches the total, and
+  the threshold line reads against it (DataZooDE/anofox-visualization#1101).
+
 ## [0.54.0] — 2026-11-14
 
 ### Changed

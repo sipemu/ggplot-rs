@@ -18,11 +18,18 @@ pub struct StatPareto {
     /// Order categories by descending value (ties keep data order). With
     /// `false` the data order is kept.
     pub sort: bool,
+    /// The grand total the running share is of (a top N of a longer list:
+    /// the line ends at the top N's share, not 100 %); `None` is the sum
+    /// of the rows. The y scale trains up to it.
+    pub total: Option<f64>,
 }
 
 impl Default for StatPareto {
     fn default() -> Self {
-        StatPareto { sort: true }
+        StatPareto {
+            sort: true,
+            total: None,
+        }
     }
 }
 
@@ -44,7 +51,11 @@ impl Stat for StatPareto {
         if self.sort {
             rows.sort_by(|a, b| b.1.total_cmp(&a.1));
         }
-        let total: f64 = rows.iter().map(|r| r.1).sum();
+        let sum: f64 = rows.iter().map(|r| r.1).sum();
+        let total = self
+            .total
+            .filter(|t| t.is_finite() && *t > 0.0)
+            .unwrap_or(sum);
         let mut cum = 0.0;
         let (mut xs, mut ys, mut cums, mut pcts) = (vec![], vec![], vec![], vec![]);
         for (x, v) in rows {
@@ -65,7 +76,14 @@ impl Stat for StatPareto {
         out.add_column("cum".into(), cums.clone());
         out.add_column("cum_pct".into(), pcts);
         out.add_column("ymin".into(), vec![Value::Float(0.0); n]);
-        out.add_column("ymax".into(), cums);
+        // with a grand total beyond the rows, the scale reaches it (the
+        // secondary axis's 100 %)
+        let ymax = if total > sum {
+            vec![Value::Float(total); n]
+        } else {
+            cums
+        };
+        out.add_column("ymax".into(), ymax);
         out
     }
 
@@ -122,5 +140,21 @@ mod tests {
         assert_eq!(f("y"), vec![50.0, 40.0, 10.0]);
         assert_eq!(f("cum"), vec![50.0, 90.0, 100.0]);
         assert_eq!(f("cum_pct"), vec![50.0, 90.0, 100.0]);
+        // a top N of a longer list: the share of the grand total, and the
+        // scale reaches it
+        let out = StatPareto {
+            total: Some(400.0),
+            ..StatPareto::default()
+        }
+        .compute_group(&d, &ScaleSet::new());
+        let f = |c: &str| -> Vec<f64> {
+            out.column(c)
+                .unwrap()
+                .iter()
+                .map(|v| v.as_f64().unwrap())
+                .collect()
+        };
+        assert_eq!(f("cum_pct"), vec![12.5, 22.5, 25.0]);
+        assert_eq!(f("ymax"), vec![400.0, 400.0, 400.0]);
     }
 }

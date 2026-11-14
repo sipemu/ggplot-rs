@@ -36,6 +36,9 @@ pub struct GeomPareto {
     /// Draw a dashed reference line at this cumulative share (e.g. `0.8`
     /// for the 80/20 rule).
     pub threshold: Option<f64>,
+    /// The grand total the cumulative share is of, when the bars are a top
+    /// N of a longer list ([`StatPareto::total`]); `None` is their sum.
+    pub total: Option<f64>,
 }
 
 impl Default for GeomPareto {
@@ -50,6 +53,7 @@ impl Default for GeomPareto {
             alpha: 1.0,
             sort: true,
             threshold: None,
+            total: None,
         }
     }
 }
@@ -149,10 +153,13 @@ impl Geom for GeomPareto {
         super::clear_row_extras(backend);
         line.sort_by(|a, b| a.1.total_cmp(&b.1));
 
-        if let (Some(share), Some(total)) = (
-            self.threshold,
-            cum_col.iter().filter_map(|v| v.as_f64()).reduce(f64::max),
-        ) {
+        // the 100 % the share is of: the stat's total (cum / cum_pct)
+        let total = cum_col
+            .iter()
+            .zip(pct_col.into_iter().flatten())
+            .find_map(|(c, p)| Some(c.as_f64()? / p.as_f64().filter(|p| *p > 0.0)? * 100.0))
+            .or_else(|| cum_col.iter().filter_map(|v| v.as_f64()).reduce(f64::max));
+        if let (Some(share), Some(total)) = (self.threshold, total) {
             super::clear_mark(backend);
             let ny = my(share * total);
             backend.draw_line(
@@ -218,7 +225,10 @@ impl Geom for GeomPareto {
     }
 
     fn default_stat(&self) -> Box<dyn Stat> {
-        Box::new(StatPareto { sort: self.sort })
+        Box::new(StatPareto {
+            sort: self.sort,
+            total: self.total,
+        })
     }
 
     fn default_position(&self) -> Box<dyn Position> {
