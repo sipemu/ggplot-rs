@@ -42,6 +42,11 @@ pub enum RepelDirection {
     X,
     /// Only vertically.
     Y,
+    /// Only downwards from the target (#513), for labels hanging from the
+    /// top of a panel: no relaxation — in x order, each label moves down to
+    /// the first slot clear of the labels before it, so a crowded row
+    /// stacks in reading order. Points and lines are not avoided.
+    Down,
 }
 
 /// Shared layout parameters of [`GeomTextRepel`] / [`GeomLabelRepel`].
@@ -80,6 +85,17 @@ pub struct RepelParams {
     pub seed: u64,
     /// Movement axis.
     pub direction: RepelDirection,
+    /// Where the label box starts relative to its point, as `GeomText`'s
+    /// `hjust` (#513): 0 = its left edge at the point, 0.5 = centred
+    /// (default), 1 = its right edge.
+    pub hjust: f64,
+    /// As [`Self::hjust`], vertically: 0 = the box's bottom at the point.
+    pub vjust: f64,
+    /// Text halo colour (ggrepel's `bg.colour`, as `GeomText::bg_colour`),
+    /// so a label stays readable over marks; `None` (default) draws none.
+    pub bg_colour: Option<(u8, u8, u8)>,
+    /// Text halo radius in px (ggrepel's `bg.r`).
+    pub bg_r: f64,
     /// Above this many labels the force layout is skipped (it is O(n²) in
     /// the worst case) and labels are placed greedily, dropping overlaps.
     pub max_labels: usize,
@@ -109,6 +125,10 @@ impl Default for RepelParams {
             min_segment_length: 12.0,
             seed: 42,
             direction: RepelDirection::Both,
+            hjust: 0.5,
+            vjust: 0.5,
+            bg_colour: None,
+            bg_r: 0.0,
             max_labels: 500,
             segment_color: None,
             segment_width: 0.6,
@@ -179,6 +199,19 @@ macro_rules! repel_builders {
             /// Restrict movement to one axis.
             pub fn direction(mut self, d: RepelDirection) -> Self {
                 self.repel.direction = d;
+                self
+            }
+            /// Where the box starts relative to its point (`GeomText`'s
+            /// `hjust` / `vjust`; 0.5 = centred).
+            pub fn justify(mut self, hjust: f64, vjust: f64) -> Self {
+                self.repel.hjust = hjust;
+                self.repel.vjust = vjust;
+                self
+            }
+            /// A halo of `colour` and radius `r` px around the text.
+            pub fn halo(mut self, colour: (u8, u8, u8), r: f64) -> Self {
+                self.repel.bg_colour = Some(colour);
+                self.repel.bg_r = r;
                 self
             }
             /// Label-count cap of the force layout.
@@ -408,7 +441,7 @@ pub(crate) fn layout_with_lines(
     let (move_x, move_y) = match p.direction {
         RepelDirection::Both => (1.0, 1.0),
         RepelDirection::X => (1.0, 0.0),
-        RepelDirection::Y => (0.0, 1.0),
+        RepelDirection::Y | RepelDirection::Down => (0.0, 1.0),
     };
 
     // Points sorted by x for range queries.
@@ -424,7 +457,42 @@ pub(crate) fn layout_with_lines(
         start..end.max(start)
     };
 
-    if !capped && n > 0 {
+    if !capped && p.direction == RepelDirection::Down {
+        // #513: no relaxation — in x order, each label starts at its target
+        // and moves down past the placed labels it overlaps, to the first
+        // free slot (first fit), so a crowded row stacks in reading order.
+        let mut order: Vec<usize> = (0..n).collect();
+        order.sort_by(|&a, &b| targets[a].0.total_cmp(&targets[b].0).then(a.cmp(&b)));
+        let mut placed: Vec<usize> = Vec::with_capacity(n);
+        for &i in &order {
+            let mut b = LabelBox {
+                cx: targets[i].0,
+                cy: targets[i].1,
+                hw: half[i].0,
+                hh: half[i].1,
+            };
+            clamp_box(&mut b);
+            loop {
+                let below = placed
+                    .iter()
+                    .filter(|&&j| b.overlaps(&boxes[j], box_pad))
+                    .map(|&j| boxes[j].cy + boxes[j].hh + b.hh + 2.0 * box_pad)
+                    .reduce(f64::max);
+                let Some(y) = below.filter(|y| y.is_finite()) else {
+                    break;
+                };
+                let was = b.cy;
+                b.cy = y;
+                clamp_box(&mut b);
+                // at the bottom edge: left overlapping (max_overlaps decides)
+                if b.cy <= was {
+                    break;
+                }
+            }
+            boxes[i] = b;
+            placed.push(i);
+        }
+    } else if !capped && n > 0 {
         #[cfg(not(target_arch = "wasm32"))]
         let started = std::time::Instant::now();
         let mut order: Vec<usize> = (0..n).collect();
@@ -487,7 +555,7 @@ pub(crate) fn layout_with_lines(
                     // allowed direction).
                     let mut along_x = match p.direction {
                         RepelDirection::X => true,
-                        RepelDirection::Y => false,
+                        RepelDirection::Y | RepelDirection::Down => false,
                         RepelDirection::Both => ox * move_x <= oy * move_y,
                     };
                     let s = |x: bool| if x { sx } else { sy };
@@ -556,7 +624,7 @@ pub(crate) fn layout_with_lines(
                     };
                     let mut along_x = match p.direction {
                         RepelDirection::X => true,
-                        RepelDirection::Y => false,
+                        RepelDirection::Y | RepelDirection::Down => false,
                         RepelDirection::Both => ox <= oy,
                     };
                     let (mut sx, mut sy, mut ox, mut oy) = (sx, sy, ox, oy);
@@ -824,7 +892,18 @@ fn draw_repel(
         })
         .collect();
     let anchors: Vec<(f64, f64)> = items.iter().map(|it| it.anchor).collect();
-    let targets: Vec<(f64, f64)> = items.iter().map(|it| it.target).collect();
+    // The box's start: its point, justified (#513; y grows downwards).
+    let just = |j: f64| if j.is_finite() { 0.5 - j } else { 0.0 };
+    let targets: Vec<(f64, f64)> = items
+        .iter()
+        .zip(&half)
+        .map(|(it, h)| {
+            (
+                it.target.0 + 2.0 * h.0 * just(p.hjust),
+                it.target.1 - 2.0 * h.1 * just(p.vjust),
+            )
+        })
+        .collect();
     // `avoid_ablines` in pixels: the line between two far-apart x values
     // (the data's own x range, widened) — the box test clips it.
     let mut lines = Vec::new();
@@ -970,8 +1049,12 @@ fn draw_repel(
                 angle: 0.0,
                 family: super::resolve_font_family("", theme),
                 face,
-                bg_colour: None,
-                bg_r: 0.0,
+                bg_colour: p.bg_colour,
+                bg_r: if p.bg_r.is_finite() {
+                    p.bg_r.max(0.0)
+                } else {
+                    0.0
+                },
             },
         )?;
     }
@@ -1260,6 +1343,45 @@ mod tests {
         assert_eq!(overlapping(&lay), 0);
     }
 
+    /// #513: labels hanging from the top edge, close in x (event labels).
+    fn top_edge_labels(direction: RepelDirection) -> (Vec<(f64, f64)>, RepelLayout) {
+        let xs = [20.0, 32.0, 44.0, 50.0, 58.0, 70.0, 140.0, 150.0];
+        let anchors: Vec<(f64, f64)> = xs.iter().map(|&x| (x, 0.0)).collect();
+        let targets: Vec<(f64, f64)> = xs.iter().map(|&x| (x + 26.0, 6.0)).collect();
+        let half = vec![(25.0, 6.0); xs.len()];
+        let lay = layout(
+            &anchors,
+            &targets,
+            &half,
+            &[],
+            &panel(),
+            &RepelParams {
+                direction,
+                max_overlaps: usize::MAX,
+                ..RepelParams::default()
+            },
+        );
+        (targets, lay)
+    }
+
+    #[test]
+    fn down_stacks_top_labels_without_overlap() {
+        let (targets, lay) = top_edge_labels(RepelDirection::Down);
+        assert_eq!(overlapping(&lay), 0);
+        for (b, t) in lay.boxes.iter().zip(&targets) {
+            assert!((b.cx - t.0).abs() <= 0.5, "x stays put");
+            assert!(b.cy >= t.1 - 1e-6, "never above its anchor");
+        }
+        // the first in x order keeps its place; the one after it, which it
+        // overlaps, sits right below it
+        assert_eq!(lay.boxes[0].cy, targets[0].1);
+        assert!(lay.boxes[1].cy > lay.boxes[0].cy);
+        assert!(
+            lay.boxes[6].cy == targets[6].1,
+            "a label clear of the rest stays up"
+        );
+    }
+
     #[test]
     fn cap_skips_simulation() {
         let anchors: Vec<(f64, f64)> = (0..20).map(|i| (i as f64, 10.0)).collect();
@@ -1338,6 +1460,73 @@ mod tests {
         assert!(!segment_hits_box((0.0, 70.0), (100.0, 70.0), &b, 0.0));
         assert!(segment_hits_box((0.0, 57.0), (100.0, 57.0), &b, 3.0));
         assert!(!segment_hits_box((0.0, 0.0), (30.0, 30.0), &b, 0.0));
+    }
+
+    #[test]
+    fn down_keeps_every_event_label_in_a_narrow_plot() {
+        // #513 (anofox#1140): seven event labels at the top of the data,
+        // close in x, in a narrow plot — all drawn, each starting right of
+        // its point.
+        let names = [
+            "Port strike",
+            "Typhoon Haikui",
+            "Canal closure",
+            "Plant fire",
+            "Rail outage",
+            "Customs backlog",
+            "Typhoon Koinu",
+        ];
+        let render = |n: usize, hjust: f64| {
+            let xs: Vec<Value> = (0..n).map(|i| Value::Float(i as f64)).collect();
+            let labels: Vec<Value> = names[..n]
+                .iter()
+                .map(|n| Value::Str(n.to_string()))
+                .collect();
+            crate::plot::GGPlot::new(vec![
+                ("x".into(), xs),
+                ("y".into(), vec![Value::Float(10.0); n]),
+                ("l".into(), labels),
+            ])
+            .aes(crate::aes::Aes::new().x("x").y("y").label("l"))
+            .geom_text_repel_with(
+                GeomTextRepel::default()
+                    .direction(RepelDirection::Down)
+                    .justify(hjust, 0.0)
+                    .max_overlaps(usize::MAX),
+            )
+            .render_svg_native_with_size(220, 300)
+            .unwrap()
+        };
+        let text_x = |svg: &str, name: &str| -> f64 {
+            let end = svg.find(&format!(">{name}<")).expect(name);
+            let tag = &svg[svg[..end].rfind("<text").unwrap()..end];
+            let k = tag.find(" x=\"").unwrap() + 4;
+            tag[k..k + tag[k..].find('"').unwrap()].parse().unwrap()
+        };
+        let all = render(7, 0.0);
+        assert!(!all.contains("paint-order"), "no halo unless asked");
+        let halo = crate::plot::GGPlot::new(vec![
+            ("x".into(), vec![Value::Float(1.0)]),
+            ("y".into(), vec![Value::Float(1.0)]),
+            ("l".into(), vec![Value::Str("event".into())]),
+        ])
+        .aes(crate::aes::Aes::new().x("x").y("y").label("l"))
+        .geom_text_repel_with(GeomTextRepel::default().halo((255, 255, 255), 2.0))
+        .render_svg_native_with_size(220, 300)
+        .unwrap();
+        assert!(
+            halo.contains("paint-order") && halo.contains("stroke=\"#FFFFFF\""),
+            "{halo}"
+        );
+        for n in names {
+            assert!(all.contains(&format!(">{n}<")), "{n} kept");
+        }
+        // one label in mid-panel: justified left, it starts at its point
+        let (left, centred) = (
+            text_x(&render(1, 0.0), names[0]),
+            text_x(&render(1, 0.5), names[0]),
+        );
+        assert!(left > centred + 10.0, "{left} vs {centred}");
     }
 
     #[test]

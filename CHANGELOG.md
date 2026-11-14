@@ -5,6 +5,21 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.57.0] — 2026-11-14
+
+### Added
+- `RepelDirection::Down` (#513): labels hanging from the top of a panel
+  stack downwards in x order. No relaxation: each label moves down to the
+  first slot clear of the labels before it (first fit), so a crowded row
+  of event labels is drawn in reading order instead of piling up at the
+  edge. Points and lines are not avoided in this mode
+  (DataZooDE/anofox-visualization#1140).
+- `RepelParams::hjust` / `vjust` (`.justify(h, v)`): where a label box
+  starts relative to its point, as `GeomText`'s `hjust` / `vjust`
+  (default 0.5, centred).
+- `RepelParams::bg_colour` / `bg_r` (`.halo(colour, r)`): a text halo for
+  `geom_text_repel`, as `GeomText`'s (ggrepel's `bg.colour` / `bg.r`).
+
 ## [0.56.1] — 2026-11-14
 
 ### Fixed
