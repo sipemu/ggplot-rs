@@ -5,6 +5,16 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.56.0] — 2026-11-14
+
+### Added
+- `SeriesSummary::cor` (`Correlation`): on a point layer (a scatter, a
+  bubble chart) with a numeric x and at least 5 marks, Pearson's r and
+  Spearman's ρ of x and y, and a bubble's size against x and y (ρ).
+  `summary_text` says it in words: `y rises strongly with x (r 0.95, ρ 0.94);
+  size falls strongly with x (ρ -0.94), …` — so an answer about a scatter can
+  quote the trend instead of guessing it (DataZooDE/anofox-visualization#1107).
+
 ## [0.55.0] — 2026-11-14
 
 ### Added

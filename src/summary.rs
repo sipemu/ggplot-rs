@@ -54,6 +54,24 @@ pub struct SeriesSummary {
     pub band_width: Option<(f64, f64)>,
     /// Every mark's `(x label, y)`, in the order drawn.
     pub points: Vec<(String, f64)>,
+    /// How y goes with a numeric x on a point layer (a scatter, a bubble
+    /// chart) of at least [`MIN_COR_POINTS`] marks.
+    pub cor: Option<Correlation>,
+}
+
+/// A point layer needs this many marks for a correlation.
+pub const MIN_COR_POINTS: usize = 5;
+
+/// How two things go together in a scatter: y with x, and a bubble's size
+/// with x and with y.
+#[derive(Debug, Clone, PartialEq)]
+pub struct Correlation {
+    /// Pearson's r of x and y.
+    pub r: f64,
+    /// Spearman's ρ of x and y (ranks: any monotone trend).
+    pub rho: f64,
+    /// Spearman's ρ of the size with x and with y, for a bubble chart.
+    pub size_rho: Option<(f64, f64)>,
 }
 
 /// The summaries of every layer, panel by panel.
@@ -181,6 +199,25 @@ impl std::fmt::Display for PlotSummary {
                     write!(f, ", band {} … {}", num(lo), num(hi))?;
                     write_width(f, s)?;
                 }
+                if let Some(c) = &s.cor {
+                    write!(
+                        f,
+                        "; y {} with x (r {}, ρ {})",
+                        trend(c.rho),
+                        num(round2(c.r)),
+                        num(round2(c.rho))
+                    )?;
+                    if let Some((sx, sy)) = c.size_rho {
+                        write!(
+                            f,
+                            "; size {} with x (ρ {}), {} with y (ρ {})",
+                            trend(sx),
+                            num(round2(sx)),
+                            trend(sy),
+                            num(round2(sy))
+                        )?;
+                    }
+                }
             }
             if l.series.len() > shown {
                 write!(f, "; +{} more series", l.series.len() - shown)?;
@@ -270,6 +307,60 @@ fn compare(layers: &[LayerSummary]) -> Option<Comparison> {
         largest_pct: lp.filter(|_| differs),
         smallest_pct: sp.filter(|_| differs),
     })
+}
+
+/// A correlation in words: how strongly, and which way.
+fn trend(rho: f64) -> &'static str {
+    match (rho.abs(), rho > 0.0) {
+        (a, _) if a < 0.2 => "shows no clear trend",
+        (a, true) if a < 0.4 => "rises weakly",
+        (a, false) if a < 0.4 => "falls weakly",
+        (a, true) if a < 0.7 => "rises moderately",
+        (a, false) if a < 0.7 => "falls moderately",
+        (_, true) => "rises strongly",
+        (_, false) => "falls strongly",
+    }
+}
+
+fn round2(v: f64) -> f64 {
+    (v * 100.0).round() / 100.0
+}
+
+/// Pearson's r, `None` when either side doesn't vary.
+fn pearson(a: &[f64], b: &[f64]) -> Option<f64> {
+    let n = a.len() as f64;
+    let (ma, mb) = (a.iter().sum::<f64>() / n, b.iter().sum::<f64>() / n);
+    let (mut sab, mut saa, mut sbb) = (0.0, 0.0, 0.0);
+    for (x, y) in a.iter().zip(b) {
+        sab += (x - ma) * (y - mb);
+        saa += (x - ma) * (x - ma);
+        sbb += (y - mb) * (y - mb);
+    }
+    (saa > 0.0 && sbb > 0.0).then(|| (sab / (saa * sbb).sqrt()).clamp(-1.0, 1.0))
+}
+
+/// Average ranks (ties share their mean rank).
+fn ranks(v: &[f64]) -> Vec<f64> {
+    let mut ix: Vec<usize> = (0..v.len()).collect();
+    ix.sort_by(|&i, &j| v[i].total_cmp(&v[j]));
+    let mut r = vec![0.0; v.len()];
+    let mut k = 0;
+    while k < ix.len() {
+        let mut e = k;
+        while e + 1 < ix.len() && v[ix[e + 1]] == v[ix[k]] {
+            e += 1;
+        }
+        let avg = (k + e) as f64 / 2.0 + 1.0;
+        for &i in &ix[k..=e] {
+            r[i] = avg;
+        }
+        k = e + 1;
+    }
+    r
+}
+
+fn spearman(a: &[f64], b: &[f64]) -> Option<f64> {
+    pearson(&ranks(a), &ranks(b))
 }
 
 /// `, width 16 at a → 25.3 at b (widens)` for a band.
@@ -371,6 +462,26 @@ fn layer_summary(geom: &str, d: &DataFrame, date_x: bool) -> Option<LayerSummary
                 .and_then(|b| b.as_ref())
                 .and_then(|_| width(ia).zip(width(ib)))
                 .filter(|_| ia != ib);
+            // a scatter or bubble chart: how y (and the size) go with x
+            let cor =
+                (geom.starts_with("point") && xs.len() == pts.len() && pts.len() >= MIN_COR_POINTS)
+                    .then(|| {
+                        let xv: Vec<f64> = xs.iter().map(|p| p.1).collect();
+                        let yv: Vec<f64> = pts.iter().map(|p| p.1).collect();
+                        let size_rho = d.column("size").and_then(|sc| {
+                            let sv: Vec<f64> = pts
+                                .iter()
+                                .map(|(i, _)| sc[*i].as_f64().filter(|v| v.is_finite()))
+                                .collect::<Option<_>>()?;
+                            Some((spearman(&sv, &xv)?, spearman(&sv, &yv)?))
+                        });
+                        Some(Correlation {
+                            r: pearson(&xv, &yv)?,
+                            rho: spearman(&xv, &yv)?,
+                            size_rho,
+                        })
+                    })
+                    .flatten();
             Some(SeriesSummary {
                 key: key.map(|_| k),
                 n: pts.len(),
@@ -383,6 +494,7 @@ fn layer_summary(geom: &str, d: &DataFrame, date_x: bool) -> Option<LayerSummary
                 band: band.flatten(),
                 band_width,
                 points: pts.iter().map(|(i, v)| (xl(*i), *v)).collect(),
+                cor,
             })
         })
         .collect();
@@ -429,6 +541,52 @@ mod tests {
 
     fn strs(v: &[&str]) -> Vec<Value> {
         v.iter().map(|s| Value::Str(s.to_string())).collect()
+    }
+
+    #[test]
+    fn a_scatter_says_how_y_and_the_size_go_with_x() {
+        let f = |v: &[f64]| v.iter().map(|x| Value::Float(*x)).collect::<Vec<_>>();
+        let x = [1.0, 2.0, 3.0, 4.0, 5.0, 6.0];
+        let y = [2.0, 3.0, 5.0, 4.0, 7.0, 8.0];
+        // the size falls as y rises (big districts sit low)
+        let size = [90.0, 80.0, 50.0, 60.0, 20.0, 10.0];
+        let df = vec![
+            ("x".to_string(), f(&x)),
+            ("y".to_string(), f(&y)),
+            ("s".to_string(), f(&size)),
+        ];
+        let built = GGPlot::new(df)
+            .aes(Aes::new().x("x").y("y").size("s"))
+            .geom_point()
+            .build();
+        let c = built.summary().layers[0].series[0].cor.clone().unwrap();
+        assert!(c.r > 0.9 && c.rho > 0.9, "{c:?}");
+        let (sx, sy) = c.size_rho.unwrap();
+        assert!(sx < -0.9 && sy < -0.9, "{c:?}");
+        let text = built.summary_text();
+        assert!(
+            text.contains("; y rises strongly with x (r 0.95, ρ 0.94)"),
+            "{text}"
+        );
+        assert!(
+            text.contains("size falls strongly with x (ρ -0.94), falls strongly with y (ρ -1)"),
+            "{text}"
+        );
+
+        // too few marks, or a line: no correlation
+        let df = vec![("x".to_string(), f(&x[..4])), ("y".to_string(), f(&y[..4]))];
+        let few = GGPlot::new(df)
+            .aes(Aes::new().x("x").y("y"))
+            .geom_point()
+            .build();
+        assert!(few.summary().layers[0].series[0].cor.is_none());
+        let df = vec![("x".to_string(), f(&x)), ("y".to_string(), f(&y))];
+        let line = GGPlot::new(df)
+            .aes(Aes::new().x("x").y("y"))
+            .geom_line()
+            .build();
+        assert!(line.summary().layers[0].series[0].cor.is_none());
+        assert!(!line.summary_text().contains(" with x"));
     }
 
     #[test]
