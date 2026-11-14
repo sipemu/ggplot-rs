@@ -91,7 +91,8 @@ impl Geom for GeomSmooth {
         let y_scale = scales.get(&Aesthetic::Y);
 
         // If there's a color/fill aesthetic, draw separate smooths per group
-        if let Some(cc) = color_col.or(fill_col) {
+        // (or a mapped `group` alone, #507)
+        if let Some(cc) = color_col.or(fill_col).or_else(|| data.column("group")) {
             let mut groups: Vec<(String, Vec<usize>)> = Vec::new();
             for (i, v) in cc.iter().enumerate() {
                 let key = v.to_group_key();

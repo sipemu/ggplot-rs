@@ -99,7 +99,8 @@ impl Geom for GeomLine {
 
         // One polyline per group/colour/linetype level — a mapped
         // `linetype` alone splits the rows too, as in ggplot2 (#220).
-        if color_col.is_some() || linetype_col.is_some() {
+        // a mapped `group` alone splits them too, as in ggplot2 (#507)
+        if color_col.is_some() || linetype_col.is_some() || data.column("group").is_some() {
             let groups = super::support::row_groups(data);
             for indices in &groups {
                 let first_idx = indices[0];

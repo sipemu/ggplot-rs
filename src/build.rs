@@ -1159,7 +1159,15 @@ impl PlotBuilder {
                 let mut computed = stat.compute_group(&group, scale_set);
                 let n = computed.nrows();
                 if n > 0 {
-                    for fv in facet_vars {
+                    // the group's own columns (a facet, and the colour / fill
+                    // / group it was split by) carry over to what the stat
+                    // computed, as in ggplot2: a stat that returns only x and
+                    // y (lm, loess) otherwise lost them, and the geom drew
+                    // every group's fit as one path in one colour
+                    for fv in facet_vars
+                        .iter()
+                        .chain(group_cols.iter().filter(|c| *c != "x"))
+                    {
                         if !computed.has_column(fv) {
                             if let Some(val) = group.column(fv).and_then(|c| c.first()).cloned() {
                                 computed.add_column(fv.clone(), vec![val; n]);

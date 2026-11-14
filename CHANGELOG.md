@@ -5,6 +5,17 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.56.1] — 2026-11-14
+
+### Fixed
+- A stat's output keeps the columns its group was split by (`color`,
+  `fill`, `group`), as in ggplot2. `lm` and `loess` smooths returned only
+  x and y, so a smooth per colour group was drawn as one path in one
+  colour, zigzagging from group to group
+  (DataZooDE/anofox-visualization#1121).
+- `geom_line`, `geom_path` and `geom_smooth` split on a mapped `group`
+  alone (#507).
+
 ## [0.56.0] — 2026-11-14
 
 ### Added
