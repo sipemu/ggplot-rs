@@ -387,7 +387,7 @@ impl Geom for GeomSf {
         data: &DataFrame,
         coord: &dyn Coord,
         scales: &ScaleSet,
-        _theme: &Theme,
+        theme: &Theme,
         backend: &mut dyn DrawBackend,
     ) -> Result<(), RenderError> {
         let geom_col = data
@@ -429,6 +429,23 @@ impl Geom for GeomSf {
         if size_col.is_some() {
             order.sort_by(|&a, &b| size_of(b).total_cmp(&size_of(a)));
         }
+        // anofox-visualization#1202: landmarks — a fill category of few,
+        // large symbols among many small ones (3 depots over 5,000
+        // customers) — would sit at the bottom of largest-first and vanish
+        // under the crowd: drawn last instead, over a halo in the panel's
+        // colour. A real bubble map has no such category and keeps
+        // largest-first.
+        let landmarks = match (fill_col, size_col) {
+            (Some(fc), Some(_)) => landmark_rows(data.nrows(), |i| value_str(&fc[i]), &size_of),
+            _ => std::collections::HashSet::new(),
+        };
+        if !landmarks.is_empty() {
+            let (last, mut first): (Vec<usize>, Vec<usize>) =
+                order.into_iter().partition(|i| landmarks.contains(i));
+            first.extend(last);
+            order = first;
+        }
+        let halo = theme.panel_background.fill.unwrap_or((255, 255, 255));
 
         for i in order {
             let g = match &geom_col[i] {
@@ -473,6 +490,11 @@ impl Geom for GeomSf {
                 super::set_mark_formatted(backend, scales, None, &Aesthetic::Fill, None);
             }
             super::set_row_extras(backend, data, i);
+            if landmarks.contains(&i) {
+                if let Geometry::Point(c) = &g {
+                    self.draw_point(*c, &project, halo, size + 1.5, backend)?;
+                }
+            }
             self.draw_geometry(&g, &project, fill, color, size, pattern.as_ref(), backend)?;
         }
         backend.set_tooltip(None);
@@ -516,6 +538,46 @@ impl Geom for GeomSf {
     fn set_series_color(&mut self, color: (u8, u8, u8)) {
         self.fill = color;
     }
+}
+
+/// Rows of the fill categories that are landmarks among many points: a
+/// category of at most 2 % of the rows (and at least 50 rows in all) whose
+/// smallest symbol is at least twice the median of the other rows'.
+fn landmark_rows(
+    n: usize,
+    key: impl Fn(usize) -> String,
+    size_of: &impl Fn(usize) -> f64,
+) -> std::collections::HashSet<usize> {
+    use std::collections::{HashMap, HashSet};
+    let mut out = HashSet::new();
+    if n < 50 {
+        return out;
+    }
+    let mut groups: HashMap<String, Vec<usize>> = HashMap::new();
+    for i in 0..n {
+        groups.entry(key(i)).or_default().push(i);
+    }
+    let cap = (n * 2 / 100).max(1);
+    for rows in groups.values().filter(|r| r.len() <= cap) {
+        let mut others: Vec<f64> = (0..n)
+            .filter(|i| !rows.contains(i))
+            .map(size_of)
+            .filter(|v| v.is_finite())
+            .collect();
+        if others.is_empty() {
+            continue;
+        }
+        others.sort_by(f64::total_cmp);
+        let median = others[others.len() / 2];
+        let smallest = rows
+            .iter()
+            .map(|&i| size_of(i))
+            .fold(f64::INFINITY, f64::min);
+        if smallest.is_finite() && smallest >= 2.0 * median {
+            out.extend(rows.iter().copied());
+        }
+    }
+    out
 }
 
 #[cfg(test)]

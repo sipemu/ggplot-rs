@@ -5,6 +5,17 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.58.0] — 2026-11-15
+
+### Changed
+- `geom_sf` points: a fill category of few, large symbols among many small
+  ones — landmarks, e.g. 3 depots among 1,000 customers (at most 2 % of at
+  least 50 rows, each at least twice the others' median size) — is drawn
+  last, over a halo in the panel's colour, instead of at the bottom of the
+  largest-first order where the crowd buried it
+  (DataZooDE/anofox-visualization#1202). A bubble map without such a
+  category keeps largest-first.
+
 ## [0.57.0] — 2026-11-14
 
 ### Added
