@@ -1,7 +1,9 @@
 //! What a built plot draws, as numbers: per layer (and facet panel) and per
 //! series, how many marks, the x range, the y minimum / maximum and where,
-//! the first and last y, and a band's extent. A caller that writes about a
-//! chart (a title, an answer) can quote these instead of guessing them.
+//! the first and last y, a band's extent, the series' shape (its largest
+//! move against the trend, its peaks) and which series leads at each x. A
+//! caller that writes about a chart (a title, an answer) can quote these
+//! instead of guessing them.
 //!
 //! ```
 //! use ggplot_rs::prelude::*;
@@ -29,6 +31,21 @@ pub struct LayerSummary {
     /// The facet panel's label, when the plot is faceted.
     pub panel: Option<String>,
     pub series: Vec<SeriesSummary>,
+    /// Two or more series over the same x values: which one is highest at
+    /// each shared x — `(series, how many x)`, most first — and how many x
+    /// they share. "A is always the highest" holds only when A has them all.
+    pub leaders: Option<Leaders>,
+}
+
+/// Who is highest at each shared x: `(series, how many x)` most first, and
+/// how many x the series share.
+pub type Leaders = (Vec<(String, usize)>, usize);
+
+/// A move of a series between two of its marks: `(y, x)` at each end.
+#[derive(Debug, Clone, PartialEq)]
+pub struct Move {
+    pub from: (f64, String),
+    pub to: (f64, String),
 }
 
 /// One series of a layer (all its rows when the layer has no series column).
@@ -57,7 +74,20 @@ pub struct SeriesSummary {
     /// How y goes with a numeric x on a point layer (a scatter, a bubble
     /// chart) of at least [`MIN_COR_POINTS`] marks.
     pub cor: Option<Correlation>,
+    /// Along an ordered x (at least [`MIN_SHAPE_POINTS`] marks): the
+    /// largest move against the series' net direction — the deepest fall of
+    /// a series that ends higher than it starts, the biggest rise of one
+    /// that ends lower — when it is at least a tenth of the y range. A
+    /// series that "rises steadily" has none worth naming.
+    pub counter_move: Option<Move>,
+    /// Along an ordered x: the local maxima that stand out by at least a
+    /// quarter of the y range (their prominence), highest first. Two or
+    /// more: the series peaks more than once.
+    pub peaks: Vec<(f64, String)>,
 }
+
+/// A series needs this many marks for its shape (counter move, peaks).
+pub const MIN_SHAPE_POINTS: usize = 4;
 
 /// A point layer needs this many marks for a correlation.
 pub const MIN_COR_POINTS: usize = 5;
@@ -80,6 +110,10 @@ pub struct PlotSummary {
     pub layers: Vec<LayerSummary>,
     /// Two series over the same x values: their difference per x.
     pub compare: Option<Comparison>,
+    /// A faceted plot whose panels each draw one series of the same layer
+    /// over the same x: which panel is highest at each shared x, as
+    /// [`LayerSummary::leaders`], with the layer's geom.
+    pub panel_leaders: Option<(String, Leaders)>,
 }
 
 /// `b − a` per shared x, for a plot of exactly two series (2025 against
@@ -136,9 +170,11 @@ impl BuiltPlot {
             }
         }
         let compare = compare(&merged);
+        let panel_leaders = faceted.then(|| panel_leaders(&merged)).flatten();
         PlotSummary {
             layers: merged,
             compare,
+            panel_leaders,
         }
     }
 
@@ -199,6 +235,25 @@ impl std::fmt::Display for PlotSummary {
                     write!(f, ", band {} … {}", num(lo), num(hi))?;
                     write_width(f, s)?;
                 }
+                if let Some(m) = &s.counter_move {
+                    let word = if m.to.0 < m.from.0 { "fall" } else { "rise" };
+                    write!(
+                        f,
+                        "; against the trend: largest {word} {} at {} → {} at {}",
+                        num(m.from.0),
+                        m.from.1,
+                        num(m.to.0),
+                        m.to.1
+                    )?;
+                }
+                if s.peaks.len() > 1 {
+                    let list: Vec<String> = s.peaks[..s.peaks.len().min(3)]
+                        .iter()
+                        .map(|(y, x)| format!("{} at {x}", num(*y)))
+                        .collect();
+                    let more = if s.peaks.len() > 3 { ", …" } else { "" };
+                    write!(f, "; {} peaks: {}{more}", s.peaks.len(), list.join(", "))?;
+                }
                 if let Some(c) = &s.cor {
                     write!(
                         f,
@@ -222,6 +277,22 @@ impl std::fmt::Display for PlotSummary {
             if l.series.len() > shown {
                 write!(f, "; +{} more series", l.series.len() - shown)?;
             }
+            if let Some((top, shared)) = &l.leaders {
+                let list: Vec<String> = top.iter().map(|(k, c)| format!("{k} {c}")).collect();
+                write!(
+                    f,
+                    "; highest at each of {shared} shared x: {}",
+                    list.join(", ")
+                )?;
+            }
+        }
+        if let Some((geom, (top, shared))) = &self.panel_leaders {
+            let list: Vec<String> = top.iter().map(|(k, c)| format!("{k} {c}")).collect();
+            write!(
+                f,
+                "\n{geom} across panels: highest at each of {shared} shared x: {}",
+                list.join(", ")
+            )?;
         }
         if let Some(c) = &self.compare {
             let one = |(d, p, x): &(f64, Option<f64>, String)| {
@@ -482,7 +553,25 @@ fn layer_summary(geom: &str, d: &DataFrame, date_x: bool) -> Option<LayerSummary
                         })
                     })
                     .flatten();
+            // the shape along x: a numeric / date x in x order, a discrete
+            // one as drawn; a scatter (point layer) has no line to follow
+            let ordered: Vec<(f64, String)> = if geom.starts_with("point") {
+                Vec::new()
+            } else if xs.len() == pts.len() {
+                let mut v: Vec<(f64, f64, usize)> = xs
+                    .iter()
+                    .zip(&pts)
+                    .map(|(xv, p)| (xv.1, p.1, p.0))
+                    .collect();
+                v.sort_by(|a, b| a.0.total_cmp(&b.0));
+                v.into_iter().map(|(_, yv, i)| (yv, xl(i))).collect()
+            } else {
+                pts.iter().map(|(i, v)| (*v, xl(*i))).collect()
+            };
+            let (counter_move, peaks) = shape(&ordered);
             Some(SeriesSummary {
+                counter_move,
+                peaks,
                 key: key.map(|_| k),
                 n: pts.len(),
                 x_from,
@@ -498,11 +587,143 @@ fn layer_summary(geom: &str, d: &DataFrame, date_x: bool) -> Option<LayerSummary
             })
         })
         .collect();
+    let leaders = leaders(&series);
     (!series.is_empty()).then(|| LayerSummary {
         geom: geom.to_string(),
         panel: None,
         series,
+        leaders,
     })
+}
+
+/// The largest move against the net direction and the prominent peaks of
+/// `ys` (in x order), see [`SeriesSummary::counter_move`] / [`SeriesSummary::peaks`].
+fn shape(ys: &[(f64, String)]) -> (Option<Move>, Vec<(f64, String)>) {
+    let n = ys.len();
+    if n < MIN_SHAPE_POINTS {
+        return (None, Vec::new());
+    }
+    let (lo, hi) = ys
+        .iter()
+        .fold((f64::INFINITY, f64::NEG_INFINITY), |(a, b), (y, _)| {
+            (a.min(*y), b.max(*y))
+        });
+    let range = hi - lo;
+    if range <= 0.0 {
+        return (None, Vec::new());
+    }
+    // against the net direction: a fall when it ends higher (or level), a rise when lower
+    let up = ys[n - 1].0 >= ys[0].0;
+    let (mut best, mut ext, mut at) = (0.0, ys[0].0, 0);
+    let mut mv = None;
+    for (j, (y, _)) in ys.iter().enumerate() {
+        let d = if up { ext - y } else { y - ext };
+        if d > best {
+            best = d;
+            mv = Some((at, j));
+        }
+        if (up && *y > ext) || (!up && *y < ext) {
+            ext = *y;
+            at = j;
+        }
+    }
+    let counter_move = mv.filter(|_| best >= 0.1 * range).map(|(a, b)| Move {
+        from: ys[a].clone(),
+        to: ys[b].clone(),
+    });
+    // peaks by prominence: how far it stands above the higher of the two
+    // lowest points between it and the next higher mark on either side
+    let mut peaks = Vec::new();
+    if n <= 5000 {
+        for i in 0..n {
+            let y = ys[i].0;
+            let left_ok = i == 0 || ys[i - 1].0 < y;
+            let right_ok = i + 1 == n || ys[i + 1].0 <= y;
+            if !(left_ok && right_ok) || (i == 0 && n > 1 && ys[1].0 == y) {
+                continue;
+            }
+            let side = |it: &mut dyn Iterator<Item = usize>| {
+                let mut m = y;
+                for k in it {
+                    if ys[k].0 > y {
+                        return m;
+                    }
+                    m = m.min(ys[k].0);
+                }
+                m
+            };
+            let l = side(&mut (0..i).rev());
+            let r = side(&mut (i + 1..n));
+            // an end of the series counts only by its inner side
+            let base = if i == 0 {
+                r
+            } else if i + 1 == n {
+                l
+            } else {
+                l.max(r)
+            };
+            if y - base >= 0.25 * range {
+                peaks.push(ys[i].clone());
+            }
+        }
+        peaks.sort_by(|a, b| b.0.total_cmp(&a.0));
+    }
+    (counter_move, peaks)
+}
+
+/// The first layer of each panel, when every panel draws it as one series:
+/// those series, keyed by panel, compared like the series of one layer.
+fn panel_leaders(layers: &[LayerSummary]) -> Option<(String, Leaders)> {
+    let geom = &layers.first()?.geom;
+    let mut seen = Vec::new();
+    let mut series = Vec::new();
+    for l in layers.iter().filter(|l| &l.geom == geom) {
+        let p = l.panel.clone()?;
+        if seen.contains(&p) || l.series.len() != 1 {
+            return None;
+        }
+        seen.push(p.clone());
+        series.push(SeriesSummary {
+            key: Some(p),
+            ..l.series[0].clone()
+        });
+    }
+    Some((geom.clone(), leaders(&series)?))
+}
+
+/// Which series is highest at each x two or more series share.
+fn leaders(series: &[SeriesSummary]) -> Option<Leaders> {
+    if series.len() < 2 || series.iter().any(|s| s.key.is_none()) {
+        return None;
+    }
+    let maps: Vec<std::collections::HashMap<&str, f64>> = series
+        .iter()
+        .map(|s| s.points.iter().map(|(x, y)| (x.as_str(), *y)).collect())
+        .collect();
+    let mut count: Vec<usize> = vec![0; series.len()];
+    let mut shared = 0;
+    for (x, _) in &series[0].points {
+        let ys: Option<Vec<f64>> = maps.iter().map(|m| m.get(x.as_str()).copied()).collect();
+        let Some(ys) = ys else { continue };
+        shared += 1;
+        let top = ys.iter().cloned().fold(f64::NEG_INFINITY, f64::max);
+        for (k, y) in ys.iter().enumerate() {
+            if *y == top {
+                count[k] += 1;
+            }
+        }
+    }
+    if shared < 3 {
+        return None;
+    }
+    let mut out: Vec<(String, usize)> = series
+        .iter()
+        .zip(count)
+        .filter(|(_, c)| *c > 0)
+        .map(|(s, c)| (s.key.clone().unwrap_or_default(), c))
+        .collect();
+    out.sort_by_key(|o| std::cmp::Reverse(o.1));
+    Some((out, shared))
 }
 
 /// A value as the summary shows it: a date as `YYYY-MM-DD` (with the time
@@ -769,5 +990,146 @@ mod tests {
             .summary_text();
         assert!(t.ends_with("; +3 more series"), "{t}");
         assert!(t.contains("s1 — 1 mark, x 1 … 1; y first 1.5"), "{t}");
+    }
+
+    fn line(ys: &[f64]) -> String {
+        let df = vec![
+            (
+                "x".to_string(),
+                (1..=ys.len()).map(|i| Value::Float(i as f64)).collect(),
+            ),
+            (
+                "y".to_string(),
+                ys.iter().map(|v| Value::Float(*v)).collect(),
+            ),
+        ];
+        GGPlot::new(df)
+            .aes(Aes::new().x("x").y("y"))
+            .geom_line()
+            .build()
+            .summary_text()
+    }
+
+    #[test]
+    fn a_rise_with_a_dip_names_the_dip() {
+        let t = line(&[1.0, 2.0, 5.0, 3.0, 4.0, 6.0]);
+        assert!(
+            t.contains("; against the trend: largest fall 5 at 3 → 3 at 4"),
+            "{t}"
+        );
+        let t = line(&[9.0, 8.0, 4.0, 7.0, 3.0, 1.0]);
+        assert!(t.contains("largest rise 4 at 3 → 7 at 4"), "{t}");
+    }
+
+    #[test]
+    fn a_steady_or_nearly_steady_series_has_no_counter_move() {
+        assert!(!line(&[1.0, 2.0, 3.0, 4.0, 5.0]).contains("against the trend"));
+        // a wobble under a tenth of the range is not named
+        assert!(!line(&[0.0, 50.0, 49.0, 100.0]).contains("against the trend"));
+    }
+
+    #[test]
+    fn two_peaks_are_named_highest_first() {
+        let t = line(&[0.0, 10.0, 0.0, 0.0, 6.0, 0.0, 0.0]);
+        assert!(t.contains("; 2 peaks: 10 at 2, 6 at 5"), "{t}");
+        // a small bump is not a peak
+        assert!(!line(&[0.0, 10.0, 0.0, 1.0, 0.0]).contains("peaks"));
+    }
+
+    #[test]
+    fn a_scatter_has_no_shape() {
+        let df = vec![
+            (
+                "x".to_string(),
+                vec![3.0, 1.0, 2.0, 5.0, 4.0]
+                    .into_iter()
+                    .map(Value::Float)
+                    .collect(),
+            ),
+            (
+                "y".to_string(),
+                vec![1.0, 5.0, 2.0, 4.0, 3.0]
+                    .into_iter()
+                    .map(Value::Float)
+                    .collect(),
+            ),
+        ];
+        let s = GGPlot::new(df)
+            .aes(Aes::new().x("x").y("y"))
+            .geom_point()
+            .build()
+            .summary();
+        assert!(s.layers[0].series[0].counter_move.is_none());
+        assert!(s.layers[0].series[0].peaks.is_empty());
+    }
+
+    #[test]
+    fn the_highest_series_per_x_is_counted() {
+        let df = vec![
+            (
+                "x".to_string(),
+                strs(&["a", "b", "c", "d", "a", "b", "c", "d"]),
+            ),
+            (
+                "y".to_string(),
+                vec![5.0, 6.0, 7.0, 1.0, 4.0, 5.0, 6.0, 2.0]
+                    .into_iter()
+                    .map(Value::Float)
+                    .collect(),
+            ),
+            (
+                "g".to_string(),
+                strs(&["WI", "WI", "WI", "WI", "CA", "CA", "CA", "CA"]),
+            ),
+        ];
+        let t = GGPlot::new(df)
+            .aes(Aes::new().x("x").y("y").color("g"))
+            .geom_line()
+            .build()
+            .summary_text();
+        assert!(
+            t.contains("; highest at each of 4 shared x: WI 3, CA 1"),
+            "{t}"
+        );
+    }
+
+    #[test]
+    fn facet_panels_are_compared_per_x() {
+        let df = vec![
+            (
+                "x".to_string(),
+                vec![1.0, 2.0, 3.0, 1.0, 2.0, 3.0]
+                    .into_iter()
+                    .map(Value::Float)
+                    .collect(),
+            ),
+            (
+                "y".to_string(),
+                vec![5.0, 1.0, 7.0, 4.0, 6.0, 2.0]
+                    .into_iter()
+                    .map(Value::Float)
+                    .collect(),
+            ),
+            (
+                "store".to_string(),
+                strs(&["WI", "WI", "WI", "CA", "CA", "CA"]),
+            ),
+        ];
+        let t = GGPlot::new(df)
+            .aes(Aes::new().x("x").y("y"))
+            .geom_line()
+            .facet_wrap("store", None)
+            .build()
+            .summary_text();
+        assert!(
+            t.contains("\nline across panels: highest at each of 3 shared x: WI 2, CA 1"),
+            "{t}"
+        );
+    }
+
+    #[test]
+    fn at_most_three_peaks_are_listed() {
+        let t = line(&[0.0, 9.0, 0.0, 8.0, 0.0, 7.0, 0.0, 10.0, 0.0]);
+        assert!(t.contains("; 4 peaks: 10 at 8, 9 at 2, 8 at 4, …"), "{t}");
     }
 }

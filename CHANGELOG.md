@@ -5,6 +5,36 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.60.0] — 2026-11-18
+
+### Added
+- The plot summary (`BuiltPlot::summary`, `summary_text`) says more about a
+  series' shape, so text written about a chart can be checked against it
+  (DataZooDE/anofox-visualization#1263):
+  - `SeriesSummary::counter_move` (`Move`): along an ordered x, the largest
+    move against the series' net direction — the deepest fall of a series
+    that ends higher, the biggest rise of one that ends lower — when it is
+    at least a tenth of the y range (`; against the trend: largest fall …`).
+    A series that "rises steadily" has none worth naming.
+  - `SeriesSummary::peaks`: local maxima standing out by at least a quarter
+    of the y range, highest first (`; 3 peaks: …`, at most three listed).
+  - `LayerSummary::leaders` (`Leaders`): with two or more series over the
+    same x, which one is highest at how many of them (`; highest at each of
+    51 shared x: WI_1 25, CA_1 22, TX_1 4`), and
+    `PlotSummary::panel_leaders` the same across facet panels that each draw
+    one series.
+- `MIN_SHAPE_POINTS` (4): the marks a series needs for its shape.
+
+### Changed
+- `SeriesSummary`, `LayerSummary` and `PlotSummary` have new public fields;
+  a struct literal of them needs the new ones.
+
+### Fixed
+- PNG text (plotters path): bold and italic faces render (`FontDesc::style`
+  kept the regular glyphs); rotated text keeps its anchor and face, so a y
+  title is centred on its panel; rich-text runs are measured with the
+  bundled font's advances, so rotated sub/superscripts stay on the line (#521).
+
 ## [0.59.0] — 2026-11-17
 
 ### Added
