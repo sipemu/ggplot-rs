@@ -118,6 +118,15 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     legend_wrap()?;
     boxplot_identity()?;
     themes()?;
+    sign_split()?;
+    sign_split_density()?;
+    distributions()?;
+    ridges()?;
+    factor_graph()?;
+    repel()?;
+    sec_axis()?;
+    rich_text()?;
+    radial()?;
 
     println!("Gallery written to assets/gallery/");
     Ok(())
@@ -1860,5 +1869,342 @@ fn calendar() -> Result<(), Box<dyn std::error::Error>> {
         .ylab("")
         .theme_minimal()
         .save_with_size(&out("calendar"), W + 260, 300)?;
+    Ok(())
+}
+
+/// Monthly profit around zero: the line is red below the threshold and green
+/// above, crossings interpolated (`SignSplit`).
+fn sign_split() -> Result<(), Box<dyn std::error::Error>> {
+    let mut r = seeded(41);
+    let week: Vec<f64> = (1..=40).map(f64::from).collect();
+    let profit: Vec<f64> = week
+        .iter()
+        .map(|w| round2((w * 0.33).sin() * 14.0 + w * 0.25 - 3.0 + randn(&mut r) * 2.5))
+        .collect();
+    let df = df! { "week" => week, "profit" => profit }?;
+    GGPlot::new(df)
+        .aes(Aes::new().x("week").y("profit"))
+        .geom_hline(0.0)
+        .geom_line_with(GeomLine {
+            width: 2.2,
+            interpolate: Interpolate::MonotoneCubic,
+            split: Some(SignSplit::new((192, 58, 98), (31, 122, 82))),
+            ..Default::default()
+        })
+        .title("Above / Below a Threshold")
+        .subtitle("Weekly profit, k€ — red below zero, green above")
+        .xlab("Week")
+        .ylab("k€")
+        .theme_minimal()
+        .save_with_size(&out("sign_split"), W, H)?;
+    Ok(())
+}
+
+/// Simulated project outcomes: the density's mass below zero (a loss) in
+/// red, above in green (`SignSplit` on `geom_density`).
+fn sign_split_density() -> Result<(), Box<dyn std::error::Error>> {
+    let mut r = seeded(42);
+    let npv: Vec<f64> = (0..600)
+        .map(|_| {
+            let base = 1.4 + randn(&mut r) * 1.6;
+            round2(if r.gen::<f64>() < 0.15 {
+                base - 3.0
+            } else {
+                base
+            })
+        })
+        .collect();
+    let df = df! { "npv" => npv }?;
+    GGPlot::new(df)
+        .aes(Aes::new().x("npv"))
+        .geom_density_with(GeomDensity {
+            alpha: 0.6,
+            split: Some(SignSplit::new((192, 58, 98), (31, 122, 82)).axis(SplitAxis::X)),
+            ..Default::default()
+        })
+        .title("Loss vs Gain")
+        .subtitle("Simulated project NPV, M€ — mass below zero in red")
+        .xlab("NPV (M€)")
+        .ylab("Density")
+        .theme_minimal()
+        .save_with_size(&out("sign_split_density"), W, H)?;
+    Ok(())
+}
+
+/// Three candidate lead-time priors with the same median, drawn from the
+/// built-in densities (`dnorm_ms`, `dlnorm`, `dgamma`).
+fn distributions() -> Result<(), Box<dyn std::error::Error>> {
+    use ggplot_rs::stat::distribution::{dgamma, dlnorm, dnorm_ms, qgamma};
+    let (mut x, mut y, mut d) = (Vec::new(), Vec::new(), Vec::new());
+    let shape = 6.0;
+    let rate = shape / 10.0;
+    for i in 0..=240 {
+        let v = i as f64 * 0.1;
+        for (name, f) in [
+            ("Normal", dnorm_ms(v, 10.0, 2.5)),
+            ("LogNormal", dlnorm(v, 10f64.ln(), 0.3)),
+            ("Gamma", dgamma(v, shape, rate)),
+        ] {
+            x.push(v);
+            y.push(f);
+            d.push(name);
+        }
+    }
+    let (lo, hi) = (qgamma(0.05, shape, rate), qgamma(0.95, shape, rate));
+    let df = df! { "days" => x, "density" => y, "prior" => d }?;
+    GGPlot::new(df)
+        .aes(Aes::new().x("days").y("density").color("prior"))
+        .geom_line_with(GeomLine {
+            width: 2.0,
+            ..Default::default()
+        })
+        .geom_vline(lo)
+        .geom_vline(hi)
+        .scale_color_brewer(PaletteName::Dark2)
+        .title("Distribution Functions")
+        .subtitle(&format!(
+            "Lead-time priors, median ≈ 10 days; Gamma 90 % interval {lo:.1}–{hi:.1}"
+        ))
+        .xlab("Lead time (days)")
+        .ylab("Density")
+        .theme_minimal()
+        .save_with_size(&out("distributions"), W, H)?;
+    Ok(())
+}
+
+/// Daily maximum temperatures per month as a ridgeline plot.
+fn ridges() -> Result<(), Box<dyn std::error::Error>> {
+    let months = [
+        "Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
+    ];
+    let mean = [
+        3.0, 4.5, 9.0, 14.0, 18.5, 22.0, 24.5, 24.0, 19.5, 14.0, 8.0, 4.0,
+    ];
+    let mut r = seeded(43);
+    let (mut t, mut m) = (Vec::new(), Vec::new());
+    for (name, mu) in months.iter().zip(mean) {
+        for _ in 0..90 {
+            t.push(round2(mu + randn(&mut r) * (3.0 + mu * 0.06)));
+            m.push(*name);
+        }
+    }
+    let df = df! { "temp" => t, "month" => m }?;
+    GGPlot::new(df)
+        .aes(Aes::new().x("temp").y("month").fill("month"))
+        .geom_density_ridges_with(GeomDensityRidges {
+            alpha: 0.85,
+            scale: 1.3,
+            ..Default::default()
+        })
+        .scale_fill_viridis_d('C', 0.0, 1.0, 1)
+        // room for the top ridge: `scale - 0.5` rows above the last month
+        .scale_y_discrete(ScaleDiscrete::new().with_expand(0.6, 0.9))
+        .title("Ridgelines")
+        .subtitle("Daily maximum temperature by month, °C")
+        .xlab("°C")
+        .ylab("")
+        .theme_minimal()
+        .legend_position(LegendPosition::None)
+        .save_with_size(&out("ridges"), W, H)?;
+    Ok(())
+}
+
+/// A hidden Markov model as a Forney-style factor graph: parameters, the
+/// state chain and the observations in three straight bands
+/// (`graph_layout::banded` + `graph::draw`).
+fn factor_graph() -> Result<(), Box<dyn std::error::Error>> {
+    use ggplot_rs::graph::{draw, node_size, DrawEdge, DrawNode, GraphStyle, NodeShape};
+    use ggplot_rs::graph_layout::{banded, BandedParams, GraphEdge, GraphNode};
+    // (label, shape, band)
+    let mut spec: Vec<(String, NodeShape, usize)> = vec![
+        ("Dir".into(), NodeShape::Glyph, 0),
+        ("A".into(), NodeShape::Square, 0),
+        ("Dir".into(), NodeShape::Glyph, 0),
+        ("B".into(), NodeShape::Square, 0),
+        ("Cat".into(), NodeShape::Glyph, 1),
+        ("s₀".into(), NodeShape::Circle, 1),
+    ];
+    let mut links: Vec<(usize, usize)> = vec![(0, 1), (2, 3), (4, 5)];
+    let mut prev = 5;
+    for t in 1..=4 {
+        let tr = spec.len();
+        spec.push(("T".into(), NodeShape::Glyph, 1));
+        let eq = spec.len();
+        spec.push((format!("s{t}"), NodeShape::Square, 1));
+        let ob = spec.len();
+        spec.push(("T".into(), NodeShape::Glyph, 2));
+        let x = spec.len();
+        spec.push((format!("x{t}"), NodeShape::FilledCircle, 2));
+        links.extend([(prev, tr), (1, tr), (tr, eq), (eq, ob), (3, ob), (ob, x)]);
+        prev = eq;
+    }
+    let sizes: Vec<_> = spec.iter().map(|(l, sh, _)| node_size(*sh, l)).collect();
+    let gnodes: Vec<GraphNode> = spec
+        .iter()
+        .zip(&sizes)
+        .map(|((_, _, b), s)| GraphNode {
+            w: s.w,
+            h: s.h,
+            lane: Some(*b),
+            ..Default::default()
+        })
+        .collect();
+    let gedges: Vec<GraphEdge> = links
+        .iter()
+        .map(|&(from, to)| GraphEdge {
+            from,
+            to,
+            label_w: None,
+        })
+        .collect();
+    let layout = banded(
+        &gnodes,
+        &gedges,
+        &BandedParams {
+            bands: 3,
+            margin: 24.0,
+            ..Default::default()
+        },
+    );
+    let nodes: Vec<DrawNode> = spec
+        .iter()
+        .zip(&sizes)
+        .enumerate()
+        .map(|(i, ((_, shape, _), b))| DrawNode {
+            id: format!("n{i}"),
+            shape: *shape,
+            lines: b.lines.clone(),
+            stroke: (55, 65, 81),
+            ..Default::default()
+        })
+        .collect();
+    let edges: Vec<DrawEdge> = links
+        .iter()
+        .map(|_| DrawEdge {
+            colour: (90, 98, 112),
+            width: 1.3,
+            undirected: true,
+            ..Default::default()
+        })
+        .collect();
+    let lanes = ["parameters", "hidden states", "observations"].map(String::from);
+    draw(
+        &layout,
+        &lanes,
+        &[],
+        &nodes,
+        &edges,
+        &GraphStyle::default(),
+        ggplot_rs::theme::presets::theme_void(),
+    )
+    .save_with_size(
+        &out("factor_graph"),
+        layout.w.ceil() as u32,
+        layout.h.ceil() as u32,
+    )?;
+    Ok(())
+}
+
+/// Labels pushed clear of each other and of their points (`geom_text_repel`).
+fn repel() -> Result<(), Box<dyn std::error::Error>> {
+    let df = df! {
+        "country" => ["Norway", "Sweden", "Denmark", "Finland", "Germany", "France", "Spain",
+                      "Italy", "Poland", "Portugal", "Greece", "Netherlands", "Austria", "Ireland"],
+        "gdp" => [87.9, 56.4, 68.0, 50.5, 52.7, 44.4, 32.7, 38.4, 22.1, 26.0, 22.6, 62.7, 56.5, 103.7],
+        "life" => [83.2, 83.1, 81.4, 81.9, 80.7, 82.3, 83.1, 82.9, 77.4, 81.8, 80.6, 81.7, 81.3, 82.6],
+    }?;
+    GGPlot::new(df)
+        .aes(Aes::new().x("gdp").y("life").label("country"))
+        .geom_point()
+        .geom_text_repel()
+        .title("Repelled Labels")
+        .subtitle("GDP per capita vs life expectancy, 2023")
+        .xlab("GDP per capita (k$)")
+        .ylab("Life expectancy (years)")
+        .theme_minimal()
+        .save_with_size(&out("repel"), W, H)?;
+    Ok(())
+}
+
+/// One measure, two units: °C on the left, °F on the right (`SecAxis::linear`).
+fn sec_axis() -> Result<(), Box<dyn std::error::Error>> {
+    let month: Vec<f64> = (1..=12).map(f64::from).collect();
+    let temp = vec![
+        1.2, 2.1, 5.8, 9.9, 14.2, 17.4, 19.5, 19.1, 15.2, 10.4, 5.5, 2.3,
+    ];
+    let df = df! { "month" => month, "temp" => temp }?;
+    GGPlot::new(df)
+        .aes(Aes::new().x("month").y("temp"))
+        .geom_line_with(GeomLine {
+            width: 2.0,
+            interpolate: Interpolate::MonotoneCubic,
+            ..Default::default()
+        })
+        .geom_point()
+        .scale_y_continuous(
+            ScaleContinuous::new().with_sec_axis(SecAxis::linear(1.8, 32.0).with_name("°F")),
+        )
+        .title("Secondary Axis")
+        .subtitle("Mean daily temperature, Berlin")
+        .xlab("Month")
+        .ylab("°C")
+        .theme_minimal()
+        .save_with_size(&out("sec_axis"), W, H)?;
+    Ok(())
+}
+
+/// Titles and axis titles with bold, italics, sub/superscripts and coloured
+/// spans (`Theme::rich_text`, ggtext's `element_markdown`).
+fn rich_text() -> Result<(), Box<dyn std::error::Error>> {
+    let mut r = seeded(44);
+    let (mut x, mut y, mut g) = (Vec::new(), Vec::new(), Vec::new());
+    for (name, slope) in [("treated", 0.9), ("control", 0.35)] {
+        for _ in 0..60 {
+            let v = r.gen::<f64>() * 10.0;
+            x.push(round2(v));
+            y.push(round2(2.0 + slope * v + randn(&mut r) * 1.2));
+            g.push(name);
+        }
+    }
+    let df = df! { "dose" => x, "response" => y, "group" => g }?;
+    let mut theme = ggplot_rs::theme::presets::theme_minimal();
+    theme.rich_text = true;
+    let svg = GGPlot::new(df)
+        .aes(Aes::new().x("dose").y("response").color("group"))
+        .geom_point()
+        .scale_color_manual(vec![
+            ("control", RGBAColor::new(150, 150, 150)),
+            ("treated", RGBAColor::new(213, 94, 0)),
+        ])
+        .title("<span style='color:#D55E00'>**Treated**</span> respond faster than *controls*")
+        .xlab("Dose (mg·kg^-1^)")
+        .ylab("Response, log~10~ units")
+        .theme(theme)
+        .legend_position(LegendPosition::None)
+        // the SVG renderer: the plotters PNG path doesn't set rich text yet (#521)
+        .render_svg_native_with_size(W, H)?;
+    std::fs::write("assets/gallery/rich_text.svg", svg)?;
+    Ok(())
+}
+
+/// Monthly rainfall on a half-circle with a hole (`coord_radial`).
+fn radial() -> Result<(), Box<dyn std::error::Error>> {
+    let df = df! {
+        "month" => ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"],
+        "rain" => [42.0, 33.0, 40.0, 37.0, 54.0, 69.0, 56.0, 58.0, 45.0, 37.0, 44.0, 55.0],
+    }?;
+    let half = std::f64::consts::FRAC_PI_2;
+    GGPlot::new(df)
+        .aes(Aes::new().x("month").y("rain").fill("rain"))
+        .geom_col()
+        .scale_fill_viridis_c()
+        .coord_radial(-half, half, 0.35)
+        .title("Radial Coordinates")
+        .subtitle("Monthly rainfall, mm — a half circle with a hole")
+        .xlab("")
+        .ylab("")
+        .theme_minimal()
+        .legend_position(LegendPosition::None)
+        .save_with_size(&out("radial"), W, H)?;
     Ok(())
 }
