@@ -143,6 +143,10 @@ jobs:
       - uses: Swatinem/rust-cache@v2
 
       - uses: jetli/wasm-pack-action@v0.4.0
+        # pinned: its "latest" lookup once returned v0.9.1, which lacks
+        # `wasm-pack test --no-default-features` (PR #520)
+        with:
+          version: v0.15.1
 
       - uses: actions/setup-node@v4
         with:

@@ -164,6 +164,7 @@ fn detail(rows: &[Po]) -> Result<(), Box<dyn std::error::Error>> {
             color: (20, 110, 98),
             alpha: 0.45,
             line_width: 1.5,
+            ..Default::default()
         })
         // SLA threshold — mass to the left is the on-time share.
         .geom_vline_with(GeomVline {

@@ -310,6 +310,7 @@ fn distribution_geoms() {
                 color: (0, 80, 0),
                 alpha: 0.4,
                 line_width: 1.5,
+                ..Default::default()
             }),
         "density_with",
     );

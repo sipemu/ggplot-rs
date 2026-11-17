@@ -5,6 +5,31 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.59.0] — 2026-11-17
+
+### Added
+- `SignSplit` (`geom::support`, in the prelude with `SplitAxis`): colour an
+  area, density or line by the side of a threshold — red below, green
+  above, or any two colours — cut at the exact crossing, so the parts meet
+  without a gap or an overlap (DataZooDE/anofox-visualization#1256). Set it
+  as `split` on `GeomArea`, `GeomDensity` or `GeomLine`. Along y (the
+  default, threshold 0) each area part fills between the curve and the
+  threshold; along x (a distribution of outcomes) the shape is cut at
+  `x = at`. An area or density keeps one outline; a line changes colour
+  without a break (one width; an arrow on its last part).
+- `geom::support::split_runs`: a polyline cut into runs on either side of a
+  threshold, the crossing interpolated.
+- `stat::distribution`: `pnorm`, `gamma_inc` (regularized lower incomplete
+  gamma) and density / CDF / quantile for Normal(mean, sd) (`dnorm_ms`,
+  `pnorm_ms`, `qnorm_ms`), LogNormal (`dlnorm`, `plnorm`, `qlnorm`),
+  Gamma(shape, rate) (`dgamma`, `pgamma`, `qgamma`) and Beta(a, b)
+  (`dbeta`, `pbeta`, `qbeta`) — for a distribution input's preview and its
+  "likely value + 90 % range" fit (DataZooDE/anofox-visualization#1235).
+
+### Changed
+- `GeomArea`, `GeomDensity` and `GeomLine` have a new public field `split`
+  (default `None`): a struct literal without `..Default::default()` needs it.
+
 ## [0.58.1] — 2026-11-17
 
 ### Fixed
