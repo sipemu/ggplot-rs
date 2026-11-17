@@ -328,6 +328,56 @@ Highcharts-style chart types, each one layer in the grammar (tracked under the
 | Maps & weather | `geom_sf`, `coord_sf`, `geom_tilemap` (+ `us_state_grid`), `geom_flow` (`sf`), `annotation_map_tile` (`tiles`), `geom_windbarb` |
 | Radial | `coord_polar`, `coord_radar`, gauges via `CoordPolar::with_span` |
 
+### Recent additions
+
+Threshold splits, distribution functions, ridgelines, factor graphs, label
+repulsion, secondary axes, rich text and radial coordinates.
+
+<table>
+  <tr>
+    <td align="center" width="33%">
+      <img src="assets/gallery/sign_split.png" width="260" alt="Line split at zero"><br>
+      <sub>Above / below a threshold · <code>SignSplit</code></sub>
+    </td>
+    <td align="center" width="33%">
+      <img src="assets/gallery/sign_split_density.png" width="260" alt="Density split at zero"><br>
+      <sub>Loss vs gain · <code>SignSplit</code> on <code>geom_density</code></sub>
+    </td>
+    <td align="center" width="33%">
+      <img src="assets/gallery/distributions.png" width="260" alt="Distribution functions"><br>
+      <sub>Densities &amp; quantiles · <code>stat::distribution</code></sub>
+    </td>
+  </tr>
+  <tr>
+    <td align="center">
+      <img src="assets/gallery/ridges.png" width="260" alt="Ridgelines"><br>
+      <sub>Ridgelines · <code>geom_density_ridges</code></sub>
+    </td>
+    <td align="center">
+      <img src="assets/gallery/factor_graph.png" width="260" alt="Factor graph"><br>
+      <sub>Factor graph · <code>graph_layout::banded</code> + <code>graph::draw</code></sub>
+    </td>
+    <td align="center">
+      <img src="assets/gallery/repel.png" width="260" alt="Repelled labels"><br>
+      <sub>Repelled labels · <code>geom_text_repel</code></sub>
+    </td>
+  </tr>
+  <tr>
+    <td align="center">
+      <img src="assets/gallery/sec_axis.png" width="260" alt="Secondary axis"><br>
+      <sub>Second unit on the right · <code>SecAxis::linear</code></sub>
+    </td>
+    <td align="center">
+      <img src="assets/gallery/rich_text.png" width="260" alt="Rich text"><br>
+      <sub>Rich text · <code>Theme::rich_text</code> (<code>element_markdown</code>)</sub>
+    </td>
+    <td align="center">
+      <img src="assets/gallery/radial.png" width="260" alt="Radial coordinates"><br>
+      <sub>Half donut · <code>coord_radial</code></sub>
+    </td>
+  </tr>
+</table>
+
 ### Publication-ready (ggpubr-style)
 
 Journal palettes, `theme_pubr()`, GAM smoothing, and statistical annotations —
