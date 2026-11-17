@@ -95,3 +95,45 @@ fn a_line_changes_colour_at_the_crossing() {
     assert_eq!(shapes(&svg, "stroke", RED), 2, "{svg}");
     assert_eq!(shapes(&svg, "stroke", GREEN), 1);
 }
+
+#[test]
+fn grouped_lines_split_each_series() {
+    let mut df = series();
+    df.add_column(
+        "g".into(),
+        ["a", "a", "a", "a"]
+            .iter()
+            .map(|s| Value::Str(s.to_string()))
+            .collect(),
+    );
+    let svg = GGPlot::new(df)
+        .aes(Aes::new().x("x").y("y").group("g"))
+        .geom_line_with(GeomLine {
+            split: Some(SignSplit::new(RED, GREEN).at(1.0).axis(SplitAxis::Y)),
+            ..Default::default()
+        })
+        .render_svg_native_with_size(400, 300)
+        .unwrap();
+    assert!(
+        shapes(&svg, "stroke", RED) >= 1 && shapes(&svg, "stroke", GREEN) >= 1,
+        "{svg}"
+    );
+}
+
+#[test]
+fn a_split_along_x_cuts_an_area_at_x() {
+    let svg = GGPlot::new(series())
+        .aes(Aes::new().x("x").y("y"))
+        .geom_area_with(GeomArea {
+            split: Some(SignSplit::new(RED, GREEN).axis(SplitAxis::X).at(1.5)),
+            ..Default::default()
+        })
+        .position(PositionIdentity)
+        .render_svg_native_with_size(400, 300)
+        .unwrap();
+    assert_eq!(
+        (shapes(&svg, "fill", RED), shapes(&svg, "fill", GREEN)),
+        (1, 1),
+        "{svg}"
+    );
+}

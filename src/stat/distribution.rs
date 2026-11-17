@@ -593,6 +593,38 @@ mod family_tests {
     }
 
     #[test]
+    fn edges_and_out_of_domain_values() {
+        // outside the support
+        assert_eq!(dlnorm(0.0, 0.0, 1.0), 0.0);
+        assert_eq!(plnorm(-1.0, 0.0, 1.0), 0.0);
+        assert_eq!(dgamma(-1.0, 2.0, 1.0), 0.0);
+        assert_eq!(dgamma(0.0, 2.0, 1.0), 0.0);
+        assert_eq!(dgamma(0.0, 1.0, 3.0), 3.0);
+        assert!(dgamma(0.0, 0.5, 1.0).is_infinite());
+        assert_eq!(dbeta(1.5, 2.0, 2.0), 0.0);
+        assert_eq!(dbeta(0.0, 2.0, 3.0), 0.0);
+        assert!(dbeta(1.0, 2.0, 0.5).is_infinite());
+        assert!(close(dbeta(0.0, 1.0, 3.0), 3.0, 1e-9));
+        assert_eq!(gamma_inc(2.0, 0.0), 0.0);
+        assert_eq!(gamma_inc(-1.0, 1.0), 0.0);
+        // the ends of the quantiles
+        assert_eq!(qgamma(0.0, 2.0, 1.0), 0.0);
+        assert!(qgamma(1.0, 2.0, 1.0).is_infinite());
+        assert_eq!(qbeta(0.0, 2.0, 3.0), 0.0);
+        assert_eq!(qbeta(1.0, 2.0, 3.0), 1.0);
+        assert!(invert(|x| x, f64::NAN, 0.0, 1.0, false).is_nan());
+        assert!(invert(|x| x, 1.5, 0.0, 1.0, false).is_nan());
+        // the CDFs and their quantiles agree
+        assert!(close(
+            pnorm_ms(qnorm_ms(0.9, 3.0, 2.0), 3.0, 2.0),
+            0.9,
+            1e-6
+        ));
+        assert!(close(plnorm(qlnorm(0.2, 0.5, 0.3), 0.5, 0.3), 0.2, 1e-6));
+        assert!(close(pnorm(-3.0) + pnorm(3.0), 1.0, 1e-7));
+    }
+
+    #[test]
     fn densities_integrate_to_one() {
         let integ = |f: &dyn Fn(f64) -> f64, lo: f64, hi: f64| {
             let n = 20_000;

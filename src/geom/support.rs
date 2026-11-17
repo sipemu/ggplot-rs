@@ -604,4 +604,22 @@ mod split_tests {
         // a run that starts on the threshold takes the side it then goes to
         assert_eq!(runs[1], (false, vec![(3.0, 0.0), (4.0, -1.0)]));
     }
+
+    #[test]
+    fn colours_by_side_and_breaks_on_gaps_along_x() {
+        let sp = SignSplit::new((1, 0, 0), (0, 1, 0))
+            .axis(SplitAxis::X)
+            .at(2.0);
+        assert_eq!((sp.colour(false), sp.colour(true)), ((1, 0, 0), (0, 1, 0)));
+        let runs = split_runs(
+            &[(0.0, 1.0), (f64::INFINITY, 1.0), (1.0, 1.0), (3.0, 2.0)],
+            SplitAxis::X,
+            2.0,
+        );
+        assert_eq!(runs.len(), 3, "{runs:?}");
+        assert_eq!(runs[2].1[0], (2.0, 1.5));
+        // a flat segment along the threshold doesn't divide by zero
+        let flat = split_runs(&[(0.0, 0.0), (1.0, 0.0), (2.0, 1.0)], SplitAxis::Y, 0.0);
+        assert_eq!(flat.len(), 1);
+    }
 }
