@@ -21,6 +21,10 @@ pub struct GeomArea {
     /// How consecutive points are joined (straight by default; a smooth
     /// `areaspline` with [`Interpolate::MonotoneCubic`](super::support::Interpolate::MonotoneCubic)).
     pub interpolate: super::support::Interpolate,
+    /// Fill each side of a threshold in its own colour (red below, green
+    /// above), cut at the exact crossing; one outline. Along y, each part
+    /// fills between the curve and the threshold.
+    pub split: Option<super::support::SignSplit>,
 }
 
 impl Default for GeomArea {
@@ -31,6 +35,48 @@ impl Default for GeomArea {
             alpha: 0.4,
             line_width: 1.0,
             interpolate: super::support::Interpolate::Linear,
+            split: None,
+        }
+    }
+}
+
+/// Polygons, each with its fill colour.
+pub(crate) type Parts = Vec<(Vec<(f64, f64)>, (u8, u8, u8))>;
+
+/// A band (upper curve over lower, in scale space) cut by `sp`: one polygon
+/// per run, in its side's colour. Along y each run fills down (up) to the
+/// threshold; along x the band is cut at `x = at`.
+pub(crate) fn split_band(
+    sp: &super::support::SignSplit,
+    upper: &[(f64, f64)],
+    lower: &[(f64, f64)],
+    x_scale: Option<&dyn crate::scale::Scale>,
+    y_scale: Option<&dyn crate::scale::Scale>,
+) -> Parts {
+    use super::support::{split_runs, SplitAxis};
+    match sp.axis {
+        SplitAxis::Y => {
+            let at = y_scale.map_or(sp.at, |s| s.map(&Value::Float(sp.at)));
+            split_runs(upper, SplitAxis::Y, at)
+                .into_iter()
+                .filter_map(|(above, mut run)| {
+                    let (first, last) = (run.first()?.0, run.last()?.0);
+                    run.extend([(last, at), (first, at)]);
+                    Some((run, sp.colour(above)))
+                })
+                .collect()
+        }
+        SplitAxis::X => {
+            let at = x_scale.map_or(sp.at, |s| s.map(&Value::Float(sp.at)));
+            let lows = split_runs(lower, SplitAxis::X, at);
+            split_runs(upper, SplitAxis::X, at)
+                .into_iter()
+                .zip(lows)
+                .map(|((above, mut up), (_, low))| {
+                    up.extend(low.into_iter().rev());
+                    (up, sp.colour(above))
+                })
+                .collect()
         }
     }
 }
@@ -114,30 +160,37 @@ impl Geom for GeomArea {
                 upper_raw.push((nx, ny));
                 lower_raw.push((nx, nb));
             }
-            let to_px = |pts: Vec<(f64, f64)>| -> Vec<(f64, f64)> {
-                super::support::interpolate(&pts, self.interpolate)
-                    .0
-                    .into_iter()
-                    .map(|p| coord.transform(p, &plot_area))
+            let smooth = |pts: &[(f64, f64)]| super::support::interpolate(pts, self.interpolate).0;
+            let px = |pts: &[(f64, f64)]| -> Vec<(f64, f64)> {
+                pts.iter()
+                    .map(|&p| coord.transform(p, &plot_area))
                     .collect()
             };
-            let (upper, mut lower) = (to_px(upper_raw), to_px(lower_raw));
-
-            let mut polygon = upper.clone();
-            lower.reverse();
-            polygon.extend(lower);
-            if polygon.len() >= 3 {
-                backend.draw_polygon(
-                    &polygon,
-                    &RectStyle {
-                        fill: Some(fill),
-                        stroke: None,
-                        stroke_width: 0.0,
-                        alpha: self.alpha,
-                        clip: true,
-                        corner_radius: 0.0,
-                    },
-                )?;
+            let (up_n, low_n) = (smooth(&upper_raw), smooth(&lower_raw));
+            let upper = px(&up_n);
+            // the filled parts: the whole band, or one per side of the split
+            let parts = match &self.split {
+                None => {
+                    let mut poly = up_n.clone();
+                    poly.extend(low_n.iter().rev());
+                    vec![(poly, fill)]
+                }
+                Some(sp) => split_band(sp, &up_n, &low_n, x_scale, y_scale),
+            };
+            for (poly, colour) in parts {
+                if poly.len() >= 3 {
+                    backend.draw_polygon(
+                        &px(&poly),
+                        &RectStyle {
+                            fill: Some(colour),
+                            stroke: None,
+                            stroke_width: 0.0,
+                            alpha: self.alpha,
+                            clip: true,
+                            corner_radius: 0.0,
+                        },
+                    )?;
+                }
             }
             if upper.len() >= 2 {
                 // A single-series area keeps its dark outline; multi-series bands

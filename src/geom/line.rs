@@ -27,6 +27,10 @@ pub struct GeomLine {
     /// spline through the points with
     /// [`Interpolate::MonotoneCubic`](super::support::Interpolate::MonotoneCubic)).
     pub interpolate: super::support::Interpolate,
+    /// Colour each side of a threshold in its own colour (red below, green
+    /// above), changing at the exact crossing without a break. A split line
+    /// keeps one width; an arrow goes on its last part.
+    pub split: Option<super::support::SignSplit>,
 }
 
 impl Default for GeomLine {
@@ -38,7 +42,56 @@ impl Default for GeomLine {
             arrow: None,
             lineend: LineEnd::Butt,
             interpolate: super::support::Interpolate::Linear,
+            split: None,
         }
+    }
+}
+
+impl GeomLine {
+    /// A line cut by its split (points in scale space), each part in its
+    /// side's colour.
+    #[allow(clippy::too_many_arguments)]
+    fn draw_split(
+        &self,
+        sp: &super::support::SignSplit,
+        raw: &[(f64, f64)],
+        coord: &dyn Coord,
+        scales: &ScaleSet,
+        plot_area: &crate::render::Rect,
+        lt: Linetype,
+        backend: &mut dyn DrawBackend,
+    ) -> Result<(), RenderError> {
+        use super::support::{split_runs, SplitAxis};
+        let at = match sp.axis {
+            SplitAxis::Y => scales.get(&Aesthetic::Y),
+            SplitAxis::X => scales.get(&Aesthetic::X),
+        }
+        .map_or(sp.at, |s| s.map(&crate::data::Value::Float(sp.at)));
+        let runs = split_runs(raw, sp.axis, at);
+        let n = runs.len();
+        for (k, (above, run)) in runs.into_iter().enumerate() {
+            let points: Vec<(f64, f64)> = run
+                .into_iter()
+                .map(|p| coord.transform(p, plot_area))
+                .collect();
+            let widths = vec![self.width; points.len()];
+            draw_polyline_with_linewidth(
+                backend,
+                &points,
+                &widths,
+                sp.colour(above),
+                self.alpha,
+                lt.clone(),
+                self.lineend,
+                if k + 1 == n {
+                    self.arrow.as_ref()
+                } else {
+                    None
+                },
+                self.width,
+            )?;
+        }
+        Ok(())
     }
 }
 
@@ -136,6 +189,10 @@ impl Geom for GeomLine {
                     })
                     .collect();
                 let (raw, origin) = super::support::interpolate(&raw, self.interpolate);
+                if let Some(sp) = &self.split {
+                    self.draw_split(sp, &raw, coord, scales, &plot_area, lt, backend)?;
+                    continue;
+                }
                 let mut points: Vec<(f64, f64)> = raw
                     .into_iter()
                     .map(|p| coord.transform(p, &plot_area))
@@ -195,6 +252,14 @@ impl Geom for GeomLine {
                 })
                 .collect();
             let (raw, origin) = super::support::interpolate(&raw, self.interpolate);
+            if let Some(sp) = &self.split {
+                if data.nrows() > 0 {
+                    super::set_row_extras(backend, data, 0);
+                }
+                self.draw_split(sp, &raw, coord, scales, &plot_area, lt, backend)?;
+                super::clear_row_extras(backend);
+                return Ok(());
+            }
             let mut points: Vec<(f64, f64)> = raw
                 .into_iter()
                 .map(|p| coord.transform(p, &plot_area))

@@ -447,3 +447,161 @@ mod interpolate_tests {
         assert_eq!(lin.len(), pts.len());
     }
 }
+
+/// Which axis a [`SignSplit`] cuts along.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
+pub enum SplitAxis {
+    /// Cut where the curve crosses `y = at` (a time series above / below a
+    /// target): each part fills between the curve and the threshold.
+    #[default]
+    Y,
+    /// Cut at `x = at` (a distribution of outcomes: losses left of 0, gains
+    /// right of it).
+    X,
+}
+
+/// Colour an area, density or line by the side of a threshold it is on —
+/// red below, green above — cut at the exact (interpolated) crossing, so the
+/// parts meet without a gap or an overlap (DataZooDE/anofox-visualization#1256).
+/// `at` is in data units.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct SignSplit {
+    pub axis: SplitAxis,
+    pub at: f64,
+    pub below: (u8, u8, u8),
+    pub above: (u8, u8, u8),
+}
+
+impl SignSplit {
+    /// The default: along y at 0, red below, green above.
+    pub fn new(below: (u8, u8, u8), above: (u8, u8, u8)) -> Self {
+        SignSplit {
+            axis: SplitAxis::Y,
+            at: 0.0,
+            below,
+            above,
+        }
+    }
+
+    pub fn axis(mut self, axis: SplitAxis) -> Self {
+        self.axis = axis;
+        self
+    }
+
+    pub fn at(mut self, at: f64) -> Self {
+        self.at = at;
+        self
+    }
+
+    /// The colour of a run on that side.
+    pub fn colour(&self, above: bool) -> (u8, u8, u8) {
+        if above {
+            self.above
+        } else {
+            self.below
+        }
+    }
+}
+
+/// A polyline cut into runs on either side of `at` (along `axis`), each run
+/// with its side (`true`: at or above the threshold) and its points; a
+/// crossing is interpolated and ends one run and starts the next, so
+/// neighbouring runs share it. A non-finite point breaks the line. The
+/// points and `at` are in the same (scale) space.
+pub fn split_runs(pts: &[(f64, f64)], axis: SplitAxis, at: f64) -> Vec<(bool, Vec<(f64, f64)>)> {
+    let key = |p: (f64, f64)| match axis {
+        SplitAxis::Y => p.1,
+        SplitAxis::X => p.0,
+    };
+    let mut runs: Vec<(bool, Vec<(f64, f64)>)> = Vec::new();
+    let mut cur: Option<(bool, Vec<(f64, f64)>)> = None;
+    let mut prev: Option<(f64, f64)> = None;
+    for &p in pts {
+        if !(p.0.is_finite() && p.1.is_finite()) {
+            if let Some(r) = cur.take() {
+                runs.push(r);
+            }
+            prev = None;
+            continue;
+        }
+        let k = key(p);
+        // on the threshold, a point keeps the side of the run it continues
+        let side = match &cur {
+            Some((s, _)) if k == at => *s,
+            _ => k >= at,
+        };
+        match (&mut cur, prev) {
+            // a run that so far only touches the threshold takes the side
+            // of its first point off it
+            (Some((s, run)), _) if *s != side && run.iter().all(|&r| key(r) == at) => {
+                *s = side;
+                run.push(p);
+            }
+            (Some((s, run)), Some(q)) if *s != side => {
+                // the exact crossing between q and p
+                let (kq, kp) = (key(q), k);
+                let t = if kp != kq { (at - kq) / (kp - kq) } else { 0.0 };
+                let c = (q.0 + (p.0 - q.0) * t, q.1 + (p.1 - q.1) * t);
+                let c = match axis {
+                    SplitAxis::Y => (c.0, at),
+                    SplitAxis::X => (at, c.1),
+                };
+                run.push(c);
+                let done = cur.take().unwrap();
+                runs.push(done);
+                cur = Some((side, vec![c, p]));
+            }
+            (Some((_, run)), _) => run.push(p),
+            (None, _) => cur = Some((side, vec![p])),
+        }
+        prev = Some(p);
+    }
+    if let Some(r) = cur {
+        runs.push(r);
+    }
+    runs
+}
+
+#[cfg(test)]
+mod split_tests {
+    use super::*;
+
+    #[test]
+    fn a_line_crossing_zero_is_cut_at_the_crossing() {
+        let pts = [(0.0, -2.0), (1.0, 2.0), (2.0, 4.0), (3.0, -4.0)];
+        let runs = split_runs(&pts, SplitAxis::Y, 0.0);
+        assert_eq!(runs.len(), 3);
+        assert_eq!(runs[0], (false, vec![(0.0, -2.0), (0.5, 0.0)]));
+        assert_eq!(
+            runs[1],
+            (true, vec![(0.5, 0.0), (1.0, 2.0), (2.0, 4.0), (2.5, 0.0)])
+        );
+        assert_eq!(runs[2], (false, vec![(2.5, 0.0), (3.0, -4.0)]));
+    }
+
+    #[test]
+    fn a_distribution_is_cut_at_x() {
+        let pts = [(-2.0, 0.1), (-1.0, 0.3), (1.0, 0.5), (2.0, 0.1)];
+        let runs = split_runs(&pts, SplitAxis::X, 0.0);
+        assert_eq!(runs.len(), 2);
+        assert_eq!(runs[0].1.last(), Some(&(0.0, 0.4)));
+        assert_eq!(runs[1].1.first(), Some(&(0.0, 0.4)));
+        assert!(!runs[0].0 && runs[1].0);
+    }
+
+    #[test]
+    fn a_gap_breaks_the_line_and_a_point_on_the_threshold_keeps_its_side() {
+        let pts = [
+            (0.0, 1.0),
+            (1.0, 0.0),
+            (2.0, f64::NAN),
+            (3.0, 0.0),
+            (4.0, -1.0),
+        ];
+        let runs = split_runs(&pts, SplitAxis::Y, 0.0);
+        assert_eq!(runs.len(), 2, "{runs:?}");
+        assert_eq!(runs[0], (true, vec![(0.0, 1.0), (1.0, 0.0)]));
+        // a run that starts on the threshold takes the side it then goes to
+        assert_eq!(runs[1], (false, vec![(3.0, 0.0), (4.0, -1.0)]));
+    }
+}

@@ -18,6 +18,10 @@ pub struct GeomDensity {
     pub color: (u8, u8, u8),
     pub alpha: f64,
     pub line_width: f64,
+    /// Fill each side of a threshold in its own colour (a distribution of
+    /// outcomes: losses red, gains green), cut at the exact crossing; one
+    /// outline. Along x by default use [`SplitAxis::X`](super::support::SplitAxis::X).
+    pub split: Option<super::support::SignSplit>,
 }
 
 impl Default for GeomDensity {
@@ -27,6 +31,7 @@ impl Default for GeomDensity {
             color: (50, 50, 50),
             alpha: 0.3,
             line_width: 1.0,
+            split: None,
         }
     }
 }
@@ -99,33 +104,44 @@ impl Geom for GeomDensity {
                 })
                 .unwrap_or(self.color);
 
-            let mut upper: Vec<(f64, f64)> = Vec::new();
-            let mut lower: Vec<(f64, f64)> = Vec::new();
-
+            let mut up_n: Vec<(f64, f64)> = Vec::new();
+            let mut low_n: Vec<(f64, f64)> = Vec::new();
             for &i in indices {
                 let nx = x_scale.map(|s| s.map(&x_col[i])).unwrap_or(0.0);
                 let ny = y_scale.map(|s| s.map(&y_col[i])).unwrap_or(0.0);
-                upper.push(coord.transform((nx, ny), &plot_area));
-                lower.push(coord.transform((nx, base_ny), &plot_area));
+                up_n.push((nx, ny));
+                low_n.push((nx, base_ny));
             }
+            let px = |pts: &[(f64, f64)]| -> Vec<(f64, f64)> {
+                pts.iter()
+                    .map(|&p| coord.transform(p, &plot_area))
+                    .collect()
+            };
+            let upper = px(&up_n);
 
-            // Filled polygon
-            let mut polygon = upper.clone();
-            lower.reverse();
-            polygon.extend(lower);
-
-            if polygon.len() >= 3 {
-                backend.draw_polygon(
-                    &polygon,
-                    &RectStyle {
-                        fill: Some(fill_color),
-                        stroke: None,
-                        stroke_width: 0.0,
-                        alpha: self.alpha,
-                        clip: true,
-                        corner_radius: 0.0,
-                    },
-                )?;
+            // the filled parts: the whole curve, or one per side of the split
+            let parts = match &self.split {
+                None => {
+                    let mut poly = up_n.clone();
+                    poly.extend(low_n.iter().rev());
+                    vec![(poly, fill_color)]
+                }
+                Some(sp) => super::area::split_band(sp, &up_n, &low_n, x_scale, y_scale),
+            };
+            for (poly, colour) in parts {
+                if poly.len() >= 3 {
+                    backend.draw_polygon(
+                        &px(&poly),
+                        &RectStyle {
+                            fill: Some(colour),
+                            stroke: None,
+                            stroke_width: 0.0,
+                            alpha: self.alpha,
+                            clip: true,
+                            corner_radius: 0.0,
+                        },
+                    )?;
+                }
             }
 
             // Top line
