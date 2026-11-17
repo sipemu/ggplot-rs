@@ -38,6 +38,10 @@ jobs:
           targets: wasm32-unknown-unknown
 
       - uses: jetli/wasm-pack-action@v0.4.0
+        # pinned: its "latest" lookup once returned v0.9.1, which lacks
+        # `wasm-pack test --no-default-features` (PR #520)
+        with:
+          version: v0.15.1
 
       - uses: actions/setup-node@v4
         with:
@@ -74,6 +78,10 @@ jobs:
           targets: wasm32-unknown-unknown
 
       - uses: jetli/wasm-pack-action@v0.4.0
+        # pinned: its "latest" lookup once returned v0.9.1, which lacks
+        # `wasm-pack test --no-default-features` (PR #520)
+        with:
+          version: v0.15.1
 
       - name: wasm-bindgen tests
         run: wasm-pack test --node crates/ggplot-rs-wasm --no-default-features

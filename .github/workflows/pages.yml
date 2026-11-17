@@ -33,6 +33,10 @@ jobs:
         with:
           targets: wasm32-unknown-unknown
       - uses: jetli/wasm-pack-action@v0.4.0
+        # pinned: its "latest" lookup once returned v0.9.1, which lacks
+        # `wasm-pack test --no-default-features` (PR #520)
+        with:
+          version: v0.15.1
       - name: Build the WASM bundle
         run: wasm-pack build crates/ggplot-rs-wasm --target web --out-dir ../../web/pkg --out-name ggplot_rs
       - uses: actions/configure-pages@v5
