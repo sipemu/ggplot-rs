@@ -2169,7 +2169,7 @@ fn rich_text() -> Result<(), Box<dyn std::error::Error>> {
     let df = df! { "dose" => x, "response" => y, "group" => g }?;
     let mut theme = ggplot_rs::theme::presets::theme_minimal();
     theme.rich_text = true;
-    let svg = GGPlot::new(df)
+    GGPlot::new(df)
         .aes(Aes::new().x("dose").y("response").color("group"))
         .geom_point()
         .scale_color_manual(vec![
@@ -2181,9 +2181,7 @@ fn rich_text() -> Result<(), Box<dyn std::error::Error>> {
         .ylab("Response, log~10~ units")
         .theme(theme)
         .legend_position(LegendPosition::None)
-        // the SVG renderer: the plotters PNG path doesn't set rich text yet (#521)
-        .render_svg_native_with_size(W, H)?;
-    std::fs::write("assets/gallery/rich_text.svg", svg)?;
+        .save_with_size(&out("rich_text"), W, H)?;
     Ok(())
 }
 

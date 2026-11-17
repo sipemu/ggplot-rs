@@ -331,9 +331,7 @@ Highcharts-style chart types, each one layer in the grammar (tracked under the
 ### Recent additions
 
 Threshold splits, distribution functions, ridgelines, factor graphs, label
-repulsion, secondary axes, rich text and radial coordinates. The rich-text
-tile is an SVG (`render_svg_native`): the plotters PNG path does not set rich
-text yet ([#521](https://github.com/sipemu/ggplot-rs/issues/521)).
+repulsion, secondary axes, rich text and radial coordinates.
 
 <table>
   <tr>
@@ -370,7 +368,7 @@ text yet ([#521](https://github.com/sipemu/ggplot-rs/issues/521)).
       <sub>Second unit on the right · <code>SecAxis::linear</code></sub>
     </td>
     <td align="center">
-      <img src="assets/gallery/rich_text.svg" width="260" alt="Rich text"><br>
+      <img src="assets/gallery/rich_text.png" width="260" alt="Rich text"><br>
       <sub>Rich text · <code>Theme::rich_text</code> (<code>element_markdown</code>)</sub>
     </td>
     <td align="center">
