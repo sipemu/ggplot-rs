@@ -245,11 +245,24 @@ pub fn banded(nodes: &[GraphNode], edges: &[GraphEdge], p: &BandedParams) -> Gra
     for v in 0..n {
         col_w[col[v]] = col_w[col[v]].max(nodes[v].w);
     }
+    // the gap after each column: wide enough for the label of an edge that
+    // crosses it within a band (a factor's interface name, anofox-visualization#1238)
+    let mut gap = vec![p.col_gap; ncol];
+    for e in edges {
+        let (u, v) = (e.from, e.to);
+        if let Some(lw) = e
+            .label_w
+            .filter(|_| band(u) == band(v) && col[u].abs_diff(col[v]) == 1)
+        {
+            let c = col[u].min(col[v]);
+            gap[c] = gap[c].max(lw + 2.0 * LABEL_CLEAR + 4.0);
+        }
+    }
     let mut col_x = vec![0.0f64; ncol];
     let mut x = 0.0;
     for c in 0..ncol {
         col_x[c] = x + col_w[c] / 2.0;
-        x += col_w[c] + p.col_gap;
+        x += col_w[c] + gap[c];
     }
     let nb = p.bands.max(1);
     let ntr: Vec<usize> = (0..nb)
@@ -310,7 +323,26 @@ pub fn banded(nodes: &[GraphNode], edges: &[GraphEdge], p: &BandedParams) -> Gra
     // between the bands (one lane per source), then into the top (bottom) of
     // a target in the next band, or down (up) the gap beside a farther
     // target's column and into its side — so it crosses no box.
-    let bussed = |u: usize, v: usize| band(u) != band(v) && col[u] != col[v];
+    // In the same column it runs straight down (up), unless another box of
+    // the column is in the way or the target takes several such edges: then
+    // it takes the bus too, so the lines don't run on top of each other
+    // (anofox-visualization#1238).
+    let same_col_in = |v: usize| {
+        dag.iter()
+            .filter(|&&(a, b, _, _)| b == v && band(a) != band(v) && col[a] == col[v])
+            .count()
+    };
+    let blocked = |u: usize, v: usize| {
+        let (lo, hi) = if pn[u].cy < pn[v].cy {
+            (pn[u].cy, pn[v].cy)
+        } else {
+            (pn[v].cy, pn[u].cy)
+        };
+        (0..n).any(|w| w != u && w != v && col[w] == col[u] && pn[w].cy > lo && pn[w].cy < hi)
+    };
+    let bussed = |u: usize, v: usize| {
+        band(u) != band(v) && (col[u] != col[v] || same_col_in(v) > 1 || blocked(u, v))
+    };
     let mut lanes_of: Vec<((usize, bool), Vec<usize>)> = Vec::new();
     for &(_, _, k, _) in &dag {
         let (u, v) = (edges[k].from, edges[k].to);
@@ -340,17 +372,14 @@ pub fn banded(nodes: &[GraphNode], edges: &[GraphEdge], p: &BandedParams) -> Gra
             .map_or(&[][..], |(_, us)| &us[..]);
         let i = us.iter().position(|&x| x == u).unwrap_or(0) as f64;
         let y = channel + (i - (us.len().max(1) - 1) as f64 / 2.0) * LANE;
-        let right = col[v] > col[u];
+        let right = col[v] >= col[u];
         let side = |n: &PlacedNode, c: usize, r: bool| {
             if r {
-                (
-                    n.cx + n.w / 2.0,
-                    col_x[c] + col_w[c] / 2.0 + p.col_gap / 2.0,
-                )
+                (n.cx + n.w / 2.0, col_x[c] + col_w[c] / 2.0 + gap[c] / 2.0)
             } else {
                 (
                     n.cx - n.w / 2.0,
-                    col_x[c] - col_w[c] / 2.0 - p.col_gap / 2.0,
+                    col_x[c] - col_w[c] / 2.0 - gap[c.saturating_sub(1)] / 2.0,
                 )
             }
         };
@@ -393,8 +422,14 @@ pub fn banded(nodes: &[GraphNode], edges: &[GraphEdge], p: &BandedParams) -> Gra
     for &k in &loops {
         edge_pts[k] = self_loop(&pn[edges[k].from], true, 16.0);
     }
+    let straight_edges: Vec<(usize, usize, usize)> = dag
+        .iter()
+        .filter(|&&(u, v, _, _)| !bussed(u, v))
+        .map(|&(u, v, k, _)| (k, u, v))
+        .collect();
+    spread_ports(&pn, &mut edge_pts, &straight_edges);
     let bands = if lanes {
-        let (x0, x1) = (-12.0, x - p.col_gap + 12.0);
+        let (x0, x1) = (-12.0, x - gap.last().copied().unwrap_or(p.col_gap) + 12.0);
         (0..nb)
             .filter(|&b| ntr[b] > 0)
             .map(|b| {
@@ -565,6 +600,103 @@ fn exit(p: &PlacedNode, to: (f64, f64)) -> (f64, f64) {
         (p.cx + dx * k, p.cy + dy * k)
     } else {
         (p.cx, p.cy)
+    }
+}
+
+/// Room (px) between an edge label and the box it sits beside.
+pub const LABEL_CLEAR: f64 = 4.0;
+
+/// Straight edges that meet one side of a box at the same point (two
+/// constants into a factor) get ports of their own along that side, in the
+/// order of their other ends; the other end aims at the port
+/// (anofox-visualization#1238). `straight` lists `(edge, u, v)`.
+fn spread_ports(
+    pn: &[PlacedNode],
+    pts: &mut [Vec<(f64, f64)>],
+    straight: &[(usize, usize, usize)],
+) {
+    // the side of `p` that the point on its border lies on: 0 left, 1 right, 2 top, 3 bottom
+    let side_of = |p: &PlacedNode, (x, y): (f64, f64)| {
+        if (x - (p.cx - p.w / 2.0)).abs() < 0.5 {
+            0
+        } else if (x - (p.cx + p.w / 2.0)).abs() < 0.5 {
+            1
+        } else if y < p.cy {
+            2
+        } else {
+            3
+        }
+    };
+    // per (node, side): (edge, its end is the first point, the other node)
+    type Ends = Vec<(usize, bool, usize)>;
+    let mut groups: std::collections::BTreeMap<(usize, u8), Ends> = Default::default();
+    for &(k, u, v) in straight {
+        let e = &pts[k];
+        if e.len() != 2 {
+            continue;
+        }
+        // which end lies on which node (a reversed edge runs v → u)
+        let (iu, iv) = if (e[0].0 - pn[u].cx).abs() <= pn[u].w / 2.0 + 0.5
+            && (e[0].1 - pn[u].cy).abs() <= pn[u].h / 2.0 + 0.5
+        {
+            (0, 1)
+        } else {
+            (1, 0)
+        };
+        groups
+            .entry((u, side_of(&pn[u], e[iu])))
+            .or_default()
+            .push((k, iu == 0, v));
+        groups
+            .entry((v, side_of(&pn[v], e[iv])))
+            .or_default()
+            .push((k, iv == 0, u));
+    }
+    // pass 1: the ports, per (edge, end)
+    let mut port: std::collections::HashMap<(usize, bool), (f64, f64)> = Default::default();
+    for ((node, side), mut list) in groups {
+        let m = list.len();
+        if m < 2 {
+            continue;
+        }
+        let p = &pn[node];
+        let vertical = side < 2;
+        list.sort_by(|a, b| {
+            let (pa, pb) = (&pn[a.2], &pn[b.2]);
+            let (ka, kb) = if vertical {
+                (pa.cy, pb.cy)
+            } else {
+                (pa.cx, pb.cx)
+            };
+            ka.total_cmp(&kb).then(a.0.cmp(&b.0))
+        });
+        let len = if vertical { p.h } else { p.w };
+        let span = (len * 0.6).min(14.0 * (m - 1) as f64);
+        for (i, &(k, first, _)) in list.iter().enumerate() {
+            let off = -span / 2.0 + span * i as f64 / (m - 1) as f64;
+            let at = match side {
+                0 => (p.cx - p.w / 2.0, p.cy + off),
+                1 => (p.cx + p.w / 2.0, p.cy + off),
+                2 => (p.cx + off, p.cy - p.h / 2.0),
+                _ => (p.cx + off, p.cy + p.h / 2.0),
+            };
+            port.insert((k, first), at);
+        }
+    }
+    // pass 2: an end on a port stays there; the other end aims at it
+    for &(k, u, v) in straight {
+        if pts[k].len() != 2 || !(port.contains_key(&(k, true)) || port.contains_key(&(k, false))) {
+            continue;
+        }
+        let first_on_u = (pts[k][0].0 - pn[u].cx).abs() <= pn[u].w / 2.0 + 0.5
+            && (pts[k][0].1 - pn[u].cy).abs() <= pn[u].h / 2.0 + 0.5;
+        let node_of = |first: bool| if first == first_on_u { u } else { v };
+        let p0 = port.get(&(k, true)).copied();
+        let p1 = port.get(&(k, false)).copied();
+        let aim1 = p1.unwrap_or((pn[node_of(false)].cx, pn[node_of(false)].cy));
+        let aim0 = p0.unwrap_or((pn[node_of(true)].cx, pn[node_of(true)].cy));
+        pts[k][0] = p0.unwrap_or_else(|| exit(&pn[node_of(true)], aim1));
+        pts[k][1] = p1.unwrap_or_else(|| exit(&pn[node_of(false)], aim0));
     }
 }
 
@@ -1347,6 +1479,86 @@ mod tests {
 
     /// A coin toss in bands param / obs: the Bernoulli factors dropping from
     /// θ fan out side by side, each observation right below its factor.
+    #[test]
+    fn banded_two_priors_keep_their_edges_and_labels_apart() {
+        // anofox-visualization#1238: μ ~ Normal(12, v0), τ ~ Gamma(k0, r0),
+        // yᵢ ~ Normal(μ, τ). Param band: 0 m0, 1 v0 → 2 N → 3 μ;
+        // 4 k0, 5 r0 → 6 Γ → 7 τ. Obs band: 8..=10 N, 11..=13 y.
+        let node = |lane, w| GraphNode {
+            w,
+            h: if w > 30.0 { 30.0 } else { 14.0 },
+            lane: Some(lane),
+            ..Default::default()
+        };
+        let mut nodes = vec![node(0, 24.0), node(0, 24.0), node(0, 34.0), node(0, 14.0)];
+        nodes.extend([node(0, 24.0), node(0, 24.0), node(0, 34.0), node(0, 14.0)]);
+        nodes.extend((0..3).map(|_| node(1, 34.0)));
+        nodes.extend((0..3).map(|_| node(1, 14.0)));
+        let edge = |from, to, label_w| GraphEdge { from, to, label_w };
+        let mut edges = vec![
+            edge(0, 2, Some(30.0)),
+            edge(1, 2, Some(52.0)),
+            edge(2, 3, Some(18.0)),
+            edge(4, 6, Some(34.0)),
+            edge(5, 6, Some(22.0)),
+            edge(6, 7, Some(18.0)),
+        ];
+        for i in 0..3 {
+            edges.push(edge(3, 8 + i, Some(30.0)));
+            edges.push(edge(7, 8 + i, Some(52.0)));
+            edges.push(edge(8 + i, 11 + i, Some(18.0)));
+        }
+        let l = banded(
+            &nodes,
+            &edges,
+            &BandedParams {
+                bands: 2,
+                ..Default::default()
+            },
+        );
+        let end = |k: usize| *l.edges[k].last().unwrap();
+        // the two constants enter the factor at ports of their own
+        assert_ne!(end(0), end(1), "m0 and v0 share a port");
+        assert_ne!(end(3), end(4), "k0 and r0 share a port");
+        // room for the longest interface label between a constant and its factor
+        let (c, f) = (&l.nodes[1], &l.nodes[2]);
+        assert!(
+            (f.cx - f.w / 2.0) - (c.cx + c.w / 2.0) >= 52.0 + 2.0 * LABEL_CLEAR,
+            "gap {}",
+            (f.cx - f.w / 2.0) - (c.cx + c.w / 2.0)
+        );
+        // μ and τ reach every observation's factor apart
+        for i in 0..3 {
+            let (km, kt) = (6 + 3 * i, 7 + 3 * i);
+            assert!(
+                (end(km).0 - end(kt).0).abs() >= 4.0,
+                "obs {i}: {:?} {:?}",
+                end(km),
+                end(kt)
+            );
+        }
+        // and μ's edge passes through no other box (τ sits below μ)
+        let crosses = |pts: &[(f64, f64)], b: &PlacedNode| {
+            pts.windows(2).any(|w| {
+                (0..=20).any(|s| {
+                    let t = s as f64 / 20.0;
+                    let (x, y) = (
+                        w[0].0 + (w[1].0 - w[0].0) * t,
+                        w[0].1 + (w[1].1 - w[0].1) * t,
+                    );
+                    (x - b.cx).abs() < b.w / 2.0 - 0.5 && (y - b.cy).abs() < b.h / 2.0 - 0.5
+                })
+            })
+        };
+        for k in [6, 9, 12] {
+            for (v, b) in l.nodes.iter().enumerate() {
+                if v != 3 && v != edges[k].to {
+                    assert!(!crosses(&l.edges[k], b), "edge {k} crosses node {v}");
+                }
+            }
+        }
+    }
+
     #[test]
     fn banded_fans_out_drops_and_hangs_leaves_below() {
         // 0 θ (param), 1..=3 Bernoulli (obs), 4..=6 y (obs)

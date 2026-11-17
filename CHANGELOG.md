@@ -5,6 +5,25 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.58.1] — 2026-11-17
+
+### Fixed
+- `graph_layout::banded` (a factor graph's bands): two priors in one column
+  no longer crowd their band (DataZooDE/anofox-visualization#1238).
+  - An edge into another band in the **same** column (a parameter into the
+    observation under it) takes the bus, like an edge into another column,
+    when another box of that column is in its way or its target takes
+    several such edges. Before, μ's and τ's edges ran on one line, μ's
+    through τ's node.
+  - Straight edges that meet one side of a box (two constants into a
+    factor) get ports of their own along that side.
+  - The gap after a column is wide enough for the labels of the edges that
+    cross it (`GraphEdge::label_w`, as `layered` already did).
+- `graph::draw`: a label set near an edge's end (`DrawEdge::label_at`, a
+  factor's interface name) sits beside the box at that end,
+  `graph_layout::LABEL_CLEAR` (4 px) clear of it, instead of centred on
+  the box's border; on a vertical segment, beside the line.
+
 ## [0.58.0] — 2026-11-15
 
 ### Changed

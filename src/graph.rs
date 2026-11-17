@@ -244,8 +244,6 @@ impl NodeShape {
     }
 }
 
-/// How far from its end an edge label set near that end sits, at most (px).
-const LABEL_REACH: f64 = 22.0;
 /// A belief curve's size over its node (px).
 pub const BELIEF_W: f64 = 46.0;
 pub const BELIEF_H: f64 = 16.0;
@@ -528,6 +526,44 @@ fn edge_label_at(pts: &[(f64, f64)], label: &str, nodes: &[PlacedNode]) -> (f64,
         .unwrap_or(mid)
 }
 
+/// An end label's anchor (as for a mid label: the text goes 4 px above
+/// it): on the edge's last (first) segment, its near side `LABEL_CLEAR`
+/// from the box the edge ends at; on a vertical segment beside the line
+/// instead, its top `LABEL_CLEAR` below (above) that box. At most half
+/// the segment in.
+fn end_label_at(pts: &[(f64, f64)], label: &str, t: f64) -> (f64, f64) {
+    use crate::graph_layout::LABEL_CLEAR;
+    let n = pts.len();
+    if n < 2 {
+        return pts.first().copied().unwrap_or((0.0, 0.0));
+    }
+    let (end, prev) = if t >= 0.5 {
+        (pts[n - 1], pts[n - 2])
+    } else {
+        (pts[0], pts[1])
+    };
+    let (dx, dy) = (prev.0 - end.0, prev.1 - end.1);
+    let len = (dx * dx + dy * dy).sqrt();
+    if len == 0.0 {
+        return end;
+    }
+    let (ux, uy) = (dx / len, dy / len);
+    let lines = label.split('\n').count() as f64;
+    let hw = edge_label_width(label) / 2.0;
+    let hh = lines * 6.6;
+    // the anchor sits 4 px + 0.36 em below the text's middle
+    let below_mid = 4.0 + 0.36 * SMALL_PX;
+    if ux.abs() >= uy.abs() {
+        // along the line, above it: its near side LABEL_CLEAR from the box
+        let s = (hw + LABEL_CLEAR).min(len * 0.5);
+        (end.0 + ux * s, end.1 + uy * s)
+    } else {
+        // beside a vertical line, its top (bottom) clear of the box
+        let s = (hh + LABEL_CLEAR).min(len * 0.5);
+        (end.0 + LABEL_CLEAR + hw, end.1 + uy * s + below_mid)
+    }
+}
+
 /// Text is centred on its y (`dominant-baseline="middle"`); the layout
 /// places lines by their baseline. A cap-height-ish shift between the two.
 fn mid_of_baseline(baseline: f64, px: f64) -> f64 {
@@ -731,29 +767,9 @@ pub fn draw(
         let routed = layout.routed.get(k).copied().unwrap_or(false);
         if let Some(l) = e.label.as_ref().filter(|_| !routed) {
             let (mx, my) = match e.label_at {
-                // near an end: at most LABEL_REACH px from it
-                Some(t) => {
-                    let t = t.clamp(0.0, 1.0);
-                    let len: f64 = route
-                        .windows(2)
-                        .map(|w| ((w[1].0 - w[0].0).powi(2) + (w[1].1 - w[0].1).powi(2)).sqrt())
-                        .sum();
-                    let reach = |f: f64| {
-                        if len > 0.0 {
-                            (len * f).min(LABEL_REACH) / len
-                        } else {
-                            f
-                        }
-                    };
-                    point_at(
-                        route,
-                        if t >= 0.5 {
-                            1.0 - reach(1.0 - t)
-                        } else {
-                            reach(t)
-                        },
-                    )
-                }
+                // near an end (a factor's interface): beside the box at
+                // that end, clear of it (anofox-visualization#1238)
+                Some(t) => end_label_at(route, l, t),
                 None => edge_label_at(route, l, &layout.nodes),
             };
             let f = if e.label_math && s.math_font.is_some() {
@@ -1224,6 +1240,32 @@ pub fn draw(
 mod tests {
     use super::*;
     use crate::graph_layout::{layered, GraphEdge, GraphNode, LayeredParams};
+
+    #[test]
+    fn an_end_label_sits_beside_its_box() {
+        // anofox-visualization#1238: an interface name near a factor is
+        // clear of the factor's box, not centred on its border
+        let hw = edge_label_width("variance") / 2.0;
+        let (x, y) = end_label_at(&[(0.0, 0.0), (100.0, 0.0)], "variance", 0.8);
+        assert!(
+            (x - (100.0 - hw - crate::graph_layout::LABEL_CLEAR)).abs() < 1e-9 && y == 0.0,
+            "{x} {y}"
+        );
+        let (x, _) = end_label_at(&[(0.0, 0.0), (100.0, 0.0)], "mean", 0.2);
+        assert!(
+            x - edge_label_width("mean") / 2.0 >= crate::graph_layout::LABEL_CLEAR - 1e-9,
+            "{x}"
+        );
+        // a vertical edge: beside the line, below the box it leaves
+        let (x, y) = end_label_at(&[(50.0, 0.0), (50.0, 40.0)], "out", 0.2);
+        assert!(
+            x - edge_label_width("out") / 2.0 > 50.0 && y > 0.0,
+            "{x} {y}"
+        );
+        // a short edge: the label stays on it
+        let (x, _) = end_label_at(&[(0.0, 0.0), (20.0, 0.0)], "variance", 0.8);
+        assert!((x - 10.0).abs() < 1e-9, "{x}");
+    }
 
     #[test]
     fn wraps_long_labels_in_three_lines() {
