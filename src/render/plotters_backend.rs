@@ -582,6 +582,34 @@ impl<'a, DB: DrawingBackend> DrawBackend for PlottersAdapter<'a, DB> {
         Ok(())
     }
 
+    /// Rich text (#413, #521): runs laid out with the bundled font's own
+    /// advance widths, so a bold or shifted run doesn't leave a gap.
+    fn draw_rich_text(
+        &mut self,
+        runs: &[crate::render::rich::RichRun],
+        pos: (f64, f64),
+        style: &TextStyle,
+    ) -> Result<(), RenderError> {
+        let family = style.family.as_deref().unwrap_or("sans-serif").to_string();
+        ensure_font(&family);
+        let area = self.area;
+        let placed = crate::render::rich::layout_runs(runs, pos, style, &|t, size, face| {
+            let font_style = match face {
+                crate::render::backend::FontFace::Plain => FontStyle::Normal,
+                crate::render::backend::FontFace::Bold => FontStyle::Bold,
+                crate::render::backend::FontFace::Italic => FontStyle::Italic,
+            };
+            let font = (family.as_str(), size, font_style).into_font();
+            area.estimate_text_size(t, &plotters::prelude::TextStyle::from(font))
+                .map(|(w, _)| w as f64)
+                .unwrap_or_else(|_| crate::render::text::text_width(t, size))
+        });
+        for (text, at, run_style) in placed {
+            self.draw_text(&text, at, &run_style)?;
+        }
+        Ok(())
+    }
+
     fn draw_polygon(
         &mut self,
         points: &[(f64, f64)],
@@ -891,7 +919,9 @@ impl<'a, DB: DrawingBackend> PlottersAdapter<'a, DB> {
         angle_i: i32,
         color: RGBAColor,
     ) -> Result<(), RenderError> {
-        let font = (family, size).into_font().style(font_style);
+        // #521: the style goes in with the family — `FontDesc::style` keeps
+        // the regular face's glyph data, so bold / italic never showed.
+        let font = (family, size, font_style).into_font();
 
         let pos_adj = match anchor {
             TextAnchor::Start => plotters::style::text_anchor::Pos::new(
@@ -909,35 +939,21 @@ impl<'a, DB: DrawingBackend> PlottersAdapter<'a, DB> {
         };
 
         if angle_i != 0 {
-            let (font_transform, rotated_pos) = match angle_i.rem_euclid(360) {
-                80..=100 => (
-                    FontTransform::Rotate90,
-                    plotters::style::text_anchor::Pos::new(
-                        plotters::style::text_anchor::HPos::Center,
-                        plotters::style::text_anchor::VPos::Center,
-                    ),
-                ),
-                170..=190 => (
-                    FontTransform::Rotate180,
-                    plotters::style::text_anchor::Pos::new(
-                        plotters::style::text_anchor::HPos::Center,
-                        plotters::style::text_anchor::VPos::Center,
-                    ),
-                ),
+            // #521: the anchor and the face apply along the rotated text, as
+            // in the SVG (`rotate(angle x y)` about the anchor point) —
+            // plotters places the anchor in the text's own frame, then
+            // rotates about `pos`.
+            let font_transform = match angle_i.rem_euclid(360) {
+                80..=100 => FontTransform::Rotate90,
+                170..=190 => FontTransform::Rotate180,
                 // 270° or -90° or 45° approximation (common ggplot2 x-axis rotation)
-                _ => (
-                    FontTransform::Rotate270,
-                    plotters::style::text_anchor::Pos::new(
-                        plotters::style::text_anchor::HPos::Right,
-                        plotters::style::text_anchor::VPos::Center,
-                    ),
-                ),
+                _ => FontTransform::Rotate270,
             };
 
-            let text_style = plotters::prelude::TextStyle::from((family, size).into_font())
+            let text_style = plotters::prelude::TextStyle::from(font)
                 .color(&color)
                 .transform(font_transform)
-                .pos(rotated_pos);
+                .pos(pos_adj);
 
             self.area
                 .draw_text(text, &text_style, (pos.0 as i32, pos.1 as i32))
