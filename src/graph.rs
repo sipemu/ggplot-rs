@@ -171,8 +171,11 @@ pub struct GraphStyle {
     /// Prefix of the layer classes (`<prefix>node`, `<prefix>edge`,
     /// `<prefix>edge-label`, `<prefix>lane`, `<prefix>lane-label`,
     /// `<prefix>node-label`, `<prefix>node-value`, `<prefix>node-badge`,
-    /// `<prefix>node-spark`, `<prefix>plate`, `<prefix>plate-label`; a
-    /// shaped node's mark also has `<prefix>node-<shape>`).
+    /// `<prefix>node-spark`, `<prefix>plate`, `<prefix>plate-label`,
+    /// `<prefix>node-state`, `<prefix>node-state-bar`,
+    /// `<prefix>node-state-prior`, `<prefix>node-state-value`,
+    /// `<prefix>node-outline`, `<prefix>node-diamond-mark`; a shaped node's
+    /// mark also has `<prefix>node-<shape>`).
     pub class_prefix: String,
     /// A factor graph's math font: when set, the labels of shaped nodes
     /// (variables, observations, equality nodes, glyph factors) are set in
@@ -227,6 +230,15 @@ pub enum NodeShape {
     /// A small filled square at the end of an edge, its label beside it (to
     /// the right): an observation in Forney style, where data enters.
     Terminal,
+    /// A box with square corners and a box's contents: an influence
+    /// diagram's decision.
+    Rect,
+    /// A diamond with the label (and a value line) inside: an influence
+    /// diagram's utility.
+    Diamond,
+    /// A box with a second outline inside it and a box's contents: a
+    /// deterministic node of a Bayesian network.
+    DoubleBox,
 }
 
 impl NodeShape {
@@ -240,7 +252,19 @@ impl NodeShape {
             NodeShape::Text => "text",
             NodeShape::Glyph => "glyph",
             NodeShape::Terminal => "terminal",
+            NodeShape::Rect => "rect",
+            NodeShape::Diamond => "diamond",
+            NodeShape::DoubleBox => "double-box",
         }
+    }
+
+    /// A box's contents (label, value, badge, sparkline, states) go inside:
+    /// [`NodeShape::Box`], [`NodeShape::Rect`], [`NodeShape::DoubleBox`].
+    pub fn boxed(self) -> bool {
+        matches!(
+            self,
+            NodeShape::Box | NodeShape::Rect | NodeShape::DoubleBox
+        )
     }
 }
 
@@ -255,13 +279,86 @@ const TERMINAL: f64 = 11.0;
 const GLYPH_SIDE: f64 = 34.0;
 const GLYPH_PX: f64 = 15.0;
 
+/// A state row's height, its bar's length and the widest state name (px).
+const STATE_H: f64 = 15.0;
+const STATE_BAR_W: f64 = 64.0;
+const STATE_NAME_MAX: f64 = 84.0;
+/// The gaps around a state's bar, and the room for its text ("100%").
+const STATE_GAP: f64 = 6.0;
+const STATE_TEXT_W: f64 = 30.0;
+/// A box with state rows may be this much wider than a plain one.
+const STATES_MAX_W: f64 = 224.0;
+
+/// A state's name as its row shows it: cut with "…" past
+/// `STATE_NAME_MAX`.
+fn state_name(name: &str) -> String {
+    let cap = (STATE_NAME_MAX / (SMALL_PX * 0.56)).floor() as usize;
+    if name.chars().count() <= cap {
+        return name.to_string();
+    }
+    let mut s: String = name.chars().take(cap.saturating_sub(1)).collect();
+    s = s.trim_end().to_string();
+    s.push('…');
+    s
+}
+
+/// The box a discrete node needs (a Bayesian network's node, Netica /
+/// GeNIe style): [`node_box`]'s label, value and badge, then one row per
+/// state (its name, a bar and the probability as text), as [`draw`] fills
+/// it from [`DrawNode::states`]. No states: [`node_box`].
+pub fn states_box(
+    label: &str,
+    value: Option<&str>,
+    badge: Option<&str>,
+    states: &[String],
+) -> NodeBox {
+    let b = node_box(label, value, badge, false);
+    if states.is_empty() {
+        return b;
+    }
+    let names = states
+        .iter()
+        .map(|n| text_w(&state_name(n), SMALL_PX, true))
+        .fold(0.0, f64::max);
+    let rows = names + STATE_GAP + STATE_BAR_W + STATE_GAP + STATE_TEXT_W;
+    NodeBox {
+        w: b.w.max(rows + 2.0 * BOX_PAD_X).min(STATES_MAX_W),
+        h: b.h + 4.0 + STATE_H * states.len() as f64,
+        lines: b.lines,
+    }
+}
+
+/// The diamond a [`NodeShape::Diamond`] needs for its label and an
+/// optional value line: the text's box, its corners on the diamond's edges.
+pub fn diamond_box(label: &str, value: Option<&str>) -> NodeBox {
+    let lines = wrap(label, 132.0);
+    let mut w = lines
+        .iter()
+        .map(|l| text_w(l, LABEL_PX, true))
+        .fold(0.0, f64::max);
+    let mut h = LINE_H * lines.len() as f64;
+    if let Some(v) = value {
+        w = w.max(text_w(v, VALUE_PX, true));
+        h += LINE_H;
+    }
+    // a w × h box inscribed in the diamond takes twice each, plus a margin
+    NodeBox {
+        w: (2.0 * w + 16.0).max(72.0),
+        h: (2.0 * h + 8.0).max(44.0),
+        lines,
+    }
+}
+
 /// The size a node of `shape` needs for `label` (a [`NodeShape::Box`] is
 /// [`node_box`] without a value, badge or sparkline). A circle fits its
 /// label on one line, at least 30 px across.
 pub fn node_size(shape: NodeShape, label: &str) -> NodeBox {
     let one = || vec![label.to_string()];
     match shape {
-        NodeShape::Box => node_box(label, None, None, false),
+        NodeShape::Box | NodeShape::Rect | NodeShape::DoubleBox => {
+            node_box(label, None, None, false)
+        }
+        NodeShape::Diamond => diamond_box(label, None),
         NodeShape::Circle | NodeShape::FilledCircle => {
             let d = (text_w(label, LABEL_PX, true) + 14.0).max(30.0);
             NodeBox {
@@ -308,6 +405,22 @@ pub struct Plate {
 /// it off that mark.
 pub type DataAttr = (String, Option<String>);
 
+/// One state of a discrete node: a row in its box with the state's name, a
+/// bar for its probability and that probability as text, the prior as a
+/// faint bar behind it with a tick where it ends (Netica / GeNIe style).
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct StateBar {
+    pub name: String,
+    /// The probability, 0..=1 (clamped).
+    pub p: f64,
+    /// The probability before any evidence, 0..=1.
+    pub prior: Option<f64>,
+    /// What the row says after the bar (e.g. `36%`).
+    pub text: String,
+    /// The observed state: its name in bold.
+    pub observed: bool,
+}
+
 /// What a node's box shows, and its attributes. Its geometry comes from the
 /// layout ([`PlacedNode`]); its label lines from [`node_box`].
 #[derive(Clone, Debug, Default)]
@@ -336,6 +449,12 @@ pub struct DrawNode {
     /// span as [`DrawNode::belief`], drawn as a faint dashed outline, and
     /// its colour.
     pub prior: Option<(Vec<f64>, Rgb)>,
+    /// A discrete node's states, one row each under the label (a boxed
+    /// shape; size it with [`states_box`]), and the bars' colour.
+    pub states: Option<(Vec<StateBar>, Rgb)>,
+    /// The box's (or diamond's) fill; `None` is the card colour. E.g. a
+    /// node with evidence, shaded.
+    pub fill: Option<Rgb>,
     pub tooltip: String,
     /// `data-*` on the box (the hit target); every node lists the same
     /// names, in the same order.
@@ -856,7 +975,16 @@ pub fn draw(
     // group), then what it shows, grouped per node
     let mut order: Vec<usize> = (0..nodes.len().min(layout.nodes.len())).collect();
     order.sort_by_key(|&i| (layout.nodes[i].order, i));
-    let mut boxes: Vec<(Rgb, Frame)> = Vec::new();
+    // boxes, a layer per (outline, shape, fill)
+    let mut boxes: Vec<((Rgb, NodeShape, Rgb), Frame)> = Vec::new();
+    // a double box's inner outline, by colour
+    let mut outlines: Vec<(Rgb, Frame)> = Vec::new();
+    // a diamond's hit target (an invisible box) and its mark, by outline
+    let (mut hits, mut diamonds) = (Frame::default(), Vec::<(Rgb, Frame)>::new());
+    // state rows: the prior's faint bar, its tick, the bar, the names (the
+    // observed one bold) and the probabilities
+    let (mut sprior, mut stick, mut sbar) = (Frame::default(), Frame::default(), Frame::default());
+    let (mut sname, mut sseen, mut stext) = (Frame::default(), Frame::default(), Frame::default());
     let mut beliefs = Frame::default();
     let mut priors = Frame::default();
     // shaped nodes, a layer per (shape, corner radius, outline)
@@ -916,7 +1044,37 @@ pub fn draw(
                 beliefs.txt("fill", hex(*col)).txt("of", id.clone());
             }
         }
-        if nd.shape != NodeShape::Box {
+        if nd.shape == NodeShape::Diamond {
+            hits.num("x0", x)
+                .num("x1", x + pn.w)
+                .num("y0", y)
+                .num("y1", y + pn.h);
+            hits.txt("tip", nd.tooltip.clone()).attrs(&nd.attrs);
+            let f = by_colour(&mut diamonds, nd.stroke);
+            for (px, py) in [(pn.cx, y), (x + pn.w, pn.cy), (pn.cx, y + pn.h), (x, pn.cy)] {
+                f.num("x", px).num("y", py).txt("g", id.clone());
+                f.txt("fill", hex(nd.fill.unwrap_or(s.card)))
+                    .txt("of", id.clone());
+            }
+            // the label (and value) centred in it
+            let n = nd.lines.len() + usize::from(nd.value.is_some());
+            let mut base = pn.cy - LINE_H * n as f64 / 2.0 + 12.0;
+            for line in &nd.lines {
+                lines
+                    .num("x", pn.cx)
+                    .num("y", mid_of_baseline(base, LABEL_PX));
+                lines.txt("label", line.clone()).txt("of", id.clone());
+                base += LINE_H;
+            }
+            if let Some(fv) = &nd.value {
+                values
+                    .num("x", pn.cx)
+                    .num("y", mid_of_baseline(base, VALUE_PX));
+                values.txt("label", fv.clone()).txt("of", id.clone());
+            }
+            continue;
+        }
+        if !nd.shape.boxed() {
             let r = match nd.shape {
                 NodeShape::Circle | NodeShape::FilledCircle => pn.w.min(pn.h) / 2.0,
                 NodeShape::Square | NodeShape::FilledSquare | NodeShape::Terminal => 1.5,
@@ -976,7 +1134,23 @@ pub fn draw(
             target.txt("label", label).txt("of", id.clone());
             continue;
         }
-        let f = by_colour(&mut boxes, nd.stroke);
+        let key = (nd.stroke, nd.shape, nd.fill.unwrap_or(s.card));
+        let i = match boxes.iter().position(|(k, _)| *k == key) {
+            Some(i) => i,
+            None => {
+                boxes.push((key, Frame::default()));
+                boxes.len() - 1
+            }
+        };
+        let f = &mut boxes[i].1;
+        if nd.shape == NodeShape::DoubleBox {
+            let o = by_colour(&mut outlines, nd.stroke);
+            o.num("x0", x + 3.5)
+                .num("x1", x + pn.w - 3.5)
+                .num("y0", y + 3.5)
+                .num("y1", y + pn.h - 3.5);
+            o.txt("of", id.clone());
+        }
         f.num("x0", x)
             .num("x1", x + pn.w)
             .num("y0", y)
@@ -1020,6 +1194,57 @@ pub fn draw(
             btext.txt("label", b.clone()).txt("of", id.clone());
             base += 20.0;
         }
+        // the states, a row each: name, the prior's faint bar with a tick
+        // where it ends, the bar, the probability
+        if let Some((rows, colour)) = nd.states.as_ref().filter(|(r, _)| !r.is_empty()) {
+            let names = rows
+                .iter()
+                .map(|r| text_w(&state_name(&r.name), SMALL_PX, true))
+                .fold(0.0, f64::max);
+            let bx = x + BOX_PAD_X + names + STATE_GAP;
+            // the bar takes what the box leaves it, at most its full length
+            let bw = (pn.w - 2.0 * BOX_PAD_X - names - 2.0 * STATE_GAP - STATE_TEXT_W)
+                .clamp(16.0, STATE_BAR_W);
+            base += 4.0;
+            for r in rows {
+                let cy = mid_of_baseline(base, SMALL_PX);
+                let f = if r.observed { &mut sseen } else { &mut sname };
+                f.num("x", x + BOX_PAD_X).num("y", cy);
+                f.txt("label", state_name(&r.name)).txt("of", id.clone());
+                if let Some(q) = r.prior {
+                    let q = if q.is_finite() {
+                        q.clamp(0.0, 1.0)
+                    } else {
+                        0.0
+                    };
+                    sprior
+                        .num("x0", bx)
+                        .num("x1", bx + bw * q)
+                        .num("y0", cy - 5.0)
+                        .num("y1", cy + 5.0);
+                    sprior.txt("fill", hex(s.muted)).txt("of", id.clone());
+                    stick
+                        .num("x0", bx + bw * q - 0.75)
+                        .num("x1", bx + bw * q + 0.75)
+                        .num("y0", cy - 6.0)
+                        .num("y1", cy + 6.0);
+                    stick.txt("fill", hex(s.muted)).txt("of", id.clone());
+                }
+                let p = if r.p.is_finite() {
+                    r.p.clamp(0.0, 1.0)
+                } else {
+                    0.0
+                };
+                sbar.num("x0", bx)
+                    .num("x1", bx + bw * p)
+                    .num("y0", cy - 3.5)
+                    .num("y1", cy + 3.5);
+                sbar.txt("fill", hex(*colour)).txt("of", id.clone());
+                stext.num("x", bx + bw + STATE_GAP).num("y", cy);
+                stext.txt("label", r.text.clone()).txt("of", id.clone());
+                base += STATE_H;
+            }
+        }
         // a mini trend along the bottom of the box
         if let Some((values, colour)) = nd.spark.as_ref().filter(|(v, _)| v.len() >= 2) {
             let (lo, hi) = values
@@ -1046,22 +1271,45 @@ pub fn draw(
             }
         }
     }
-    for (stroke, mut f) in boxes {
+    for ((stroke, shape, fill), mut f) in boxes {
         let aes = f.attr_aes(rect_aes().tooltip("tip"));
+        let cls = match shape {
+            NodeShape::Box => class("node"),
+            _ => format!(
+                "{} {}",
+                class("node"),
+                class(&format!("node-{}", shape.name()))
+            ),
+        };
         plot = plot
             .geom_rect_with(
                 GeomRect {
-                    fill: s.card,
+                    fill,
                     color: stroke,
                     alpha: 1.0,
                     line_width: 1.2,
                     ..Default::default()
                 }
-                .with_radius(8.0),
+                .with_radius(if shape == NodeShape::Rect { 0.0 } else { 8.0 }),
             )
             .layer_data(f.take(h))
             .layer_aes(aes)
-            .layer_svg_attr("class", class("node"));
+            .layer_svg_attr("class", cls);
+    }
+    if !hits.is_empty() {
+        // a diamond's hit target: its bounding box, invisible
+        let aes = hits.attr_aes(rect_aes().tooltip("tip"));
+        let cls = format!("{} {}", class("node"), class("node-diamond"));
+        plot = plot
+            .geom_rect_with(GeomRect {
+                fill: s.card,
+                alpha: 0.0,
+                line_width: 0.0,
+                ..Default::default()
+            })
+            .layer_data(hits.take(h))
+            .layer_aes(aes)
+            .layer_svg_attr("class", cls);
     }
     for ((shape, r, stroke), mut f) in shaped {
         let aes = f.attr_aes(rect_aes().fill("fill").tooltip("tip"));
@@ -1140,6 +1388,79 @@ pub fn draw(
             .layer_aes(of(rect_aes().fill("fill")))
             .decorative()
             .layer_svg_attrs(inert);
+    }
+    for (stroke, mut f) in outlines {
+        plot = plot
+            .geom_rect_with(
+                GeomRect {
+                    fill: s.card,
+                    color: stroke,
+                    alpha: 0.0,
+                    line_width: 1.0,
+                    ..Default::default()
+                }
+                .with_radius(5.5),
+            )
+            .layer_data(f.take(h))
+            .layer_aes(of(rect_aes()))
+            .decorative()
+            .layer_svg_attrs(inert)
+            .layer_svg_attr("class", class("node-outline"));
+    }
+    for (stroke, mut f) in diamonds {
+        plot = plot
+            .geom_polygon_with(GeomPolygon {
+                color: stroke,
+                alpha: 1.0,
+                line_width: 1.2,
+                ..Default::default()
+            })
+            .layer_data(f.take(h))
+            .layer_aes(of(Aes::new().x("x").y("y").group("g").fill("fill")))
+            .decorative()
+            .layer_svg_attrs(inert)
+            .layer_svg_attr("class", class("node-diamond-mark"));
+    }
+    for (mut f, alpha, cls) in [
+        (sprior, 0.28, "node-state-prior"),
+        (sbar, 0.9, "node-state-bar"),
+        (stick, 0.9, "node-state-prior"),
+    ] {
+        if f.is_empty() {
+            continue;
+        }
+        plot = plot
+            .geom_rect_with(GeomRect {
+                alpha,
+                line_width: 0.0,
+                ..Default::default()
+            })
+            .layer_data(f.take(h))
+            .layer_aes(of(rect_aes().fill("fill")))
+            .decorative()
+            .layer_svg_attrs(inert)
+            .layer_svg_attr("class", class(cls));
+    }
+    for (mut f, colour, face, cls) in [
+        (sname, s.ink, FontFace::Plain, "node-state"),
+        (sseen, s.heading, FontFace::Bold, "node-state"),
+        (stext, s.muted, FontFace::Plain, "node-state-value"),
+    ] {
+        if f.is_empty() {
+            continue;
+        }
+        plot = plot
+            .geom_text_with(GeomText {
+                size: SMALL_PX,
+                color: colour,
+                fontface: face,
+                hjust: 0.0,
+                ..Default::default()
+            })
+            .layer_data(f.take(h))
+            .layer_aes(of(Aes::new().x("x").y("y").label("label")))
+            .layer_svg_attrs(inert)
+            .layer_svg_attrs([("aria-hidden", "true"), ("class", &*class(cls))]);
     }
     for (mut f, size, colour, cls, math, hjust) in [
         (lines, LABEL_PX, s.heading, class("node-label"), false, 0.5),
@@ -1265,6 +1586,155 @@ mod tests {
         // a short edge: the label stays on it
         let (x, _) = end_label_at(&[(0.0, 0.0), (20.0, 0.0)], "variance", 0.8);
         assert!((x - 10.0).abs() < 1e-9, "{x}");
+    }
+
+    /// A Bayesian network's nodes (Netica / GeNIe style): a chance node's
+    /// states as rows of bars with the prior behind them, an observed node
+    /// shaded with its state in bold, a decision as a square-cornered box,
+    /// a utility as a diamond (an invisible box as its hit target), a
+    /// deterministic node with a double outline.
+    #[test]
+    fn draws_bayes_net_nodes_with_state_bars() {
+        let states = vec!["yes".to_string(), "no".to_string()];
+        let spec = [
+            ("Rain", NodeShape::Box),
+            ("Wet grass", NodeShape::Box),
+            ("Water?", NodeShape::Rect),
+            ("Cost", NodeShape::Diamond),
+            ("Either", NodeShape::DoubleBox),
+        ];
+        let sizes: Vec<NodeBox> = spec
+            .iter()
+            .map(|(l, sh)| match sh {
+                NodeShape::Diamond => diamond_box(l, Some("-12.5")),
+                _ => states_box(l, None, None, &states),
+            })
+            .collect();
+        // two state rows below the label; room for the bars
+        let plain = node_box("Rain", None, None, false);
+        assert_eq!(sizes[0].h, plain.h + 4.0 + 2.0 * STATE_H);
+        assert!(sizes[0].w >= 2.0 * BOX_PAD_X + STATE_BAR_W + STATE_TEXT_W);
+        assert!(sizes[3].w > sizes[3].h, "a diamond wider than tall");
+        let gnodes: Vec<GraphNode> = sizes
+            .iter()
+            .map(|b| GraphNode {
+                w: b.w,
+                h: b.h,
+                ..Default::default()
+            })
+            .collect();
+        let links = [(0, 1), (2, 1), (1, 3), (0, 4)];
+        let gedges: Vec<GraphEdge> = links
+            .iter()
+            .map(|&(a, b)| GraphEdge {
+                from: a,
+                to: b,
+                label_w: None,
+            })
+            .collect();
+        let params = LayeredParams {
+            direction: crate::graph_layout::Direction::TopBottom,
+            ..Default::default()
+        };
+        let l = layered(&gnodes, &gedges, &params);
+        let bar = |name: &str, p: f64, prior: Option<f64>, observed: bool| StateBar {
+            name: name.to_string(),
+            p,
+            prior,
+            text: format!("{:.0}%", p * 100.0),
+            observed,
+        };
+        let nodes: Vec<DrawNode> = spec
+            .iter()
+            .zip(&sizes)
+            .enumerate()
+            .map(|(i, ((_, shape), b))| DrawNode {
+                id: format!("n{i}"),
+                shape: *shape,
+                lines: b.lines.clone(),
+                value: (*shape == NodeShape::Diamond).then(|| "-12.5".to_string()),
+                stroke: (60, 60, 60),
+                tooltip: b.lines.join(" "),
+                attrs: vec![("node".to_string(), Some(format!("n{i}")))],
+                states: (*shape != NodeShape::Diamond).then(|| {
+                    if i == 1 {
+                        (
+                            vec![
+                                bar("yes", 1.0, Some(0.65), true),
+                                bar("no", 0.0, Some(0.35), false),
+                            ],
+                            (37, 99, 235),
+                        )
+                    } else {
+                        (
+                            vec![
+                                bar("yes", 0.3, Some(0.5), false),
+                                bar("no", 0.7, Some(0.5), false),
+                            ],
+                            (37, 99, 235),
+                        )
+                    }
+                }),
+                fill: (i == 1).then_some((230, 236, 250)),
+                ..Default::default()
+            })
+            .collect();
+        let edges: Vec<DrawEdge> = links
+            .iter()
+            .map(|&(a, b)| DrawEdge {
+                colour: (90, 90, 90),
+                width: 1.6,
+                attrs: vec![("edge".to_string(), Some(format!("{a}>{b}")))],
+                ..Default::default()
+            })
+            .collect();
+        let svg = draw(
+            &l,
+            &[],
+            &[],
+            &nodes,
+            &edges,
+            &GraphStyle::default(),
+            crate::theme::presets::theme_void(),
+        )
+        .render_svg_native_at(0.0, 0.0, l.w.ceil() as u32, l.h.ceil() as u32)
+        .unwrap();
+        // one hit target per node, classed by shape; directed edges
+        assert_eq!(svg.matches("data-node=").count(), spec.len());
+        for c in [
+            "gg-graph-node-rect",
+            "gg-graph-node-diamond",
+            "gg-graph-node-double-box",
+        ] {
+            assert!(svg.contains(c), "{c}");
+        }
+        assert!(
+            svg.contains("gg-graph-node-diamond-mark") && svg.contains("gg-graph-node-outline")
+        );
+        assert!(
+            svg.contains("data-part=\"arrow\""),
+            "arrowheads at the child"
+        );
+        // state rows: four bars, their priors, the names and probabilities
+        assert!(
+            svg.contains("gg-graph-node-state-bar") && svg.contains("gg-graph-node-state-prior")
+        );
+        assert!(svg.contains(">30%<") && svg.contains(">100%<"));
+        // the observed node shaded, its observed state in bold
+        assert!(svg.contains("fill=\"#E6ECFA\""), "shaded");
+        assert!(
+            svg.match_indices(">yes</text>")
+                .any(|(i, _)| svg[svg[..i].rfind("<text").unwrap()..i].contains("bold")),
+            "the observed state in bold"
+        );
+        // the diamond's value inside it
+        assert!(svg.contains(">-12.5<"));
+        // a plain box keeps its round corners and the plain class
+        let plain = svg
+            .split("<rect")
+            .find(|r| r.contains("data-node=\"n0\""))
+            .unwrap();
+        assert!(plain.contains("gg-graph-node\""), "{plain}");
     }
 
     #[test]
