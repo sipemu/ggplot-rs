@@ -5,6 +5,8 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.61.0] — 2026-11-19
+
 ### Added
 - `hclust` (`stat::hclust`, in the prelude): agglomerative hierarchical
   clustering of a distance matrix — average, complete or single `Linkage`,
