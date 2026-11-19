@@ -5,6 +5,15 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Added
+- `hclust` (`stat::hclust`, in the prelude): agglomerative hierarchical
+  clustering of a distance matrix — average, complete or single `Linkage`,
+  R's merge numbering and heights (they feed `dendrogram_links`), and a leaf
+  `order` that also turns each merged half so the leaves that meet are the
+  closest pair. `similarity_order` orders items from a similarity matrix
+  (a correlation, a normalized mutual information): the clustering order of
+  a heatmap's rows and columns (DataZooDE/anofox-visualization#1277).
+
 ## [0.60.0] — 2026-11-18
 
 ### Added

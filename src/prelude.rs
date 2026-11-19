@@ -143,6 +143,7 @@ pub use crate::stat::ecdf::StatEcdf;
 pub use crate::stat::ellipse::StatEllipse;
 pub use crate::stat::function::StatFunction;
 pub use crate::stat::funnel::FunnelShape;
+pub use crate::stat::hclust::{hclust, similarity_order, Hclust, Linkage};
 pub use crate::stat::identity::StatIdentity;
 pub use crate::stat::indicator::{Indicator, MacdPart, StatIndicator};
 pub use crate::stat::loess::StatLoess;

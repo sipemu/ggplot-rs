@@ -24,6 +24,7 @@ pub mod ellipse;
 pub mod function;
 pub mod funnel;
 pub(crate) mod gam;
+pub mod hclust;
 pub mod heikin_ashi;
 pub mod identity;
 pub mod indicator;
