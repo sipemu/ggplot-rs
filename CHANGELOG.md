@@ -13,6 +13,22 @@ All notable changes to this project are documented here. The format follows
   closest pair. `similarity_order` orders items from a similarity matrix
   (a correlation, a normalized mutual information): the clustering order of
   a heatmap's rows and columns (DataZooDE/anofox-visualization#1277).
+- Bayesian network nodes in `graph::draw`, Netica / GeNIe style
+  (DataZooDE/anofox-visualization#1275):
+  - `DrawNode::states` (`StateBar`): a discrete node's states as rows in its
+    box — the state's name, a bar for its probability, the probability as
+    text, the prior as a faint bar behind it with a tick where it ends; the
+    observed state's name in bold. `states_box` sizes such a box.
+  - `DrawNode::fill`: a box's (or diamond's) own fill, e.g. a node with
+    evidence shaded.
+  - `NodeShape::Rect` (a decision: square corners), `NodeShape::Diamond` (a
+    utility: label and value inside; an invisible box is its hit target,
+    sized by `diamond_box`) and `NodeShape::DoubleBox` (a deterministic
+    node: a second outline inside), with `NodeShape::boxed`.
+
+### Changed
+- `DrawNode` has new public fields; a struct literal of it needs them (or
+  `..Default::default()`).
 
 ## [0.60.0] — 2026-11-18
 
