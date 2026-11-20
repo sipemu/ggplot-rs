@@ -447,6 +447,121 @@ pub fn diamond_box(label: &str, value: Option<&str>) -> NodeBox {
     }
 }
 
+/// A table's widest first column (row names) and widest further column (px).
+const TABLE_NAME_MAX: f64 = 96.0;
+const TABLE_CELL_MAX: f64 = 84.0;
+/// The gap between a table's columns (px).
+const TABLE_GAP: f64 = 10.0;
+
+/// A small table in a node's box, under its label (an influence diagram's
+/// policy: a row per configuration of the decision's informational parents,
+/// a column per option with its expected utility, the chosen option
+/// marked). The first column holds the row names, left-aligned; the others
+/// are right-aligned. Size the box with [`table_box`].
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct NodeTable {
+    /// The column heads (the first one names the rows and may be empty);
+    /// all empty: no header row.
+    pub header: Vec<String>,
+    /// The rows: the name, then a cell per further column.
+    pub rows: Vec<Vec<String>>,
+    /// Per row, the column (1 or more) of its marked cell, e.g. the chosen
+    /// option: bold, on a tint of the table's colour.
+    pub marked: Vec<Option<usize>>,
+    /// A row to highlight with a band, e.g. the configuration the evidence
+    /// picks.
+    pub current: Option<usize>,
+    /// Per column, the `data-state` its head and cells carry (empty: none),
+    /// e.g. the option a click on the column names.
+    pub keys: Vec<String>,
+}
+
+/// `s` cut with "…" to at most `max` px (bold).
+fn fit_text(s: &str, max: f64) -> String {
+    let cap = (max / (SMALL_PX * 0.6)).floor() as usize;
+    if s.chars().count() <= cap {
+        return s.to_string();
+    }
+    let mut out: String = s.chars().take(cap.saturating_sub(1)).collect();
+    out = out.trim_end().to_string();
+    out.push('…');
+    out
+}
+
+impl NodeTable {
+    fn has_header(&self) -> bool {
+        self.header.iter().any(|h| !h.is_empty())
+    }
+
+    fn columns(&self) -> usize {
+        self.rows
+            .iter()
+            .map(Vec::len)
+            .chain([self.header.len()])
+            .max()
+            .unwrap_or(0)
+    }
+
+    /// Column `c`'s `data-state`, if it has one.
+    fn key(&self, c: usize) -> Option<String> {
+        self.keys.get(c).filter(|k| !k.is_empty()).cloned()
+    }
+
+    /// A cell's text as drawn: cut to its column's limit.
+    fn cell(&self, c: usize, s: &str) -> String {
+        fit_text(
+            s,
+            if c == 0 {
+                TABLE_NAME_MAX
+            } else {
+                TABLE_CELL_MAX
+            },
+        )
+    }
+
+    /// Each column's width (px), header and cells as drawn (bold, the
+    /// widest case).
+    fn widths(&self) -> Vec<f64> {
+        (0..self.columns())
+            .map(|c| {
+                self.rows
+                    .iter()
+                    .filter_map(|r| r.get(c))
+                    .chain(self.header.get(c))
+                    .map(|s| text_w(&self.cell(c, s), SMALL_PX, true))
+                    .fold(0.0, f64::max)
+            })
+            .collect()
+    }
+
+    /// The width of the table (px).
+    fn width(&self) -> f64 {
+        let w = self.widths();
+        w.iter().sum::<f64>() + TABLE_GAP * w.len().saturating_sub(1) as f64
+    }
+}
+
+/// The box a node with a [`NodeTable`] needs: [`node_box`]'s label, value
+/// and badge, then the header row (when there is one) and a row per table
+/// row, as [`draw`] fills it from [`DrawNode::table`].
+pub fn table_box(
+    label: &str,
+    value: Option<&str>,
+    badge: Option<&str>,
+    table: &NodeTable,
+) -> NodeBox {
+    let b = node_box(label, value, badge, false);
+    if table.rows.is_empty() {
+        return b;
+    }
+    let rows = table.rows.len() + usize::from(table.has_header());
+    NodeBox {
+        w: b.w.max(table.width() + 2.0 * BOX_PAD_X),
+        h: b.h + 4.0 + STATE_H * rows as f64,
+        lines: b.lines,
+    }
+}
+
 /// The size a node of `shape` needs for `label` (a [`NodeShape::Box`] is
 /// [`node_box`] without a value, badge or sparkline). A circle fits its
 /// label on one line, at least 30 px across.
@@ -568,6 +683,10 @@ pub struct DrawNode {
     /// A mark at the box's top right corner, e.g. a hand for a node set by
     /// an intervention.
     pub icon: Option<NodeIcon>,
+    /// A table under the label (a boxed shape; size it with
+    /// [`table_box`]), e.g. an influence diagram's policy, and the colour
+    /// its marked cells are tinted with.
+    pub table: Option<(NodeTable, Rgb)>,
     pub tooltip: String,
     /// `data-*` on the box (the hit target); every node lists the same
     /// names, in the same order.
@@ -1165,6 +1284,11 @@ pub fn draw(
     let (mut sname, mut sseen, mut stext) = (Frame::default(), Frame::default(), Frame::default());
     // a state's change (▲ up in the heading colour, bold; ▼ down muted)
     let (mut sup, mut sdown) = (Frame::default(), Frame::default());
+    // a node's table: the current row's band, the marked cells' tint, the
+    // header (left, right), the row names, the cells and the marked cells
+    let (mut tband, mut tmarkbg) = (Frame::default(), Frame::default());
+    let (mut thead_l, mut thead_r) = (Frame::default(), Frame::default());
+    let (mut tname, mut tcell, mut tmark) = (Frame::default(), Frame::default(), Frame::default());
     // an icon's badge, its rounded rects and polygons
     let (mut ibadge, mut irect, mut ipoly) = (Frame::default(), Frame::default(), Frame::default());
     let mut beliefs = Frame::default();
@@ -1472,6 +1596,70 @@ pub fn draw(
                 base += STATE_H;
             }
         }
+        // a table (an influence diagram's policy): the header, then a row
+        // each; the first column left, the others right-aligned
+        if let Some((t, colour)) = nd.table.as_ref().filter(|(t, _)| !t.rows.is_empty()) {
+            let widths = t.widths();
+            let x0 = pn.cx - t.width() / 2.0;
+            // each column's left and right edge
+            let mut edges = Vec::with_capacity(widths.len());
+            let mut cx = x0;
+            for w in &widths {
+                edges.push((cx, cx + w));
+                cx += w + TABLE_GAP;
+            }
+            base += 4.0;
+            if t.has_header() {
+                let cy = mid_of_baseline(base, SMALL_PX);
+                for (c, h) in t.header.iter().enumerate().filter(|(_, h)| !h.is_empty()) {
+                    let (f, hx) = if c == 0 {
+                        (&mut thead_l, edges[c].0)
+                    } else {
+                        (&mut thead_r, edges[c].1)
+                    };
+                    f.num("x", hx).num("y", cy);
+                    f.txt("label", t.cell(c, h)).txt("of", id.clone());
+                    if c > 0 {
+                        f.opt("state", t.key(c));
+                    }
+                }
+                base += STATE_H;
+            }
+            for (k, row) in t.rows.iter().enumerate() {
+                let cy = mid_of_baseline(base, SMALL_PX);
+                if t.current == Some(k) {
+                    tband
+                        .num("x0", x + 4.0)
+                        .num("x1", x + pn.w - 4.0)
+                        .num("y0", cy - 7.0)
+                        .num("y1", cy + 7.0);
+                    tband.txt("fill", hex(s.muted)).txt("of", id.clone());
+                }
+                let mark = t.marked.get(k).copied().flatten();
+                for (c, cell) in row.iter().enumerate().take(edges.len()) {
+                    let marked = c > 0 && mark == Some(c);
+                    if marked {
+                        tmarkbg
+                            .num("x0", edges[c].0 - 3.0)
+                            .num("x1", edges[c].1 + 3.0)
+                            .num("y0", cy - 6.5)
+                            .num("y1", cy + 6.5);
+                        tmarkbg.txt("fill", hex(*colour)).txt("of", id.clone());
+                    }
+                    let (f, cx) = match (c, marked) {
+                        (0, _) => (&mut tname, edges[c].0),
+                        (_, true) => (&mut tmark, edges[c].1),
+                        _ => (&mut tcell, edges[c].1),
+                    };
+                    f.num("x", cx).num("y", cy);
+                    f.txt("label", t.cell(c, cell)).txt("of", id.clone());
+                    if c > 0 {
+                        f.opt("state", t.key(c));
+                    }
+                }
+                base += STATE_H;
+            }
+        }
         // a mini trend along the bottom of the box
         if let Some((values, colour)) = nd.spark.as_ref().filter(|(v, _)| v.len() >= 2) {
             let (lo, hi) = values
@@ -1652,6 +1840,8 @@ pub fn draw(
         (sprior, 0.28, "node-state-prior"),
         (sbar, 0.9, "node-state-bar"),
         (stick, 0.9, "node-state-prior"),
+        (tband, 0.14, "node-table-current"),
+        (tmarkbg, 0.2, "node-table-mark"),
     ] {
         if f.is_empty() {
             continue;
@@ -1688,6 +1878,36 @@ pub fn draw(
             .layer_data(f.take(h))
             .layer_svg_attrs(inert)
             .layer_svg_attrs([("aria-hidden", "true"), ("class", &*class(cls))]);
+    }
+    for (mut f, colour, face, hjust, cls) in [
+        (thead_l, s.muted, FontFace::Plain, 0.0, "node-table-head"),
+        (thead_r, s.muted, FontFace::Plain, 1.0, "node-table-head"),
+        (tname, s.ink, FontFace::Plain, 0.0, "node-table-name"),
+        (tcell, s.muted, FontFace::Plain, 1.0, "node-table-cell"),
+        (
+            tmark,
+            s.heading,
+            FontFace::Bold,
+            1.0,
+            "node-table-cell node-table-chosen",
+        ),
+    ] {
+        if f.is_empty() {
+            continue;
+        }
+        let cls = cls.split(' ').map(&class).collect::<Vec<_>>().join(" ");
+        plot = plot
+            .geom_text_with(GeomText {
+                size: SMALL_PX,
+                color: colour,
+                fontface: face,
+                hjust,
+                ..Default::default()
+            })
+            .layer_aes(of(state_attr(&f, Aes::new().x("x").y("y").label("label"))))
+            .layer_data(f.take(h))
+            .layer_svg_attrs(inert)
+            .layer_svg_attrs([("aria-hidden", "true"), ("class", &*cls)]);
     }
     for (mut f, face, colour) in [
         (sup, FontFace::Bold, s.heading),
@@ -2031,6 +2251,117 @@ mod tests {
             .find(|r| r.contains("data-node=\"n0\""))
             .unwrap();
         assert!(plain.contains("gg-graph-node\""), "{plain}");
+    }
+
+    /// An influence diagram's policy as a table in the decision's box
+    /// (DataZooDE/anofox-visualization#1279): a header, a row per
+    /// configuration of the informational parents, the chosen option bold
+    /// on a tint, the configuration the evidence picks on a band.
+    #[test]
+    fn draws_a_policy_table_in_a_decision() {
+        let table = NodeTable {
+            header: vec!["Seismic".into(), "drill".into(), "don't drill".into()],
+            rows: vec![
+                vec!["closed".into(), "87.5".into(), "0".into()],
+                vec!["open".into(), "22.9".into(), "0".into()],
+                vec!["diffuse".into(), "-25.6".into(), "0".into()],
+                vec![
+                    "a very long configuration name".into(),
+                    "1".into(),
+                    "2".into(),
+                ],
+            ],
+            marked: vec![Some(1), Some(1), Some(2)],
+            current: Some(1),
+            keys: vec![String::new(), "drill".into(), "dont".into()],
+        };
+        let b = table_box("Drill?", None, None, &table);
+        let plain = node_box("Drill?", None, None, false);
+        // a header row and four rows under the label, room for the columns
+        assert_eq!(b.h, plain.h + 4.0 + 5.0 * STATE_H);
+        assert!(
+            b.w >= table.width() + 2.0 * BOX_PAD_X,
+            "{} {}",
+            b.w,
+            table.width()
+        );
+        // no header row when every head is empty; no rows: a plain box
+        let bare = NodeTable {
+            header: vec![String::new(), "EU".into()],
+            ..table.clone()
+        };
+        assert_eq!(table_box("Drill?", None, None, &bare).h, b.h);
+        let headless = NodeTable {
+            header: Vec::new(),
+            ..table.clone()
+        };
+        assert_eq!(table_box("Drill?", None, None, &headless).h, b.h - STATE_H);
+        assert_eq!(
+            table_box("Drill?", None, None, &NodeTable::default()),
+            plain
+        );
+        let gnodes = [GraphNode {
+            w: b.w,
+            h: b.h,
+            ..Default::default()
+        }];
+        let l = layered(&gnodes, &[], &LayeredParams::default());
+        let nodes = [DrawNode {
+            id: "drill".into(),
+            shape: NodeShape::Rect,
+            lines: b.lines.clone(),
+            stroke: (60, 60, 60),
+            tooltip: "Drill?".into(),
+            attrs: vec![("node".to_string(), Some("drill".to_string()))],
+            table: Some((table, (37, 99, 235))),
+            ..Default::default()
+        }];
+        let svg = draw(
+            &l,
+            &[],
+            &[],
+            &nodes,
+            &[],
+            &GraphStyle::default(),
+            crate::theme::presets::theme_void(),
+        )
+        .render_svg_native_at(0.0, 0.0, l.w.ceil() as u32, l.h.ceil() as u32)
+        .unwrap();
+        assert!(
+            svg.contains(">Seismic<") && svg.contains(">don&#39;t drill<"),
+            "{svg}"
+        );
+        assert!(svg.contains(">closed<") && svg.contains(">-25.6<"));
+        // the long name cut with …
+        assert!(svg.contains(">a very long c…<"), "{svg}");
+        // three chosen cells, bold on a tint; one band for the current row
+        assert_eq!(svg.matches("gg-graph-node-table-chosen").count(), 3);
+        assert_eq!(svg.matches("gg-graph-node-table-mark").count(), 3);
+        assert!(svg.contains("gg-graph-node-table-mark"));
+        assert!(svg.contains("gg-graph-node-table-current"));
+        assert!(
+            svg.match_indices(">87.5</text>")
+                .any(|(i, _)| svg[svg[..i].rfind("<text").unwrap()..i].contains("bold")),
+            "the chosen option in bold"
+        );
+        assert!(
+            svg.match_indices(">0</text>")
+                .any(|(i, _)| !svg[svg[..i].rfind("<text").unwrap()..i].contains("bold")),
+            "the others plain"
+        );
+        // a column's head and cells name its key; the row names none
+        assert_eq!(svg.matches("data-state=\"dont\"").count(), 5);
+        assert_eq!(svg.matches("data-state=\"drill\"").count(), 5);
+        assert!(!svg
+            .split("<text")
+            .any(|t| t.contains(">closed<") && t.contains("data-state")));
+        // the cells are right-aligned
+        assert!(
+            svg.match_indices(">22.9</text>")
+                .any(|(i, _)| svg[svg[..i].rfind("<text").unwrap()..i]
+                    .contains("text-anchor=\"end\"")),
+            "right-aligned"
+        );
     }
 
     /// Interactive evidence on a Bayesian network

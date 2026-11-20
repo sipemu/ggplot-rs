@@ -5,6 +5,16 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Added
+- `DrawNode::table` (`NodeTable`, sized by `table_box`): a small table in a
+  node's box under its label — a header row, then a row each, the first
+  column left-aligned, the others right-aligned; a marked cell per row in
+  bold on a tint, and a current row on a faint band. An influence diagram's
+  policy on its decision node: a row per configuration of the informational
+  parents, a column per option with its expected utility, the chosen option
+  marked (DataZooDE/anofox-visualization#1279). `NodeTable::keys` puts a
+  `data-state` on a column's head and cells (what a click on it names).
+
 ## [0.62.0] — 2026-11-20
 
 ### Added
