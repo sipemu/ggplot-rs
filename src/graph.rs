@@ -169,7 +169,7 @@ pub struct GraphStyle {
     /// A plate's dashed outline and its label.
     pub plate: Rgb,
     /// Prefix of the layer classes (`<prefix>node`, `<prefix>edge`,
-    /// `<prefix>edge-label`, `<prefix>lane`, `<prefix>lane-label`,
+    /// `<prefix>edge-label`, `<prefix>edge-label-box`, `<prefix>lane`, `<prefix>lane-label`,
     /// `<prefix>node-label`, `<prefix>node-value`, `<prefix>node-badge`,
     /// `<prefix>node-spark`, `<prefix>plate`, `<prefix>plate-label`,
     /// `<prefix>node-state`, `<prefix>node-state-bar`,
@@ -941,6 +941,17 @@ fn end_label_at(pts: &[(f64, f64)], label: &str, t: f64) -> (f64, f64) {
     }
 }
 
+/// The box (w, h px) behind an edge label set at `px`: its widest line and
+/// its lines, plus a little room (anofox-visualization#1317).
+fn label_box(label: &str, px: f64) -> (f64, f64) {
+    let w = label
+        .split('\n')
+        .map(|l| text_w(l, px, false))
+        .fold(0.0, f64::max);
+    let n = label.split('\n').count() as f64;
+    (w + 6.0, n * px * 1.2 + 3.0)
+}
+
 /// Text is centred on its y (`dominant-baseline="middle"`); the layout
 /// places lines by their baseline. A cap-height-ish shift between the two.
 fn mid_of_baseline(baseline: f64, px: f64) -> f64 {
@@ -1110,6 +1121,9 @@ pub fn draw(
     let (mut cgap, mut cmark) = (Frame::default(), Frame::default());
     // a blocked edge's bar
     let mut bmark = Frame::default();
+    // a card-coloured box behind each edge label: the line stops clear of
+    // the text instead of running through it (anofox-visualization#1317)
+    let mut lbox = Frame::default();
     for (k, e) in edges.iter().enumerate() {
         let Some(route) = layout.edges.get(k) else {
             continue;
@@ -1202,14 +1216,21 @@ pub fn draw(
                 Some(t) => end_label_at(route, l, t),
                 None => edge_label_at(route, l, &layout.nodes),
             };
-            let f = if e.label_math && s.math_font.is_some() {
-                &mut lmf
+            let math = e.label_math && s.math_font.is_some();
+            let (f, px) = if math {
+                (&mut lmf, LABEL_PX + 1.0)
             } else {
-                &mut lf
+                (&mut lf, SMALL_PX)
             };
-            f.num("x", mx).num("y", mid_of_baseline(my - 4.0, SMALL_PX));
+            let y = mid_of_baseline(my - 4.0, SMALL_PX);
+            f.num("x", mx).num("y", y);
             f.txt("label", l.clone());
             f.attrs(&e.label_attrs);
+            let (bw, bh) = label_box(l, px);
+            lbox.num("x0", mx - bw / 2.0)
+                .num("x1", mx + bw / 2.0)
+                .num("y0", y - bh / 2.0)
+                .num("y1", y + bh / 2.0);
         }
     }
     for (mut f, arrowed) in [(ef, true), (uf, false)] {
@@ -1271,6 +1292,26 @@ pub fn draw(
             .decorative()
             .layer_svg_attrs(inert)
             .layer_svg_attrs([("aria-hidden", "true"), ("class", &*class("edge-block"))]);
+    }
+    if !lbox.is_empty() {
+        plot = plot
+            .geom_rect_with(
+                GeomRect {
+                    fill: s.card,
+                    alpha: 1.0,
+                    line_width: 0.0,
+                    ..Default::default()
+                }
+                .with_radius(3.0),
+            )
+            .layer_data(lbox.take(h))
+            .layer_aes(rect_aes())
+            .decorative()
+            .layer_svg_attrs(inert)
+            .layer_svg_attrs([
+                ("aria-hidden", "true"),
+                ("class", &*class("edge-label-box")),
+            ]);
     }
     if !lmf.is_empty() {
         let aes = lmf.attr_aes(Aes::new().x("x").y("y").label("label"));
@@ -2864,6 +2905,16 @@ mod tests {
             .iter()
             .any(|(t, _)| attr(t, "data-from").as_deref() == Some("Ingest")));
         assert!(svg.contains(" gg-graph-node\"") && svg.contains("gg-graph-edge-label"));
+        // anofox-visualization#1317: a card-coloured box behind the label,
+        // drawn before its text, so the edge stops clear of it
+        let lbox = svg.find("gg-graph-edge-label-box").expect("a label box");
+        let text = svg.find("gg-graph-edge-label\"").expect("the label");
+        assert!(lbox < text, "the box is under the text");
+        let rect = &svg[svg[..lbox].rfind('<').unwrap()..lbox];
+        assert!(
+            rect.starts_with("<rect") || rect.contains("<rect"),
+            "{rect}"
+        );
         // node contents grouped by node; lanes drawn with their names
         for id in labels {
             assert!(svg.contains(&format!("data-of=\"{id}\"")), "{id}");

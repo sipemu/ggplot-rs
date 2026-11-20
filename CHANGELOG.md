@@ -5,6 +5,12 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Changed
+- `graph::draw`: every edge label sits on a card-coloured box (rounded,
+  opaque, class `<prefix>edge-label-box`, drawn under the text), so the
+  edge stops clear of the label instead of running through it between the
+  glyphs' halo (DataZooDE/anofox-visualization#1317).
+
 ## [0.64.0] — 2026-11-20
 
 ### Added
