@@ -644,6 +644,9 @@ pub struct StateBar {
 pub enum NodeIcon {
     /// A hand: the node is set by an intervention (`do`).
     Hand,
+    /// A letter (bold, in the heading colour) in the badge: e.g. `X` a
+    /// treatment, `Y` an outcome, `M` a mediator in a causal diagram.
+    Letter(char),
 }
 
 /// What a node's box shows, and its attributes. Its geometry comes from the
@@ -687,6 +690,10 @@ pub struct DrawNode {
     /// [`table_box`]), e.g. an influence diagram's policy, and the colour
     /// its marked cells are tinted with.
     pub table: Option<(NodeTable, Rgb)>,
+    /// A second outline around the box (or diamond), 4 px outside it and
+    /// 2 px wide, in this colour: the node is singled out, e.g. adjusted for
+    /// in a causal diagram (an adjustment set).
+    pub ring: Option<Rgb>,
     pub tooltip: String,
     /// `data-*` on the box (the hit target); every node lists the same
     /// names, in the same order.
@@ -736,6 +743,10 @@ pub struct DrawEdge {
     /// no longer acts on it): a break mark across its middle — a gap and
     /// two slashes in the edge's colour. Give it a muted colour.
     pub cut: bool,
+    /// The edge is blocked (a path through it is closed, e.g. by adjusting
+    /// for a node on it): a bar across its middle, square to the line, in
+    /// the edge's colour.
+    pub blocked: bool,
 }
 
 /// An edge's width (px) for what it carries, `value` of the graph's `max`:
@@ -1097,6 +1108,8 @@ pub fn draw(
     let mut lmf = Frame::default();
     // a cut edge's break mark: the gap (card-coloured) and two slashes
     let (mut cgap, mut cmark) = (Frame::default(), Frame::default());
+    // a blocked edge's bar
+    let mut bmark = Frame::default();
     for (k, e) in edges.iter().enumerate() {
         let Some(route) = layout.edges.get(k) else {
             continue;
@@ -1143,6 +1156,25 @@ pub fn draw(
                         cmark.txt("g", format!("{g}-{i}")).txt("col", hex(e.colour));
                         cmark.attrs(&e.label_attrs);
                     }
+                }
+            }
+        }
+        if e.blocked {
+            let total: f64 = pts
+                .windows(2)
+                .map(|w| ((w[1].0 - w[0].0).powi(2) + (w[1].1 - w[0].1).powi(2)).sqrt())
+                .sum();
+            if total > 12.0 {
+                let (mx, my) = point_at(&pts, 0.5);
+                let (ax, ay) = point_at(&pts, 0.5 - 2.0 / total);
+                let (bx, by) = point_at(&pts, 0.5 + 2.0 / total);
+                let len = ((bx - ax).powi(2) + (by - ay).powi(2)).sqrt().max(1e-6);
+                let (vx, vy) = (-(by - ay) / len, (bx - ax) / len);
+                let half = 6.0 + e.width;
+                for t in [-half, half] {
+                    bmark.num("x", mx + vx * t).num("y", my + vy * t);
+                    bmark.txt("g", format!("b{k:04}")).txt("col", hex(e.colour));
+                    bmark.attrs(&e.label_attrs);
                 }
             }
         }
@@ -1230,6 +1262,16 @@ pub fn draw(
             .layer_svg_attrs(inert)
             .layer_svg_attrs([("aria-hidden", "true"), ("class", &*class("edge-cut"))]);
     }
+    if !bmark.is_empty() {
+        let aes = bmark.attr_aes(Aes::new().x("x").y("y").group("g").color("col"));
+        plot = plot
+            .geom_path_with(GeomPath::default().linewidth(2.4).lineend(LineEnd::Butt))
+            .layer_data(bmark.take(h))
+            .layer_aes(aes)
+            .decorative()
+            .layer_svg_attrs(inert)
+            .layer_svg_attrs([("aria-hidden", "true"), ("class", &*class("edge-block"))]);
+    }
     if !lmf.is_empty() {
         let aes = lmf.attr_aes(Aes::new().x("x").y("y").label("label"));
         plot = plot
@@ -1291,6 +1333,9 @@ pub fn draw(
     let (mut tname, mut tcell, mut tmark) = (Frame::default(), Frame::default(), Frame::default());
     // an icon's badge, its rounded rects and polygons
     let (mut ibadge, mut irect, mut ipoly) = (Frame::default(), Frame::default(), Frame::default());
+    // an icon's letter; a ring around a box, by colour
+    let mut iletter = Frame::default();
+    let mut rings: Vec<(Rgb, Frame)> = Vec::new();
     let mut beliefs = Frame::default();
     let mut priors = Frame::default();
     // shaped nodes, a layer per (shape, corner radius, outline)
@@ -1349,6 +1394,17 @@ pub fn draw(
                 beliefs.num("x", px).num("y", py).txt("g", id.clone());
                 beliefs.txt("fill", hex(*col)).txt("of", id.clone());
             }
+        }
+        if let Some(c) = nd
+            .ring
+            .filter(|_| nd.shape.boxed() || nd.shape == NodeShape::Diamond)
+        {
+            let f = by_colour(&mut rings, c);
+            f.num("x0", x - 4.0)
+                .num("x1", x + pn.w + 4.0)
+                .num("y0", y - 4.0)
+                .num("y1", y + pn.h + 4.0);
+            f.txt("of", id.clone());
         }
         if nd.shape == NodeShape::Diamond {
             hits.num("x0", x)
@@ -1473,14 +1529,22 @@ pub fn draw(
             .num("y1", y + pn.h);
         f.txt("tip", nd.tooltip.clone()).attrs(&nd.attrs);
         // the icon in a round badge on the top right corner
-        if let Some(NodeIcon::Hand) = nd.icon {
-            let (bx, by) = (x + pn.w - 11.0, y - 7.0);
+        let (bx, by) = (x + pn.w - 11.0, y - 7.0);
+        if nd.icon.is_some() {
             ibadge
                 .num("x0", bx)
                 .num("x1", bx + 18.0)
                 .num("y0", by)
                 .num("y1", by + 18.0);
             ibadge.txt("of", id.clone());
+        }
+        if let Some(NodeIcon::Letter(c)) = nd.icon {
+            iletter
+                .num("x", bx + 9.0)
+                .num("y", mid_of_baseline(by + 13.0, BADGE_PX));
+            iletter.txt("label", c.to_string()).txt("of", id.clone());
+        }
+        if let Some(NodeIcon::Hand) = nd.icon {
             let (ox, oy) = (bx + 3.0, by + 3.0);
             for (x0, y0, x1, y1) in HAND_RECTS {
                 irect
@@ -1710,6 +1774,26 @@ pub fn draw(
             .layer_data(f.take(h))
             .layer_aes(aes)
             .layer_svg_attr("class", cls);
+    }
+    // a ring around a singled-out node, outside its box (after the boxes:
+    // the first `data-of` group of a node holds what it shows)
+    for (c, mut f) in rings {
+        plot = plot
+            .geom_rect_with(
+                GeomRect {
+                    fill: s.card,
+                    color: c,
+                    alpha: 0.0,
+                    line_width: 2.0,
+                    ..Default::default()
+                }
+                .with_radius(11.0),
+            )
+            .layer_data(f.take(h))
+            .layer_aes(rect_aes().group_wrap("of", "of"))
+            .decorative()
+            .layer_svg_attrs(inert)
+            .layer_svg_attrs([("aria-hidden", "true"), ("class", &*class("node-ring"))]);
     }
     if !hits.is_empty() {
         // a diamond's hit target: its bounding box, invisible
@@ -1949,6 +2033,8 @@ pub fn draw(
             .decorative()
             .layer_svg_attrs(inert)
             .layer_svg_attrs([("aria-hidden", "true"), ("class", &*class("node-icon"))]);
+    }
+    if !irect.is_empty() {
         plot = plot
             .geom_rect_with(
                 GeomRect {
@@ -1974,6 +2060,19 @@ pub fn draw(
             .layer_data(ipoly.take(h))
             .layer_aes(of(Aes::new().x("x").y("y").group("g")))
             .decorative()
+            .layer_svg_attrs(inert)
+            .layer_svg_attrs([("aria-hidden", "true"), ("class", &*class("node-icon"))]);
+    }
+    if !iletter.is_empty() {
+        plot = plot
+            .geom_text_with(GeomText {
+                size: BADGE_PX,
+                color: s.heading,
+                fontface: FontFace::Bold,
+                ..Default::default()
+            })
+            .layer_data(iletter.take(h))
+            .layer_aes(of(Aes::new().x("x").y("y").label("label")))
             .layer_svg_attrs(inert)
             .layer_svg_attrs([("aria-hidden", "true"), ("class", &*class("node-icon"))]);
     }
@@ -2464,6 +2563,76 @@ mod tests {
         assert!(svg.contains("gg-graph-edge-cut"), "cut mark");
         // a click on a row names its state
         assert!(svg.contains("data-state=\"yes\"") && svg.contains("data-state=\"no\""));
+    }
+
+    /// A causal diagram's marks: a ring around an adjusted node, a letter
+    /// in the badge (X a treatment, M a mediator), a bar across a blocked
+    /// edge.
+    #[test]
+    fn draws_rings_letters_and_blocked_edges() {
+        let gnodes = vec![
+            GraphNode {
+                w: 90.0,
+                h: 40.0,
+                ..Default::default()
+            };
+            3
+        ];
+        let gedges = [(0, 1), (1, 2)].map(|(from, to)| GraphEdge {
+            from,
+            to,
+            label_w: None,
+        });
+        let l = layered(&gnodes, &gedges, &LayeredParams::default());
+        let nodes: Vec<DrawNode> = ["Engaged", "Discount", "Stays"]
+            .iter()
+            .enumerate()
+            .map(|(i, name)| DrawNode {
+                id: format!("n{i}"),
+                lines: vec![name.to_string()],
+                stroke: (60, 60, 60),
+                attrs: vec![("node".to_string(), Some(format!("n{i}")))],
+                ring: (i == 0).then_some((37, 99, 235)),
+                icon: match i {
+                    1 => Some(NodeIcon::Letter('X')),
+                    2 => Some(NodeIcon::Letter('Y')),
+                    _ => None,
+                },
+                ..Default::default()
+            })
+            .collect();
+        let edges = vec![
+            DrawEdge {
+                colour: (160, 160, 160),
+                width: 1.6,
+                blocked: true,
+                line: EdgeLine::Dashed,
+                ..Default::default()
+            },
+            DrawEdge {
+                colour: (160, 160, 160),
+                width: 1.6,
+                ..Default::default()
+            },
+        ];
+        let svg = draw(
+            &l,
+            &[],
+            &[],
+            &nodes,
+            &edges,
+            &GraphStyle::default(),
+            crate::theme::presets::theme_void(),
+        )
+        .render_svg_native_at(0.0, 0.0, l.w.ceil() as u32, l.h.ceil() as u32)
+        .unwrap();
+        assert_eq!(svg.matches("gg-graph-node-ring").count(), 1, "one ring");
+        assert!(
+            svg.to_ascii_lowercase().contains("stroke=\"#2563eb\""),
+            "ring colour"
+        );
+        assert!(svg.contains(">X<") && svg.contains(">Y<"), "letters");
+        assert_eq!(svg.matches("gg-graph-edge-block").count(), 1, "one bar");
     }
 
     #[test]

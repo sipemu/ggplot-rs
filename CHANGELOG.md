@@ -5,6 +5,15 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Added
+- Causal marks in `graph::draw` (DataZooDE/anofox-visualization#1278):
+  - `DrawNode::ring`: a second outline 4 px outside the box, 2 px wide, in
+    its own colour — a node singled out (an adjustment set's node).
+  - `NodeIcon::Letter(char)`: a bold letter in the corner badge (X a
+    treatment, Y an outcome, M a mediator).
+  - `DrawEdge::blocked`: a bar across the edge's middle, square to the line
+    (a path through it is blocked).
+
 ## [0.63.0] — 2026-11-20
 
 ### Added
