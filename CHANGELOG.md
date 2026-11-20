@@ -5,6 +5,8 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.65.0] — 2026-11-20
+
 ### Changed
 - `graph::draw`: every edge label sits on a card-coloured box (rounded,
   opaque, class `<prefix>edge-label-box`, drawn under the text), so the
