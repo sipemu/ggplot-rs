@@ -5,6 +5,8 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.62.0] — 2026-11-20
+
 ### Added
 - Interactive evidence on a Bayesian network in `graph::draw`
   (DataZooDE/anofox-visualization#1276):
