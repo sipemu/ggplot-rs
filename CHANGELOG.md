@@ -5,6 +5,8 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.63.0] — 2026-11-20
+
 ### Added
 - `DrawNode::table` (`NodeTable`, sized by `table_box`): a small table in a
   node's box under its label — a header row, then a row each, the first
