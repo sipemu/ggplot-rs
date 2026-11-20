@@ -5,6 +5,8 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.64.0] — 2026-11-20
+
 ### Added
 - Causal marks in `graph::draw` (DataZooDE/anofox-visualization#1278):
   - `DrawNode::ring`: a second outline 4 px outside the box, 2 px wide, in
