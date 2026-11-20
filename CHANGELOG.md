@@ -5,6 +5,22 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Added
+- Interactive evidence on a Bayesian network in `graph::draw`
+  (DataZooDE/anofox-visualization#1276):
+  - `StateBar::was`: a state's probability before the last change; its
+    change is drawn after the probability (`▲21` / `▼4`, percentage points,
+    none under half a point), sized by `states_box_with_deltas`.
+  - `GraphStyle::moved`: a node without a fill of its own is tinted towards
+    this colour by how far its belief moved (`js_distance`, the
+    Jensen–Shannon distance between the two distributions, also public).
+  - `DrawEdge::cut`: an edge cut by an intervention on its child, drawn with
+    a break mark (a gap and two slashes) across its middle.
+  - `DrawNode::icon` (`NodeIcon::Hand`): a hand in a round badge on the
+    box's top right corner, for a node set by an intervention (`do`).
+  - A state row's name and probability carry `data-state`, so a click on
+    the row can name its state.
+
 ## [0.61.0] — 2026-11-19
 
 ### Added

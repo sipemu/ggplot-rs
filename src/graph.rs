@@ -174,8 +174,9 @@ pub struct GraphStyle {
     /// `<prefix>node-spark`, `<prefix>plate`, `<prefix>plate-label`,
     /// `<prefix>node-state`, `<prefix>node-state-bar`,
     /// `<prefix>node-state-prior`, `<prefix>node-state-value`,
-    /// `<prefix>node-outline`, `<prefix>node-diamond-mark`; a shaped node's
-    /// mark also has `<prefix>node-<shape>`).
+    /// `<prefix>node-outline`, `<prefix>node-diamond-mark`,
+    /// `<prefix>node-state-delta`, `<prefix>node-icon`, `<prefix>edge-cut`;
+    /// a shaped node's mark also has `<prefix>node-<shape>`).
     pub class_prefix: String,
     /// A factor graph's math font: when set, the labels of shaped nodes
     /// (variables, observations, equality nodes, glyph factors) are set in
@@ -186,6 +187,12 @@ pub struct GraphStyle {
     pub glyph_fill: Option<Rgb>,
     /// A glyph factor's glyph colour; `None` is `heading`.
     pub glyph_ink: Option<Rgb>,
+    /// A discrete node's tint by how far its belief moved (every
+    /// [`StateBar::was`] given): the box fill mixed towards this colour by
+    /// the [`js_distance`] between the two, up to 45 % at a distance of 0.4
+    /// or more. Only a node without a [`DrawNode::fill`] of its own; `None`
+    /// tints nothing.
+    pub moved: Option<Rgb>,
 }
 
 impl Default for GraphStyle {
@@ -203,6 +210,7 @@ impl Default for GraphStyle {
             math_font: None,
             glyph_fill: None,
             glyph_ink: None,
+            moved: None,
         }
     }
 }
@@ -288,6 +296,83 @@ const STATE_GAP: f64 = 6.0;
 const STATE_TEXT_W: f64 = 30.0;
 /// A box with state rows may be this much wider than a plain one.
 const STATES_MAX_W: f64 = 224.0;
+/// The room for a state's change after its probability (`▲21`).
+const STATE_DELTA_W: f64 = 28.0;
+/// A change smaller than this is not shown.
+const MIN_DELTA: f64 = 0.005;
+
+/// The Jensen–Shannon distance between two distributions over the same
+/// states (base 2: 0 the same, 1 disjoint), each normalised to sum to 1;
+/// 0 when either sums to 0 or they differ in length.
+pub fn js_distance(p: &[f64], q: &[f64]) -> f64 {
+    let clean = |v: &[f64]| -> Option<Vec<f64>> {
+        let v: Vec<f64> = v
+            .iter()
+            .map(|x| if x.is_finite() { x.max(0.0) } else { 0.0 })
+            .collect();
+        let s: f64 = v.iter().sum();
+        (s > 0.0).then(|| v.into_iter().map(|x| x / s).collect())
+    };
+    let (Some(p), Some(q)) = (clean(p), clean(q)) else {
+        return 0.0;
+    };
+    if p.len() != q.len() {
+        return 0.0;
+    }
+    let kl = |a: &[f64], m: &[f64]| -> f64 {
+        a.iter()
+            .zip(m)
+            .filter(|(x, _)| **x > 0.0)
+            .map(|(x, y)| x * (x / y).log2())
+            .sum()
+    };
+    let m: Vec<f64> = p.iter().zip(&q).map(|(a, b)| (a + b) / 2.0).collect();
+    let jsd = (kl(&p, &m) + kl(&q, &m)) / 2.0;
+    jsd.clamp(0.0, 1.0).sqrt()
+}
+
+/// `a` mixed towards `b` by `t` (0..=1).
+fn mix(a: Rgb, b: Rgb, t: f64) -> Rgb {
+    let t = t.clamp(0.0, 1.0);
+    let m = |x: u8, y: u8| (x as f64 + (y as f64 - x as f64) * t).round() as u8;
+    (m(a.0, b.0), m(a.1, b.1), m(a.2, b.2))
+}
+
+/// A node's tint ([`GraphStyle::moved`]): how much of the colour, by how
+/// far its belief moved.
+fn moved_share(states: &[StateBar]) -> Option<f64> {
+    let was: Option<Vec<f64>> = states.iter().map(|r| r.was).collect();
+    let was = was?;
+    let now: Vec<f64> = states.iter().map(|r| r.p).collect();
+    let d = js_distance(&now, &was);
+    (d >= 0.01).then(|| (d / 0.4).min(1.0) * 0.45)
+}
+
+/// A state's change as its row shows it: `▲21`, `▼4` (percentage
+/// points), `None` under [`MIN_DELTA`].
+fn delta_text(p: f64, was: f64) -> Option<(String, bool)> {
+    let d = p - was;
+    if !d.is_finite() || d.abs() < MIN_DELTA {
+        return None;
+    }
+    let pts = (d.abs() * 100.0).round().max(1.0);
+    Some((
+        format!("{}{pts:.0}", if d > 0.0 { '▲' } else { '▼' }),
+        d > 0.0,
+    ))
+}
+
+/// A hand (an intervention), in a 12 × 12 px box from its top left: the
+/// palm and four fingers as rounded rects `(x0, y0, x1, y1)`, the thumb as
+/// a polygon.
+const HAND_RECTS: [(f64, f64, f64, f64); 5] = [
+    (0.6, 5.2, 9.2, 11.8),
+    (0.6, 1.8, 2.5, 7.0),
+    (2.8, 0.4, 4.7, 7.0),
+    (5.0, 0.8, 6.9, 7.0),
+    (7.2, 2.2, 9.1, 7.0),
+];
+const HAND_THUMB: [(f64, f64); 4] = [(8.2, 8.4), (11.0, 5.2), (12.2, 6.2), (9.4, 10.6)];
 
 /// A state's name as its row shows it: cut with "…" past
 /// `STATE_NAME_MAX`.
@@ -312,6 +397,18 @@ pub fn states_box(
     badge: Option<&str>,
     states: &[String],
 ) -> NodeBox {
+    states_box_with_deltas(label, value, badge, states, false)
+}
+
+/// [`states_box`] with room for each row's change after its probability
+/// (`deltas`, see [`StateBar::was`]).
+pub fn states_box_with_deltas(
+    label: &str,
+    value: Option<&str>,
+    badge: Option<&str>,
+    states: &[String],
+    deltas: bool,
+) -> NodeBox {
     let b = node_box(label, value, badge, false);
     if states.is_empty() {
         return b;
@@ -320,9 +417,10 @@ pub fn states_box(
         .iter()
         .map(|n| text_w(&state_name(n), SMALL_PX, true))
         .fold(0.0, f64::max);
-    let rows = names + STATE_GAP + STATE_BAR_W + STATE_GAP + STATE_TEXT_W;
+    let delta = if deltas { STATE_DELTA_W } else { 0.0 };
+    let rows = names + STATE_GAP + STATE_BAR_W + STATE_GAP + STATE_TEXT_W + delta;
     NodeBox {
-        w: b.w.max(rows + 2.0 * BOX_PAD_X).min(STATES_MAX_W),
+        w: b.w.max(rows + 2.0 * BOX_PAD_X).min(STATES_MAX_W + delta),
         h: b.h + 4.0 + STATE_H * states.len() as f64,
         lines: b.lines,
     }
@@ -419,6 +517,18 @@ pub struct StateBar {
     pub text: String,
     /// The observed state: its name in bold.
     pub observed: bool,
+    /// The probability before the last change (e.g. under the evidence as it
+    /// was), 0..=1: a ▲ / ▼ and the change in percentage points after the
+    /// probability (`▲21`), none for a change under half a point. Size the
+    /// box with [`states_box_with_deltas`].
+    pub was: Option<f64>,
+}
+
+/// A mark on a node, at its top right corner in a small round badge.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum NodeIcon {
+    /// A hand: the node is set by an intervention (`do`).
+    Hand,
 }
 
 /// What a node's box shows, and its attributes. Its geometry comes from the
@@ -455,6 +565,9 @@ pub struct DrawNode {
     /// The box's (or diamond's) fill; `None` is the card colour. E.g. a
     /// node with evidence, shaded.
     pub fill: Option<Rgb>,
+    /// A mark at the box's top right corner, e.g. a hand for a node set by
+    /// an intervention.
+    pub icon: Option<NodeIcon>,
     pub tooltip: String,
     /// `data-*` on the box (the hit target); every node lists the same
     /// names, in the same order.
@@ -498,8 +611,12 @@ pub struct DrawEdge {
     /// `data-*` on the path; every edge lists the same names, in the same
     /// order.
     pub attrs: Vec<DataAttr>,
-    /// `data-*` on the label.
+    /// `data-*` on the label (and on a cut edge's break mark).
     pub label_attrs: Vec<DataAttr>,
+    /// The edge is cut (its child is set by an intervention, so the parent
+    /// no longer acts on it): a break mark across its middle — a gap and
+    /// two slashes in the edge's colour. Give it a muted colour.
+    pub cut: bool,
 }
 
 /// An edge's width (px) for what it carries, `value` of the graph's `max`:
@@ -598,6 +715,17 @@ fn by_colour(v: &mut Vec<(Rgb, Frame)>, c: Rgb) -> &mut Frame {
         }
     };
     &mut v[i].1
+}
+
+/// `aes` plus `data-state` when the frame has a `state` column (a state
+/// row's name and probability: what a click on the row names; the bars are
+/// decorative and carry none).
+fn state_attr(f: &Frame, aes: Aes) -> Aes {
+    if f.0.iter().any(|(n, _)| n == "state") {
+        aes.data_attr("state", "state")
+    } else {
+        aes
+    }
 }
 
 fn hex(c: Rgb) -> String {
@@ -848,6 +976,8 @@ pub fn draw(
     let (mut ef, mut uf, mut lf) = (Frame::default(), Frame::default(), Frame::default());
     // a variable's name on its edge (Forney style), in the math font
     let mut lmf = Frame::default();
+    // a cut edge's break mark: the gap (card-coloured) and two slashes
+    let (mut cgap, mut cmark) = (Frame::default(), Frame::default());
     for (k, e) in edges.iter().enumerate() {
         let Some(route) = layout.edges.get(k) else {
             continue;
@@ -866,6 +996,36 @@ pub fn draw(
             let len = ((tx - fx).powi(2) + (ty - fy).powi(2)).sqrt().max(1e-6);
             let pull = e.width.min(len / 2.0);
             pts[n - 1] = (tx - (tx - fx) / len * pull, ty - (ty - fy) / len * pull);
+        }
+        if e.cut {
+            let total: f64 = pts
+                .windows(2)
+                .map(|w| ((w[1].0 - w[0].0).powi(2) + (w[1].1 - w[0].1).powi(2)).sqrt())
+                .sum();
+            if total > 16.0 {
+                let (mx, my) = point_at(&pts, 0.5);
+                let (ax, ay) = point_at(&pts, 0.5 - 2.0 / total);
+                let (bx, by) = point_at(&pts, 0.5 + 2.0 / total);
+                let len = ((bx - ax).powi(2) + (by - ay).powi(2)).sqrt().max(1e-6);
+                let (ux, uy) = ((bx - ax) / len, (by - ay) / len);
+                let g = format!("c{k:04}");
+                for d in [-4.0, 4.0] {
+                    cgap.num("x", mx + ux * d).num("y", my + uy * d);
+                    cgap.txt("g", g.clone()).num("lw", e.width + 2.5);
+                    cgap.attrs(&e.label_attrs);
+                }
+                // each slash across the line, leaning 30° along it
+                let (c30, s30) = (30f64.to_radians().cos(), 30f64.to_radians().sin());
+                let (vx, vy) = (-uy * c30 + ux * s30, ux * c30 + uy * s30);
+                for (i, off) in [-3.5, 3.5].into_iter().enumerate() {
+                    let (cx, cy) = (mx + ux * off, my + uy * off);
+                    for t in [-5.0, 5.0] {
+                        cmark.num("x", cx + vx * t).num("y", cy + vy * t);
+                        cmark.txt("g", format!("{g}-{i}")).txt("col", hex(e.colour));
+                        cmark.attrs(&e.label_attrs);
+                    }
+                }
+            }
         }
         let ef = if e.undirected { &mut uf } else { &mut ef };
         let lt = match e.line {
@@ -933,6 +1093,24 @@ pub fn draw(
             .layer_aes(aes)
             .layer_svg_attr("class", class("edge"));
     }
+    if !cgap.is_empty() {
+        let aes = cgap.attr_aes(Aes::new().x("x").y("y").group("g").linewidth("lw"));
+        plot = plot
+            .geom_path_with(GeomPath::default().color(s.card).lineend(LineEnd::Butt))
+            .layer_data(cgap.take(h))
+            .layer_aes(aes)
+            .decorative()
+            .layer_svg_attrs(inert)
+            .layer_svg_attrs([("aria-hidden", "true"), ("class", &*class("edge-cut"))]);
+        let aes = cmark.attr_aes(Aes::new().x("x").y("y").group("g").color("col"));
+        plot = plot
+            .geom_path_with(GeomPath::default().linewidth(1.4).lineend(LineEnd::Round))
+            .layer_data(cmark.take(h))
+            .layer_aes(aes)
+            .decorative()
+            .layer_svg_attrs(inert)
+            .layer_svg_attrs([("aria-hidden", "true"), ("class", &*class("edge-cut"))]);
+    }
     if !lmf.is_empty() {
         let aes = lmf.attr_aes(Aes::new().x("x").y("y").label("label"));
         plot = plot
@@ -985,6 +1163,10 @@ pub fn draw(
     // observed one bold) and the probabilities
     let (mut sprior, mut stick, mut sbar) = (Frame::default(), Frame::default(), Frame::default());
     let (mut sname, mut sseen, mut stext) = (Frame::default(), Frame::default(), Frame::default());
+    // a state's change (▲ up in the heading colour, bold; ▼ down muted)
+    let (mut sup, mut sdown) = (Frame::default(), Frame::default());
+    // an icon's badge, its rounded rects and polygons
+    let (mut ibadge, mut irect, mut ipoly) = (Frame::default(), Frame::default(), Frame::default());
     let mut beliefs = Frame::default();
     let mut priors = Frame::default();
     // shaped nodes, a layer per (shape, corner radius, outline)
@@ -1134,7 +1316,17 @@ pub fn draw(
             target.txt("label", label).txt("of", id.clone());
             continue;
         }
-        let key = (nd.stroke, nd.shape, nd.fill.unwrap_or(s.card));
+        // a node without a fill of its own: tinted by how far it moved
+        let fill = nd.fill.unwrap_or_else(|| {
+            match (
+                s.moved,
+                nd.states.as_ref().and_then(|(r, _)| moved_share(r)),
+            ) {
+                (Some(c), Some(t)) => mix(s.card, c, t),
+                _ => s.card,
+            }
+        });
+        let key = (nd.stroke, nd.shape, fill);
         let i = match boxes.iter().position(|(k, _)| *k == key) {
             Some(i) => i,
             None => {
@@ -1156,6 +1348,29 @@ pub fn draw(
             .num("y0", y)
             .num("y1", y + pn.h);
         f.txt("tip", nd.tooltip.clone()).attrs(&nd.attrs);
+        // the icon in a round badge on the top right corner
+        if let Some(NodeIcon::Hand) = nd.icon {
+            let (bx, by) = (x + pn.w - 11.0, y - 7.0);
+            ibadge
+                .num("x0", bx)
+                .num("x1", bx + 18.0)
+                .num("y0", by)
+                .num("y1", by + 18.0);
+            ibadge.txt("of", id.clone());
+            let (ox, oy) = (bx + 3.0, by + 3.0);
+            for (x0, y0, x1, y1) in HAND_RECTS {
+                irect
+                    .num("x0", ox + x0)
+                    .num("x1", ox + x1)
+                    .num("y0", oy + y0)
+                    .num("y1", oy + y1);
+                irect.txt("of", id.clone());
+            }
+            for (px, py) in HAND_THUMB {
+                ipoly.num("x", ox + px).num("y", oy + py);
+                ipoly.txt("g", id.clone()).txt("of", id.clone());
+            }
+        }
 
         if let Some(a) = nd.accent {
             accent.num("x0", x + 1.5).num("x1", x + 4.5);
@@ -1202,8 +1417,13 @@ pub fn draw(
                 .map(|r| text_w(&state_name(&r.name), SMALL_PX, true))
                 .fold(0.0, f64::max);
             let bx = x + BOX_PAD_X + names + STATE_GAP;
+            let delta = if rows.iter().any(|r| r.was.is_some()) {
+                STATE_DELTA_W
+            } else {
+                0.0
+            };
             // the bar takes what the box leaves it, at most its full length
-            let bw = (pn.w - 2.0 * BOX_PAD_X - names - 2.0 * STATE_GAP - STATE_TEXT_W)
+            let bw = (pn.w - 2.0 * BOX_PAD_X - names - 2.0 * STATE_GAP - STATE_TEXT_W - delta)
                 .clamp(16.0, STATE_BAR_W);
             base += 4.0;
             for r in rows {
@@ -1211,6 +1431,7 @@ pub fn draw(
                 let f = if r.observed { &mut sseen } else { &mut sname };
                 f.num("x", x + BOX_PAD_X).num("y", cy);
                 f.txt("label", state_name(&r.name)).txt("of", id.clone());
+                f.txt("state", r.name.clone());
                 if let Some(q) = r.prior {
                     let q = if q.is_finite() {
                         q.clamp(0.0, 1.0)
@@ -1242,6 +1463,12 @@ pub fn draw(
                 sbar.txt("fill", hex(*colour)).txt("of", id.clone());
                 stext.num("x", bx + bw + STATE_GAP).num("y", cy);
                 stext.txt("label", r.text.clone()).txt("of", id.clone());
+                stext.txt("state", r.name.clone());
+                if let Some((t, up)) = r.was.and_then(|w| delta_text(p, w)) {
+                    let f = if up { &mut sup } else { &mut sdown };
+                    f.num("x", bx + bw + STATE_GAP + STATE_TEXT_W).num("y", cy);
+                    f.txt("label", t).txt("of", id.clone());
+                }
                 base += STATE_H;
             }
         }
@@ -1457,10 +1684,78 @@ pub fn draw(
                 hjust: 0.0,
                 ..Default::default()
             })
+            .layer_aes(of(state_attr(&f, Aes::new().x("x").y("y").label("label"))))
+            .layer_data(f.take(h))
+            .layer_svg_attrs(inert)
+            .layer_svg_attrs([("aria-hidden", "true"), ("class", &*class(cls))]);
+    }
+    for (mut f, face, colour) in [
+        (sup, FontFace::Bold, s.heading),
+        (sdown, FontFace::Plain, s.muted),
+    ] {
+        if f.is_empty() {
+            continue;
+        }
+        plot = plot
+            .geom_text_with(GeomText {
+                size: SMALL_PX - 1.0,
+                color: colour,
+                fontface: face,
+                hjust: 0.0,
+                ..Default::default()
+            })
             .layer_data(f.take(h))
             .layer_aes(of(Aes::new().x("x").y("y").label("label")))
             .layer_svg_attrs(inert)
-            .layer_svg_attrs([("aria-hidden", "true"), ("class", &*class(cls))]);
+            .layer_svg_attrs([
+                ("aria-hidden", "true"),
+                ("class", &*class("node-state-delta")),
+            ]);
+    }
+    if !ibadge.is_empty() {
+        plot = plot
+            .geom_rect_with(
+                GeomRect {
+                    fill: s.card,
+                    color: s.heading,
+                    alpha: 1.0,
+                    line_width: 1.1,
+                    ..Default::default()
+                }
+                .with_radius(9.0),
+            )
+            .layer_data(ibadge.take(h))
+            .layer_aes(of(rect_aes()))
+            .decorative()
+            .layer_svg_attrs(inert)
+            .layer_svg_attrs([("aria-hidden", "true"), ("class", &*class("node-icon"))]);
+        plot = plot
+            .geom_rect_with(
+                GeomRect {
+                    fill: s.heading,
+                    alpha: 1.0,
+                    line_width: 0.0,
+                    ..Default::default()
+                }
+                .with_radius(0.9),
+            )
+            .layer_data(irect.take(h))
+            .layer_aes(of(rect_aes()))
+            .decorative()
+            .layer_svg_attrs(inert)
+            .layer_svg_attrs([("aria-hidden", "true"), ("class", &*class("node-icon"))]);
+        plot = plot
+            .geom_polygon_with(GeomPolygon {
+                fill: s.heading,
+                alpha: 1.0,
+                line_width: 0.0,
+                ..Default::default()
+            })
+            .layer_data(ipoly.take(h))
+            .layer_aes(of(Aes::new().x("x").y("y").group("g")))
+            .decorative()
+            .layer_svg_attrs(inert)
+            .layer_svg_attrs([("aria-hidden", "true"), ("class", &*class("node-icon"))]);
     }
     for (mut f, size, colour, cls, math, hjust) in [
         (lines, LABEL_PX, s.heading, class("node-label"), false, 0.5),
@@ -1643,6 +1938,7 @@ mod tests {
             prior,
             text: format!("{:.0}%", p * 100.0),
             observed,
+            was: None,
         };
         let nodes: Vec<DrawNode> = spec
             .iter()
@@ -1735,6 +2031,121 @@ mod tests {
             .find(|r| r.contains("data-node=\"n0\""))
             .unwrap();
         assert!(plain.contains("gg-graph-node\""), "{plain}");
+    }
+
+    /// Interactive evidence on a Bayesian network
+    /// (DataZooDE/anofox-visualization#1276): a state's change after its
+    /// probability, a node tinted by how far it moved, a hand on a node set
+    /// by an intervention, its incoming edge cut, `data-state` on each row.
+    #[test]
+    fn draws_belief_deltas_cut_edges_and_a_hand() {
+        let states = vec!["yes".to_string(), "no".to_string()];
+        let plain = states_box("Rain", None, None, &states);
+        let wide = states_box_with_deltas("Rain", None, None, &states, true);
+        assert_eq!(wide.w, plain.w + STATE_DELTA_W, "room for the change");
+        let gnodes = vec![
+            GraphNode {
+                w: wide.w,
+                h: wide.h,
+                ..Default::default()
+            };
+            2
+        ];
+        let l = layered(
+            &gnodes,
+            &[GraphEdge {
+                from: 0,
+                to: 1,
+                label_w: None,
+            }],
+            &LayeredParams {
+                direction: crate::graph_layout::Direction::TopBottom,
+                ..Default::default()
+            },
+        );
+        let bar = |name: &str, p: f64, was: f64| StateBar {
+            name: name.to_string(),
+            p,
+            text: format!("{:.0}%", p * 100.0),
+            was: Some(was),
+            ..Default::default()
+        };
+        let nodes: Vec<DrawNode> = (0..2)
+            .map(|i| DrawNode {
+                id: format!("n{i}"),
+                lines: vec![if i == 0 { "Cloudy" } else { "Rain" }.to_string()],
+                stroke: (60, 60, 60),
+                attrs: vec![("node".to_string(), Some(format!("n{i}")))],
+                states: Some((
+                    if i == 0 {
+                        vec![bar("yes", 0.5, 0.5), bar("no", 0.5, 0.5)]
+                    } else {
+                        vec![bar("yes", 0.71, 0.5), bar("no", 0.29, 0.5)]
+                    },
+                    (37, 99, 235),
+                )),
+                icon: (i == 0).then_some(NodeIcon::Hand),
+                ..Default::default()
+            })
+            .collect();
+        let edges = vec![DrawEdge {
+            colour: (160, 160, 160),
+            width: 1.6,
+            cut: true,
+            attrs: vec![("edge".to_string(), Some("n0>n1".to_string()))],
+            label_attrs: vec![("to".to_string(), Some("n1".to_string()))],
+            ..Default::default()
+        }];
+        let style = GraphStyle {
+            moved: Some((245, 158, 11)),
+            ..Default::default()
+        };
+        let svg = draw(
+            &l,
+            &[],
+            &[],
+            &nodes,
+            &edges,
+            &style,
+            crate::theme::presets::theme_void(),
+        )
+        .render_svg_native_at(0.0, 0.0, l.w.ceil() as u32, l.h.ceil() as u32)
+        .unwrap();
+        // Rain moved: ▲21 / ▼21, tinted; Cloudy did not move: no change, no tint
+        assert!(svg.contains(">▲21<") && svg.contains(">▼21<"), "deltas");
+        assert_eq!(svg.matches("gg-graph-node-state-delta").count(), 2);
+        let tint = mix(
+            (255, 255, 255),
+            (245, 158, 11),
+            moved_share(&nodes[1].states.as_ref().unwrap().0).unwrap(),
+        );
+        assert!(
+            svg.to_ascii_lowercase()
+                .contains(&format!("fill=\"{}\"", hex(tint))),
+            "tinted"
+        );
+        assert!(
+            svg.contains("fill=\"#FFFFFF\"") || svg.contains("fill=\"#ffffff\""),
+            "Cloudy untinted"
+        );
+        // the hand and the cut mark
+        assert!(svg.contains("gg-graph-node-icon"), "hand");
+        assert!(svg.contains("gg-graph-edge-cut"), "cut mark");
+        // a click on a row names its state
+        assert!(svg.contains("data-state=\"yes\"") && svg.contains("data-state=\"no\""));
+    }
+
+    #[test]
+    fn js_distance_is_zero_for_the_same_and_one_for_disjoint() {
+        assert!(js_distance(&[0.5, 0.5], &[0.5, 0.5]).abs() < 1e-12);
+        assert!((js_distance(&[1.0, 0.0], &[0.0, 1.0]) - 1.0).abs() < 1e-12);
+        let d = js_distance(&[0.71, 0.29], &[0.5, 0.5]);
+        assert!(d > 0.1 && d < 0.2, "{d}");
+        // unnormalised input, or a length mismatch
+        assert!((js_distance(&[2.0, 2.0], &[0.5, 0.5])).abs() < 1e-12);
+        assert_eq!(js_distance(&[1.0], &[0.5, 0.5]), 0.0);
+        assert_eq!(delta_text(0.71, 0.5), Some(("▲21".to_string(), true)));
+        assert_eq!(delta_text(0.5, 0.503), None);
     }
 
     #[test]
