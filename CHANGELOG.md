@@ -5,6 +5,8 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.65.1] — 2026-11-22
+
 ### Fixed
 - A y tick label wider than the room left of the panel (a narrow plot,
   e.g. a flipped bar chart 316 px wide, where the layout's label reserve
