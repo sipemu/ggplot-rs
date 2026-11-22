@@ -5,6 +5,12 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Fixed
+- A y tick label wider than the room left of the panel (a narrow plot,
+  e.g. a flipped bar chart 316 px wide, where the layout's label reserve
+  is capped at 35 % of the width) is shortened with "…" instead of running
+  past the canvas's left edge (#538). Labels that fit draw as before.
+
 ## [0.65.0] — 2026-11-20
 
 ### Changed
