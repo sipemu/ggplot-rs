@@ -5,6 +5,8 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.65.2] — 2026-11-22
+
 ### Fixed
 - A shortened y tick label (#538) keeps an 8 % margin, so it stays on the
   canvas in a browser that draws a wider fallback font than the Hanken
