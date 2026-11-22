@@ -460,6 +460,19 @@ pub(crate) fn draw_y_axis_with(
         )?;
     }
 
+    // #538: the room left of the panel for a tick label — to the canvas
+    // edge, less the y title's band when one is drawn. The layout reserves
+    // up to 35 % of the width for long labels; a label still wider than the
+    // room left (a narrow plot) is shortened with "…" instead of running
+    // off the canvas. Labels that fit are drawn exactly as before.
+    let title_band = if with_title && !scale.name().is_empty() && theme.axis_title_y.visible {
+        theme.axis_title_y.size + Y_TITLE_GAP
+    } else {
+        0.0
+    };
+    let label_room =
+        plot_area.x - tick_len - theme.legend_spacing - backend.total_area().x - title_band - 2.0;
+
     // Ticks and labels
     for (pos, label) in &breaks {
         let py = along_y(coord, *pos, plot_area);
@@ -484,9 +497,14 @@ pub(crate) fn draw_y_axis_with(
             } else {
                 Some(theme.axis_text_y.family.clone())
             };
+            let label = if theme.axis_text_y.angle == 0.0 {
+                fit_label(label, theme.axis_text_y.size, label_room)
+            } else {
+                std::borrow::Cow::Borrowed(label.as_str())
+            };
             backend.set_element_class(Some("gg-axis gg-axis-y gg-axis-text"));
             backend.draw_text(
-                label,
+                &label,
                 (plot_area.x - tick_len - theme.legend_spacing, py),
                 &TextStyle {
                     color: theme.axis_text_y.color,
@@ -545,6 +563,24 @@ pub(crate) fn draw_y_axis_with(
     }
 
     Ok(())
+}
+
+/// `label` shortened with "…" to `room` px at `size` (#538); as it was when
+/// it fits, or when there is no room to speak of.
+fn fit_label(label: &str, size: f64, room: f64) -> std::borrow::Cow<'_, str> {
+    use crate::render::text::text_width;
+    if room < size || text_width(label, size) <= room {
+        return std::borrow::Cow::Borrowed(label);
+    }
+    let chars: Vec<char> = label.chars().collect();
+    for n in (1..chars.len()).rev() {
+        let cand: String =
+            chars[..n].iter().collect::<String>().trim_end().to_string() + "\u{2026}";
+        if text_width(&cand, size) <= room {
+            return std::borrow::Cow::Owned(cand);
+        }
+    }
+    std::borrow::Cow::Owned("\u{2026}".into())
 }
 
 /// Gap between the y tick labels and the y axis title (#348).
@@ -1113,5 +1149,26 @@ mod tests {
             x + w / 2.0 <= 60.0 - 1.0 + 0.01,
             "right edge still overflows: x={x} w={w}"
         );
+    }
+}
+
+#[cfg(test)]
+mod fit_label_538_tests {
+    use super::fit_label;
+
+    #[test]
+    fn a_label_is_kept_shortened_or_reduced_to_an_ellipsis() {
+        // fits, or no room to speak of: as it was
+        assert_eq!(fit_label("ES_bu", 11.0, 200.0), "ES_bu");
+        assert_eq!(fit_label("a long label", 11.0, 5.0), "a long label");
+        // too wide: shortened, trailing space trimmed before the ellipsis
+        let cut = fit_label("one global model (anofox_ml)", 11.0, 60.0);
+        assert!(
+            cut.ends_with('…') && cut.len() < "one global model (anofox_ml)".len(),
+            "{cut}"
+        );
+        assert!(!cut.contains(" …"), "{cut}");
+        // room for the ellipsis only
+        assert_eq!(fit_label("WWWWWWWW", 11.0, 11.5), "…");
     }
 }
