@@ -1151,3 +1151,24 @@ mod tests {
         );
     }
 }
+
+#[cfg(test)]
+mod fit_label_538_tests {
+    use super::fit_label;
+
+    #[test]
+    fn a_label_is_kept_shortened_or_reduced_to_an_ellipsis() {
+        // fits, or no room to speak of: as it was
+        assert_eq!(fit_label("ES_bu", 11.0, 200.0), "ES_bu");
+        assert_eq!(fit_label("a long label", 11.0, 5.0), "a long label");
+        // too wide: shortened, trailing space trimmed before the ellipsis
+        let cut = fit_label("one global model (anofox_ml)", 11.0, 60.0);
+        assert!(
+            cut.ends_with('…') && cut.len() < "one global model (anofox_ml)".len(),
+            "{cut}"
+        );
+        assert!(!cut.contains(" …"), "{cut}");
+        // room for the ellipsis only
+        assert_eq!(fit_label("WWWWWWWW", 11.0, 11.5), "…");
+    }
+}
