@@ -566,9 +566,11 @@ pub(crate) fn draw_y_axis_with(
 }
 
 /// `label` shortened with "…" to `room` px at `size` (#538); as it was when
-/// it fits, or when there is no room to speak of.
+/// it fits, or when there is no room to speak of. Measured 8 % wide:
+/// `text_width` models Hanken Grotesk, and a page without that font
+/// substitutes a wider one.
 fn fit_label(label: &str, size: f64, room: f64) -> std::borrow::Cow<'_, str> {
-    use crate::render::text::text_width;
+    let text_width = |t: &str, size: f64| crate::render::text::text_width(t, size) * 1.08;
     if room < size || text_width(label, size) <= room {
         return std::borrow::Cow::Borrowed(label);
     }
