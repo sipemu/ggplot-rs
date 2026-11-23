@@ -5,6 +5,20 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Added
+- 19 CLDR locale presets beyond en-US, en-GB, de-DE and fr-FR, reached
+  through `Locale::from_tag` / `try_from_tag`: de-AT, de-CH, fr-BE, fr-CH,
+  fr-CA, it-IT, it-CH, es-ES, es-MX, nl-NL, nl-BE, pt-PT, pt-BR, pl-PL,
+  sv-SE, da-DK, nb-NO, fi-FI, cs-CZ. Marks, minimum grouping digits,
+  currency placement, month and weekday names and date patterns are ICU's
+  (DataZooDE/anofox-visualization#1358). A language without its own region
+  falls back to its main locale (`it` → it-IT, `pt` → pt-BR, `no` → nb-NO).
+  `Locale::preset_tags()` lists every tag.
+
+### Changed
+- `de-AT` and `fr-CA` now resolve to their own presets instead of de-DE /
+  fr-FR (Austria groups with a space, Canada uses the dollar).
+
 ## [0.65.2] — 2026-11-22
 
 ### Fixed
