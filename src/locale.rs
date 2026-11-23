@@ -83,6 +83,203 @@ pub struct Locale {
     pub time_format: String,
 }
 
+/// CLDR-derived presets beyond the hand-written four (#538 follow-up,
+/// DataZooDE/anofox-visualization#1358): marks, currency placement, month
+/// and weekday names and date patterns as ICU formats them. Thousands marks
+/// that CLDR writes as a (narrow) no-break space are a plain space, as in
+/// [`Locale::fr_fr`].
+struct Preset {
+    tag: &'static str,
+    decimal: &'static str,
+    big: &'static str,
+    currency: &'static str,
+    spacing: &'static str,
+    percent: &'static str,
+    date: &'static str,
+    month: &'static str,
+    min_grouping: usize,
+    suffix: bool,
+    months_short: [&'static str; 12],
+    months_long: [&'static str; 12],
+    days_short: [&'static str; 7],
+    days_long: [&'static str; 7],
+}
+
+#[rustfmt::skip]
+const PRESETS: &[Preset] = &[
+    Preset {
+        tag: "de-AT", decimal: ",", big: " ", min_grouping: 1,
+        currency: "€", suffix: false, spacing: " ", percent: " %",
+        months_short: ["Jän.", "Feb.", "März", "Apr.", "Mai", "Juni", "Juli", "Aug.", "Sep.", "Okt.", "Nov.", "Dez."],
+        months_long: ["Jänner", "Februar", "März", "April", "Mai", "Juni", "Juli", "August", "September", "Oktober", "November", "Dezember"],
+        days_short: ["So.", "Mo.", "Di.", "Mi.", "Do.", "Fr.", "Sa."],
+        days_long: ["Sonntag", "Montag", "Dienstag", "Mittwoch", "Donnerstag", "Freitag", "Samstag"],
+        date: "%-d. %b %Y", month: "%b %Y",
+    },
+    Preset {
+        tag: "de-CH", decimal: ".", big: "'", min_grouping: 1,
+        currency: "CHF", suffix: false, spacing: " ", percent: "%",
+        months_short: ["Jan.", "Feb.", "März", "Apr.", "Mai", "Juni", "Juli", "Aug.", "Sept.", "Okt.", "Nov.", "Dez."],
+        months_long: ["Januar", "Februar", "März", "April", "Mai", "Juni", "Juli", "August", "September", "Oktober", "November", "Dezember"],
+        days_short: ["So.", "Mo.", "Di.", "Mi.", "Do.", "Fr.", "Sa."],
+        days_long: ["Sonntag", "Montag", "Dienstag", "Mittwoch", "Donnerstag", "Freitag", "Samstag"],
+        date: "%-d. %b %Y", month: "%b %Y",
+    },
+    Preset {
+        tag: "fr-BE", decimal: ",", big: " ", min_grouping: 1,
+        currency: "€", suffix: true, spacing: " ", percent: " %",
+        months_short: ["janv.", "févr.", "mars", "avr.", "mai", "juin", "juil.", "août", "sept.", "oct.", "nov.", "déc."],
+        months_long: ["janvier", "février", "mars", "avril", "mai", "juin", "juillet", "août", "septembre", "octobre", "novembre", "décembre"],
+        days_short: ["dim.", "lun.", "mar.", "mer.", "jeu.", "ven.", "sam."],
+        days_long: ["dimanche", "lundi", "mardi", "mercredi", "jeudi", "vendredi", "samedi"],
+        date: "%-d %b %Y", month: "%b %Y",
+    },
+    Preset {
+        tag: "fr-CH", decimal: ",", big: " ", min_grouping: 1,
+        currency: "CHF", suffix: true, spacing: " ", percent: "%",
+        months_short: ["janv.", "févr.", "mars", "avr.", "mai", "juin", "juil.", "août", "sept.", "oct.", "nov.", "déc."],
+        months_long: ["janvier", "février", "mars", "avril", "mai", "juin", "juillet", "août", "septembre", "octobre", "novembre", "décembre"],
+        days_short: ["dim.", "lun.", "mar.", "mer.", "jeu.", "ven.", "sam."],
+        days_long: ["dimanche", "lundi", "mardi", "mercredi", "jeudi", "vendredi", "samedi"],
+        date: "%-d %b %Y", month: "%b %Y",
+    },
+    Preset {
+        tag: "fr-CA", decimal: ",", big: " ", min_grouping: 1,
+        currency: "$", suffix: true, spacing: " ", percent: " %",
+        months_short: ["janv.", "févr.", "mars", "avr.", "mai", "juin", "juill.", "août", "sept.", "oct.", "nov.", "déc."],
+        months_long: ["janvier", "février", "mars", "avril", "mai", "juin", "juillet", "août", "septembre", "octobre", "novembre", "décembre"],
+        days_short: ["dim.", "lun.", "mar.", "mer.", "jeu.", "ven.", "sam."],
+        days_long: ["dimanche", "lundi", "mardi", "mercredi", "jeudi", "vendredi", "samedi"],
+        date: "%-d %b %Y", month: "%b %Y",
+    },
+    Preset {
+        tag: "it-IT", decimal: ",", big: ".", min_grouping: 2,
+        currency: "€", suffix: true, spacing: " ", percent: "%",
+        months_short: ["gen", "feb", "mar", "apr", "mag", "giu", "lug", "ago", "set", "ott", "nov", "dic"],
+        months_long: ["gennaio", "febbraio", "marzo", "aprile", "maggio", "giugno", "luglio", "agosto", "settembre", "ottobre", "novembre", "dicembre"],
+        days_short: ["dom", "lun", "mar", "mer", "gio", "ven", "sab"],
+        days_long: ["domenica", "lunedì", "martedì", "mercoledì", "giovedì", "venerdì", "sabato"],
+        date: "%-d %b %Y", month: "%b %Y",
+    },
+    Preset {
+        tag: "it-CH", decimal: ".", big: "'", min_grouping: 2,
+        currency: "CHF", suffix: false, spacing: " ", percent: "%",
+        months_short: ["gen", "feb", "mar", "apr", "mag", "giu", "lug", "ago", "set", "ott", "nov", "dic"],
+        months_long: ["gennaio", "febbraio", "marzo", "aprile", "maggio", "giugno", "luglio", "agosto", "settembre", "ottobre", "novembre", "dicembre"],
+        days_short: ["dom", "lun", "mar", "mer", "gio", "ven", "sab"],
+        days_long: ["domenica", "lunedì", "martedì", "mercoledì", "giovedì", "venerdì", "sabato"],
+        date: "%-d %b %Y", month: "%b %Y",
+    },
+    Preset {
+        tag: "es-ES", decimal: ",", big: ".", min_grouping: 2,
+        currency: "€", suffix: true, spacing: " ", percent: " %",
+        months_short: ["ene", "feb", "mar", "abr", "may", "jun", "jul", "ago", "sept", "oct", "nov", "dic"],
+        months_long: ["enero", "febrero", "marzo", "abril", "mayo", "junio", "julio", "agosto", "septiembre", "octubre", "noviembre", "diciembre"],
+        days_short: ["dom", "lun", "mar", "mié", "jue", "vie", "sáb"],
+        days_long: ["domingo", "lunes", "martes", "miércoles", "jueves", "viernes", "sábado"],
+        date: "%-d %b %Y", month: "%b %Y",
+    },
+    Preset {
+        tag: "es-MX", decimal: ".", big: ",", min_grouping: 1,
+        currency: "$", suffix: false, spacing: "", percent: "%",
+        months_short: ["ene", "feb", "mar", "abr", "may", "jun", "jul", "ago", "sep", "oct", "nov", "dic"],
+        months_long: ["enero", "febrero", "marzo", "abril", "mayo", "junio", "julio", "agosto", "septiembre", "octubre", "noviembre", "diciembre"],
+        days_short: ["dom", "lun", "mar", "mié", "jue", "vie", "sáb"],
+        days_long: ["domingo", "lunes", "martes", "miércoles", "jueves", "viernes", "sábado"],
+        date: "%-d %b %Y", month: "%b %Y",
+    },
+    Preset {
+        tag: "nl-NL", decimal: ",", big: ".", min_grouping: 1,
+        currency: "€", suffix: false, spacing: " ", percent: "%",
+        months_short: ["jan", "feb", "mrt", "apr", "mei", "jun", "jul", "aug", "sep", "okt", "nov", "dec"],
+        months_long: ["januari", "februari", "maart", "april", "mei", "juni", "juli", "augustus", "september", "oktober", "november", "december"],
+        days_short: ["zo", "ma", "di", "wo", "do", "vr", "za"],
+        days_long: ["zondag", "maandag", "dinsdag", "woensdag", "donderdag", "vrijdag", "zaterdag"],
+        date: "%-d %b %Y", month: "%b %Y",
+    },
+    Preset {
+        tag: "nl-BE", decimal: ",", big: ".", min_grouping: 1,
+        currency: "€", suffix: false, spacing: " ", percent: "%",
+        months_short: ["jan", "feb", "mrt", "apr", "mei", "jun", "jul", "aug", "sep", "okt", "nov", "dec"],
+        months_long: ["januari", "februari", "maart", "april", "mei", "juni", "juli", "augustus", "september", "oktober", "november", "december"],
+        days_short: ["zo", "ma", "di", "wo", "do", "vr", "za"],
+        days_long: ["zondag", "maandag", "dinsdag", "woensdag", "donderdag", "vrijdag", "zaterdag"],
+        date: "%-d %b %Y", month: "%b %Y",
+    },
+    Preset {
+        tag: "pt-PT", decimal: ",", big: " ", min_grouping: 2,
+        currency: "€", suffix: true, spacing: " ", percent: "%",
+        months_short: ["jan.", "fev.", "mar.", "abr.", "mai.", "jun.", "jul.", "ago.", "set.", "out.", "nov.", "dez."],
+        months_long: ["janeiro", "fevereiro", "março", "abril", "maio", "junho", "julho", "agosto", "setembro", "outubro", "novembro", "dezembro"],
+        days_short: ["domingo", "segunda", "terça", "quarta", "quinta", "sexta", "sábado"],
+        days_long: ["domingo", "segunda-feira", "terça-feira", "quarta-feira", "quinta-feira", "sexta-feira", "sábado"],
+        date: "%-d/%-m/%Y", month: "%b %Y",
+    },
+    Preset {
+        tag: "pt-BR", decimal: ",", big: ".", min_grouping: 1,
+        currency: "R$", suffix: false, spacing: " ", percent: "%",
+        months_short: ["jan.", "fev.", "mar.", "abr.", "mai.", "jun.", "jul.", "ago.", "set.", "out.", "nov.", "dez."],
+        months_long: ["janeiro", "fevereiro", "março", "abril", "maio", "junho", "julho", "agosto", "setembro", "outubro", "novembro", "dezembro"],
+        days_short: ["dom.", "seg.", "ter.", "qua.", "qui.", "sex.", "sáb."],
+        days_long: ["domingo", "segunda-feira", "terça-feira", "quarta-feira", "quinta-feira", "sexta-feira", "sábado"],
+        date: "%-d de %b de %Y", month: "%b de %Y",
+    },
+    Preset {
+        tag: "pl-PL", decimal: ",", big: " ", min_grouping: 2,
+        currency: "zł", suffix: true, spacing: " ", percent: "%",
+        months_short: ["sty", "lut", "mar", "kwi", "maj", "cze", "lip", "sie", "wrz", "paź", "lis", "gru"],
+        months_long: ["stycznia", "lutego", "marca", "kwietnia", "maja", "czerwca", "lipca", "sierpnia", "września", "października", "listopada", "grudnia"],
+        days_short: ["niedz.", "pon.", "wt.", "śr.", "czw.", "pt.", "sob."],
+        days_long: ["niedziela", "poniedziałek", "wtorek", "środa", "czwartek", "piątek", "sobota"],
+        date: "%-d %b %Y", month: "%b %Y",
+    },
+    Preset {
+        tag: "sv-SE", decimal: ",", big: " ", min_grouping: 1,
+        currency: "kr", suffix: true, spacing: " ", percent: " %",
+        months_short: ["jan.", "feb.", "mars", "apr.", "maj", "juni", "juli", "aug.", "sep.", "okt.", "nov.", "dec."],
+        months_long: ["januari", "februari", "mars", "april", "maj", "juni", "juli", "augusti", "september", "oktober", "november", "december"],
+        days_short: ["sön", "mån", "tis", "ons", "tors", "fre", "lör"],
+        days_long: ["söndag", "måndag", "tisdag", "onsdag", "torsdag", "fredag", "lördag"],
+        date: "%-d %b %Y", month: "%b %Y",
+    },
+    Preset {
+        tag: "da-DK", decimal: ",", big: ".", min_grouping: 1,
+        currency: "kr.", suffix: true, spacing: " ", percent: " %",
+        months_short: ["jan.", "feb.", "mar.", "apr.", "maj", "jun.", "jul.", "aug.", "sep.", "okt.", "nov.", "dec."],
+        months_long: ["januar", "februar", "marts", "april", "maj", "juni", "juli", "august", "september", "oktober", "november", "december"],
+        days_short: ["søn.", "man.", "tirs.", "ons.", "tors.", "fre.", "lør."],
+        days_long: ["søndag", "mandag", "tirsdag", "onsdag", "torsdag", "fredag", "lørdag"],
+        date: "%-d. %b %Y", month: "%b %Y",
+    },
+    Preset {
+        tag: "nb-NO", decimal: ",", big: " ", min_grouping: 1,
+        currency: "kr", suffix: true, spacing: " ", percent: " %",
+        months_short: ["jan.", "feb.", "mars", "apr.", "mai", "juni", "juli", "aug.", "sep.", "okt.", "nov.", "des."],
+        months_long: ["januar", "februar", "mars", "april", "mai", "juni", "juli", "august", "september", "oktober", "november", "desember"],
+        days_short: ["søn.", "man.", "tir.", "ons.", "tor.", "fre.", "lør."],
+        days_long: ["søndag", "mandag", "tirsdag", "onsdag", "torsdag", "fredag", "lørdag"],
+        date: "%-d. %b %Y", month: "%b %Y",
+    },
+    Preset {
+        tag: "fi-FI", decimal: ",", big: " ", min_grouping: 1,
+        currency: "€", suffix: true, spacing: " ", percent: " %",
+        months_short: ["tammi", "helmi", "maalis", "huhti", "touko", "kesä", "heinä", "elo", "syys", "loka", "marras", "joulu"],
+        months_long: ["tammikuuta", "helmikuuta", "maaliskuuta", "huhtikuuta", "toukokuuta", "kesäkuuta", "heinäkuuta", "elokuuta", "syyskuuta", "lokakuuta", "marraskuuta", "joulukuuta"],
+        days_short: ["su", "ma", "ti", "ke", "to", "pe", "la"],
+        days_long: ["sunnuntai", "maanantai", "tiistai", "keskiviikko", "torstai", "perjantai", "lauantai"],
+        date: "%-d.%-m.%Y", month: "%b %Y",
+    },
+    Preset {
+        tag: "cs-CZ", decimal: ",", big: " ", min_grouping: 1,
+        currency: "Kč", suffix: true, spacing: " ", percent: " %",
+        months_short: ["led", "úno", "bře", "dub", "kvě", "čvn", "čvc", "srp", "zář", "říj", "lis", "pro"],
+        months_long: ["ledna", "února", "března", "dubna", "května", "června", "července", "srpna", "září", "října", "listopadu", "prosince"],
+        days_short: ["ne", "po", "út", "st", "čt", "pá", "so"],
+        days_long: ["neděle", "pondělí", "úterý", "středa", "čtvrtek", "pátek", "sobota"],
+        date: "%-d. %-m. %Y", month: "%b %Y",
+    },
+];
+
 fn strings<const N: usize>(names: [&str; N]) -> [String; N] {
     names.map(str::to_string)
 }
@@ -235,9 +432,12 @@ impl Locale {
 
     /// The preset for a BCP-47-ish tag, if one matches: case-insensitive,
     /// `-` or `_` separated, POSIX suffixes (`.UTF-8`, `@euro`) ignored.
-    /// `de*` → [`de_de`](Self::de_de), `fr*` → [`fr_fr`](Self::fr_fr),
-    /// `en-GB` / `en-UK` → [`en_gb`](Self::en_gb), other `en*` and `C` /
-    /// `POSIX` → [`en_us`](Self::en_us).
+    /// A CLDR preset for the exact language and region first (`de-AT`,
+    /// `de-CH`, `fr-CA`, `it-IT`, `es-MX`, `pt-BR`, … — [`preset_tags`](Self::preset_tags)),
+    /// then the language's main locale (`it` → it-IT, `pt` → pt-BR, `nb`/`no`
+    /// → nb-NO), then `de*` → [`de_de`](Self::de_de), `fr*` →
+    /// [`fr_fr`](Self::fr_fr), `en-GB` / `en-UK` → [`en_gb`](Self::en_gb),
+    /// other `en*` and `C` / `POSIX` → [`en_us`](Self::en_us).
     pub fn try_from_tag(tag: &str) -> Option<Self> {
         let t = tag
             .trim()
@@ -250,12 +450,69 @@ impl Locale {
         let lang = parts.next().unwrap_or("");
         // Skip a script subtag (e.g. "Latn") to find the region.
         let region = parts.find(|p| p.len() != 4).unwrap_or("");
+        // a CLDR preset for exactly this language and region (de-AT, pt-BR, …)
+        let exact = PRESETS.iter().find(|p| {
+            let (l, r) = p.tag.split_once('-').unwrap_or((p.tag, ""));
+            l.eq_ignore_ascii_case(lang) && r.eq_ignore_ascii_case(region)
+        });
+        if let Some(p) = exact {
+            return Some(Self::from_preset(p));
+        }
+        // else the language's main locale (CLDR's default region)
+        let main = match lang {
+            "it" => "it-IT",
+            "es" => "es-ES",
+            "nl" => "nl-NL",
+            "pt" => "pt-BR",
+            "pl" => "pl-PL",
+            "sv" => "sv-SE",
+            "da" => "da-DK",
+            "nb" | "no" | "nn" => "nb-NO",
+            "fi" => "fi-FI",
+            "cs" => "cs-CZ",
+            _ => "",
+        };
+        if let Some(p) = PRESETS.iter().find(|p| p.tag == main) {
+            return Some(Self::from_preset(p));
+        }
         match (lang, region) {
             ("de", _) => Some(Self::de_de()),
             ("fr", _) => Some(Self::fr_fr()),
             ("en", "gb" | "uk") => Some(Self::en_gb()),
             ("en", _) | ("c", "") | ("posix", "") => Some(Self::en_us()),
             _ => None,
+        }
+    }
+
+    /// Every tag [`try_from_tag`](Self::try_from_tag) has a preset for.
+    pub fn preset_tags() -> Vec<&'static str> {
+        ["en-US", "en-GB", "de-DE", "fr-FR"]
+            .into_iter()
+            .chain(PRESETS.iter().map(|p| p.tag))
+            .collect()
+    }
+
+    fn from_preset(p: &Preset) -> Self {
+        Locale {
+            tag: p.tag.into(),
+            decimal_mark: p.decimal.into(),
+            big_mark: p.big.into(),
+            min_grouping_digits: p.min_grouping,
+            currency_symbol: p.currency.into(),
+            currency_position: if p.suffix {
+                CurrencyPosition::Suffix
+            } else {
+                CurrencyPosition::Prefix
+            },
+            currency_spacing: p.spacing.into(),
+            percent_suffix: p.percent.into(),
+            months_short: strings(p.months_short),
+            months_long: strings(p.months_long),
+            days_short: strings(p.days_short),
+            days_long: strings(p.days_long),
+            date_format: p.date.into(),
+            month_format: p.month.into(),
+            time_format: "%H:%M".into(),
         }
     }
 
@@ -457,11 +714,28 @@ mod tests {
         for (tag, want) in [
             ("de-DE", "de-DE"),
             ("de", "de-DE"),
-            ("DE_at", "de-DE"),
+            ("DE_at", "de-AT"),
+            ("de-LU", "de-DE"),
             ("de_DE.UTF-8", "de-DE"),
             ("de_DE@euro", "de-DE"),
             ("fr-FR", "fr-FR"),
-            ("fr-CA", "fr-FR"),
+            ("fr-CA", "fr-CA"),
+            ("fr-LU", "fr-FR"),
+            ("it", "it-IT"),
+            ("pt", "pt-BR"),
+            ("no", "nb-NO"),
+            ("es", "es-ES"),
+            ("es-AR", "es-ES"),
+            ("nl", "nl-NL"),
+            ("pl", "pl-PL"),
+            ("sv-FI", "sv-SE"),
+            ("da", "da-DK"),
+            ("nb", "nb-NO"),
+            ("nn", "nb-NO"),
+            ("fi", "fi-FI"),
+            ("cs", "cs-CZ"),
+            ("pt-PT", "pt-PT"),
+            ("it-CH", "it-CH"),
             ("en-GB", "en-GB"),
             ("en_gb", "en-GB"),
             ("en-Latn-GB", "en-GB"),
