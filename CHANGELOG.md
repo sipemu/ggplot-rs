@@ -5,6 +5,8 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.66.0] — 2026-11-23
+
 ### Added
 - 19 CLDR locale presets beyond en-US, en-GB, de-DE and fr-FR, reached
   through `Locale::from_tag` / `try_from_tag`: de-AT, de-CH, fr-BE, fr-CH,
