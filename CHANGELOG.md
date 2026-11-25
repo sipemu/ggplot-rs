@@ -5,6 +5,16 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.67.0] — 2026-11-25
+
+### Added
+- `GGPlot::direct_labels()` (#543, R's `directlabels`): instead of a colour
+  legend, each colour group of a line / path / step layer is named right of
+  the panel at the height of its last point, in its own colour. Labels are
+  pushed apart so they never overlap and get a short leader when they had
+  to move; they use the band a right legend would take. A plot with nothing
+  to label this way keeps its legend.
+
 ## [0.66.0] — 2026-11-23
 
 ### Added

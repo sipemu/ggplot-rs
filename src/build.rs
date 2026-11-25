@@ -74,6 +74,8 @@ pub struct BuiltPlot {
     pub clip: bool,
     /// Semantic CSS classes on the SVG's non-data elements (#465).
     pub svg_classes: bool,
+    /// Lines named at their ends instead of a colour legend (#543).
+    pub direct_labels: bool,
 }
 
 impl BuiltPlot {
@@ -325,6 +327,7 @@ impl PlotBuilder {
             legend_bottom_share: _,
             clip,
             svg_classes,
+            direct_labels,
             legend_auto: _,
             locale,
             svg_root_data: _,
@@ -563,6 +566,7 @@ impl PlotBuilder {
             legend_at: None,
             clip,
             svg_classes,
+            direct_labels,
         })
     }
 

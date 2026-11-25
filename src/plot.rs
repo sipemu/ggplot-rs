@@ -123,6 +123,8 @@ pub struct GGPlot {
     /// Tag axes, grid, legend, strips and titles with semantic CSS classes
     /// in SVG output (#465).
     pub(crate) svg_classes: bool,
+    /// [`GGPlot::direct_labels`] (#543).
+    pub(crate) direct_labels: bool,
     /// [`GGPlot::legend_inside_auto`]'s settings, if set (#332).
     pub(crate) legend_auto: Option<LegendAuto>,
     /// Panel aspect ratio used when the theme sets none (helpers such as
@@ -213,6 +215,7 @@ impl GGPlot {
             legend_bottom_share: None,
             clip: true,
             svg_classes: false,
+            direct_labels: false,
             legend_auto: None,
             default_aspect_ratio: None,
             hide_position_guides: false,
@@ -3551,6 +3554,17 @@ impl GGPlot {
     /// Use a configured [`CoordCartesian`] (zoom + reverse).
     pub fn coord_cartesian_with(mut self, coord: CoordCartesian) -> Self {
         self.coord = Box::new(coord);
+        self
+    }
+
+    /// Name each line at its end instead of drawing a colour legend (#543,
+    /// R's `directlabels`): every colour group of a line / path / step layer
+    /// gets its label right of the panel, at the height of its last point,
+    /// in its colour — pushed apart so labels never overlap, with a short
+    /// leader when one had to move. Uses the band a right legend would take;
+    /// a plot with nothing to label this way draws its legend as usual.
+    pub fn direct_labels(mut self) -> Self {
+        self.direct_labels = true;
         self
     }
 
