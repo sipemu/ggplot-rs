@@ -328,17 +328,22 @@ impl PlotRenderer {
             )?;
         }
 
-        // 9. Draw legend
-        legend::draw_legend_planned(
-            &built.scales,
-            theme,
-            &plot_area,
-            plot_area.width,
-            backend,
-            &built.guide_legend,
-            &built.suppressed_aes,
-            &built.legend_plans,
-        )?;
+        // 9. Draw legend — or name each line at its end (#543)
+        let direct = built.direct_labels
+            && matches!(theme.legend_position, crate::theme::LegendPosition::Right)
+            && super::direct_labels::draw(built, &plot_area, backend)?;
+        if !direct {
+            legend::draw_legend_planned(
+                &built.scales,
+                theme,
+                &plot_area,
+                plot_area.width,
+                backend,
+                &built.guide_legend,
+                &built.suppressed_aes,
+                &built.legend_plans,
+            )?;
+        }
 
         // 10. Draw caption
         if let Some(ref caption) = built.labels.caption {

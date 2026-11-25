@@ -1,5 +1,6 @@
 pub mod backend;
 pub mod corner_layout;
+pub mod direct_labels;
 pub mod layout;
 pub(crate) mod offset;
 pub(crate) mod probe;
