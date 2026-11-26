@@ -3563,6 +3563,10 @@ impl GGPlot {
     /// in its colour — pushed apart so labels never overlap, with a short
     /// leader when one had to move. Uses the band a right legend would take;
     /// a plot with nothing to label this way draws its legend as usual.
+    /// On a narrow render, where that band would take more than 30 % of the
+    /// width, the plot draws the usual legend below instead (as
+    /// [`legend_bottom_when_narrow`](Self::legend_bottom_when_narrow)`(0.3)`;
+    /// set that to choose another share).
     pub fn direct_labels(mut self) -> Self {
         self.direct_labels = true;
         self
@@ -4410,7 +4414,12 @@ impl GGPlot {
         let has_subtitle = plot.labels.subtitle.is_some();
         let has_caption = plot.labels.caption.is_some();
         let has_legend = plot.has_legend_mapping();
-        let legend_bottom_share = plot.legend_bottom_share;
+        // Direct labels on a narrow render: where their band would take more
+        // than DIRECT_LABELS_MAX_SHARE of the width, the usual legend goes
+        // below instead (a set `legend_bottom_when_narrow` wins).
+        let legend_bottom_share = plot
+            .legend_bottom_share
+            .or(plot.direct_labels.then_some(DIRECT_LABELS_MAX_SHARE));
         let legend_auto = plot.legend_auto;
         let x_label = plot.labels.x.clone();
         let y_label = plot.labels.y.clone();
@@ -5532,6 +5541,10 @@ impl GGPlot {
             })
     }
 }
+
+/// The largest share of a render's width the direct labels' band may take
+/// before the legend goes below instead (see [`GGPlot::direct_labels`]).
+const DIRECT_LABELS_MAX_SHARE: f64 = 0.3;
 
 /// Size-independent facts about a built plot that its layout needs.
 #[derive(Clone, Copy, Debug)]
