@@ -5,6 +5,14 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.67.1] — 2026-11-26
+
+### Fixed
+- `direct_labels()` on a narrow render (#545): where the labels' band would
+  take more than 30 % of the width, the usual legend is drawn below
+  instead, as `legend_bottom_when_narrow(0.3)` would; set that to choose
+  another share. A phone-width chart kept only a sliver of panel.
+
 ## [0.67.0] — 2026-11-25
 
 ### Added

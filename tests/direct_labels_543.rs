@@ -106,3 +106,34 @@ fn a_plot_with_nothing_to_label_keeps_its_legend() {
         "points only: the legend is drawn"
     );
 }
+
+#[test]
+fn a_narrow_render_draws_the_legend_below_instead() {
+    // a phone-width chart: the labels' band would squeeze the panel
+    let narrow = plot()
+        .direct_labels()
+        .render_svg_native_with_size(280, 300)
+        .unwrap();
+    assert_eq!(
+        fill_of(&narrow, "Chain").as_deref(),
+        Some("#000000"),
+        "narrow: the usual legend (ink-coloured text), not end labels"
+    );
+    // wide enough: still named at the ends
+    let wide = plot()
+        .direct_labels()
+        .render_svg_native_with_size(700, 300)
+        .unwrap();
+    assert_ne!(fill_of(&wide, "Chain").as_deref(), Some("#000000"));
+    // an explicit share wins
+    let kept = plot()
+        .direct_labels()
+        .legend_bottom_when_narrow(0.9)
+        .render_svg_native_with_size(280, 300)
+        .unwrap();
+    assert_ne!(
+        fill_of(&kept, "Chain").as_deref(),
+        Some("#000000"),
+        "legend_bottom_when_narrow(0.9) keeps the end labels"
+    );
+}
